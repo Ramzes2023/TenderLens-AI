@@ -1,6 +1,10 @@
 # TenderLens AI — intended architecture
 
 Это целевая архитектура. Реализован только фундамент и командный Telegram-бот (Phase 2).
+Обновление Phase 3: document handler -> services.pdf (загрузка с лимитом) ->
+отдельный процесс parsers.pdf_worker -> PyMuPDF -> PdfSummary -> ответ в Telegram.
+На диск файл не записывается; в текущем этапе сохраняется только статистика в ответе,
+постраничный текст извлекается временно. Для будущего RAG потребуется отдельный контракт хранения.
 app.bot.__main__ -> main -> config + Dispatcher -> handlers.
 HTTP-сессией владеет run_bot и закрывает её в finally. На Windows Ctrl+C обрабатывает
 asyncio.run; на других платформах включены signal handlers aiogram.

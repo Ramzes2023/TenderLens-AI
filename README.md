@@ -2,8 +2,8 @@
 
 Планируемая платформа анализа тендеров и автоматизации на Python 3.12.
 
-**Статус: Phase 9 — анализ PDF + scoring + SQLite + semantic RAG/Qdrant + мониторинг RSS ЕИС.**
-При настроенном GigaChat читаемые PDF автоматически анализируются, Python рассчитывает совместимость с профилем компании, SQLite хранит историю, semantic RAG/Qdrant отвечает на вопросы по документу, а Phase 9 умеет проверять настроенные RSS-ленты ЕИС и отправлять новые подходящие закупки в Telegram. HTTP API и Docker пока не реализованы.
+**Статус: Phase 10 — Telegram + FastAPI backend + PDF analysis + scoring + SQLite + semantic RAG/Qdrant + мониторинг RSS ЕИС.**
+При настроенном GigaChat читаемые PDF автоматически анализируются, Python рассчитывает совместимость с профилем компании, SQLite хранит историю, semantic RAG/Qdrant отвечает на вопросы по документу, RSS ЕИС обеспечивает мониторинг, а FastAPI предоставляет HTTP-интерфейс и Swagger/OpenAPI. Docker пока не реализован.
 
 ## Проверка PDF
 
@@ -98,7 +98,7 @@ cd C:\Users\ramze\Documents\Codex\tender-ai
 ## Структура
 
 - app/bot — config.py (окружение), handlers.py (команды), main.py (жизненный цикл), __main__.py (запуск).
-- app/api — будущий FastAPI-интерфейс.
+- app/api — FastAPI app factory, runtime composition, API-key guard и v1 endpoints.
 - app/llm — адаптеры GigaChat/YandexGPT.
 - app/parsers — извлечение текста и ссылок на страницы.
 - app/rag — индексирование и поиск фрагментов.
@@ -449,3 +449,23 @@ Live-проверка источника после настройки URL:
 ```powershell
 .\.venv\Scripts\python.exe -m app.sources.health
 ```
+
+## Phase 10: FastAPI backend
+
+HTTP API запускается отдельно от Telegram и использует те же services/repositories.
+По умолчанию сервер слушает только `127.0.0.1:8000`. Запуск:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.api
+```
+
+После запуска доступны `http://127.0.0.1:8000/docs` и `http://127.0.0.1:8000/health`.
+Основные маршруты: история `/api/v1/tenders`, detail по id, deterministic scoring,
+semantic RAG `/api/v1/rag/ask`, EIS monitoring status/scan и PDF upload analysis.
+PDF endpoint ограничен 10 МиБ, повторный SHA-256 использует сохранённый анализ и не вызывает LLM повторно.
+
+`TENDERLENS_API_KEY` необязателен для локальной разработки. Если он задан, все
+`/api/v1/*` маршруты требуют заголовок `X-API-Key`; `/health` и Swagger schema остаются
+доступными для readiness/debug. Для внешнего deployment ключ обязателен вместе с HTTPS/reverse proxy.
+API не хранит загруженные PDF bytes; сохраняются те же структурированные результаты Phase 7,
+а RAG — chunks/vectors в Qdrant.

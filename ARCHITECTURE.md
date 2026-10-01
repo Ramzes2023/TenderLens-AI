@@ -205,3 +205,9 @@ Qdrant server/Cloud, сохранив контракт `RagService` и Telegram 
 ## Phase 9 monitoring architecture
 `EIS RSS -> app.sources.EisRssSource -> TenderNotice -> monitoring.prefilter -> monitor_seen -> Telegram`.
 The source adapter is intentionally separate from Telegram. Search filters are encoded in operator-supplied RSS URLs, not hard-coded. Monitoring persistence uses the existing SQLite file but separate tables. Background polling fetches the configured feed set once per cycle, then applies per-user dedup before notifications. Manual `/tenders` uses the same service. RSS metadata is only a coarse pre-filter; authoritative document analysis remains the Phase 5–8 pipeline.
+
+
+## Phase 10 HTTP boundary
+`app.api` is a second transport beside Telegram. `create_app()` receives an `ApiRuntime`, which makes tests independent of live GigaChat/EIS/Qdrant. Production runtime composition loads each component independently and `/health` reports `ready`/`unavailable` without exposing secrets. API handlers call the existing repository, scoring engine, analysis service, RAG service and monitoring service; they do not contain scoring formulas or vendor SDK code.
+
+Security defaults: bind `127.0.0.1`, bounded multipart PDF input, owner-scoped history/RAG, no raw PDF persistence, and optional constant-time `X-API-Key` comparison. Any non-local deployment must set an API key and put the service behind HTTPS/reverse-proxy controls; Phase 10 does not implement user authentication, rate limiting or multi-tenant authorization beyond the existing owner scope.

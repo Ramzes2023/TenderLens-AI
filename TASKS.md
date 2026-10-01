@@ -83,3 +83,15 @@
 - [x] Background polling loop with bounded notifications.
 - [x] Manual source health check and offline parser/repository/service tests.
 - [ ] Add additional source adapters (Rosatom/B2B-Center/Sberbank-AST/RTS-tender) only after verifying permitted/stable access.
+
+
+## Phase 10 — FastAPI
+- [x] app factory + Uvicorn entrypoint
+- [x] public health/readiness
+- [x] user-scoped history and detail endpoints
+- [x] deterministic scoring endpoint
+- [x] semantic RAG ask endpoint
+- [x] EIS monitoring status/manual scan
+- [x] bounded PDF upload analysis with SHA-256 dedup
+- [x] optional X-API-Key protection
+- [ ] production auth/rate limits (later deployment hardening)

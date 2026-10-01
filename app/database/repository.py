@@ -131,6 +131,17 @@ class TenderRepository:
         except sqlite3.Error:
             raise DatabaseError("Не удалось прочитать локальную базу данных.") from None
 
+    def find_by_id(self, owner_user_id: int, tender_id: int) -> StoredTender | None:
+        try:
+            with closing(self._connect()) as conn:
+                row = conn.execute(
+                    "SELECT * FROM tenders WHERE owner_user_id=? AND id=?",
+                    (owner_user_id, int(tender_id)),
+                ).fetchone()
+            return self._deserialize(row) if row else None
+        except (sqlite3.Error, ValueError, TypeError):
+            raise DatabaseError("Не удалось прочитать локальную базу данных.") from None
+
     def save_success(
         self,
         *,

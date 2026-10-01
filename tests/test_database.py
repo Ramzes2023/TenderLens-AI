@@ -63,6 +63,8 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(stored.scoring.fit_score, 80)
         found = self.repo.find_by_hash(1, "a" * 64)
         self.assertEqual(found.id, stored.id)
+        self.assertEqual(self.repo.find_by_id(1, stored.id).id, stored.id)
+        self.assertIsNone(self.repo.find_by_id(2, stored.id))
         self.assertEqual(len(self.repo.list_recent(1)), 1)
 
     def test_user_isolation_and_upsert(self):

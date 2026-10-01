@@ -95,3 +95,14 @@
 - [x] bounded PDF upload analysis with SHA-256 dedup
 - [x] optional X-API-Key protection
 - [ ] production auth/rate limits (later deployment hardening)
+
+## Phase 11 — Docker / deployment
+
+- [x] Add Dockerfile based on Python 3.12 slim.
+- [x] Run the API as a non-root user.
+- [x] Keep `.env`, local databases and caches outside the image build context.
+- [x] Add Docker healthcheck that requires `/health` status `ok`.
+- [x] Add Compose config with localhost-only default binding.
+- [x] Persist SQLite, local Qdrant and FastEmbed model cache in a named volume.
+- [x] Document single-node limitation of file-backed SQLite/Qdrant local mode.
+- [ ] Verify the image with Docker Desktop on the target Windows machine.

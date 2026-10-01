@@ -53,3 +53,11 @@ Implemented a source-monitoring MVP around configurable EIS RSS feeds: normalize
 
 ## Phase 10: HTTP API
 FastAPI exposes the existing domain services without duplicating Telegram transport. The API is localhost-only by default, has Swagger/OpenAPI, a public readiness endpoint, optional `X-API-Key` protection for `/api/v1/*`, user-scoped history/detail, deterministic scoring, semantic RAG questions, EIS monitoring status/manual scan, and multipart PDF analysis. Duplicate PDFs are detected by the same user-scoped SHA-256 repository rule and reuse stored analysis. Uploaded PDF bytes are not persisted.
+
+## Phase 11 — Docker / single-node deployment
+
+Status: implemented.
+
+Deployment assets now provide a reproducible Python 3.12 Linux image, non-root runtime user, strict container healthcheck, localhost-only default port publishing, and a persistent named volume for SQLite, local Qdrant and FastEmbed cache. Secrets remain outside the image and are injected at runtime from `.env` by Docker Compose.
+
+The current deployment target is intentionally single-node / one API process because the MVP uses file-backed SQLite and Qdrant local mode. Multi-replica production scaling is a later architecture change, not something hidden behind Docker Compose.

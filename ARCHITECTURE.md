@@ -211,3 +211,31 @@ The source adapter is intentionally separate from Telegram. Search filters are e
 `app.api` is a second transport beside Telegram. `create_app()` receives an `ApiRuntime`, which makes tests independent of live GigaChat/EIS/Qdrant. Production runtime composition loads each component independently and `/health` reports `ready`/`unavailable` without exposing secrets. API handlers call the existing repository, scoring engine, analysis service, RAG service and monitoring service; they do not contain scoring formulas or vendor SDK code.
 
 Security defaults: bind `127.0.0.1`, bounded multipart PDF input, owner-scoped history/RAG, no raw PDF persistence, and optional constant-time `X-API-Key` comparison. Any non-local deployment must set an API key and put the service behind HTTPS/reverse-proxy controls; Phase 10 does not implement user authentication, rate limiting or multi-tenant authorization beyond the existing owner scope.
+
+## Phase 11 deployment topology
+
+```text
+Windows / Linux host
+        |
+  127.0.0.1:8000
+        |
++-----------------------+
+| TenderLens API image  |
+| Python 3.12 / Uvicorn |
+| non-root uid 10001    |
++-----------+-----------+
+            |
+            v
+   named Docker volume
+       /app/data
+      /         \
+ SQLite       Qdrant local
+   |              |
+ monitoring     RAG chunks
+                  |
+          FastEmbed cache
+```
+
+Secrets are runtime environment variables from `.env`; they are not copied into the image. The Russian trusted root CA used by the existing GigaChat/EIS configuration is a public trust certificate and is copied into `/app/certs` so the current TLS setup continues to work inside Linux containers.
+
+This topology is a single-node deployment. Local Qdrant mode and SQLite are intentionally kept behind one API process. A future horizontally scaled deployment should move those stateful components to server-backed services rather than mount the same local files into multiple replicas.

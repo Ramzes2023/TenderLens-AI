@@ -469,3 +469,21 @@ PDF endpoint ограничен 10 МиБ, повторный SHA-256 испол
 доступными для readiness/debug. Для внешнего deployment ключ обязателен вместе с HTTPS/reverse proxy.
 API не хранит загруженные PDF bytes; сохраняются те же структурированные результаты Phase 7,
 а RAG — chunks/vectors в Qdrant.
+
+## Phase 11 — Docker deployment
+
+The FastAPI service can now run as a reproducible Linux container. The image uses Python 3.12, runs as a non-root user, has a strict Docker healthcheck, and persists SQLite, local Qdrant and the FastEmbed model cache in a named Docker volume.
+
+The Compose configuration reads secrets from the local `.env` file but `.env` is excluded from the image build context. The API is published to `127.0.0.1:8000` by default, so it is not exposed to the LAN/Internet unless `TENDERLENS_DOCKER_BIND` is deliberately changed.
+
+```powershell
+docker compose build
+docker compose up -d
+docker compose ps
+```
+
+Swagger: `http://127.0.0.1:8000/docs`. Stop the stack with `docker compose down`. Persistent application data remains in the `tenderlens_data` volume; remove it only intentionally with `docker compose down -v`.
+
+The first container start may download the multilingual FastEmbed model. `FASTEMBED_CACHE_PATH` points into the persistent data volume so later container recreations can reuse that cache.
+
+Phase 11 deliberately deploys one FastAPI process against local SQLite/Qdrant storage. This is appropriate for the single-node portfolio deployment. Horizontal scaling or multiple containers writing the same local Qdrant directory should use a server-backed database/vector store instead of sharing local files.

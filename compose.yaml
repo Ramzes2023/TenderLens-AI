@@ -1,0 +1,29 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tenderlens-ai:phase11
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      API_RELOAD: "false"
+      DATABASE_URL: sqlite:////app/data/tenderlens.db
+      DATA_DIR: /app/data
+      RAG_QDRANT_PATH: /app/data/qdrant
+      FASTEMBED_CACHE_PATH: /app/data/fastembed_cache
+      COMPANY_PROFILE_FILE: /app/config/company_profile.example.json
+      GIGACHAT_CA_BUNDLE_FILE: /app/certs/russian_trusted_root_ca_pem.crt
+      EIS_CA_BUNDLE_FILE: /app/certs/russian_trusted_root_ca_pem.crt
+      TENDERLENS_HEALTHCHECK_URL: http://127.0.0.1:8000/health
+    ports:
+      - "${TENDERLENS_DOCKER_BIND:-127.0.0.1}:${TENDERLENS_DOCKER_PORT:-8000}:8000"
+    volumes:
+      - tenderlens_data:/app/data
+    stop_grace_period: 20s
+
+volumes:
+  tenderlens_data:

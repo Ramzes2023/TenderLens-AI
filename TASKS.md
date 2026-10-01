@@ -72,3 +72,14 @@
 - [ ] Unit, integration и end-to-end проверки, набор оценки LLM/RAG.
 - [ ] Инструкция запуска, примеры без конфиденциальных данных, ограничения.
 - [ ] Демонстрация и описание реальной роли разработчика; публикация по запросу.
+
+
+## Phase 9 — monitoring sources
+- [x] Normalized `TenderNotice` source model.
+- [x] Configurable EIS RSS/Atom adapter with HTTPX, proxy/TLS support.
+- [x] Quick company-profile pre-filter without LLM.
+- [x] User-scoped SQLite dedup and monitoring subscriptions.
+- [x] `/tenders`, `/monitor_on`, `/monitor_off`, `/monitor_status`.
+- [x] Background polling loop with bounded notifications.
+- [x] Manual source health check and offline parser/repository/service tests.
+- [ ] Add additional source adapters (Rosatom/B2B-Center/Sberbank-AST/RTS-tender) only after verifying permitted/stable access.

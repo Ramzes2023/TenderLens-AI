@@ -1,0 +1,172 @@
+"""EIS (zakupki.gov.ru) RSS/Atom adapter.
+
+The source URL is configured by the operator instead of being constructed in code.
+This keeps search filters under human control and avoids depending on undocumented
+query-string details. Both RSS 2.0 and Atom payloads are accepted.
+"""
+from __future__ import annotations
+
+import hashlib
+import html
+import re
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass
+from pathlib import Path
+
+import httpx
+
+from .models import TenderNotice
+
+
+class SourceError(RuntimeError):
+    pass
+
+
+_TAG_RE = re.compile(r"<[^>]+>")
+_WS_RE = re.compile(r"\s+")
+_NOTICE_RE = re.compile(r"(?<!\d)(\d{11,20})(?!\d)")
+_PRICE_PATTERNS = (
+    re.compile(r"(?:НМЦК|начальн(?:ая|ой)\s+цена|цена\s+контракта)[^\d]{0,40}([\d\s\u00a0]+(?:[,.]\d{1,2})?)", re.I),
+    re.compile(r"([\d\s\u00a0]+(?:[,.]\d{1,2})?)\s*(?:₽|руб(?:\.|лей|ля)?)", re.I),
+)
+_CUSTOMER_RE = re.compile(r"(?:заказчик|организация)\s*[:\-]\s*([^;\n|]{3,300})", re.I)
+_DEADLINE_RE = re.compile(r"(?:окончани[ея]\s+подачи\s+заявок|срок\s+подачи\s+заявок)\s*[:\-]\s*([^;\n|]{3,120})", re.I)
+_REGION_RE = re.compile(r"(?:регион|место\s+поставки)\s*[:\-]\s*([^;\n|]{3,160})", re.I)
+
+
+def _local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1].lower()
+
+
+def _clean(value: str | None) -> str:
+    if not value:
+        return ""
+    value = html.unescape(value)
+    value = _TAG_RE.sub(" ", value)
+    return _WS_RE.sub(" ", value).strip()
+
+
+def _child_text(element: ET.Element, names: set[str]) -> str:
+    for child in list(element):
+        if _local_name(child.tag) in names:
+            text = "".join(child.itertext()) if list(child) else (child.text or "")
+            cleaned = _clean(text)
+            if cleaned:
+                return cleaned
+    return ""
+
+
+def _entry_link(element: ET.Element) -> str:
+    for child in list(element):
+        if _local_name(child.tag) != "link":
+            continue
+        href = (child.attrib.get("href") or "").strip()
+        if href:
+            return href
+        text = _clean(child.text)
+        if text:
+            return text
+    return ""
+
+
+def _parse_money(text: str) -> float | None:
+    for pattern in _PRICE_PATTERNS:
+        match = pattern.search(text)
+        if not match:
+            continue
+        value = match.group(1).replace("\u00a0", "").replace(" ", "").replace(",", ".")
+        try:
+            return float(value)
+        except ValueError:
+            continue
+    return None
+
+
+def _extract(pattern: re.Pattern[str], text: str) -> str | None:
+    match = pattern.search(text)
+    return _clean(match.group(1)) if match else None
+
+
+def _stable_id(guid: str, link: str, title: str, published: str) -> str:
+    basis = guid or link or f"{title}|{published}"
+    return hashlib.sha256(basis.encode("utf-8", errors="replace")).hexdigest()
+
+
+def parse_eis_feed(payload: bytes, *, source_name: str = "eis") -> list[TenderNotice]:
+    try:
+        root = ET.fromstring(payload)
+    except ET.ParseError:
+        raise SourceError("ЕИС вернул некорректный RSS/Atom XML.") from None
+
+    entries = [node for node in root.iter() if _local_name(node.tag) in {"item", "entry"}]
+    notices: list[TenderNotice] = []
+    for entry in entries:
+        title = _child_text(entry, {"title"}) or "Закупка без названия"
+        description = _child_text(entry, {"description", "summary", "content"})
+        published = _child_text(entry, {"pubdate", "published", "updated"}) or None
+        guid = _child_text(entry, {"guid", "id"})
+        link = _entry_link(entry)
+        combined = _clean(" ".join(filter(None, [title, description])))
+        number_match = _NOTICE_RE.search(combined + " " + link)
+        tender_number = number_match.group(1) if number_match else None
+        external_id = guid or tender_number or _stable_id(guid, link, title, published or "")
+        notices.append(TenderNotice(
+            source=source_name,
+            external_id=external_id[:500],
+            title=title[:1000],
+            url=link[:2000],
+            published_at=published,
+            tender_number=tender_number,
+            customer=_extract(_CUSTOMER_RE, combined),
+            initial_price=_parse_money(combined),
+            currency="RUB" if re.search(r"(?:₽|руб(?:\.|лей|ля)?)", combined, re.I) else None,
+            deadline=_extract(_DEADLINE_RE, combined),
+            region=_extract(_REGION_RE, combined),
+            summary=description[:4000] or None,
+        ))
+    return notices
+
+
+@dataclass(frozen=True)
+class EisRssSource:
+    urls: tuple[str, ...]
+    timeout: float = 30.0
+    ca_bundle_file: Path | None = None
+    name: str = "eis"
+
+    async def fetch(self, limit: int = 20) -> list[TenderNotice]:
+        limit = max(1, min(int(limit), 100))
+        if not self.urls:
+            return []
+        verify: bool | str = str(self.ca_bundle_file) if self.ca_bundle_file else True
+        merged: list[TenderNotice] = []
+        seen: set[tuple[str, str]] = set()
+        try:
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                follow_redirects=True,
+                verify=verify,
+                trust_env=True,
+                headers={"User-Agent": "TenderLensAI/0.9 (+RSS monitor)"},
+            ) as client:
+                for url in self.urls:
+                    response = await client.get(url)
+                    response.raise_for_status()
+                    payload = response.content
+                    if len(payload) > 5 * 1024 * 1024:
+                        raise SourceError("RSS ЕИС превышает безопасный лимит 5 МиБ.")
+                    content_type = response.headers.get("content-type", "").lower()
+                    if "html" in content_type or payload.lstrip().lower().startswith(b"<!doctype html"):
+                        raise SourceError("ЕИС вернул HTML вместо RSS/Atom XML.")
+                    for notice in parse_eis_feed(payload, source_name=self.name):
+                        if notice.identity in seen:
+                            continue
+                        seen.add(notice.identity)
+                        merged.append(notice)
+                        if len(merged) >= limit:
+                            return merged
+        except SourceError:
+            raise
+        except (httpx.HTTPError, OSError):
+            raise SourceError("Не удалось получить RSS ЕИС: проверьте URL, сеть, proxy и TLS CA.") from None
+        return merged

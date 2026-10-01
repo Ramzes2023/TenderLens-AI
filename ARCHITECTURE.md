@@ -200,3 +200,8 @@ locks в local mode. Коллекция создаётся по размерно
 Исходный PDF не хранится; `data/qdrant/` содержит chunk text и vectors, считается чувствительным
 локальным хранилищем и исключён из Git. При production deployment local Qdrant можно заменить на
 Qdrant server/Cloud, сохранив контракт `RagService` и Telegram workflow.
+
+
+## Phase 9 monitoring architecture
+`EIS RSS -> app.sources.EisRssSource -> TenderNotice -> monitoring.prefilter -> monitor_seen -> Telegram`.
+The source adapter is intentionally separate from Telegram. Search filters are encoded in operator-supplied RSS URLs, not hard-coded. Monitoring persistence uses the existing SQLite file but separate tables. Background polling fetches the configured feed set once per cycle, then applies per-user dedup before notifications. Manual `/tenders` uses the same service. RSS metadata is only a coarse pre-filter; authoritative document analysis remains the Phase 5–8 pipeline.

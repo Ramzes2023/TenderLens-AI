@@ -49,7 +49,8 @@ def create_dispatcher() -> Dispatcher:
 
 
 async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: int = 20000,
-                  company_profile=None, tender_repository=None, rag_service=None) -> None:
+                  company_profile=None, tender_repository=None, rag_service=None,
+                  monitoring_service=None) -> None:
     if settings.proxy_url:
         session = AiohttpSession(proxy=settings.proxy_url)
         try:
@@ -70,15 +71,29 @@ async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: in
             dispatcher["tender_repository"] = tender_repository
         if rag_service is not None:
             dispatcher["rag_service"] = rag_service
+        if monitoring_service is not None:
+            dispatcher["monitoring_service"] = monitoring_service
         await bot.get_me()  # Validate credentials before announcing successful startup.
+        monitor_task = None
+        monitor_stop = None
+        if monitoring_service is not None and monitoring_service.settings.enabled:
+            from .monitoring import monitor_loop
+            monitor_stop = asyncio.Event()
+            monitor_task = asyncio.create_task(monitor_loop(bot, monitoring_service, monitor_stop))
+            logger.info("Автомониторинг тендеров запущен.")
         logger.info("TenderLens AI запущен. Остановка: Ctrl+C.")
-        await dispatcher.start_polling(
-            bot,
-            allowed_updates=dispatcher.resolve_used_update_types(),
-            handle_as_tasks=False,
-            handle_signals=sys.platform != "win32",
-            close_bot_session=False,
-        )
+        try:
+            await dispatcher.start_polling(
+                bot,
+                allowed_updates=dispatcher.resolve_used_update_types(),
+                handle_as_tasks=False,
+                handle_signals=sys.platform != "win32",
+                close_bot_session=False,
+            )
+        finally:
+            if monitor_task is not None:
+                from .monitoring import stop_monitor_task
+                await stop_monitor_task(monitor_task, monitor_stop)
     finally:
         await bot.session.close()
         logger.info("Сессия Telegram закрыта.")
@@ -129,8 +144,36 @@ def main() -> int:
     except (RagConfigurationError, RagError, RagStoreError):
         logger.warning("RAG отключён: проверьте RAG_* настройки и доступ к локальному индексу.")
 
+    from app.monitoring import (MonitoringConfigurationError, MonitoringRepository,
+                                MonitoringRepositoryError, TenderMonitorService,
+                                load_monitoring_settings)
+    from app.sources import EisRssSource
+    monitoring_service = None
     try:
-        asyncio.run(run_bot(settings, provider, max_chars, company_profile, tender_repository, rag_service))
+        monitor_settings = load_monitoring_settings()
+        if monitor_settings.source_configured:
+            if tender_repository is None:
+                from app.database import load_database_settings
+                db_path = load_database_settings().path
+            else:
+                db_path = tender_repository.path
+            monitor_repository = MonitoringRepository(db_path)
+            monitor_repository.initialize()
+            source = EisRssSource(
+                urls=monitor_settings.eis_rss_urls,
+                timeout=monitor_settings.request_timeout,
+                ca_bundle_file=monitor_settings.ca_bundle_file,
+            )
+            monitoring_service = TenderMonitorService(
+                monitor_settings, source, monitor_repository, company_profile
+            )
+        elif monitor_settings.enabled:
+            logger.warning("Автомониторинг включён, но EIS_RSS_URLS пуст — monitoring не запущен.")
+    except (MonitoringConfigurationError, MonitoringRepositoryError):
+        logger.warning("Monitoring отключён: проверьте MONITOR_* / EIS_* настройки и SQLite.")
+
+    try:
+        asyncio.run(run_bot(settings, provider, max_chars, company_profile, tender_repository, rag_service, monitoring_service))
     except KeyboardInterrupt:
         logger.info("Бот остановлен пользователем.")
     except TelegramUnauthorizedError:

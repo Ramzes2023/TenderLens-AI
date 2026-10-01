@@ -178,3 +178,20 @@ Dispatcher dependency injection. Локальный MVP поддерживает
 вызываются через `asyncio.to_thread`, поэтому короткие локальные SQL-запросы не блокируют
 async Telegram loop. Для многопроцессного/серверного масштаба Phase 10/11 может заменить
 этот репозиторий PostgreSQL-реализацией с миграционным инструментом.
+
+
+## Phase 8 RAG
+
+После чтения PDF parser сохраняет page-level text только в памяти. `app.rag.chunking` создаёт
+ограниченные chunks с overlap и номером страницы. `HashEmbeddingProvider` строит локальный
+детерминированный dense vector без сетевого вызова; `SQLiteVectorStore` хранит vector BLOB +
+chunk text в отдельной `RAG_DATABASE_URL`. Индекс изолирован по `(Telegram user id, PDF SHA-256)`.
+
+`/ask <вопрос>` выбирает последний тендер пользователя из основной SQLite history, ищет top-k
+фрагментов только этого PDF, ограничивает общий контекст и вызывает существующий LLMProvider.
+Prompt запрещает внешние знания/догадки; ответ показывает страницы retrieved chunks.
+
+Важно: hashing vectors — лёгкий lexical retrieval MVP, а не semantic embedding model. Интерфейсы
+`RagService`/vector store/embedder отделены, поэтому backend можно заменить на Qdrant и semantic
+embeddings без изменения Telegram workflow. Исходный PDF не хранится; RAG DB хранит текст chunks
+локально, поэтому её следует считать чувствительными данными и не коммитить.

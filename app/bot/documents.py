@@ -62,7 +62,7 @@ async def _send_stored(message: Message, record) -> None:
 
 
 async def pdf_handler(message: Message, bot: Bot, tender_provider=None, tender_max_chars: int = 20000,
-                      company_profile=None, tender_repository=None) -> None:
+                      company_profile=None, tender_repository=None, rag_service=None) -> None:
     document = message.document
     if document is None:
         return
@@ -102,6 +102,25 @@ async def pdf_handler(message: Message, bot: Bot, tender_provider=None, tender_m
                         existing = None
                         logger.warning("Не удалось проверить PDF на дубликат (%s).", type(error).__name__)
                     if existing is not None:
+                        if rag_service is not None:
+                            try:
+                                indexed = await asyncio.to_thread(rag_service.has_document, owner_id, pdf_hash)
+                            except Exception as error:
+                                indexed = True
+                                logger.warning("Не удалось проверить RAG-индекс (%s).", type(error).__name__)
+                            if not indexed:
+                                try:
+                                    rag_summary = await summarize_pdf(data)
+                                    if rag_summary.status == "ok":
+                                        count = await asyncio.to_thread(
+                                            rag_service.index_pdf, owner_id, pdf_hash, rag_summary
+                                        )
+                                        await message.answer(
+                                            f"📚 RAG-индекс подготовлен локально: {count} фрагм. Теперь доступна команда /ask.",
+                                            parse_mode=None,
+                                        )
+                                except Exception as error:
+                                    logger.warning("Не удалось создать RAG-индекс (%s).", type(error).__name__)
                         await _send_stored(message, existing)
                         return
                 try:
@@ -139,6 +158,16 @@ async def pdf_handler(message: Message, bot: Bot, tender_provider=None, tender_m
             await message.answer(chunk, parse_mode=None)
 
     owner_id, chat_id = _identity(message)
+    if rag_service is not None and owner_id is not None and pdf_hash is not None:
+        try:
+            count = await asyncio.to_thread(rag_service.index_pdf, owner_id, pdf_hash, result)
+            await message.answer(
+                f"📚 RAG-индекс создан: {count} фрагм. Задайте вопрос командой /ask.",
+                parse_mode=None,
+            )
+        except Exception as error:
+            logger.warning("Не удалось создать RAG-индекс (%s).", type(error).__name__)
+
     if (tender_repository is not None and owner_id is not None and chat_id is not None
             and pdf_hash is not None):
         try:

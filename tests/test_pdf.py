@@ -20,6 +20,8 @@ class ParserTests(unittest.TestCase):
     def test_text_and_empty_page(self):
         result = parse_pdf(fixture())
         self.assertEqual((result.status, result.pages, result.characters, result.empty_pages), ("ok", 2, len("Tender test\n"), 1))
+        self.assertEqual(len(result.page_texts), 2)
+        self.assertIn("Tender test", result.page_texts[0])
 
     def test_blank_pdf_needs_ocr(self):
         result = parse_pdf(fixture(blank=True))

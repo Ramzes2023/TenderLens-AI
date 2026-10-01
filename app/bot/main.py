@@ -49,7 +49,7 @@ def create_dispatcher() -> Dispatcher:
 
 
 async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: int = 20000,
-                  company_profile=None, tender_repository=None) -> None:
+                  company_profile=None, tender_repository=None, rag_service=None) -> None:
     if settings.proxy_url:
         session = AiohttpSession(proxy=settings.proxy_url)
         try:
@@ -68,6 +68,8 @@ async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: in
             dispatcher["company_profile"] = company_profile
         if tender_repository is not None:
             dispatcher["tender_repository"] = tender_repository
+        if rag_service is not None:
+            dispatcher["rag_service"] = rag_service
         await bot.get_me()  # Validate credentials before announcing successful startup.
         logger.info("TenderLens AI запущен. Остановка: Ctrl+C.")
         await dispatcher.start_polling(
@@ -118,8 +120,17 @@ def main() -> int:
     except (DatabaseConfigurationError, DatabaseError):
         logger.warning("История тендеров отключена: проверьте DATABASE_URL и доступ к файлу БД.")
 
+    from app.rag import RagConfigurationError, RagError, RagService, RagStoreError, load_rag_settings
+    rag_service = None
     try:
-        asyncio.run(run_bot(settings, provider, max_chars, company_profile, tender_repository))
+        rag_settings = load_rag_settings()
+        if rag_settings.enabled:
+            rag_service = RagService(rag_settings)
+    except (RagConfigurationError, RagError, RagStoreError):
+        logger.warning("RAG отключён: проверьте RAG_* настройки и доступ к локальному индексу.")
+
+    try:
+        asyncio.run(run_bot(settings, provider, max_chars, company_profile, tender_repository, rag_service))
     except KeyboardInterrupt:
         logger.info("Бот остановлен пользователем.")
     except TelegramUnauthorizedError:

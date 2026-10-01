@@ -14,6 +14,7 @@ class PdfSummary:
     characters: int = 0
     empty_pages: int = 0
     text: str = field(default="", repr=False)
+    page_texts: tuple[str, ...] = field(default_factory=tuple, repr=False)
 
 
 def parse_pdf(data: bytes) -> PdfSummary:
@@ -42,6 +43,6 @@ def parse_pdf(data: bytes) -> PdfSummary:
                 empty += not bool(text.strip())
                 if count > MAX_CHARACTERS:
                     return PdfSummary("too_much_text", pages)
-            return PdfSummary("no_text" if empty == pages else "ok", pages, count, empty, "\n".join(texts))
+            return PdfSummary("no_text" if empty == pages else "ok", pages, count, empty, "\n".join(texts), tuple(texts))
     except Exception:
         return PdfSummary("invalid")

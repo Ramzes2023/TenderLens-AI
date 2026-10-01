@@ -48,7 +48,8 @@ def create_dispatcher() -> Dispatcher:
     return dispatcher
 
 
-async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: int = 20000) -> None:
+async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: int = 20000,
+                  company_profile=None) -> None:
     if settings.proxy_url:
         session = AiohttpSession(proxy=settings.proxy_url)
         try:
@@ -63,6 +64,8 @@ async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: in
         if tender_provider is not None:
             dispatcher["tender_provider"] = tender_provider
             dispatcher["tender_max_chars"] = tender_max_chars
+        if company_profile is not None:
+            dispatcher["company_profile"] = company_profile
         await bot.get_me()  # Validate credentials before announcing successful startup.
         logger.info("TenderLens AI запущен. Остановка: Ctrl+C.")
         await dispatcher.start_polling(
@@ -95,8 +98,16 @@ def main() -> int:
         provider = GigaChatProvider(llm_settings)
     except (LLMConfigurationError, AnalysisError):
         logger.warning("AI-анализ отключён: проверьте настройки LLM и лимит текста.")
+
+    from app.scoring.config import ScoringConfigurationError, load_company_profile
+    company_profile = None
     try:
-        asyncio.run(run_bot(settings, provider, max_chars))
+        company_profile = load_company_profile()
+    except ScoringConfigurationError:
+        logger.warning("Scoring отключён: проверьте профиль компании.")
+
+    try:
+        asyncio.run(run_bot(settings, provider, max_chars, company_profile))
     except KeyboardInterrupt:
         logger.info("Бот остановлен пользователем.")
     except TelegramUnauthorizedError:

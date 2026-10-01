@@ -29,7 +29,8 @@ def format_summary(name: str, result: PdfSummary) -> str:
     return text
 
 
-async def pdf_handler(message: Message, bot: Bot, tender_provider=None, tender_max_chars: int = 20000) -> None:
+async def pdf_handler(message: Message, bot: Bot, tender_provider=None, tender_max_chars: int = 20000,
+                      company_profile=None) -> None:
     document = message.document
     if document is None:
         return
@@ -76,3 +77,10 @@ async def pdf_handler(message: Message, bot: Bot, tender_provider=None, tender_m
         return
     for chunk in format_tender(analysis):
         await message.answer(chunk, parse_mode=None)
+
+    if company_profile is not None:
+        from app.scoring.engine import score_tender
+        from .scoring import format_scoring
+        scoring = score_tender(analysis.analysis, company_profile)
+        for chunk in format_scoring(scoring):
+            await message.answer(chunk, parse_mode=None)

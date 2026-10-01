@@ -1,0 +1,33 @@
+{
+  "profile_version": "demo-1",
+  "company_name": "TenderLens Demo Supplier",
+  "product_keywords": [
+    "электротехническое оборудование",
+    "автоматические выключатели",
+    "контакторы",
+    "шкафы управления",
+    "промышленная автоматика"
+  ],
+  "allowed_regions": [
+    "Москва",
+    "Московская область",
+    "Санкт-Петербург"
+  ],
+  "accepted_currencies": ["RUB"],
+  "max_contract_value": 15000000,
+  "max_bid_security_percent": 3,
+  "max_contract_security_percent": 10,
+  "available_document_keywords": [
+    "ЕГРЮЛ",
+    "ЕГРИП",
+    "декларация соответствия",
+    "техническое предложение",
+    "сертификат соответствия ЕАЭС",
+    "сертификатов соответствия ЕАЭС"
+  ],
+  "hard_stop_on_region": true,
+  "hard_stop_on_budget": true,
+  "hard_stop_on_currency": true,
+  "hard_stop_on_bid_security": false,
+  "hard_stop_on_contract_security": false
+}

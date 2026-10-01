@@ -1,6 +1,6 @@
 # TenderLens AI — intended architecture
 
-Ниже целевая архитектура; реализованы Phase 1–4. Поток полного анализа пока планируется.
+Ниже целевая архитектура; реализованы Phase 1–6. Поток полного анализа пока планируется.
 Обновление Phase 3: document handler -> services.pdf (загрузка с лимитом) ->
 отдельный процесс parsers.pdf_worker -> PyMuPDF -> PdfSummary -> ответ в Telegram.
 На диск файл не записывается; в текущем этапе сохраняется только статистика в ответе,
@@ -137,3 +137,22 @@ documents → services.tender_analysis → LLMProvider → TenderAnalysis → bo
 Formatter использует plain text, разбиение учитывает UTF-16 лимит Telegram.
 Никакого scoring, выбора участия, сохранения в БД или RAG. Старое описание отдельного
 health-потока Phase 4 остаётся историей; теперь читаемые PDF подключены к LLM.
+
+
+## Phase 6: детерминированный scoring
+
+`documents -> tender_analysis -> TenderAnalysis -> scoring.engine -> ScoringResult -> bot.scoring`.
+`CompanyProfile` загружается один раз в composition root из JSON-файла, путь задаётся
+`COMPANY_PROFILE_FILE`; секретов профиль не содержит. Telegram и LLM не вычисляют score.
+
+Scoring разделяет:
+- fit — взвешенное соответствие только по критериям, для которых есть данные;
+- completeness — наличие ключевых извлечённых групп фактов;
+- document risks — риски, извлечённые из документа LLM-слоем;
+- stop factors — нарушения явных hard-stop правил профиля.
+
+Отсутствующие факты дают `not_scored`, поэтому неизвестность не превращается в отрицательное
+совпадение. Веса MVP: category 30, region 15, budget 20, bid security 10, contract
+security 10, documents 15. Документ readiness — только keyword-проверка и не доказывает
+юридическую действительность документов. Fit не является прогнозом победы и не принимает
+решение об участии. Для реальной компании нужен отдельный профиль и проверка правил.

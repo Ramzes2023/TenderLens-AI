@@ -1,108 +1,41 @@
-# TenderLens AI — phased roadmap
+# TenderLens AI — implementation checklist
 
-Реализованы Phase 1–8; пользователь подтвердил живую проверку Telegram PDF, scoring и Phase 7 history/dedup. Следующие этапы — план.
-На каждом этапе добавлять относящиеся к нему проверки; Phase 12 объединяет
-сквозные проверки и итоговую документацию.
+## v1.0.0 completed
 
-## Phase 1 - project foundation
-- [x] Структура Python 3.12, документация, шаблон окружения, Git.
-- [x] Проверка состава файлов и импортов; без зависимостей и бизнес-логики.
+- [x] Phase 1 — project foundation, package structure and configuration.
+- [x] Phase 2 — Telegram bot startup and basic commands.
+- [x] Phase 3 — bounded PDF upload and local text extraction.
+- [x] Phase 4 — GigaChat provider abstraction and live health check.
+- [x] Phase 4.1 — portable explicit proxy configuration.
+- [x] Phase 5 — strict structured tender analysis.
+- [x] Phase 6 — deterministic company-profile scoring.
+- [x] Phase 7 — SQLite history and owner-scoped SHA-256 deduplication.
+- [x] Phase 8 — document Q&A RAG flow.
+- [x] Phase 8.1 — multilingual semantic embeddings + Qdrant local mode.
+- [x] Phase 9 — EIS RSS monitoring, pre-filter, subscriptions and deduplication.
+- [x] Phase 10 — FastAPI backend and Swagger/OpenAPI.
+- [x] Phase 11 — Docker image, Compose, persistent volume and healthcheck.
+- [x] Phase 12 — portfolio README, architecture/security/deployment/demo docs, CI, smoke test and synthetic demo PDF.
 
-## Phase 2 - Telegram bot
-- [x] Минимальный бот: /start, /help, /status, конфигурация токена, обработка ошибок.
-- [x] aiogram 3.31.0 и python-dotenv 1.2.4 в существующем .venv.
-- [x] Проверить маршрутизацию без реального токена, конфигурацию и завершение.
-- [ ] Ручная проверка трёх команд с настоящим Telegram-ботом (нужен токен).
+## Verified quality gates
 
-## Phase 3 - PDF upload and parsing
-- [x] Приём PDF, ограничения размера/типа; обработка в памяти без хранения.
-- [x] Постраничное извлечение текста и сводная статистика; обработка повреждённых файлов.
-- [x] Для сканов явно сообщать о необходимости OCR; OCR не реализован.
-- [x] Ручная отправка PDF в Telegram подтверждена пользователем.
+- [x] Offline automated test suite passes on the Windows development environment.
+- [x] FastAPI `/health` works locally and in Docker.
+- [x] Docker service reports `healthy`.
+- [x] FastEmbed semantic model works on host and inside Docker.
+- [x] `.env` and `data/` are excluded from Git/Docker context.
+- [x] API binds to localhost by default.
+- [x] Container runs as a non-root user.
+- [x] Portfolio docs distinguish implemented behavior from limitations.
 
-## Phase 4 - GigaChat API integration
-- [x] Общий async-контракт LLMProvider и адаптер GigaChat.
-- [x] Таймауты, безопасные ошибки, учёт токенов и mock-тесты; повторы временных ошибок отключены.
-- [x] Возможность нового адаптера через LLMProvider; YandexGPT не реализован.
-- [ ] Проверить настройки доступа и стоимость перед реальным вызовом.
+## Deliberate post-v1 backlog
 
-## Phase 5 - structured tender extraction
-- [x] Схема фактов: заказчик, сумма/валюта, сроки, обеспечение, требования, источники.
-- [x] Проверка ответа LLM; отсутствующие данные — unknown/null, не выдуманные значения.
-- [x] Mock-проверки структуры, ошибок, усечения и Telegram-сводки.
-- [ ] Ручная проверка точности на размеченных реальных документах.
-
-## Phase 6 - tender scoring
-- [x] Профиль компании и явные версионируемые правила.
-- [x] Разделить соответствие, риски и полноту данных.
-- [x] Воспроизводимый результат с объяснением; не вероятность победы.
-- [ ] Ручная Telegram-проверка с реальным GigaChat и демо-профилем.
-
-## Phase 7 - database
-- [x] Локальная SQLite-схема и репозиторий с версией схемы.
-- [x] Хранение метаданных, структурированного AI-анализа и scoring; PDF и полный текст не сохраняются.
-- [x] Изоляция по Telegram user id, SHA-256 дедупликация и /history.
-- [ ] Ручная проверка сохранения, повторной отправки PDF и /history в Telegram.
-
-## Phase 8 - RAG
-- [x] Постраничные chunks с overlap и привязкой к номеру страницы.
-- [x] /ask по последнему тендеру: retrieval top-k → grounded GigaChat answer → страницы-источники.
-- [x] Повторный PDF Phase 7 может построить RAG-индекс без повторного AI-анализа.
-- [x] Phase 8.1: FastEmbed `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` вместо hashing vectors.
-- [x] Phase 8.1: Qdrant local mode вместо самописного SQLite vector search.
-- [ ] На наборе реальных многостраничных тендеров измерить retrieval recall/precision и качество источников.
-- [ ] При серверном deployment переключить Qdrant local path на отдельный Qdrant service/Cloud.
-
-## Phase 9 - tender source monitoring
-- [ ] Контракт источника и один разрешённый источник для начала.
-- [ ] Расписание, контроль частоты, дедупликация и уведомления по подписке.
-- [ ] Обработка изменений и недоступности; не обходить ограничения площадок.
-
-## Phase 10 - FastAPI
-- [ ] HTTP-слой поверх существующих services, без дублирования логики.
-- [ ] Валидация, авторизация, изоляция пользователей, состояния фоновых задач.
-- [ ] Контрактные проверки API.
-
-## Phase 11 - Docker
-- [ ] Dockerfile и compose только для реально реализованных сервисов.
-- [ ] Секреты вне образа, непривилегированный процесс, volumes, health checks.
-- [ ] Проверка воспроизводимого запуска.
-
-## Phase 12 - tests and documentation
-- [ ] Unit, integration и end-to-end проверки, набор оценки LLM/RAG.
-- [ ] Инструкция запуска, примеры без конфиденциальных данных, ограничения.
-- [ ] Демонстрация и описание реальной роли разработчика; публикация по запросу.
-
-
-## Phase 9 — monitoring sources
-- [x] Normalized `TenderNotice` source model.
-- [x] Configurable EIS RSS/Atom adapter with HTTPX, proxy/TLS support.
-- [x] Quick company-profile pre-filter without LLM.
-- [x] User-scoped SQLite dedup and monitoring subscriptions.
-- [x] `/tenders`, `/monitor_on`, `/monitor_off`, `/monitor_status`.
-- [x] Background polling loop with bounded notifications.
-- [x] Manual source health check and offline parser/repository/service tests.
-- [ ] Add additional source adapters (Rosatom/B2B-Center/Sberbank-AST/RTS-tender) only after verifying permitted/stable access.
-
-
-## Phase 10 — FastAPI
-- [x] app factory + Uvicorn entrypoint
-- [x] public health/readiness
-- [x] user-scoped history and detail endpoints
-- [x] deterministic scoring endpoint
-- [x] semantic RAG ask endpoint
-- [x] EIS monitoring status/manual scan
-- [x] bounded PDF upload analysis with SHA-256 dedup
-- [x] optional X-API-Key protection
-- [ ] production auth/rate limits (later deployment hardening)
-
-## Phase 11 — Docker / deployment
-
-- [x] Add Dockerfile based on Python 3.12 slim.
-- [x] Run the API as a non-root user.
-- [x] Keep `.env`, local databases and caches outside the image build context.
-- [x] Add Docker healthcheck that requires `/health` status `ok`.
-- [x] Add Compose config with localhost-only default binding.
-- [x] Persist SQLite, local Qdrant and FastEmbed model cache in a named volume.
-- [x] Document single-node limitation of file-backed SQLite/Qdrant local mode.
-- [ ] Verify the image with Docker Desktop on the target Windows machine.
+- [ ] OCR for scan-only PDFs.
+- [ ] PostgreSQL + schema migration tooling.
+- [ ] Qdrant server/Cloud for multi-process deployment.
+- [ ] Proper user authentication/authorization and rate limiting.
+- [ ] Metrics/tracing/centralized logs.
+- [ ] Additional source adapters: B2B-Center, РТС-тендер, Сбербанк-АСТ, Росатом.
+- [ ] Optional second LLM provider.
+- [ ] Automated retention policies for RAG/database data.
+- [ ] Deployment to a public HTTPS environment after security hardening.

@@ -7,6 +7,8 @@ import hashlib
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.security import APIKeyHeader
 
+from app import __version__
+
 from app.database import DatabaseError
 from app.llm.base import LLMError
 from app.models.tender import TenderAnalysis
@@ -85,7 +87,7 @@ async def health(request: Request) -> HealthResponse:
     return HealthResponse(
         status=overall,
         service="TenderLens AI",
-        phase="10-fastapi",
+        version=__version__,
         components=components,
     )
 

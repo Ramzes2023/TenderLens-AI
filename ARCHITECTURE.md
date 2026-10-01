@@ -1,241 +1,142 @@
-# TenderLens AI — intended architecture
+# TenderLens AI — architecture
 
-Ниже целевая архитектура; реализованы Phase 1–6. Поток полного анализа пока планируется.
-Обновление Phase 3: document handler -> services.pdf (загрузка с лимитом) ->
-отдельный процесс parsers.pdf_worker -> PyMuPDF -> PdfSummary -> ответ в Telegram.
-На диск файл не записывается; в текущем этапе сохраняется только статистика в ответе,
-постраничный текст извлекается временно. Для будущего RAG потребуется отдельный контракт хранения.
-app.bot.__main__ -> main -> config + Dispatcher -> handlers.
-HTTP-сессией владеет run_bot и закрывает её в finally. На Windows Ctrl+C обрабатывает
-asyncio.run; на других платформах включены signal handlers aiogram.
-Команды отвечают статическими сообщениями; documents использует services.pdf.
+## System view
 
-## Поток анализа
+```mermaid
+flowchart TB
+    subgraph Inputs
+        TG[Telegram user]
+        HTTP[HTTP / Swagger client]
+        EIS[ЕИС RSS feeds]
+    end
 
-```text
-Telegram (позже HTTP API) / источник тендеров
-                  |
-                  v
-             services
-                  |
-                  v
-         parsers -> текст + страницы
-                  |
-                  v
-      llm -> извлечение фактов -> проверка схемы
-                  |
-                  v
-      scoring + профиль компании -> объяснимая оценка
-                  |
-                  v
-       database -> ответ / уведомление пользователю
+    subgraph Application
+        BOT[aiogram transport]
+        API[FastAPI transport]
+        SRC[Source adapters]
+        PARSE[PDF parser]
+        ANALYZE[Structured analysis service]
+        SCORE[Deterministic scoring engine]
+        RAGSVC[RAG service]
+        MON[Monitoring service]
+    end
+
+    subgraph Providers
+        GIGA[GigaChat]
+        EMB[FastEmbed multilingual model]
+    end
+
+    subgraph State
+        DB[(SQLite)]
+        QD[(Qdrant local)]
+    end
+
+    TG --> BOT
+    HTTP --> API
+    EIS --> SRC --> MON
+    BOT --> PARSE
+    API --> PARSE
+    PARSE --> ANALYZE --> GIGA
+    ANALYZE --> SCORE
+    PARSE --> RAGSVC
+    RAGSVC --> EMB
+    RAGSVC --> QD
+    RAGSVC --> GIGA
+    SCORE --> DB
+    MON --> DB
+    BOT --> DB
+    API --> DB
+    API --> SCORE
+    API --> RAGSVC
+    API --> MON
 ```
 
-Отдельный поток RAG: документ -> фрагменты -> embeddings -> индекс;
-вопрос -> поиск разрешённых пользователю фрагментов -> LLM -> ответ со ссылками.
-SQL хранит метаданные и результаты; векторный индекс не заменяет SQL.
+## Boundaries
 
-## Границы модулей
+### Transport layer
 
-| Пакет | Назначение |
-|---|---|
-| app/bot | Telegram handlers, загрузки, представление ответов |
-| app/api | FastAPI routes и HTTP-схемы |
-| app/services | Сценарии анализа, извлечения, ответов и мониторинга |
-| app/parsers | Преобразование документов в текст с источниками |
-| app/llm | Общий контракт и заменяемые API-адаптеры GigaChat/YandexGPT |
-| app/scoring | Детерминированные правила без зависимости от Telegram и LLM |
-| app/database | Репозитории, SQL-модели, миграции |
-| app/rag | Chunking, embeddings, поиск, связи с исходными страницами |
-| tests | Будущие unit/integration/evaluation сценарии |
+`app.bot` and `app.api` are independent transports. They orchestrate existing services rather than duplicating scoring formulas, parsing logic or provider code.
 
-Bot и API вызывают services. Транспортные обработчики не рассчитывают score
-и не обращаются к конкретному LLM SDK. Services получают зависимости явно,
-чтобы в тестах заменять внешние API и хранилища.
-Конкретные интерфейсы и модели данных будут введены при реализации соответствующих этапов.
+### PDF and structured analysis
 
-## Данные и качество
+`app.parsers` reads bounded text from PDF pages. `app.services.tender_analysis` builds a strict JSON-only prompt and validates the LLM result into `TenderAnalysis`. Unknown values stay unknown instead of being fabricated.
 
-Будущие сущности: пользователь/организация, профиль компании, тендер, документ,
-страница/фрагмент, факты, запуск анализа, результат scoring и подписка.
-Денежные значения — точные десятичные числа с валютой; сроки — с часовым поясом.
-У каждого извлечённого факта сохраняется источник. LLM извлекает и объясняет,
-а правила Python рассчитывают оценку. Недостаток данных показывается явно.
-Scoring не является обещанием победы или автоматическим решением об участии.
+The history database stores structured analysis/scoring metadata and SHA-256, not raw PDF bytes or the complete extracted document text.
 
-Документы считаются недоверенными данными: содержащиеся в них указания не должны
-разрешать вызовы инструментов или менять системные правила.
-Поиск и выдача документов ограничиваются владельцем/организацией.
-Логи не должны содержать ключи и полный текст конфиденциальных документов.
+### Deterministic scoring
 
-## Интеграции и исполнение
+`app.scoring` compares structured facts with a versioned `CompanyProfile`. The output separates:
 
-Первый LLM — GigaChat; YandexGPT можно подключить через тот же контракт.
-Для GigaChat выбран официальный SDK 0.2.3; Phase 8.1 использует его Embeddings API, а vector store — Qdrant local mode.
-SQL: возможен локальный SQLite, PostgreSQL — по требованиям развёртывания.
-Долгий разбор документов не должен блокировать Telegram/API: механизм фоновых
-задач выбирается при реализации, без обязательного Redis/Celery на старте.
+- weighted fit for known criteria;
+- completeness of extracted facts;
+- document risks;
+- explicit hard-stop factors.
 
-Мониторинг начинается с одного разрешённого источника и дедупликации.
-Файлы хранятся вне исходного кода; ограничения размера и времени обработки
-проверяются до передачи в парсер/LLM.
-Docker будет добавлен после появления запускаемых сервисов.
+Fit is not a probability of winning and not a participation decision.
 
-## Конфигурация
+### Persistence and deduplication
 
-.env.example содержит пустые секреты. На Phase 2 python-dotenv загружает корневой .env
-в окружение без перезаписи существующих переменных. Config читает токен только через
-os.environ, проверяет наличие/формат токена и LOG_LEVEL до сетевых запросов.
-При запуске выполняется getMe, затем long polling; сессия закрывается и при ошибке getMe.
-Telegram не отправляет LLM-запросы; отдельная команда health выполняет запрос только при явном запуске.
+`app.database.TenderRepository` uses SQLite for the single-node MVP. `(owner_user_id, pdf_sha256)` prevents exact PDF duplicates within one Telegram/API owner scope.
 
-Необязательный TELEGRAM_PROXY_URL передаётся в AiohttpSession(proxy=...). Без него
-создаётся обычный Bot. Сессия по-прежнему закрывается в finally. URL и учётные данные
-прокси исключены из repr настроек и маскируются при форматировании логов.
-Автоматического обхода недоступного прокси прямым соединением нет.
+Monitoring uses the same SQLite file but separate state/tables for seen notices and subscriptions.
 
-## Реализованный LLM-слой (Phase 4)
+### Semantic RAG
 
-`app.llm.health -> config -> GigaChatProvider.generate -> SDK OAuth + chat -> LLMResponse`.
-Это отдельный поток; из Telegram и PDF к нему нет вызовов.
+`app.rag.chunking` creates page-aware overlapping chunks. `FastEmbedEmbeddingProvider` uses a multilingual ONNX model locally. `QdrantVectorStore` stores chunk text, metadata and vectors. Retrieval always filters by owner and document hash before the retrieved context is sent to the LLM.
 
-- base.py: Protocol LLMProvider с async generate(prompt, max_tokens), безопасные типы ошибок.
-- models.py: неизменяемый LLMResponse без vendor-типов, с текстом и счётчиками токенов.
-- config.py: независимая валидация окружения/.env; ключ исключён из repr.
-- gigachat.py: официальный async client.achat.create, контекст закрывает HTTP-клиент;
-  общий deadline, TLS включён, max_retries=0. Ошибки преобразуются в фиксированные
-  сообщения; upstream body/headers и текст документов не логируются.
-- health.py: явный live smoke test; импорт и Telegram startup не вызывают API.
+Changing embedding dimensionality requires a new Qdrant collection name instead of reusing an incompatible index.
 
-Будущие services получат LLMProvider через аргумент конструктора/функции. Новый
-YandexGPTProvider реализует тот же контракт; Telegram не должен импортировать SDK.
-Провайдер создаёт SDK-клиент на один generate: простое владение ресурсами, но без
-межзапросного кэша OAuth-токена. Для будущей нагрузки потребуется отдельный lifecycle.
-SDK может обновлять авторизацию после 401; общий timeout ограничивает этот путь.
-Настройка storage=False отключает thread storage запроса, но не является гарантией
-политики хранения данных на стороне поставщика. Инструменты модели не включены.
+### Monitoring
 
-## Общие настройки сети
-app.network проверяет OUTBOUND_PROXY_URL. bot.config выбирает непустой
-TELEGRAM_PROXY_URL, затем общий прокси, затем прямую сеть ОС.
-llm.config при запуске переносит общий HTTP-прокси в окружение HTTPX до создания
-ленивых OAuth/API клиентов SDK. Это startup-only настройка процесса, не временная
-подмена окружения вокруг async-запроса. Пустое значение сохраняет унаследованную сеть.
-NO_PROXY, TLS и CA bundle сохранены. SDK не предоставляет отдельного proxy-параметра;
-не используются monkeypatch или изменение приватных полей SDK в приложении.
-Для смены прокси нужен перезапуск; адреса задаются конфигурацией, не исходным кодом.
+`EisRssSource` normalizes configured ЕИС RSS feeds into `TenderNotice`. RSS filters are operator-controlled through URLs in `.env`; business search terms are not hard-coded into the adapter.
 
-## Phase 5: реализованный поток фактов
-main загружает LLM-конфигурацию один раз до polling и передаёт provider/лимит через
-Dispatcher dependency injection. Telegram знает только контракт generate;
-провайдер GigaChat выбирает composition root main. Ошибка настройки не ломает PDF.
-PdfSummary теперь переносит ограниченный text (исключён из repr) из worker в память.
-documents → services.tender_analysis → LLMProvider → TenderAnalysis → bot.tender.
-Сервис нормализует текст, записывает truncation, формирует JSON-only запрос без tools,
-отклоняет дубли ключей, NaN, лишние поля и неправильные типы/диапазоны.
-Модель ответа не содержит SDK-типов. Неизвестные скаляры null, списки пусты.
-Formatter использует plain text, разбиение учитывает UTF-16 лимит Telegram.
-Никакого scoring, выбора участия, сохранения в БД или RAG. Старое описание отдельного
-health-потока Phase 4 остаётся историей; теперь читаемые PDF подключены к LLM.
+Monitoring is intentionally a **pre-filter**. RSS metadata is not authoritative enough for final scoring; full conditions belong to the document-analysis pipeline.
 
+### API boundary
 
-## Phase 6: детерминированный scoring
+FastAPI exposes health, history, analysis, scoring, RAG and monitoring. `/api/v1/*` can be protected by `TENDERLENS_API_KEY`; `/health` and OpenAPI stay available for readiness/documentation.
 
-`documents -> tender_analysis -> TenderAnalysis -> scoring.engine -> ScoringResult -> bot.scoring`.
-`CompanyProfile` загружается один раз в composition root из JSON-файла, путь задаётся
-`COMPANY_PROFILE_FILE`; секретов профиль не содержит. Telegram и LLM не вычисляют score.
+The optional API key is not a substitute for real identity and authorization in an internet-facing multi-user service.
 
-Scoring разделяет:
-- fit — взвешенное соответствие только по критериям, для которых есть данные;
-- completeness — наличие ключевых извлечённых групп фактов;
-- document risks — риски, извлечённые из документа LLM-слоем;
-- stop factors — нарушения явных hard-stop правил профиля.
-
-Отсутствующие факты дают `not_scored`, поэтому неизвестность не превращается в отрицательное
-совпадение. Веса MVP: category 30, region 15, budget 20, bid security 10, contract
-security 10, documents 15. Документ readiness — только keyword-проверка и не доказывает
-юридическую действительность документов. Fit не является прогнозом победы и не принимает
-решение об участии. Для реальной компании нужен отдельный профиль и проверка правил.
-
-## Phase 7: SQLite persistence and user-scoped deduplication
-
-Composition root создаёт `TenderRepository` из `DATABASE_URL` и передаёт его через
-Dispatcher dependency injection. Локальный MVP поддерживает только `sqlite:///` URL.
-Схема создаётся idempotent SQL-скриптом и содержит версию схемы.
-
-`tenders` хранит: Telegram owner id, chat id, SHA-256 PDF, безопасное имя файла,
-страницы/число символов, JSON строгих Pydantic-моделей анализа/scoring, признак
-усечения и UTC timestamps. Уникальность `(owner_user_id, pdf_sha256)` обеспечивает
-дедупликацию без пересечения данных разных пользователей.
-
-Поток нового документа:
-`download -> SHA-256 -> user-scoped duplicate lookup -> PDF parse -> LLM -> scoring -> save`.
-При точном дубликате сохранённые Pydantic-модели валидируются при чтении и повторно
-рендерятся в Telegram; LLM и PDF parser не вызываются. База не хранит PDF bytes или
-полный извлечённый текст.
-
-`/history` читает последние 10 записей только для `message.from_user.id`. SQLite-операции
-вызываются через `asyncio.to_thread`, поэтому короткие локальные SQL-запросы не блокируют
-async Telegram loop. Для многопроцессного/серверного масштаба Phase 10/11 может заменить
-этот репозиторий PostgreSQL-реализацией с миграционным инструментом.
-
-
-## Phase 8.1 semantic RAG
-
-После чтения PDF parser сохраняет page-level text только в памяти. `app.rag.chunking` создаёт
-ограниченные chunks с overlap и номером страницы. `GigaChatEmbeddingProvider` пакетно вызывает
-локальный FastEmbed (`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` по умолчанию), а `QdrantVectorStore` сохраняет
-vectors + page/chunk metadata в Qdrant local mode. Фильтры Qdrant всегда включают
-`owner_user_id` и `pdf_sha256`, поэтому retrieval изолирован по пользователю и документу.
-
-`/ask <вопрос>` строит semantic embedding вопроса, делает cosine top-k query в Qdrant, ограничивает
-общий контекст и вызывает существующий LLMProvider. Prompt запрещает внешние знания/догадки;
-ответ показывает страницы retrieved chunks. Embedding network call выполняется через worker thread,
-чтобы не блокировать aiogram event loop.
-
-Qdrant client открывается короткоживущими сессиями и явно закрывается, что важно для Windows file
-locks в local mode. Коллекция создаётся по размерности первого embedding. Если embedding model
-изменит размерность, система требует новое имя `RAG_QDRANT_COLLECTION`, вместо тихого повреждения индекса.
-
-Исходный PDF не хранится; `data/qdrant/` содержит chunk text и vectors, считается чувствительным
-локальным хранилищем и исключён из Git. При production deployment local Qdrant можно заменить на
-Qdrant server/Cloud, сохранив контракт `RagService` и Telegram workflow.
-
-
-## Phase 9 monitoring architecture
-`EIS RSS -> app.sources.EisRssSource -> TenderNotice -> monitoring.prefilter -> monitor_seen -> Telegram`.
-The source adapter is intentionally separate from Telegram. Search filters are encoded in operator-supplied RSS URLs, not hard-coded. Monitoring persistence uses the existing SQLite file but separate tables. Background polling fetches the configured feed set once per cycle, then applies per-user dedup before notifications. Manual `/tenders` uses the same service. RSS metadata is only a coarse pre-filter; authoritative document analysis remains the Phase 5–8 pipeline.
-
-
-## Phase 10 HTTP boundary
-`app.api` is a second transport beside Telegram. `create_app()` receives an `ApiRuntime`, which makes tests independent of live GigaChat/EIS/Qdrant. Production runtime composition loads each component independently and `/health` reports `ready`/`unavailable` without exposing secrets. API handlers call the existing repository, scoring engine, analysis service, RAG service and monitoring service; they do not contain scoring formulas or vendor SDK code.
-
-Security defaults: bind `127.0.0.1`, bounded multipart PDF input, owner-scoped history/RAG, no raw PDF persistence, and optional constant-time `X-API-Key` comparison. Any non-local deployment must set an API key and put the service behind HTTPS/reverse-proxy controls; Phase 10 does not implement user authentication, rate limiting or multi-tenant authorization beyond the existing owner scope.
-
-## Phase 11 deployment topology
+## Deployment topology
 
 ```text
-Windows / Linux host
-        |
+Host / Docker Desktop / Linux
+          |
   127.0.0.1:8000
-        |
-+-----------------------+
-| TenderLens API image  |
-| Python 3.12 / Uvicorn |
-| non-root uid 10001    |
-+-----------+-----------+
-            |
-            v
-   named Docker volume
-       /app/data
-      /         \
- SQLite       Qdrant local
-   |              |
- monitoring     RAG chunks
-                  |
-          FastEmbed cache
+          |
++--------------------------+
+| TenderLens AI v1.0.0 API |
+| Python 3.12 / Uvicorn    |
+| non-root uid 10001       |
++------------+-------------+
+             |
+        named volume
+          /app/data
+         /        \
+    SQLite       Qdrant local
+                   |
+             FastEmbed cache
 ```
 
-Secrets are runtime environment variables from `.env`; they are not copied into the image. The Russian trusted root CA used by the existing GigaChat/EIS configuration is a public trust certificate and is copied into `/app/certs` so the current TLS setup continues to work inside Linux containers.
+The Docker image excludes `.env`, `.venv` and `data/`. Runtime secrets come from the environment. The named volume persists SQLite, Qdrant local data and FastEmbed cache.
 
-This topology is a single-node deployment. Local Qdrant mode and SQLite are intentionally kept behind one API process. A future horizontally scaled deployment should move those stateful components to server-backed services rather than mount the same local files into multiple replicas.
+Local SQLite/Qdrant are intentionally owned by one API process. Do not mount the same local Qdrant directory into several replicas. A horizontally scaled architecture should use PostgreSQL and Qdrant server/Cloud.
+
+## Network and TLS
+
+- `OUTBOUND_PROXY_URL` is the optional shared explicit HTTP proxy.
+- `TELEGRAM_PROXY_URL` can override it for Telegram.
+- GigaChat/EIS can use the configured CA bundle while TLS verification remains enabled.
+- Changing explicit proxy configuration requires a process restart.
+- Proxy URLs and credentials are redacted from bot logs.
+
+## Data trust model
+
+1. **RSS metadata** — discovery only.
+2. **Extracted PDF text** — primary input for tender facts, but still requires human verification.
+3. **LLM output** — structured interpretation, validated by schema but not guaranteed factually correct.
+4. **Deterministic score** — reproducible calculation over extracted facts/profile, not a legal or commercial recommendation.
+5. **RAG answer** — grounded in retrieved chunks and pages, still subject to retrieval/model error.
+
+This separation is central to the design: uncertain AI interpretation does not silently become a deterministic business rule.

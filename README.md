@@ -1,489 +1,188 @@
 # TenderLens AI
 
-Планируемая платформа анализа тендеров и автоматизации на Python 3.12.
+**TenderLens AI v1.0.0** is a portfolio-grade Python platform for tender monitoring and document intelligence. It combines Telegram workflows, live EIS RSS monitoring, PDF extraction, structured LLM analysis, deterministic company-fit scoring, semantic RAG with Qdrant, SQLite persistence, a FastAPI backend, and Docker deployment.
 
-**Статус: Phase 10 — Telegram + FastAPI backend + PDF analysis + scoring + SQLite + semantic RAG/Qdrant + мониторинг RSS ЕИС.**
-При настроенном GigaChat читаемые PDF автоматически анализируются, Python рассчитывает совместимость с профилем компании, SQLite хранит историю, semantic RAG/Qdrant отвечает на вопросы по документу, RSS ЕИС обеспечивает мониторинг, а FastAPI предоставляет HTTP-интерфейс и Swagger/OpenAPI. Docker пока не реализован.
+> The system supports a human procurement decision; it does **not** autonomously decide whether to participate in a tender or submit bids.
 
-## Проверка PDF
+## What it demonstrates
 
-Перезапустите бот после обновления и отправьте PDF как документ. Ответ содержит
-имя файла, число страниц, количество извлечённых символов и результат чтения.
-PyMuPDF 1.28.2 извлекает текст локально, без LLM и OCR.
-Символы считаются как длина извлечённого текста, включая пробелы и переносы строк.
-Лимиты: 10 МиБ, 200 страниц, 2 000 000 символов; скачивание до 65 секунд,
-парсинг до 30 секунд в отдельном завершаемом процессе.
-Документы и текст не сохраняются и не записываются в логи. При настроенном GigaChat ограниченный текст передаётся этому внешнему AI. Имя используется только в ответе, не как путь на диске.
-Для сканов/пустых страниц сообщается об отсутствии текста; смешанные PDF могут
-быть прочитаны частично. Защищённые и повреждённые PDF дают понятную ошибку.
-При ошибке обработки счётчик 0 означает, что законченный результат не получен.
-Polling пока последовательный: другие команды ожидают завершения текущего PDF.
-Процесс ограничивает время, но не является полной изоляцией памяти/ОС.
-Реальная отправка PDF в Telegram успешно проверена пользователем. Phase 3 сохранена в Git (0c599db).
-Справка: https://pymupdf.readthedocs.io/en/latest/document.html
-Этот репозиторий ещё не является готовым демонстрационным продуктом для работодателя.
+- **Telegram bot:** PDF upload, history, RAG questions, EIS monitoring and subscriptions.
+- **Tender analysis:** PyMuPDF → structured `TenderAnalysis` → GigaChat provider abstraction.
+- **Deterministic scoring:** transparent Python rules against a versioned company profile.
+- **Semantic RAG:** page-aware chunks → multilingual FastEmbed embeddings → Qdrant local-mode retrieval → grounded LLM answer with page references.
+- **Persistence:** owner-scoped SQLite history and SHA-256 deduplication.
+- **Live tender discovery:** configurable RSS feeds from ЕИС / zakupki.gov.ru with pre-filtering and deduplication.
+- **Backend API:** FastAPI + OpenAPI/Swagger for history, scoring, PDF analysis, RAG and monitoring.
+- **Deployment:** non-root Docker image, healthcheck, persistent named volume and localhost-only bind by default.
+- **Engineering:** typed configuration, provider boundaries, unit/integration tests, CI, secret-safe defaults and documented limitations.
 
-## Планируемый результат
+## Architecture
 
-Пользователь отправляет тендерный PDF через Telegram. Система извлекает факты
-(заказчик, сумма, сроки, обеспечение, требования), показывает источники и риски,
-сравнивает тендер с профилем компании по воспроизводимым правилам.
-Дальше — расширение источников (Росатом/B2B-Center/Сбербанк-АСТ/РТС-тендер), HTTP API и Docker deployment.
-Решение об участии принимает человек; отправка заявок автоматически не планируется.
+```mermaid
+flowchart LR
+    TG[Telegram] --> BOT[aiogram bot]
+    EIS[ЕИС RSS] --> MON[Monitoring / pre-filter]
+    BOT --> PDF[PDF parser]
+    PDF --> LLM[Structured LLM analysis]
+    LLM --> SCORE[Deterministic scoring]
+    PDF --> RAG[Semantic RAG]
+    RAG --> QD[(Qdrant local)]
+    SCORE --> DB[(SQLite)]
+    MON --> DB
+    API[FastAPI / Swagger] --> DB
+    API --> SCORE
+    API --> RAG
+    API --> MON
+```
 
-## Подготовка на Windows
+Detailed boundaries and data flow: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-Проверенный в текущей среде интерпретатор — Python 3.12.14.
-В PowerShell:
+## Quick start — Docker API
+
+Requirements: Docker Desktop / Docker Engine and a local `.env` created from `.env.example`.
+
+```powershell
+Copy-Item .env.example .env
+# Edit .env and add only the credentials/features you want to use.
+docker compose build
+docker compose up -d
+docker compose ps
+curl.exe http://127.0.0.1:8000/health
+```
+
+On the first fresh Docker volume, initialize the local semantic embedding cache once:
+
+```powershell
+docker compose exec -e OUTBOUND_PROXY_URL= api python -m app.rag.health
+docker compose restart api
+```
+
+Swagger UI: `http://127.0.0.1:8000/docs`
+
+Automated local smoke check:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\smoke_api.py
+```
+
+Expected health shape:
+
+```json
+{
+  "status": "ok",
+  "service": "TenderLens AI",
+  "version": "1.0.0",
+  "components": {
+    "database": "ready",
+    "llm": "ready",
+    "scoring": "ready",
+    "rag": "ready",
+    "monitoring": "ready"
+  }
+}
+```
+
+## Local Python setup
+
+Python 3.12 is the supported development runtime.
 
 ```powershell
 cd C:\Users\ramze\Documents\Codex\tender-ai
-.\.venv\Scripts\python.exe --version
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-if (!(Test-Path .env)) { Copy-Item .env.example .env }
-notepad .env
-```
-
-Существующее .venv используется без пересоздания. Активация окружения и изменение
-политики PowerShell не требуются. На новом компьютере сначала создать .venv через Python 3.12.
-В редакторе заполните TELEGRAM_BOT_TOKEN ключом своего бота из BotFather, сохраните файл.
-Не отправляйте ключ в чат и не добавляйте .env в Git. .env.example остаётся без секретов.
-Переменные окружения имеют приоритет над .env; пустая переменная также не заменяется файлом.
-Используются TELEGRAM_BOT_TOKEN, необязательный TELEGRAM_PROXY_URL и LOG_LEVEL (по умолчанию INFO).
-Параметры GigaChat используются только отдельной LLM-командой; YandexGPT/SQL пока зарезервированы.
-
-## Запуск и проверка
-
-Для Happ можно задать прокси только в текущем PowerShell:
-```powershell
-$env:TELEGRAM_PROXY_URL = 'http://127.0.0.1:10809'
-```
-Или заполнить TELEGRAM_PROXY_URL в локальном .env. Пустое значение означает прямое
-подключение. Поддерживаются http/socks4/socks5 URL с явным портом; прокси передаётся
-в aiogram AiohttpSession. Для этого установлен aiohttp-socks.
-Happ должен работать во время запуска бота. При недоступности прокси бот не
-переключается автоматически на прямое соединение. Не публикуйте URL с учётными данными.
-Для прямого подключения при заполненном .env задайте пустую переменную окружения.
-
-```powershell
-cd C:\Users\ramze\Documents\Codex\tender-ai
-.\.venv\Scripts\python.exe -m app.bot
-```
-
-В активированном .venv эквивалентно: `python -m app.bot`.
-Остановка — Ctrl+C, HTTP-сессия закрывается. Запускайте только один polling-процесс
-для токена. Существующий webhook бот автоматически не удаляет; для такого токена
-нужно сначала отдельно решить вопрос переключения с webhook на polling.
-
-После успешного запуска откройте своего бота в Telegram:
-- /start — русское представление и честное описание текущих ограничений;
-- /help — список трёх команд;
-- /status — точный ответ `TenderLens AI is running.`
-
-Без токена программа завершается с кодом 2 и понятным сообщением до сетевых вызовов.
-Ошибочный формат также отклоняется локально; действительность токена проверяется Telegram.
-Неверная авторизация/ошибка запуска дают код 1. При временных сбоях polling библиотека
-повторяет получение обновлений. Токен маскируется в стандартном выводе логов.
-Неизвестные команды и обычные сообщения не обрабатываются. Документы принимаются только как PDF.
-
-Проверки без Telegram-токена и сети:
-```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
-.\.venv\Scripts\python.exe -m compileall -q app tests
-.\.venv\Scripts\python.exe -m pip check
-```
-В тестах используются только синтетический токен и подменённая HTTP-сессия.
-Полный набор offline-тестов нужно запускать после каждого изменения; внешние API в автоматических тестах подменяются. Реальные GigaChat-вызовы выполняются только при ручной проверке.
-
-## Структура
-
-- app/bot — config.py (окружение), handlers.py (команды), main.py (жизненный цикл), __main__.py (запуск).
-- app/api — FastAPI app factory, runtime composition, API-key guard и v1 endpoints.
-- app/llm — адаптеры GigaChat/YandexGPT.
-- app/parsers — извлечение текста и ссылок на страницы.
-- app/rag — индексирование и поиск фрагментов.
-- app/scoring — воспроизводимые правила оценки.
-- app/database — SQL-модели, доступ к данным и миграции.
-- app/services — сценарии анализа документов.
-- app/sources — адаптеры внешних источников тендеров; Phase 9 начинает с RSS ЕИС.
-- app/monitoring — pre-filter, SQLite dedup, subscriptions и фоновый polling.
-- tests — проверки конфигурации, маршрутизации и закрытия сессии.
-
-## Продолжение работы
-
-Сначала прочитать PROJECT.md, TASKS.md, ARCHITECTURE.md, затем проверить
-`git status` и `git log -5 --oneline`.
-После каждого этапа обновлять статус и результаты проверок, сохранять проверенные
-изменения отдельным коммитом. Не перезаписывать чужую незавершённую работу.
-Phase 5 реализована; дальнейшие этапы требуют отдельного задания. Коммит Phase 4 не создавался.
-
-Локальные Ollama/Aider могут помогать с небольшими проверяемыми изменениями;
-они не являются зависимостью приложения. Автоматическое продолжение работы при
-исчерпании лимита Codex не настроено.
-
-Git-репозиторий локальный. Публикация и постоянный хостинг не настраивались.
-Telegram подключается только при явном запуске с настоящим токеном.
-
-Документация зависимостей: [aiogram polling](https://docs.aiogram.dev/en/latest/dispatcher/dispatcher.html),
-[python-dotenv](https://pypi.org/project/python-dotenv/).
-
-## GigaChat: отдельная проверка (Phase 4)
-
-Официальный SDK: [ai-forever/gigachat](https://github.com/ai-forever/gigachat),
-установлена и закреплена версия 0.2.3. Используется async `client.achat.create(...)`.
-`httpx==0.28.1` указан явно, поскольку адаптер обрабатывает его сетевые исключения.
-
-1. В кабинете GigaChat API получите **ключ авторизации** (готовую Base64-строку,
-   не отдельный Client Secret и не ключ Telegram). Доступ к обычному чату GigaChat
-   сам по себе не подтверждает наличие API-доступа. Проверьте условия и квоту своего аккаунта.
-2. Откройте существующий `.env`, не заменяя его шаблоном и сохраняя Telegram-настройки:
-
-```powershell
-cd C:\Users\ramze\Documents\Codex\tender-ai
-notepad .env
-```
-
-Добавьте или обновите эти строки в редакторе (секрет не вставляйте в чат):
-
-```dotenv
-LLM_PROVIDER=gigachat
-GIGACHAT_CREDENTIALS=<ключ авторизации из кабинета API>
-GIGACHAT_SCOPE=GIGACHAT_API_PERS
-GIGACHAT_MODEL=GigaChat-2
-GIGACHAT_TIMEOUT=30
-GIGACHAT_CA_BUNDLE_FILE=
-```
-
-Обязательны credentials и model. `GigaChat-2` — пример из документации SDK;
-укажите модель, доступную вашему аккаунту. Scope по умолчанию `GIGACHAT_API_PERS`;
-для соответствующего бизнес-договора — `GIGACHAT_API_B2B` или `GIGACHAT_API_CORP`.
-Timeout — положительное конечное число секунд (по умолчанию 30), ограничивает
-весь вызов вместе с OAuth. CA bundle необязателен: при проблеме доверия сертификату
-укажите путь к проверенному PEM-набору доверенных CA из официальной документации
-провайдера. Проверка TLS всегда включена, системные сертификаты не изменяются.
-
-3. Только когда готовы отправить реальный запрос, выполните:
-
-```powershell
-.\.venv\Scripts\python.exe -m app.llm.health
-```
-
-Команда отправляет только «Ответь одним словом: работает», с лимитом ответа 32 токена,
-и выводит ответ. Это настоящий запрос, который может расходовать API-квоту/баланс.
-В ходе разработки его не запускали. Код выхода: 0 — ответ получен, 2 — ошибка настроек,
-1 — ошибка провайдера, 130 — отмена. Отсутствие ключа GigaChat не мешает запуску Telegram.
-
-SDK сам обменивает ключ на OAuth access token при запросе и управляет авторизацией.
-Используются официальные стандартные endpoints SDK; дополнительные способы входа,
-переопределения адресов и mTLS этой фазой не настраиваются. Не задавайте посторонние
-GIGACHAT_* настройки SDK без отдельной проверки. Автоматические повторы временных
-ошибок отключены; SDK может обновить токен и повторить запрос при 401.
-`TELEGRAM_PROXY_URL` относится только к Telegram. HTTPX может использовать стандартные
-HTTP_PROXY/HTTPS_PROXY/NO_PROXY окружения; настройки Windows мы не меняем.
-
-LLM возвращает внутренний LLMResponse: текст, модель, провайдер, число входных/выходных
-токенов (если API передал) и причину завершения. Это учёт токенов, не расчёт цены.
-Обрезанный по лимиту ответ сохраняет finish_reason; наличие текста не подтверждает
-полноту анализа. Нет tools, RAG и автоматической обработки тендеров.
-
-## Переносимость сети
-
-Настройки читаются при запуске. После смены VPN/прокси перезапустите процесс;
-изменять Python-код не требуется. Настоящий .env при этом обновлении не изменялся.
-
-Telegram: непустой TELEGRAM_PROXY_URL → иначе непустой OUTBOUND_PROXY_URL →
-иначе обычное подключение через сеть ОС. Пустой Telegram override означает fallback,
-а не принудительный обход общего прокси. Старые HTTP/SOCKS Telegram-прокси сохранены.
-Общий OUTBOUND_PROXY_URL поддерживает HTTP-прокси с явным портом, включая CONNECT
-для HTTPS. Неправильный URL отклоняется без вывода его содержимого.
-
-A) Прямая сеть или системный VPN, не требующий явного прокси:
-```dotenv
-OUTBOUND_PROXY_URL=
-TELEGRAM_PROXY_URL=
-```
-B) Текущий Happ:
-```dotenv
-OUTBOUND_PROXY_URL=http://127.0.0.1:10809
-TELEGRAM_PROXY_URL=
-```
-C) Другой прокси (замените OTHER_PORT числом и при необходимости измените хост):
-```dotenv
-OUTBOUND_PROXY_URL=http://127.0.0.1:OTHER_PORT
-TELEGRAM_PROXY_URL=
-```
-На сервере используйте A или адрес прокси этого сервера: localhost указывает именно
-на сервер, а не на ваш ноутбук. Старый непустой TELEGRAM_PROXY_URL имеет приоритет:
-очистите его, если хотите использовать новый общий прокси.
-
-GigaChat SDK 0.2.3 не предоставляет публичную инъекцию proxy/HTTP-клиента.
-При загрузке LLM-конфигурации непустой OUTBOUND_PROXY_URL переносится в HTTP_PROXY,
-HTTPS_PROXY и их строчные варианты только текущего процесса, до создания SDK-клиентов.
-Это относится и к OAuth, и к запросу модели. NO_PROXY сохраняется и может исключать
-адреса из проксирования. TLS остаётся включённым; GIGACHAT_CA_BUNDLE_FILE не меняется
-и SDK передаёт этот CA bundle обоим HTTP-клиентам.
-
-Если общий прокси пуст, существующие HTTP_PROXY/HTTPS_PROXY/ALL_PROXY/NO_PROXY
-не удаляются. Поэтому для действительно прямого GigaChat-соединения убедитесь,
-что запускающий терминал/сервер не передаёт устаревшие proxy-переменные.
-Переключение прокси внутри работающего процесса не поддерживается: перезапустите
-его из корректно настроенного терминала. Эти переменные могут влиять на другие
-HTTPX-клиенты этого процесса; независимые прокси для нескольких GigaChat-провайдеров
-в одном процессе сейчас не поддерживаются. Системный VPN работает на уровне ОС.
-
-После выбора варианта в локальном .env запуск одинаковый:
-```powershell
-cd C:\Users\ramze\Documents\Codex\tender-ai
-.\.venv\Scripts\python.exe -m app.bot
-```
-Отдельная реальная проверка GigaChat (расходует API-квоту):
-```powershell
-.\.venv\Scripts\python.exe -m app.llm.health
-```
-Ни одна реальная API-проверка в рамках этого обновления не выполнялась.
-
-## Phase 5 — структурированный анализ тендера
-
-Поток: PDF → ограниченный worker PyMuPDF → текст и статистика → нормализация →
-первые TENDER_ANALYSIS_MAX_CHARS символов → GigaChat → строгий JSON →
-Pydantic TenderAnalysis → русская сводка, разбитая на сообщения.
-Статистика чтения отправляется перед AI-анализом. Пустые/сканированные, защищённые,
-повреждённые и превышающие лимиты PDF в модель не отправляются.
-
-В существующем .env можно добавить TENDER_ANALYSIS_MAX_CHARS=20000.
-Без этой строки действует тот же default; диапазон 1–50000. Считаются символы
-после нормализации пробелов, не токены. Большой текст обрезается, и сводка содержит
-предупреждение о неполном документе. PDF-лимиты 10 МиБ/200 страниц/2 млн символов
-и таймаут парсера сохранены. Полный извлечённый текст временно проходит через stdout
-дочернего процесса в память родителя; он не пишется в логи или файлы.
-
-GIGACHAT_CREDENTIALS, GIGACHAT_MODEL, scope, timeout, CA bundle и сетевые параметры
-остаются прежними. При ошибке LLM-конфигурации бот сохраняет чтение PDF, но сообщает,
-что AI не настроен. Изменения настроек требуют перезапуска.
-
-Реальная проверка (после остановки предыдущего polling-процесса):
-```powershell
-cd C:\Users\ramze\Documents\Codex\tender-ai
-.\.venv\Scripts\python.exe -m app.bot
-```
-Отправьте небольшой читаемый тестовый PDF с явно указанными заказчиком, ценой и сроком.
-Ожидаются статистика, сообщение о начале анализа и сводка. Теперь каждая успешная
-загрузка вызывает настоящий API-запрос, расходующий квоту; документ передаётся GigaChat.
-В разработке реальные запросы не выполнялись. Автоматического повторного запроса
-для исправления JSON нет. Существующую локальную .env разработчик не изменял.
-
-Проверки:
-```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
 .\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m compileall -q app tests
-.\.venv\Scripts\python.exe -m pip check
-```
-Pydantic 2.13.5 уже был установлен, теперь это прямая зависимость; pytest 9.1.1 —
-отдельная dev-зависимость. Старые unittest-тесты также запускаются через pytest.
-
-Ограничения: проверка JSON/типов не проверяет истинность извлечённых фактов.
-Указания внутри PDF считаются недоверенными, но prompt не гарантирует защиту от всех
-инъекций. Нужна сверка с оригиналом; ссылки на страницы и evidence-validation пока
-не реализованы. Риски — интерпретация конкретных условий, не решение об участии.
-Нет OCR, RAG, расчёта score и хранения. Цены — float по текущему контракту, не подходят
-для бухгалтерских расчётов. Поля дат сохраняются текстом, без выдуманной временной зоны.
-Лимит ответа — 4096 токенов; обрезанный или невалидный JSON приводит к понятной ошибке.
-Polling последовательный: во время анализа другие команды ждут завершения.
-
-
-## Phase 6: профиль компании и scoring
-
-После валидированной `TenderAnalysis` вызывается `app.scoring.engine.score_tender`.
-LLM не рассчитывает score: Python применяет явные правила из JSON-профиля компании.
-По умолчанию используется `config/company_profile.example.json` — это вымышленный
-демо-профиль для портфолио; его нужно заменить на реальные ограничения компании.
-Можно указать другой файл через `COMPANY_PROFILE_FILE`.
-
-Критерии MVP и веса: направление 30, регион 15, бюджет 20, обеспечение заявки 10,
-обеспечение контракта 10, готовность документов/сертификатов 15. Если факт не извлечён
-или ограничение не задано в профиле, критерий помечается `not_scored` и исключается
-из знаменателя, а не считается провалом. Отдельно показываются полнота данных, риски
-из документа и стоп-факторы профиля. Результат не является вероятностью победы и не
-является рекомендацией участвовать/отказываться.
-
-Пример настройки:
-```dotenv
-COMPANY_PROFILE_FILE=config/company_profile.example.json
 ```
 
-Поля профиля: `product_keywords`, `allowed_regions`, `accepted_currencies`,
-`max_contract_value`, пороги обеспечения, доступные документы/сертификаты и флаги
-жёстких стоп-условий. Сопоставление выполняется детерминированно по нормализованным
-строкам; это MVP, а не семантический классификатор.
-
-## Phase 7 — локальная SQLite-база и история
-
-Phase 7 использует стандартный `sqlite3`, поэтому новых Python-зависимостей нет.
-По умолчанию `DATABASE_URL=sqlite:///./data/tenderlens.db`. Каталог `data/` и файлы
-SQLite уже исключены из Git. При запуске бот создаёт схему автоматически и проверяет
-её версию.
-
-Сохраняются только метаданные PDF, SHA-256, структурированный `TenderAnalysis`,
-результат scoring и признак усечения AI-входа. Исходный PDF и полный извлечённый текст
-в базе не сохраняются.
-
-Дедупликация выполняется по `(Telegram user id, SHA-256 PDF)`: один пользователь при
-повторной отправке того же файла получает сохранённый анализ без нового вызова GigaChat.
-Данные другого пользователя при этом не используются и не показываются.
-
-Новая команда:
-- `/history` — до 10 последних сохранённых тендеров текущего Telegram-пользователя.
-
-Для локального MVP достаточно настройки из `.env.example`:
-```dotenv
-DATABASE_URL=sqlite:///./data/tenderlens.db
-```
-После изменения пути перезапустите бота. Phase 7 намеренно не добавляет PostgreSQL,
-миграционный фреймворк или хранение исходных документов; это можно расширить при
-серверном развёртывании.
-
-
-## Phase 8.1: semantic RAG через local multilingual embeddings + Qdrant
-
-После успешной обработки PDF TenderLens создаёт page-aware semantic RAG-индекс.
-Фрагменты документа векторизуются официальной моделью FastEmbed `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` и сохраняются
-в Qdrant local mode. Отдельный Docker/Qdrant server для текущего прототипа не нужен;
-`qdrant-client` использует тот же API и хранит данные в локальной директории.
-
-После индексации доступны вопросы по последнему тендеру:
-
-```text
-/ask Какой срок поставки?
-/ask Какие сертификаты нужны?
-/ask Какая неустойка за просрочку?
-```
-
-Пайплайн: `PDF page text → chunks → FastEmbed multilingual-e5-small → Qdrant cosine search → top-k → GigaChat answer`.
-GigaChat для ответа получает только найденные фрагменты, а Telegram показывает страницы-источники.
-Повторная отправка уже проанализированного PDF не запускает повторный tender-analysis; при отсутствии
-нового Qdrant-индекса документ только переиндексируется.
-
-Установка новой зависимости после применения Phase 8.1:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-Настройки (defaults):
-
-```dotenv
-RAG_ENABLED=true
-RAG_QDRANT_PATH=./data/qdrant
-RAG_QDRANT_COLLECTION=tenderlens_chunks_v2_local
-RAG_EMBEDDING_PROVIDER=fastembed
-RAG_EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
-RAG_CHUNK_SIZE=1200
-RAG_CHUNK_OVERLAP=180
-RAG_TOP_K=5
-RAG_MAX_CONTEXT_CHARS=7000
-```
-
-Semantic embeddings используют уже настроенные `GIGACHAT_CREDENTIALS`, `GIGACHAT_SCOPE`,
-`GIGACHAT_CA_BUNDLE_FILE` и `OUTBOUND_PROXY_URL`. Для отдельной embedding-модели новый секрет не нужен.
-
-Проверка embeddings вручную:
-
-```powershell
-.\.venv\Scripts\python.exe -m app.rag.health
-```
-
-Ожидается строка `Semantic embeddings: OK` и размерность вектора. Health-команда выполняет реальный
-API-запрос и может расходовать доступную квоту.
-
-### Данные и приватность
-
-`data/qdrant/` содержит chunks текста тендеров и semantic vectors, но не исходные PDF bytes.
-Каталог уже исключён из Git через `data/`. Его нужно считать локальными чувствительными данными.
-Удаление каталога удаляет только RAG-индекс; основная SQLite history/scoring остаётся.
-
-### Ограничения прототипа
-
-Qdrant работает в local mode — это настоящий Qdrant API для разработки и демонстрации, но не
-многопользовательский сервер. В Docker/deployment фазе можно заменить `path=` на URL Qdrant server/Cloud
-без изменения Telegram `/ask` workflow. Embeddings требуют доступ к GigaChat API при индексации и при каждом вопросе.
-
-
-## Phase 9: мониторинг RSS ЕИС
-
-Phase 9 не скрейпит HTML поисковой выдачи и не зашивает query-параметры ЕИС в исходный код.
-Оператор создаёт нужный поиск на ЕИС, открывает его RSS-ссылку и помещает полный URL в
-`EIS_RSS_URLS`. Это позволяет менять ключевые слова/регион/закон без изменения Python-кода.
-Несколько RSS URL разделяются `;`.
-
-Минимальная конфигурация в локальном `.env`:
-
-```dotenv
-EIS_RSS_URLS=<полный RSS URL из ЕИС>
-MONITORING_ENABLED=false
-```
-
-После перезапуска бота `/tenders` выполняет ручную проверку. Для фоновых уведомлений:
-
-```dotenv
-MONITORING_ENABLED=true
-MONITOR_INTERVAL_SECONDS=600
-```
-
-Затем в Telegram выполнить `/monitor_on`. При включении текущая выдача становится baseline,
-чтобы бот не засыпал чат уже существующими закупками; после этого присылаются только новые
-записи. `/monitor_off` отключает подписку, `/monitor_status` показывает состояние.
-
-RSS нормализуется в `TenderNotice`: source/id/title/url + доступные номер, заказчик, цена,
-deadline и регион. Данные RSS могут быть неполными. Поэтому Phase 9 выполняет только быстрый
-pre-filter по ключевым словам профиля и известным hard-stop полям. Это не заменяет полный
-PDF-анализ/scoring и не является рекомендацией участвовать.
-
-Dedup хранится в той же SQLite-БД, но в отдельных таблицах `monitor_seen` и
-`monitor_subscriptions`, изолированно по Telegram user id. Полный RSS XML не сохраняется.
-Сетевой адаптер использует `OUTBOUND_PROXY_URL` через HTTPX environment и поддерживает
-`EIS_CA_BUNDLE_FILE`; если он пуст, переиспользуется `GIGACHAT_CA_BUNDLE_FILE`.
-
-Live-проверка источника после настройки URL:
-
-```powershell
-.\.venv\Scripts\python.exe -m app.sources.health
-```
-
-## Phase 10: FastAPI backend
-
-HTTP API запускается отдельно от Telegram и использует те же services/repositories.
-По умолчанию сервер слушает только `127.0.0.1:8000`. Запуск:
+Run the API locally:
 
 ```powershell
 .\.venv\Scripts\python.exe -m app.api
 ```
 
-После запуска доступны `http://127.0.0.1:8000/docs` и `http://127.0.0.1:8000/health`.
-Основные маршруты: история `/api/v1/tenders`, detail по id, deterministic scoring,
-semantic RAG `/api/v1/rag/ask`, EIS monitoring status/scan и PDF upload analysis.
-PDF endpoint ограничен 10 МиБ, повторный SHA-256 использует сохранённый анализ и не вызывает LLM повторно.
-
-`TENDERLENS_API_KEY` необязателен для локальной разработки. Если он задан, все
-`/api/v1/*` маршруты требуют заголовок `X-API-Key`; `/health` и Swagger schema остаются
-доступными для readiness/debug. Для внешнего deployment ключ обязателен вместе с HTTPS/reverse proxy.
-API не хранит загруженные PDF bytes; сохраняются те же структурированные результаты Phase 7,
-а RAG — chunks/vectors в Qdrant.
-
-## Phase 11 — Docker deployment
-
-The FastAPI service can now run as a reproducible Linux container. The image uses Python 3.12, runs as a non-root user, has a strict Docker healthcheck, and persists SQLite, local Qdrant and the FastEmbed model cache in a named Docker volume.
-
-The Compose configuration reads secrets from the local `.env` file but `.env` is excluded from the image build context. The API is published to `127.0.0.1:8000` by default, so it is not exposed to the LAN/Internet unless `TENDERLENS_DOCKER_BIND` is deliberately changed.
+Run the Telegram bot locally:
 
 ```powershell
-docker compose build
-docker compose up -d
-docker compose ps
+.\.venv\Scripts\python.exe -m app.bot
 ```
 
-Swagger: `http://127.0.0.1:8000/docs`. Stop the stack with `docker compose down`. Persistent application data remains in the `tenderlens_data` volume; remove it only intentionally with `docker compose down -v`.
+The Docker Compose profile currently runs the API service as the single owner of local SQLite/Qdrant state. The Telegram bot is run separately in the local development workflow. For multi-process production deployment, move SQLite/Qdrant local-mode state to server-backed services first.
 
-The first container start may download the multilingual FastEmbed model. `FASTEMBED_CACHE_PATH` points into the persistent data volume so later container recreations can reuse that cache.
+## Telegram workflow
 
-Phase 11 deliberately deploys one FastAPI process against local SQLite/Qdrant storage. This is appropriate for the single-node portfolio deployment. Horizontal scaling or multiple containers writing the same local Qdrant directory should use a server-backed database/vector store instead of sharing local files.
+Useful commands:
+
+- `/start`, `/help`, `/status`
+- `/history` — latest processed tenders for the current Telegram user
+- `/ask <question>` — semantic RAG question about the latest indexed PDF
+- `/tenders` — manual EIS RSS scan
+- `/monitor_on`, `/monitor_off`, `/monitor_status` — background EIS notifications
+
+PDF constraints: up to 10 MiB and 200 pages. Text PDFs are parsed locally. OCR is intentionally not implemented in v1.0.0; scanned-only PDFs are reported as such instead of silently inventing text.
+
+## Main API endpoints
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/health` | Service/component readiness |
+| GET | `/api/v1/tenders` | Owner-scoped tender history |
+| GET | `/api/v1/tenders/{id}` | Tender detail |
+| POST | `/api/v1/analysis/pdf` | PDF analysis pipeline |
+| POST | `/api/v1/scoring/evaluate` | Deterministic fit score |
+| POST | `/api/v1/rag/ask` | Grounded question answering |
+| GET | `/api/v1/monitoring/status` | Monitoring status |
+| POST | `/api/v1/monitoring/scan` | Manual source scan |
+
+If `TENDERLENS_API_KEY` is set, `/api/v1/*` requires `X-API-Key`. `/health` and OpenAPI remain accessible for local readiness/documentation.
+
+## Configuration
+
+`.env.example` contains the supported settings and **no secrets**. Important groups:
+
+- Telegram: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_PROXY_URL`
+- Shared networking: `OUTBOUND_PROXY_URL`
+- LLM: `GIGACHAT_*`
+- Persistence: `DATABASE_URL`, `DATA_DIR`
+- Scoring: `COMPANY_PROFILE_FILE`
+- RAG: `RAG_*`, `FASTEMBED_CACHE_PATH`
+- Monitoring: `EIS_RSS_URLS`, `MONITOR_*`
+- API: `API_HOST`, `API_PORT`, `TENDERLENS_API_KEY`
+- Docker: `TENDERLENS_DOCKER_BIND`, `TENDERLENS_DOCKER_PORT`
+
+Never commit `.env`, API keys, bot tokens, local databases or Qdrant data.
+
+## Tests and CI
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m compileall -q app tests scripts
+```
+
+GitHub Actions runs the test suite, bytecode compilation and a Docker image build on pushes and pull requests.
+
+## Data and trust boundaries
+
+- Raw PDF bytes are not persisted by the analysis/history layer.
+- SQLite stores structured analysis/scoring metadata and hashes.
+- Qdrant stores RAG chunks and embeddings; treat `data/` as sensitive local application data.
+- A bounded text excerpt can be sent to the configured external LLM provider.
+- EIS RSS is only a discovery/pre-filter source; authoritative tender conditions must be verified in source documents.
+- Fit score means compatibility with the configured company profile, **not** probability of winning and not a participation recommendation.
+
+See [`SECURITY.md`](SECURITY.md) for threat model and [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for deployment operations.
+
+## Portfolio demo
+
+A reproducible 5–10 minute demo is in [`docs/DEMO.md`](docs/DEMO.md). A synthetic PDF is included at [`examples/sample_tender.pdf`](examples/sample_tender.pdf).
+
+For an interview-oriented description of design decisions and trade-offs, see [`docs/PORTFOLIO.md`](docs/PORTFOLIO.md).
+
+## Current limitations / next production steps
+
+- OCR for scan-only documents.
+- Server-backed PostgreSQL and Qdrant for multiple replicas.
+- Real user authentication/authorization beyond optional API key + owner scope.
+- Rate limiting, observability/metrics, migrations and retention policies.
+- More tender source adapters (B2B-Center, РТС-тендер, Сбербанк-АСТ, Росатом).
+- Optional alternative LLM provider implementation.
+
+These are deliberate boundaries of v1.0.0, not hidden capabilities.

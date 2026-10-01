@@ -58,6 +58,7 @@ class DeploymentAssetsTests(unittest.TestCase):
         self.assertIn("tenderlens_data:/app/data", text)
         self.assertIn("DATABASE_URL: sqlite:////app/data/tenderlens.db", text)
         self.assertIn("RAG_QDRANT_PATH: /app/data/qdrant", text)
+        self.assertIn("image: tenderlens-ai:1.0.0", text)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app import __version__
+
 from .config import ApiSettings, load_api_settings
 from .routes import router
 from .runtime import ApiRuntime, build_runtime
@@ -21,7 +23,7 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
 
     app = FastAPI(
         title="TenderLens AI API",
-        version="0.10.0",
+        version=__version__,
         description=(
             "Tender intelligence backend: PDF analysis, deterministic scoring, "
             "semantic RAG, history and EIS monitoring."

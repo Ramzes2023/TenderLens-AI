@@ -15,7 +15,7 @@ Hash64 = Annotated[str, Field(pattern=r"^[0-9a-fA-F]{64}$")]
 class HealthResponse(BaseModel):
     status: str
     service: str
-    phase: str
+    version: str
     components: dict[str, str]
 
 

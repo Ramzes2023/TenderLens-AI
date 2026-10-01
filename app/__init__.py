@@ -1,1 +1,5 @@
-"""TenderLens AI: foundation only; implementation is planned."""
+"""TenderLens AI — tender monitoring and document intelligence platform."""
+
+__version__ = "1.0.0"
+
+__all__ = ["__version__"]

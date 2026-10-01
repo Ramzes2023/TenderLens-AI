@@ -1,63 +1,58 @@
-# TenderLens AI — состояние проекта
+# TenderLens AI — v1.0.0 project status
 
-## Цель
-Платформа анализа тендеров на Python 3.12: Telegram, PDF, LLM, затем извлечение
-фактов, scoring, SQL, RAG, мониторинг, FastAPI и Docker.
+TenderLens AI is a completed portfolio MVP for monitoring and analyzing procurement opportunities. The repository demonstrates the complete path from live source discovery to document analysis, structured scoring, semantic retrieval, persistence, API exposure and containerized deployment.
 
-## Текущий статус
-2026-10-01: реализованы Phase 1–8.1. Phase 3 сохранена пользователем в коммите
-0c599db; успешная живая загрузка PDF в Telegram подтверждена пользователем.
-Phase 4 сохранена в ae1d438. Пользователь подтвердил реальные подключения Telegram и GigaChat.
+## Implemented scope
 
-## Выполненные задачи
-- Структура проекта, Git, Python 3.12.14 и существующее .venv.
-- Telegram /start, /help, /status; необязательный прокси, безопасное логирование.
-- PDF: PyMuPDF, 10 МиБ / 200 страниц, повреждённые/защищённые/бестекстовые документы.
-- Независимый LLMProvider, LLMResponse, GigaChatProvider на официальном SDK 0.2.3.
-- Отдельная команда app.llm.health; OAuth через SDK, TLS, таймаут и безопасные ошибки.
-- Mock-тесты без GigaChat API; Telegram/PDF код сохранён без изменений.
+| Area | Status | Implementation |
+|---|---|---|
+| Project foundation | Complete | Python 3.12 package layout, config, tests, Git hygiene |
+| Telegram bot | Complete | aiogram polling, commands, PDF workflow |
+| PDF extraction | Complete | PyMuPDF, bounds, timeout worker, clear scan/corruption errors |
+| LLM layer | Complete | GigaChat provider abstraction, TLS/proxy support, structured output |
+| Structured tender analysis | Complete | strict Pydantic model + JSON validation |
+| Company-fit scoring | Complete | deterministic, explainable Python rules |
+| Persistence / dedup | Complete | SQLite, SHA-256, owner-scoped history |
+| RAG | Complete | page chunks, multilingual FastEmbed, Qdrant local, grounded answers |
+| Tender monitoring | Complete | configurable EIS RSS, pre-filter, subscriptions, dedup |
+| FastAPI | Complete | health, history, PDF analysis, scoring, RAG, monitoring, Swagger |
+| Docker | Complete | non-root image, healthcheck, named persistent volume, localhost bind |
+| Portfolio polish | Complete | CI, smoke test, security/deployment/demo documentation, sample PDF |
 
-## Текущая задача
-Phase 8.1 переводит retrieval на semantic embeddings + Qdrant. PDF разбивается на page-aware chunks,
-официальный FastEmbed `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` строит vectors, Qdrant local mode выполняет cosine top-k search,
-а `/ask <вопрос>` передаёт в chat-модель только найденный контекст. Источники показываются по страницам.
-Исходный PDF не сохраняется; `data/qdrant/` содержит chunks и vectors и остаётся вне Git.
+## Design principles
 
-## Следующие задачи
-1. Установить `qdrant-client`, проверить `python -m app.rag.health`.
-2. Повторно отправить тестовый PDF и проверить `/ask` после semantic re-index.
-3. Проверить retrieval на длинном многостраничном тендере и оценить источники.
-4. Следующие фазы — мониторинг источников, FastAPI и Docker; OCR/YandexGPT — дополнительные расширения.
+1. **Human decision remains final.** Fit scoring is compatibility, not a recommendation or win prediction.
+2. **Deterministic rules stay outside the LLM.** Scoring can be reproduced and explained.
+3. **Provider boundaries are explicit.** Telegram, API, LLM, source adapters and persistence are separated.
+4. **Unknown data is not silently converted into a negative score.** Missing fields are tracked as completeness gaps.
+5. **Local state is owner-scoped.** Telegram history and RAG retrieval filter by user/document identifiers.
+6. **Secrets are runtime configuration.** `.env` and local data are ignored by Git and excluded from Docker build context.
+7. **Portfolio claims match implementation.** OCR, multi-replica production storage, full authentication and automatic bid submission are not claimed.
 
-## Передача между сессиями
-Прочитать PROJECT, TASKS, ARCHITECTURE, README, git status и git log.
-Не печатать .env, ключи или данные документов. Не пересоздавать .venv.
-Не создавать коммит без нового указания пользователя.
+## Verified end-to-end scenarios
 
-## Обновление перед Phase 5: переносимость сети
-Добавлен OUTBOUND_PROXY_URL с Telegram override и startup-настройкой HTTPX для
-официального SDK GigaChat 0.2.3. CA bundle и TLS сохранены, зависимостей не добавлено.
-Реальный .env не изменялся. Сетевой этап завершён; Phase 5 сохраняет эту конфигурацию.
+- Telegram bot receives a real PDF and extracts text.
+- GigaChat returns structured tender facts.
+- Deterministic scoring produces an explainable fit score.
+- SQLite history and exact-PDF dedup work.
+- Semantic RAG answers paraphrased questions and returns source pages.
+- EIS RSS live connectivity works with multiple configured feeds.
+- Monitoring finds and deduplicates live procurement notices and supports background subscription state.
+- FastAPI serves Swagger/OpenAPI and reports component readiness.
+- Docker image builds on Windows Docker Desktop / WSL2 and `/health` returns all components ready after the first FastEmbed cache initialization.
 
-Проверка Phase 5: 61 тест и 38 subtests прошли; syntax/import checks и pip check — успешно.
+## v1.0.0 boundary
 
+The current deployment is intentionally **single-node**: one API process owns local SQLite and Qdrant local-mode files. This is appropriate for a portfolio/demo deployment. Horizontal scaling requires server-backed storage first.
 
-## Phase 6 scoring
-`app.scoring` загружает версионированный профиль и считает fit только по явным правилам Python.
-Недостающие факты не считаются отрицательным совпадением. Демо-профиль не является данными работодателя.
+Raw PDF bytes are not retained by the analysis/history flow. RAG chunks are persisted in Qdrant because retrieval requires them. The configured external LLM can receive bounded extracted text; deployments must apply their own data-retention and provider-compliance policies.
 
+## Next production iterations
 
-## Phase 9 status
-Implemented a source-monitoring MVP around configurable EIS RSS feeds: normalized notice model, RSS/Atom parser, profile pre-filter, user-scoped SQLite dedup, Telegram manual scan/subscription commands, and an optional periodic polling loop. Search URL construction remains outside the application: an operator copies the RSS URL generated by EIS. Additional procurement platforms are future adapters behind the same normalized model.
-
-
-## Phase 10: HTTP API
-FastAPI exposes the existing domain services without duplicating Telegram transport. The API is localhost-only by default, has Swagger/OpenAPI, a public readiness endpoint, optional `X-API-Key` protection for `/api/v1/*`, user-scoped history/detail, deterministic scoring, semantic RAG questions, EIS monitoring status/manual scan, and multipart PDF analysis. Duplicate PDFs are detected by the same user-scoped SHA-256 repository rule and reuse stored analysis. Uploaded PDF bytes are not persisted.
-
-## Phase 11 — Docker / single-node deployment
-
-Status: implemented.
-
-Deployment assets now provide a reproducible Python 3.12 Linux image, non-root runtime user, strict container healthcheck, localhost-only default port publishing, and a persistent named volume for SQLite, local Qdrant and FastEmbed cache. Secrets remain outside the image and are injected at runtime from `.env` by Docker Compose.
-
-The current deployment target is intentionally single-node / one API process because the MVP uses file-backed SQLite and Qdrant local mode. Multi-replica production scaling is a later architecture change, not something hidden behind Docker Compose.
+- PostgreSQL + migrations.
+- Qdrant server/Cloud rather than local mode.
+- OCR worker for scan-only documents.
+- OAuth/JWT or organization identity provider.
+- Rate limiting, metrics, tracing and structured audit events.
+- Additional procurement source adapters.
+- Separate worker/scheduler topology once state is server-backed.

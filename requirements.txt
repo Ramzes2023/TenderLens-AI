@@ -1,0 +1,3 @@
+# Python 3.12
+# Phase 1: no third-party dependencies.
+# Add only dependencies required by the phase being implemented.

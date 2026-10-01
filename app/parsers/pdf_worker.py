@@ -1,4 +1,4 @@
-"""Isolated parser process: PDF bytes in, small JSON summary out."""
+"""Isolated parser process: PDF bytes in, bounded JSON text and statistics out."""
 import json
 import sys
 from dataclasses import asdict

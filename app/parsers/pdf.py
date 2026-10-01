@@ -1,5 +1,5 @@
-"""PDF text statistics. No OCR, persistence, or LLM calls."""
-from dataclasses import dataclass
+"""Bounded PDF text and statistics. No OCR, persistence, or LLM calls."""
+from dataclasses import dataclass, field
 import pymupdf
 
 MAX_BYTES = 10 * 1024 * 1024
@@ -13,6 +13,7 @@ class PdfSummary:
     pages: int | None = None
     characters: int = 0
     empty_pages: int = 0
+    text: str = field(default="", repr=False)
 
 
 def parse_pdf(data: bytes) -> PdfSummary:
@@ -33,12 +34,14 @@ def parse_pdf(data: bytes) -> PdfSummary:
             if pages == 0:
                 return PdfSummary("invalid", 0)
             count = empty = 0
+            texts = []
             for page in document:
                 text = page.get_text("text")
+                texts.append(text)
                 count += len(text)
                 empty += not bool(text.strip())
                 if count > MAX_CHARACTERS:
                     return PdfSummary("too_much_text", pages)
-            return PdfSummary("no_text" if empty == pages else "ok", pages, count, empty)
+            return PdfSummary("no_text" if empty == pages else "ok", pages, count, empty, "\n".join(texts))
     except Exception:
         return PdfSummary("invalid")

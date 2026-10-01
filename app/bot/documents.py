@@ -29,7 +29,7 @@ def format_summary(name: str, result: PdfSummary) -> str:
     return text
 
 
-async def pdf_handler(message: Message, bot: Bot) -> None:
+async def pdf_handler(message: Message, bot: Bot, tender_provider=None, tender_max_chars: int = 20000) -> None:
     document = message.document
     if document is None:
         return
@@ -55,4 +55,24 @@ async def pdf_handler(message: Message, bot: Bot) -> None:
                     result = await summarize_pdf(buffer.getvalue())
                 except Exception:
                     result = PdfSummary("invalid")
-    await message.answer(format_summary(name, result), parse_mode=None)
+    summary = format_summary(name, result)
+    if result.status == "ok" and tender_provider is None:
+        summary += "\nAI-анализ не настроен. Администратору нужно проверить конфигурацию GigaChat."
+    await message.answer(summary, parse_mode=None)
+
+    if result.status != "ok" or tender_provider is None:
+        return
+    await message.answer("Документ успешно прочитан.\nНачинаю AI-анализ тендерной документации…")
+    from app.llm.base import LLMError
+    from app.services.tender_analysis import AnalysisError, analyze_tender
+    from .tender import format_tender
+    try:
+        analysis = await analyze_tender(result.text, tender_provider, tender_max_chars)
+    except LLMError:
+        await message.answer("AI-анализ недоступен: ошибка подключения, авторизации или времени ожидания. Администратору нужно проверить настройки GigaChat. PDF прочитан успешно.")
+        return
+    except AnalysisError as error:
+        await message.answer(str(error), parse_mode=None)
+        return
+    for chunk in format_tender(analysis):
+        await message.answer(chunk, parse_mode=None)

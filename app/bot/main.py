@@ -32,6 +32,11 @@ class TokenRedactingFormatter(logging.Formatter):
 
 
 def configure_logging(settings: Settings) -> None:
+    # Do not propagate vendor HTTP diagnostics (headers/payloads) to bot logs.
+    for name in ("gigachat", "httpx", "httpcore"):
+        vendor_logger = logging.getLogger(name)
+        vendor_logger.handlers = [logging.NullHandler()]
+        vendor_logger.propagate = False
     handler = logging.StreamHandler()
     handler.setFormatter(TokenRedactingFormatter(settings.token, settings.proxy_url))
     logging.basicConfig(level=settings.log_level, handlers=[handler], force=True)
@@ -43,7 +48,7 @@ def create_dispatcher() -> Dispatcher:
     return dispatcher
 
 
-async def run_bot(settings: Settings) -> None:
+async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: int = 20000) -> None:
     if settings.proxy_url:
         session = AiohttpSession(proxy=settings.proxy_url)
         try:
@@ -55,6 +60,9 @@ async def run_bot(settings: Settings) -> None:
         bot = Bot(token=settings.token)
     try:
         dispatcher = create_dispatcher()
+        if tender_provider is not None:
+            dispatcher["tender_provider"] = tender_provider
+            dispatcher["tender_max_chars"] = tender_max_chars
         await bot.get_me()  # Validate credentials before announcing successful startup.
         logger.info("TenderLens AI запущен. Остановка: Ctrl+C.")
         await dispatcher.start_polling(
@@ -76,8 +84,19 @@ def main() -> int:
         print(f"Ошибка конфигурации: {error}", file=sys.stderr)
         return 2
     configure_logging(settings)
+    from app.llm.config import load_settings as load_llm_settings
+    from app.llm.gigachat import GigaChatProvider
+    from app.llm.base import LLMConfigurationError
+    from app.services.tender_analysis import configured_max_chars, AnalysisError
+    provider, max_chars = None, 20000
     try:
-        asyncio.run(run_bot(settings))
+        llm_settings = load_llm_settings()
+        max_chars = configured_max_chars()
+        provider = GigaChatProvider(llm_settings)
+    except (LLMConfigurationError, AnalysisError):
+        logger.warning("AI-анализ отключён: проверьте настройки LLM и лимит текста.")
+    try:
+        asyncio.run(run_bot(settings, provider, max_chars))
     except KeyboardInterrupt:
         logger.info("Бот остановлен пользователем.")
     except TelegramUnauthorizedError:

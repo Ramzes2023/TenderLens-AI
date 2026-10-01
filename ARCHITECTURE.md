@@ -124,3 +124,16 @@ llm.config при запуске переносит общий HTTP-прокси
 NO_PROXY, TLS и CA bundle сохранены. SDK не предоставляет отдельного proxy-параметра;
 не используются monkeypatch или изменение приватных полей SDK в приложении.
 Для смены прокси нужен перезапуск; адреса задаются конфигурацией, не исходным кодом.
+
+## Phase 5: реализованный поток фактов
+main загружает LLM-конфигурацию один раз до polling и передаёт provider/лимит через
+Dispatcher dependency injection. Telegram знает только контракт generate;
+провайдер GigaChat выбирает composition root main. Ошибка настройки не ломает PDF.
+PdfSummary теперь переносит ограниченный text (исключён из repr) из worker в память.
+documents → services.tender_analysis → LLMProvider → TenderAnalysis → bot.tender.
+Сервис нормализует текст, записывает truncation, формирует JSON-only запрос без tools,
+отклоняет дубли ключей, NaN, лишние поля и неправильные типы/диапазоны.
+Модель ответа не содержит SDK-типов. Неизвестные скаляры null, списки пусты.
+Formatter использует plain text, разбиение учитывает UTF-16 лимит Telegram.
+Никакого scoring, выбора участия, сохранения в БД или RAG. Старое описание отдельного
+health-потока Phase 4 остаётся историей; теперь читаемые PDF подключены к LLM.

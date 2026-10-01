@@ -6,6 +6,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from app.network import configure_http_environment
+
 from .base import LLMConfigurationError
 
 ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
@@ -40,10 +42,16 @@ def load_settings(env_file: Path = ENV_FILE) -> GigaChatSettings:
         timeout = float(os.environ.get("GIGACHAT_TIMEOUT", "30") or "30")
     except ValueError:
         raise LLMConfigurationError("GIGACHAT_TIMEOUT должен быть числом.") from None
-    return GigaChatSettings(
+    settings = GigaChatSettings(
         credentials=os.environ.get("GIGACHAT_CREDENTIALS", "").strip(),
         model=os.environ.get("GIGACHAT_MODEL", "").strip(),
         scope=os.environ.get("GIGACHAT_SCOPE", "").strip() or "GIGACHAT_API_PERS",
         timeout=timeout,
         ca_bundle_file=os.environ.get("GIGACHAT_CA_BUNDLE_FILE", "").strip() or None,
     )
+
+    try:
+        configure_http_environment()
+    except ValueError as error:
+        raise LLMConfigurationError(str(error)) from None
+    return settings

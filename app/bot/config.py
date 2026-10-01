@@ -8,6 +8,8 @@ from urllib.parse import urlsplit
 from aiogram.utils.token import TokenValidationError, validate_token
 from dotenv import load_dotenv
 
+from app.network import outbound_proxy
+
 ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
@@ -35,6 +37,11 @@ def load_settings(env_file: Path = ENV_FILE) -> Settings:
     if level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
         raise ConfigurationError("LOG_LEVEL должен быть DEBUG, INFO, WARNING, ERROR или CRITICAL.")
     proxy = os.environ.get("TELEGRAM_PROXY_URL", "").strip() or None
+    if not proxy:
+        try:
+            proxy = outbound_proxy()
+        except ValueError as error:
+            raise ConfigurationError(str(error)) from None
     if proxy:
         try:
             parsed = urlsplit(proxy)

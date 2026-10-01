@@ -156,3 +156,25 @@ Scoring разделяет:
 security 10, documents 15. Документ readiness — только keyword-проверка и не доказывает
 юридическую действительность документов. Fit не является прогнозом победы и не принимает
 решение об участии. Для реальной компании нужен отдельный профиль и проверка правил.
+
+## Phase 7: SQLite persistence and user-scoped deduplication
+
+Composition root создаёт `TenderRepository` из `DATABASE_URL` и передаёт его через
+Dispatcher dependency injection. Локальный MVP поддерживает только `sqlite:///` URL.
+Схема создаётся idempotent SQL-скриптом и содержит версию схемы.
+
+`tenders` хранит: Telegram owner id, chat id, SHA-256 PDF, безопасное имя файла,
+страницы/число символов, JSON строгих Pydantic-моделей анализа/scoring, признак
+усечения и UTC timestamps. Уникальность `(owner_user_id, pdf_sha256)` обеспечивает
+дедупликацию без пересечения данных разных пользователей.
+
+Поток нового документа:
+`download -> SHA-256 -> user-scoped duplicate lookup -> PDF parse -> LLM -> scoring -> save`.
+При точном дубликате сохранённые Pydantic-модели валидируются при чтении и повторно
+рендерятся в Telegram; LLM и PDF parser не вызываются. База не хранит PDF bytes или
+полный извлечённый текст.
+
+`/history` читает последние 10 записей только для `message.from_user.id`. SQLite-операции
+вызываются через `asyncio.to_thread`, поэтому короткие локальные SQL-запросы не блокируют
+async Telegram loop. Для многопроцессного/серверного масштаба Phase 10/11 может заменить
+этот репозиторий PostgreSQL-реализацией с миграционным инструментом.

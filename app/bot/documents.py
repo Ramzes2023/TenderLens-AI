@@ -1,9 +1,15 @@
-"""PDF upload handler. Files and extracted text are not logged or retained."""
+"""PDF upload handler. PDF bytes and extracted full text are not retained."""
 import asyncio
+import hashlib
+import logging
+
 from aiogram import Bot
 from aiogram.types import Message
+
 from app.parsers.pdf import MAX_BYTES, PdfSummary
 from app.services.pdf import LimitedBuffer, summarize_pdf
+
+logger = logging.getLogger(__name__)
 
 STATUS = {
     "ok": "Да, текст извлечён.",
@@ -29,8 +35,34 @@ def format_summary(name: str, result: PdfSummary) -> str:
     return text
 
 
+def _identity(message: Message) -> tuple[int | None, int | None]:
+    user_id = getattr(getattr(message, "from_user", None), "id", None)
+    chat_id = getattr(getattr(message, "chat", None), "id", None)
+    user_id = user_id if isinstance(user_id, int) and not isinstance(user_id, bool) else None
+    chat_id = chat_id if isinstance(chat_id, int) and not isinstance(chat_id, bool) else None
+    return user_id, chat_id
+
+
+async def _send_stored(message: Message, record) -> None:
+    from app.services.tender_analysis import AnalysisResult
+    from .tender import format_tender
+
+    await message.answer(
+        "♻️ Этот PDF уже был обработан ранее. Новый запрос к AI не выполнялся.\n"
+        f"Сохранённая запись: #{record.id}",
+        parse_mode=None,
+    )
+    result = AnalysisResult(record.analysis, record.analysis_truncated)
+    for chunk in format_tender(result):
+        await message.answer(chunk, parse_mode=None)
+    if record.scoring is not None:
+        from .scoring import format_scoring
+        for chunk in format_scoring(record.scoring):
+            await message.answer(chunk, parse_mode=None)
+
+
 async def pdf_handler(message: Message, bot: Bot, tender_provider=None, tender_max_chars: int = 20000,
-                      company_profile=None) -> None:
+                      company_profile=None, tender_repository=None) -> None:
     document = message.document
     if document is None:
         return
@@ -40,6 +72,8 @@ async def pdf_handler(message: Message, bot: Bot, tender_provider=None, tender_m
         return
     if document.file_size is not None and document.file_size > MAX_BYTES:
         result = PdfSummary("too_large")
+        data = None
+        pdf_hash = None
     else:
         await message.answer("Получен PDF. Скачиваю и проверяю документ…")
         with LimitedBuffer() as buffer:
@@ -47,13 +81,31 @@ async def pdf_handler(message: Message, bot: Bot, tender_provider=None, tender_m
                 await asyncio.wait_for(bot.download(document, destination=buffer, timeout=60), timeout=65)
             except ValueError:
                 result = PdfSummary("too_large")
+                data = None
+                pdf_hash = None
             except TimeoutError:
                 result = PdfSummary("download_error")
+                data = None
+                pdf_hash = None
             except Exception:
                 result = PdfSummary("download_error")
+                data = None
+                pdf_hash = None
             else:
+                data = buffer.getvalue()
+                pdf_hash = hashlib.sha256(data).hexdigest()
+                owner_id, _ = _identity(message)
+                if tender_repository is not None and owner_id is not None:
+                    try:
+                        existing = await asyncio.to_thread(tender_repository.find_by_hash, owner_id, pdf_hash)
+                    except Exception as error:
+                        existing = None
+                        logger.warning("Не удалось проверить PDF на дубликат (%s).", type(error).__name__)
+                    if existing is not None:
+                        await _send_stored(message, existing)
+                        return
                 try:
-                    result = await summarize_pdf(buffer.getvalue())
+                    result = await summarize_pdf(data)
                 except Exception:
                     result = PdfSummary("invalid")
     summary = format_summary(name, result)
@@ -78,9 +130,30 @@ async def pdf_handler(message: Message, bot: Bot, tender_provider=None, tender_m
     for chunk in format_tender(analysis):
         await message.answer(chunk, parse_mode=None)
 
+    scoring = None
     if company_profile is not None:
         from app.scoring.engine import score_tender
         from .scoring import format_scoring
         scoring = score_tender(analysis.analysis, company_profile)
         for chunk in format_scoring(scoring):
             await message.answer(chunk, parse_mode=None)
+
+    owner_id, chat_id = _identity(message)
+    if (tender_repository is not None and owner_id is not None and chat_id is not None
+            and pdf_hash is not None):
+        try:
+            stored = await asyncio.to_thread(
+                tender_repository.save_success,
+                owner_user_id=owner_id,
+                chat_id=chat_id,
+                pdf_sha256=pdf_hash,
+                source_filename=name,
+                pages=result.pages,
+                characters=result.characters,
+                analysis=analysis.analysis,
+                scoring=scoring,
+                analysis_truncated=analysis.truncated,
+            )
+            await message.answer(f"💾 Результат сохранён в истории под номером #{stored.id}.", parse_mode=None)
+        except Exception as error:
+            logger.warning("Не удалось сохранить результат в БД (%s).", type(error).__name__)

@@ -49,7 +49,7 @@ def create_dispatcher() -> Dispatcher:
 
 
 async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: int = 20000,
-                  company_profile=None) -> None:
+                  company_profile=None, tender_repository=None) -> None:
     if settings.proxy_url:
         session = AiohttpSession(proxy=settings.proxy_url)
         try:
@@ -66,6 +66,8 @@ async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: in
             dispatcher["tender_max_chars"] = tender_max_chars
         if company_profile is not None:
             dispatcher["company_profile"] = company_profile
+        if tender_repository is not None:
+            dispatcher["tender_repository"] = tender_repository
         await bot.get_me()  # Validate credentials before announcing successful startup.
         logger.info("TenderLens AI запущен. Остановка: Ctrl+C.")
         await dispatcher.start_polling(
@@ -106,8 +108,18 @@ def main() -> int:
     except ScoringConfigurationError:
         logger.warning("Scoring отключён: проверьте профиль компании.")
 
+    from app.database import (DatabaseConfigurationError, DatabaseError,
+                              TenderRepository, load_database_settings)
+    tender_repository = None
     try:
-        asyncio.run(run_bot(settings, provider, max_chars, company_profile))
+        db_settings = load_database_settings()
+        tender_repository = TenderRepository(db_settings.path)
+        tender_repository.initialize()
+    except (DatabaseConfigurationError, DatabaseError):
+        logger.warning("История тендеров отключена: проверьте DATABASE_URL и доступ к файлу БД.")
+
+    try:
+        asyncio.run(run_bot(settings, provider, max_chars, company_profile, tender_repository))
     except KeyboardInterrupt:
         logger.info("Бот остановлен пользователем.")
     except TelegramUnauthorizedError:

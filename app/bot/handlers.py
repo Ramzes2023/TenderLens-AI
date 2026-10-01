@@ -2,6 +2,7 @@
 
 from aiogram import F, Router
 from .documents import pdf_handler
+from .history import history_handler
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 
@@ -13,7 +14,7 @@ START_TEXT = (
 )
 HELP_TEXT = (
     "Доступные команды:\n/start — знакомство с TenderLens AI\n"
-    "/help — список команд\n/status — проверка работы бота\n\n"
+    "/help — список команд\n/status — проверка работы бота\n/history — последние обработанные тендеры\n\n"
     "Отправьте PDF как документ: до 10 МиБ и 200 страниц. "
     "Покажу имя, страницы и количество символов. Текст читаемого PDF отправляется в GigaChat для AI-сводки; затем доступен детерминированный fit-score по профилю компании. OCR недоступен."
 )
@@ -37,5 +38,6 @@ def create_router() -> Router:
     router.message.register(start_handler, CommandStart())
     router.message.register(help_handler, Command("help"))
     router.message.register(status_handler, Command("status"))
+    router.message.register(history_handler, Command("history"))
     router.message.register(pdf_handler, F.document)
     return router

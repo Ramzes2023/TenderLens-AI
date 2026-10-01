@@ -1,1 +1,1 @@
-"""TenderLens AI: foundation only; implementation is planned."""
+"""TenderLens AI Telegram command interface."""

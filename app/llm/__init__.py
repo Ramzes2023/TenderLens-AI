@@ -1,1 +1,1 @@
-"""TenderLens AI: foundation only; implementation is planned."""
+"""Provider-independent LLM contracts; importing this package makes no requests."""

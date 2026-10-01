@@ -3,3 +3,5 @@ aiogram==3.31.0
 python-dotenv==1.2.4
 aiohttp-socks==0.12.0
 PyMuPDF==1.28.2
+gigachat==0.2.3
+httpx==0.28.1

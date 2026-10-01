@@ -6,3 +6,4 @@ PyMuPDF==1.28.2
 gigachat==0.2.3
 httpx==0.28.1
 pydantic==2.13.5
+qdrant-client[fastembed]>=1.15,<2

@@ -71,7 +71,7 @@ Scoring не является обещанием победы или автом�
 ## Интеграции и исполнение
 
 Первый LLM — GigaChat; YandexGPT можно подключить через тот же контракт.
-Для GigaChat выбран официальный SDK 0.2.3; embeddings и векторная БД отложены.
+Для GigaChat выбран официальный SDK 0.2.3; Phase 8.1 использует его Embeddings API, а vector store — Qdrant local mode.
 SQL: возможен локальный SQLite, PostgreSQL — по требованиям развёртывания.
 Долгий разбор документов не должен блокировать Telegram/API: механизм фоновых
 задач выбирается при реализации, без обязательного Redis/Celery на старте.
@@ -180,18 +180,23 @@ async Telegram loop. Для многопроцессного/серверног�
 этот репозиторий PostgreSQL-реализацией с миграционным инструментом.
 
 
-## Phase 8 RAG
+## Phase 8.1 semantic RAG
 
 После чтения PDF parser сохраняет page-level text только в памяти. `app.rag.chunking` создаёт
-ограниченные chunks с overlap и номером страницы. `HashEmbeddingProvider` строит локальный
-детерминированный dense vector без сетевого вызова; `SQLiteVectorStore` хранит vector BLOB +
-chunk text в отдельной `RAG_DATABASE_URL`. Индекс изолирован по `(Telegram user id, PDF SHA-256)`.
+ограниченные chunks с overlap и номером страницы. `GigaChatEmbeddingProvider` пакетно вызывает
+локальный FastEmbed (`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` по умолчанию), а `QdrantVectorStore` сохраняет
+vectors + page/chunk metadata в Qdrant local mode. Фильтры Qdrant всегда включают
+`owner_user_id` и `pdf_sha256`, поэтому retrieval изолирован по пользователю и документу.
 
-`/ask <вопрос>` выбирает последний тендер пользователя из основной SQLite history, ищет top-k
-фрагментов только этого PDF, ограничивает общий контекст и вызывает существующий LLMProvider.
-Prompt запрещает внешние знания/догадки; ответ показывает страницы retrieved chunks.
+`/ask <вопрос>` строит semantic embedding вопроса, делает cosine top-k query в Qdrant, ограничивает
+общий контекст и вызывает существующий LLMProvider. Prompt запрещает внешние знания/догадки;
+ответ показывает страницы retrieved chunks. Embedding network call выполняется через worker thread,
+чтобы не блокировать aiogram event loop.
 
-Важно: hashing vectors — лёгкий lexical retrieval MVP, а не semantic embedding model. Интерфейсы
-`RagService`/vector store/embedder отделены, поэтому backend можно заменить на Qdrant и semantic
-embeddings без изменения Telegram workflow. Исходный PDF не хранится; RAG DB хранит текст chunks
-локально, поэтому её следует считать чувствительными данными и не коммитить.
+Qdrant client открывается короткоживущими сессиями и явно закрывается, что важно для Windows file
+locks в local mode. Коллекция создаётся по размерности первого embedding. Если embedding model
+изменит размерность, система требует новое имя `RAG_QDRANT_COLLECTION`, вместо тихого повреждения индекса.
+
+Исходный PDF не хранится; `data/qdrant/` содержит chunk text и vectors, считается чувствительным
+локальным хранилищем и исключён из Git. При production deployment local Qdrant можно заменить на
+Qdrant server/Cloud, сохранив контракт `RagService` и Telegram workflow.

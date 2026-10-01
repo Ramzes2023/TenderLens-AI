@@ -46,10 +46,12 @@
 
 ## Phase 8 - RAG
 - [x] Постраничные chunks с overlap и привязкой к номеру страницы.
-- [x] Локальные deterministic hashing vectors и отдельный SQLite vector store без новой внешней зависимости.
 - [x] /ask по последнему тендеру: retrieval top-k → grounded GigaChat answer → страницы-источники.
 - [x] Повторный PDF Phase 7 может построить RAG-индекс без повторного AI-анализа.
-- [ ] На размеченном наборе оценить retrieval quality; при необходимости заменить hashing embedder на semantic embeddings/Qdrant.
+- [x] Phase 8.1: FastEmbed `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` вместо hashing vectors.
+- [x] Phase 8.1: Qdrant local mode вместо самописного SQLite vector search.
+- [ ] На наборе реальных многостраничных тендеров измерить retrieval recall/precision и качество источников.
+- [ ] При серверном deployment переключить Qdrant local path на отдельный Qdrant service/Cloud.
 
 ## Phase 9 - tender source monitoring
 - [ ] Контракт источника и один разрешённый источник для начала.

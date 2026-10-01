@@ -3,7 +3,7 @@
 Планируемая платформа анализа тендеров и автоматизации на Python 3.12.
 
 **Статус: Phase 6 — структурированная AI-сводка + детерминированный scoring по профилю компании.** Сохранены /start, /help и /status.
-При настроенном GigaChat читаемые PDF автоматически анализируются, после чего Python рассчитывает совместимость с версионированным профилем компании. HTTP API, SQL, RAG и Docker пока не реализованы.
+При настроенном GigaChat читаемые PDF автоматически анализируются, Python рассчитывает совместимость с профилем компании, SQLite хранит историю, а semantic RAG/Qdrant отвечает на вопросы по документу. HTTP API и Docker пока не реализованы.
 
 ## Проверка PDF
 
@@ -28,7 +28,7 @@ Polling пока последовательный: другие команды �
 Пользователь отправляет тендерный PDF через Telegram. Система извлекает факты
 (заказчик, сумма, сроки, обеспечение, требования), показывает источники и риски,
 сравнивает тендер с профилем компании по воспроизводимым правилам.
-Позже — вопросы по документам через RAG, мониторинг источников и HTTP API.
+Дальше — мониторинг источников, HTTP API и Docker deployment.
 Решение об участии принимает человек; отправка заявок автоматически не планируется.
 
 ## Подготовка на Windows
@@ -342,10 +342,14 @@ DATABASE_URL=sqlite:///./data/tenderlens.db
 серверном развёртывании.
 
 
-## Phase 8: вопросы по тендеру через RAG
+## Phase 8.1: semantic RAG через local multilingual embeddings + Qdrant
 
-После успешной обработки PDF TenderLens создаёт локальный page-aware RAG-индекс и сообщает,
-сколько фрагментов добавлено. Затем можно спросить по последнему тендеру:
+После успешной обработки PDF TenderLens создаёт page-aware semantic RAG-индекс.
+Фрагменты документа векторизуются официальной моделью FastEmbed `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` и сохраняются
+в Qdrant local mode. Отдельный Docker/Qdrant server для текущего прототипа не нужен;
+`qdrant-client` использует тот же API и хранит данные в локальной директории.
+
+После индексации доступны вопросы по последнему тендеру:
 
 ```text
 /ask Какой срок поставки?
@@ -353,30 +357,51 @@ DATABASE_URL=sqlite:///./data/tenderlens.db
 /ask Какая неустойка за просрочку?
 ```
 
-Пайплайн: `PDF page text → chunks → local hashing vectors → SQLite vector index → top-k → GigaChat`.
-GigaChat получает только найденные фрагменты, а ответ сопровождается номерами страниц. Если PDF
-уже был обработан до Phase 8, отправьте его ещё раз: повторный LLM-анализ не выполняется, но локальный
-RAG-индекс будет создан.
+Пайплайн: `PDF page text → chunks → FastEmbed multilingual-e5-small → Qdrant cosine search → top-k → GigaChat answer`.
+GigaChat для ответа получает только найденные фрагменты, а Telegram показывает страницы-источники.
+Повторная отправка уже проанализированного PDF не запускает повторный tender-analysis; при отсутствии
+нового Qdrant-индекса документ только переиндексируется.
 
-Настройки (все необязательны, значения ниже — defaults):
+Установка новой зависимости после применения Phase 8.1:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Настройки (defaults):
 
 ```dotenv
 RAG_ENABLED=true
-RAG_DATABASE_URL=sqlite:///./data/tenderlens_rag.db
+RAG_QDRANT_PATH=./data/qdrant
+RAG_QDRANT_COLLECTION=tenderlens_chunks_v2_local
+RAG_EMBEDDING_PROVIDER=fastembed
+RAG_EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 RAG_CHUNK_SIZE=1200
 RAG_CHUNK_OVERLAP=180
-RAG_VECTOR_DIMENSIONS=512
 RAG_TOP_K=5
 RAG_MAX_CONTEXT_CHARS=7000
 ```
 
-Phase 8 не добавляет Python-зависимостей. Векторный индекс реализован локально поверх SQLite и
-float32 BLOBs. Это позволяет протестировать весь RAG workflow без скачивания embedding-моделей и
-без отдельного Qdrant-сервера. Ограничение: hashing vectors лучше всего работают на лексически
-похожих формулировках; для production/большого корпуса планируется semantic embedder + Qdrant.
+Semantic embeddings используют уже настроенные `GIGACHAT_CREDENTIALS`, `GIGACHAT_SCOPE`,
+`GIGACHAT_CA_BUNDLE_FILE` и `OUTBOUND_PROXY_URL`. Для отдельной embedding-модели новый секрет не нужен.
+
+Проверка embeddings вручную:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.rag.health
+```
+
+Ожидается строка `Semantic embeddings: OK` и размерность вектора. Health-команда выполняет реальный
+API-запрос и может расходовать доступную квоту.
 
 ### Данные и приватность
 
-`data/tenderlens_rag.db` содержит chunks текста документов (но не PDF bytes) и должен оставаться
-локальным/вне Git. Удаление этой базы удаляет локальный RAG-индекс; AI-analysis/history в основной
-базе при этом остаются.
+`data/qdrant/` содержит chunks текста тендеров и semantic vectors, но не исходные PDF bytes.
+Каталог уже исключён из Git через `data/`. Его нужно считать локальными чувствительными данными.
+Удаление каталога удаляет только RAG-индекс; основная SQLite history/scoring остаётся.
+
+### Ограничения прототипа
+
+Qdrant работает в local mode — это настоящий Qdrant API для разработки и демонстрации, но не
+многопользовательский сервер. В Docker/deployment фазе можно заменить `path=` на URL Qdrant server/Cloud
+без изменения Telegram `/ask` workflow. Embeddings требуют доступ к GigaChat API при индексации и при каждом вопросе.

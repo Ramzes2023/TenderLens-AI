@@ -5,7 +5,7 @@
 фактов, scoring, SQL, RAG, мониторинг, FastAPI и Docker.
 
 ## Текущий статус
-2026-10-01: реализованы Phase 1–8. Phase 3 сохранена пользователем в коммите
+2026-10-01: реализованы Phase 1–8.1. Phase 3 сохранена пользователем в коммите
 0c599db; успешная живая загрузка PDF в Telegram подтверждена пользователем.
 Phase 4 сохранена в ae1d438. Пользователь подтвердил реальные подключения Telegram и GigaChat.
 
@@ -18,17 +18,16 @@ Phase 4 сохранена в ae1d438. Пользователь подтверд
 - Mock-тесты без GigaChat API; Telegram/PDF код сохранён без изменений.
 
 ## Текущая задача
-Phase 8 реализована в рабочем дереве: после PDF создаётся локальный постраничный RAG-индекс.
-Команда `/ask <вопрос>` ищет top-k фрагментов только последнего тендера пользователя и
-передаёт в GigaChat только найденный контекст. Источники показываются по страницам.
-Phase 7 сохранена пользователем в f8bb0ca. Исходный PDF не сохраняется, но Phase 8 локально
-хранит текст chunks в отдельной RAG SQLite-базе, потому что он необходим для retrieval.
+Phase 8.1 переводит retrieval на semantic embeddings + Qdrant. PDF разбивается на page-aware chunks,
+официальный FastEmbed `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` строит vectors, Qdrant local mode выполняет cosine top-k search,
+а `/ask <вопрос>` передаёт в chat-модель только найденный контекст. Источники показываются по страницам.
+Исходный PDF не сохраняется; `data/qdrant/` содержит chunks и vectors и остаётся вне Git.
 
 ## Следующие задачи
-1. Ручная проверка Phase 8: повторно отправить существующий PDF для индекса, затем `/ask`.
-2. Проверить retrieval на более длинном многостраничном тендере и оценить источники.
-3. Перед production заменить/дополнить локальный hashing embedder semantic embeddings и при необходимости Qdrant.
-4. Следующие фазы — мониторинг, YandexGPT, OCR, FastAPI и Docker.
+1. Установить `qdrant-client`, проверить `python -m app.rag.health`.
+2. Повторно отправить тестовый PDF и проверить `/ask` после semantic re-index.
+3. Проверить retrieval на длинном многостраничном тендере и оценить источники.
+4. Следующие фазы — мониторинг источников, FastAPI и Docker; OCR/YandexGPT — дополнительные расширения.
 
 ## Передача между сессиями
 Прочитать PROJECT, TASKS, ARCHITECTURE, README, git status и git log.

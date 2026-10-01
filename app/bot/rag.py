@@ -8,7 +8,7 @@ from aiogram.types import Message
 from app.database.repository import DatabaseError, TenderRepository
 from app.llm.base import LLMError, LLMProvider
 from app.rag.service import RagError, RagService
-from app.rag.store import RagStoreError
+from app.rag.qdrant_store import QdrantStoreError
 from .tender import split_messages
 
 
@@ -65,7 +65,7 @@ async def ask_handler(message: Message, tender_repository: TenderRepository | No
     record = records[0]
     try:
         indexed = await asyncio.to_thread(rag_service.has_document, owner, record.pdf_sha256)
-    except RagStoreError:
+    except QdrantStoreError:
         await message.answer("Не удалось прочитать RAG-индекс. Попробуйте позже.")
         return
     if not indexed:
@@ -78,7 +78,7 @@ async def ask_handler(message: Message, tender_repository: TenderRepository | No
     await message.answer("Ищу релевантные фрагменты документа…", parse_mode=None)
     try:
         answer = await rag_service.answer(owner, record.pdf_sha256, question, tender_provider)
-    except (RagError, RagStoreError):
+    except (RagError, QdrantStoreError):
         await message.answer("Не удалось выполнить поиск по документу. Попробуйте переформулировать вопрос.")
         return
     except LLMError:

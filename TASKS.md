@@ -1,5 +1,13 @@
 # TenderLens AI — implementation checklist
 
+## v1.3.0 completed
+- Added guided company profile editing.
+- Added safe company deletion with explicit confirmation.
+- Added easier company switching from Telegram.
+- Improved multi-company management UX.
+- Added company management documentation and tests.
+- Release version bumped to 1.3.0.
+
 ## v1.2.0 completed
 - Guided Telegram company onboarding via /company_setup.
 - Step-by-step company profile creation with confirmation.

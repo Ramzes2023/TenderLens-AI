@@ -1,13 +1,13 @@
-"""Telegram commands and guided onboarding for multi-company workspaces."""
+"""Telegram commands and guided company management for multi-company workspaces."""
 from __future__ import annotations
 
 import asyncio
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, Iterable
 
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from app.companies import CompanyRepositoryError, CompanyService
 from app.scoring.models import CompanyProfile
@@ -24,8 +24,36 @@ class CompanySetup(StatesGroup):
     confirm = State()
 
 
+class CompanyEdit(StatesGroup):
+    """Step-by-step editor for an existing company workspace."""
+
+    name = State()
+    mode = State()
+    keywords = State()
+    regions = State()
+    budget = State()
+    confirm = State()
+
+
+class CompanyDelete(StatesGroup):
+    """Explicit confirmation before deleting a company workspace."""
+
+    confirm = State()
+
+
+_KEEP_VALUES = {"=", "оставить", "без изменений", "keep", "same"}
+_CANCEL_VALUES = {"нет", "no", "n", "отмена", "cancel"}
+_YES_VALUES = {"да", "yes", "y", "сохранить", "save", "создать", "create"}
+_DELETE_VALUES = {"удалить", "delete"}
+
+
 def _owner(message: Message) -> int | None:
     value = getattr(getattr(message, "from_user", None), "id", None)
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _callback_owner(callback: CallbackQuery) -> int | None:
+    value = getattr(getattr(callback, "from_user", None), "id", None)
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
@@ -40,6 +68,14 @@ def _money(value: float | None) -> str:
     return f"{value:,.0f}".replace(",", " ")
 
 
+def _normalize_answer(value: str) -> str:
+    return " ".join(value.casefold().strip().split())
+
+
+def _is_keep(value: str) -> bool:
+    return _normalize_answer(value) in _KEEP_VALUES
+
+
 def format_workspace(workspace) -> str:
     profile = workspace.profile
     marker = "✅ ACTIVE" if workspace.is_active else "▫️"
@@ -52,6 +88,34 @@ def format_workspace(workspace) -> str:
         f"Регионы: {regions}\n"
         f"Диапазон: {_money(profile.min_contract_value)} — {_money(profile.max_contract_value)} RUB"
     )
+
+
+def company_switch_markup(items: Iterable[Any]) -> InlineKeyboardMarkup | None:
+    """Build compact one-tap company switch buttons for /companies."""
+
+    rows: list[list[InlineKeyboardButton]] = []
+    for item in list(items)[:20]:
+        marker = "✅" if item.is_active else "➡️"
+        label = f"{marker} #{item.id} {item.name}"[:64]
+        rows.append([InlineKeyboardButton(text=label, callback_data=f"company_use:{item.id}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+
+
+def _resolve_company(items: Iterable[Any], selector: str):
+    """Resolve a company by numeric id or exact case-insensitive name."""
+
+    clean = " ".join(selector.strip().split())
+    if not clean:
+        return None
+    try:
+        company_id = int(clean)
+    except ValueError:
+        company_id = None
+    candidates = list(items)
+    if company_id is not None:
+        return next((item for item in candidates if int(item.id) == company_id), None)
+    matches = [item for item in candidates if str(item.name).casefold() == clean.casefold()]
+    return matches[0] if len(matches) == 1 else None
 
 
 async def companies_handler(message: Message, company_service: CompanyService | None = None) -> None:
@@ -74,7 +138,13 @@ async def companies_handler(message: Message, company_service: CompanyService | 
             "Пока персонального профиля нет, TenderLens использует demo-профиль администратора."
         )
         return
-    await message.answer("🏢 ВАШИ КОМПАНИИ\n\n" + "\n\n".join(format_workspace(item) for item in items))
+    await message.answer(
+        "🏢 ВАШИ КОМПАНИИ\n\n"
+        + "\n\n".join(format_workspace(item) for item in items)
+        + "\n\nНажмите кнопку компании, чтобы сделать её активной.\n"
+        "Редактировать: /company_edit\nУдалить: /company_delete",
+        reply_markup=company_switch_markup(items),
+    )
 
 
 async def company_show_handler(message: Message, company_service: CompanyService | None = None) -> None:
@@ -99,7 +169,11 @@ async def company_show_handler(message: Message, company_service: CompanyService
             "Создать свой профиль: /company_setup"
         )
         return
-    await message.answer("🏢 АКТИВНАЯ КОМПАНИЯ\n\n" + format_workspace(item))
+    await message.answer(
+        "🏢 АКТИВНАЯ КОМПАНИЯ\n\n"
+        + format_workspace(item)
+        + "\n\nРедактировать: /company_edit\nУдалить: /company_delete"
+    )
 
 
 async def company_use_handler(message: Message, company_service: CompanyService | None = None) -> None:
@@ -108,13 +182,27 @@ async def company_use_handler(message: Message, company_service: CompanyService 
         await message.answer("Company workspaces пока недоступны.")
         return
     raw = _command_tail(message)
-    try:
-        company_id = int(raw)
-    except ValueError:
-        await message.answer("Использование: /company_use <id>\nПример: /company_use 2")
+    if not raw:
+        try:
+            items = await asyncio.to_thread(company_service.list, owner)
+        except CompanyRepositoryError:
+            await message.answer("Не удалось прочитать список компаний.")
+            return
+        if not items:
+            await message.answer("У вас пока нет компаний. Создать: /company_setup")
+            return
+        await message.answer(
+            "Выберите активную компанию кнопкой или используйте /company_use <id>.",
+            reply_markup=company_switch_markup(items),
+        )
         return
     try:
-        item = await asyncio.to_thread(company_service.set_active, owner, company_id)
+        items = await asyncio.to_thread(company_service.list, owner)
+        selected = _resolve_company(items, raw)
+        if selected is None:
+            await message.answer("Компания не найдена. Используйте /companies и выберите её кнопкой.")
+            return
+        item = await asyncio.to_thread(company_service.set_active, owner, int(selected.id))
     except CompanyRepositoryError as error:
         await message.answer(str(error))
         return
@@ -122,6 +210,29 @@ async def company_use_handler(message: Message, company_service: CompanyService 
         f"✅ Активная компания переключена на #{item.id}: {item.name}.\n"
         "Следующие /tenders, автоуведомления и scoring будут использовать этот профиль."
     )
+
+
+async def company_use_callback_handler(
+    callback: CallbackQuery,
+    company_service: CompanyService | None = None,
+) -> None:
+    owner = _callback_owner(callback)
+    data = callback.data or ""
+    if company_service is None or owner is None or not data.startswith("company_use:"):
+        await callback.answer("Переключение недоступно.", show_alert=True)
+        return
+    try:
+        company_id = int(data.split(":", 1)[1])
+        item = await asyncio.to_thread(company_service.set_active, owner, company_id)
+    except (ValueError, CompanyRepositoryError) as error:
+        await callback.answer(str(error) or "Не удалось переключить компанию.", show_alert=True)
+        return
+    await callback.answer(f"Активна: {item.name}")
+    if callback.message is not None:
+        await callback.message.answer(
+            f"✅ Активная компания: #{item.id} {item.name}.\n"
+            "Следующие /tenders и scoring будут использовать этот профиль."
+        )
 
 
 def _parse_csv(value: str) -> list[str]:
@@ -144,7 +255,7 @@ def _parse_budget(value: str) -> float | None:
 
 
 def _parse_mode(value: str) -> str | None:
-    raw = " ".join(value.casefold().strip().split())
+    raw = _normalize_answer(value)
     aliases = {
         "sell": "sell",
         "продавать": "sell",
@@ -186,6 +297,29 @@ def build_profile_from_setup(data: dict[str, Any]) -> CompanyProfile:
     )
 
 
+def build_profile_from_edit(data: dict[str, Any]) -> CompanyProfile:
+    """Update wizard-managed fields while preserving advanced profile fields."""
+
+    original = CompanyProfile.model_validate(data["original_profile"])
+    updates: dict[str, Any] = {
+        "company_name": str(data.get("name", original.company_name)).strip(),
+        "business_mode": str(data.get("mode", original.business_mode)).strip(),
+        "allowed_regions": list(data.get("regions", original.allowed_regions) or []),
+        "max_contract_value": data.get("budget", original.max_contract_value),
+    }
+    if data.get("keywords_changed"):
+        keywords = list(data.get("keywords") or [])
+        updates["product_keywords"] = keywords
+        updates["search_keywords"] = keywords
+    regions = updates["allowed_regions"]
+    budget = updates["max_contract_value"]
+    updates["hard_stop_on_region"] = bool(regions)
+    updates["hard_stop_on_budget"] = budget is not None
+    merged = original.model_dump(mode="python")
+    merged.update(updates)
+    return CompanyProfile.model_validate(merged)
+
+
 def format_setup_summary(data: dict[str, Any]) -> str:
     keywords = ", ".join(data.get("keywords") or []) or "не заданы"
     regions = ", ".join(data.get("regions") or []) or "без ограничения"
@@ -197,6 +331,20 @@ def format_setup_summary(data: dict[str, Any]) -> str:
         f"Регионы: {regions}\n"
         f"Максимальный контракт: {_money(data.get('budget'))} RUB\n\n"
         "Напишите ДА, чтобы создать компанию, или НЕТ, чтобы отменить."
+    )
+
+
+def format_edit_summary(data: dict[str, Any]) -> str:
+    keywords = ", ".join(data.get("keywords") or []) or "не заданы"
+    regions = ", ".join(data.get("regions") or []) or "без ограничения"
+    return (
+        "Проверьте изменения перед сохранением:\n\n"
+        f"Компания: {data.get('name', '')}\n"
+        f"Режим: {data.get('mode', 'sell')}\n"
+        f"Что отслеживать: {keywords}\n"
+        f"Регионы: {regions}\n"
+        f"Максимальный контракт: {_money(data.get('budget'))} RUB\n\n"
+        "Напишите ДА, чтобы сохранить, или НЕТ, чтобы отменить."
     )
 
 
@@ -369,12 +517,12 @@ async def company_setup_confirm_handler(
         await state.clear()
         await message.answer("Не удалось завершить создание компании.")
         return
-    answer = " ".join((message.text or "").casefold().strip().split())
-    if answer in {"нет", "no", "n", "отмена", "cancel"}:
+    answer = _normalize_answer(message.text or "")
+    if answer in _CANCEL_VALUES:
         await state.clear()
         await message.answer("Создание компании отменено.")
         return
-    if answer not in {"да", "yes", "y", "создать", "create"}:
+    if answer not in _YES_VALUES:
         await message.answer("Напишите ДА для создания или НЕТ для отмены.")
         return
     data = await state.get_data()
@@ -408,6 +556,265 @@ async def company_setup_confirm_handler(
     )
 
 
+async def company_edit_handler(
+    message: Message,
+    state: FSMContext,
+    company_service: CompanyService | None = None,
+) -> None:
+    owner = _owner(message)
+    if company_service is None or owner is None:
+        await message.answer("Редактирование компаний пока недоступно.")
+        return
+    selector = _command_tail(message)
+    try:
+        if selector:
+            items = await asyncio.to_thread(company_service.list, owner)
+            item = _resolve_company(items, selector)
+        else:
+            item = await asyncio.to_thread(company_service.active, owner)
+    except CompanyRepositoryError:
+        await message.answer("Не удалось прочитать профиль компании.")
+        return
+    if item is None:
+        await message.answer(
+            "Компания для редактирования не найдена.\n"
+            "Откройте /companies, сделайте нужную компанию активной и повторите /company_edit."
+        )
+        return
+    profile = item.profile
+    await state.clear()
+    await state.update_data(
+        edit_company_id=int(item.id),
+        original_profile=profile.model_dump(mode="json"),
+        name=item.name,
+        mode=profile.business_mode,
+        keywords=list(profile.monitoring_keywords),
+        keywords_changed=False,
+        regions=list(profile.allowed_regions),
+        budget=profile.max_contract_value,
+    )
+    await state.set_state(CompanyEdit.name)
+    await message.answer(
+        f"✏️ РЕДАКТИРОВАНИЕ #{item.id} {item.name} — шаг 1 из 5\n\n"
+        f"Текущее название: {item.name}\n"
+        "Введите новое название. Чтобы оставить текущее, отправьте =\n\n"
+        "Отмена в любой момент: /company_cancel"
+    )
+
+
+async def company_edit_name_handler(message: Message, state: FSMContext) -> None:
+    raw = message.text or ""
+    if not _is_keep(raw):
+        name = " ".join(raw.strip().split())
+        if not name or name.startswith("/"):
+            await message.answer("Введите название компании или =, чтобы оставить текущее.")
+            return
+        if len(name) > 200:
+            await message.answer("Название слишком длинное. Используйте до 200 символов.")
+            return
+        await state.update_data(name=name)
+    data = await state.get_data()
+    await state.set_state(CompanyEdit.mode)
+    await message.answer(
+        "✏️ Шаг 2 из 5 — режим\n\n"
+        f"Сейчас: {data.get('mode', 'sell')}\n"
+        "Введите sell, buy или both. Чтобы оставить текущий режим, отправьте ="
+    )
+
+
+async def company_edit_mode_handler(message: Message, state: FSMContext) -> None:
+    raw = message.text or ""
+    if not _is_keep(raw):
+        mode = _parse_mode(raw)
+        if mode is None:
+            await message.answer("Введите sell, buy, both или =, чтобы оставить текущее.")
+            return
+        await state.update_data(mode=mode)
+    data = await state.get_data()
+    current = ", ".join(data.get("keywords") or []) or "не заданы"
+    await state.set_state(CompanyEdit.keywords)
+    await message.answer(
+        "✏️ Шаг 3 из 5 — ключевые слова\n\n"
+        f"Сейчас: {current}\n\n"
+        "Введите новый список через запятую. Чтобы оставить текущий список, отправьте ="
+    )
+
+
+async def company_edit_keywords_handler(message: Message, state: FSMContext) -> None:
+    raw = message.text or ""
+    if not _is_keep(raw):
+        keywords = _parse_csv(raw)
+        if not keywords:
+            await message.answer("Нужно хотя бы одно ключевое слово либо =, чтобы оставить текущие.")
+            return
+        if len(keywords) > 100:
+            await message.answer("Слишком много ключевых слов. Укажите не более 100.")
+            return
+        await state.update_data(keywords=keywords, keywords_changed=True)
+    data = await state.get_data()
+    current = ", ".join(data.get("regions") or []) or "без ограничения"
+    await state.set_state(CompanyEdit.regions)
+    await message.answer(
+        "✏️ Шаг 4 из 5 — регионы\n\n"
+        f"Сейчас: {current}\n\n"
+        "Новые регионы — через запятую.\n"
+        "= — оставить как есть\n"
+        "- — убрать ограничение по регионам"
+    )
+
+
+async def company_edit_regions_handler(message: Message, state: FSMContext) -> None:
+    raw = message.text or ""
+    if not _is_keep(raw):
+        await state.update_data(regions=_parse_csv(raw))
+    data = await state.get_data()
+    await state.set_state(CompanyEdit.budget)
+    await message.answer(
+        "✏️ Шаг 5 из 5 — максимальный контракт\n\n"
+        f"Сейчас: {_money(data.get('budget'))} RUB\n\n"
+        "Введите новое положительное число.\n"
+        "= — оставить как есть\n"
+        "- — убрать лимит"
+    )
+
+
+async def company_edit_budget_handler(message: Message, state: FSMContext) -> None:
+    raw = message.text or ""
+    if not _is_keep(raw):
+        try:
+            budget = _parse_budget(raw)
+        except ValueError:
+            await message.answer("Введите положительное число, -, либо =, чтобы оставить текущее.")
+            return
+        await state.update_data(budget=budget)
+    data = await state.get_data()
+    await state.set_state(CompanyEdit.confirm)
+    await message.answer(format_edit_summary(data))
+
+
+async def company_edit_confirm_handler(
+    message: Message,
+    state: FSMContext,
+    company_service: CompanyService | None = None,
+) -> None:
+    owner = _owner(message)
+    if company_service is None or owner is None:
+        await state.clear()
+        await message.answer("Не удалось завершить редактирование компании.")
+        return
+    answer = _normalize_answer(message.text or "")
+    if answer in _CANCEL_VALUES:
+        await state.clear()
+        await message.answer("Изменения отменены.")
+        return
+    if answer not in _YES_VALUES:
+        await message.answer("Напишите ДА, чтобы сохранить изменения, или НЕТ, чтобы отменить.")
+        return
+    data = await state.get_data()
+    try:
+        profile = build_profile_from_edit(data)
+        company_id = int(data["edit_company_id"])
+        item = await asyncio.to_thread(
+            company_service.update,
+            owner,
+            company_id,
+            profile,
+            name=str(data["name"]),
+        )
+    except (CompanyRepositoryError, KeyError, TypeError, ValueError) as error:
+        await state.clear()
+        await message.answer(f"Не удалось сохранить изменения: {error}")
+        return
+    await state.clear()
+    await message.answer(
+        f"✅ Компания обновлена: #{item.id} {item.name}.\n"
+        "Новые настройки будут использоваться в следующих /tenders, автоуведомлениях и scoring.\n"
+        "Проверить: /company_show"
+    )
+
+
+async def company_delete_handler(
+    message: Message,
+    state: FSMContext,
+    company_service: CompanyService | None = None,
+) -> None:
+    owner = _owner(message)
+    if company_service is None or owner is None:
+        await message.answer("Удаление компаний пока недоступно.")
+        return
+    selector = _command_tail(message)
+    try:
+        if selector:
+            items = await asyncio.to_thread(company_service.list, owner)
+            item = _resolve_company(items, selector)
+        else:
+            item = await asyncio.to_thread(company_service.active, owner)
+    except CompanyRepositoryError:
+        await message.answer("Не удалось прочитать профиль компании.")
+        return
+    if item is None:
+        await message.answer("Компания для удаления не найдена. Проверьте /companies.")
+        return
+    await state.clear()
+    await state.update_data(delete_company_id=int(item.id), delete_company_name=item.name)
+    await state.set_state(CompanyDelete.confirm)
+    await message.answer(
+        "⚠️ УДАЛЕНИЕ КОМПАНИИ\n\n"
+        f"Вы собираетесь удалить #{item.id} {item.name}.\n"
+        "Это удалит профиль компании из TenderLens.\n\n"
+        "Для подтверждения напишите точно: УДАЛИТЬ\n"
+        "Для отмены: НЕТ или /company_cancel"
+    )
+
+
+async def company_delete_confirm_handler(
+    message: Message,
+    state: FSMContext,
+    company_service: CompanyService | None = None,
+) -> None:
+    owner = _owner(message)
+    if company_service is None or owner is None:
+        await state.clear()
+        await message.answer("Не удалось завершить удаление компании.")
+        return
+    answer = _normalize_answer(message.text or "")
+    if answer in _CANCEL_VALUES:
+        await state.clear()
+        await message.answer("Удаление отменено.")
+        return
+    if answer not in _DELETE_VALUES:
+        await message.answer("Чтобы удалить компанию, напишите УДАЛИТЬ. Для отмены напишите НЕТ.")
+        return
+    data = await state.get_data()
+    company_id = int(data.get("delete_company_id", 0))
+    company_name = str(data.get("delete_company_name", ""))
+    try:
+        deleted = await asyncio.to_thread(company_service.delete, owner, company_id)
+        replacement = await asyncio.to_thread(company_service.active, owner) if deleted else None
+    except CompanyRepositoryError as error:
+        await state.clear()
+        await message.answer(f"Не удалось удалить компанию: {error}")
+        return
+    await state.clear()
+    if not deleted:
+        await message.answer("Компания уже не существует или была удалена ранее.")
+        return
+    if replacement is not None:
+        await message.answer(
+            f"✅ Компания #{company_id} {company_name} удалена.\n"
+            f"Новая активная компания: #{replacement.id} {replacement.name}."
+        )
+    else:
+        await message.answer(
+            f"✅ Компания #{company_id} {company_name} удалена.\n"
+            "Персональных компаний больше нет. TenderLens вернётся к fallback-профилю, если он настроен.\n"
+            "Создать новую: /company_setup"
+        )
+
+
 async def company_setup_cancel_handler(message: Message, state: FSMContext) -> None:
     await state.clear()
-    await message.answer("Пошаговая настройка компании отменена. Запустить снова: /company_setup")
+    await message.answer(
+        "Текущая операция с компанией отменена.\n"
+        "Компании: /companies · Создать: /company_setup · Активная: /company_show"
+    )

@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi.responses import HTMLResponse
 from fastapi.security import APIKeyHeader
 
 from app import __version__
@@ -18,6 +19,7 @@ from app.scoring.models import ScoringResult
 from app.services.pdf import summarize_pdf
 from app.services.tender_analysis import AnalysisError, analyze_tender
 
+from .dashboard import dashboard_html
 from .runtime import ApiRuntime
 from .schemas import (
     CompanyActivateRequest,
@@ -93,6 +95,13 @@ def _company_response(workspace) -> CompanyResponse:
         created_at=workspace.created_at,
         updated_at=workspace.updated_at,
     )
+
+
+@router.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
+async def dashboard() -> HTMLResponse:
+    """Serve the local TenderLens operator dashboard."""
+
+    return HTMLResponse(dashboard_html())
 
 
 @router.get("/health", response_model=HealthResponse, tags=["system"])

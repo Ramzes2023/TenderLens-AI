@@ -1,3 +1,15 @@
+## v1.4.0 completed
+
+- Added browser-based Web Dashboard at /dashboard.
+- Added system health and component status view.
+- Added company workspace list and active-company switching.
+- Added monitoring status for the active company profile.
+- Added recent analyzed tender history view.
+- Added on-demand EIS scan with prices, matching reasons, and zakupki.gov.ru links.
+- Reused the existing protected FastAPI endpoints and X-API-Key authentication.
+- Added Web Dashboard documentation and automated tests.
+- Release version bumped to 1.4.0.
+
 # TenderLens AI — implementation checklist
 
 ## v1.3.0 completed

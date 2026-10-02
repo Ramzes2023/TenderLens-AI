@@ -1,6 +1,6 @@
 # TenderLens AI
 
-**TenderLens AI v1.3.0** is a portfolio-grade Python platform for tender monitoring and document intelligence. It combines Telegram workflows, live EIS RSS monitoring, PDF extraction, structured LLM analysis, deterministic company-fit scoring, semantic RAG with Qdrant, SQLite persistence, a FastAPI backend, and Docker deployment.
+**TenderLens AI v1.4.0** is a portfolio-grade Python platform for tender monitoring and document intelligence. It combines Telegram workflows, live EIS RSS monitoring, PDF extraction, structured LLM analysis, deterministic company-fit scoring, semantic RAG with Qdrant, SQLite persistence, a FastAPI backend, a browser-based operator dashboard, and Docker deployment.
 
 > The system supports a human procurement decision; it does **not** autonomously decide whether to participate in a tender or submit bids.
 
@@ -76,7 +76,7 @@ Expected health shape:
 {
   "status": "ok",
   "service": "TenderLens AI",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "components": {
     "database": "ready",
     "llm": "ready",
@@ -125,7 +125,7 @@ Useful commands:
 - `/companies`, `/company_show` — company workspaces
 - `/company_add ...`, `/company_use <id>` — create/switch the active company profile
 
-PDF constraints: up to 10 MiB and 200 pages. Text PDFs are parsed locally. OCR is intentionally not implemented in v1.3.0; scanned-only PDFs are reported as such instead of silently inventing text.
+PDF constraints: up to 10 MiB and 200 pages. Text PDFs are parsed locally. OCR is intentionally not implemented in v1.4.0; scanned-only PDFs are reported as such instead of silently inventing text.
 
 ## Main API endpoints
 
@@ -199,4 +199,8 @@ Multi-company behavior and the current sell-side/buy-side boundary are documente
 - More tender source adapters (B2B-Center, РТС-тендер, Сбербанк-АСТ, Росатом).
 - Optional alternative LLM provider implementation.
 
-These are deliberate boundaries of v1.3.0, not hidden capabilities.
+These are deliberate boundaries of v1.4.0, not hidden capabilities.
+## Web Dashboard
+
+Phase 16 adds a local operator dashboard at http://127.0.0.1:8000/dashboard. It shows system health, company workspaces, the active company, monitoring status, recent analyzed tenders, and company-aware EIS scan results. Protected actions reuse the existing X-API-Key API authentication. The dashboard is currently intended for local/single-node use and is not yet a public multi-tenant SaaS frontend.
+

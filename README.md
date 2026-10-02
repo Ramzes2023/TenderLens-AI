@@ -203,4 +203,3 @@ These are deliberate boundaries of v1.4.0, not hidden capabilities.
 ## Web Dashboard
 
 Phase 16 adds a local operator dashboard at http://127.0.0.1:8000/dashboard. It shows system health, company workspaces, the active company, monitoring status, recent analyzed tenders, and company-aware EIS scan results. Protected actions reuse the existing X-API-Key API authentication. The dashboard is currently intended for local/single-node use and is not yet a public multi-tenant SaaS frontend.
-

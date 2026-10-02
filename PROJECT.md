@@ -1,4 +1,4 @@
-# TenderLens AI — v1.0.0 project status
+# TenderLens AI — v1.1.0 project status
 
 TenderLens AI is a completed portfolio MVP for monitoring and analyzing procurement opportunities. The repository demonstrates the complete path from live source discovery to document analysis, structured scoring, semantic retrieval, persistence, API exposure and containerized deployment.
 
@@ -41,7 +41,7 @@ TenderLens AI is a completed portfolio MVP for monitoring and analyzing procurem
 - FastAPI serves Swagger/OpenAPI and reports component readiness.
 - Docker image builds on Windows Docker Desktop / WSL2 and `/health` returns all components ready after the first FastEmbed cache initialization.
 
-## v1.0.0 boundary
+## v1.1.0 boundary
 
 The current deployment is intentionally **single-node**: one API process owns local SQLite and Qdrant local-mode files. This is appropriate for a portfolio/demo deployment. Horizontal scaling requires server-backed storage first.
 
@@ -56,3 +56,7 @@ Raw PDF bytes are not retained by the analysis/history flow. RAG chunks are pers
 - Rate limiting, metrics, tracing and structured audit events.
 - Additional procurement source adapters.
 - Separate worker/scheduler topology once state is server-backed.
+
+## Phase 13 — multi-company commercialization foundation
+
+TenderLens now supports multiple persistent company workspaces per owner, active-company switching, per-company EIS keyword searches, company-scoped monitoring deduplication, and active-profile scoring through Telegram and FastAPI. This is the foundation for onboarding different industries without editing server configuration per customer.

@@ -28,10 +28,12 @@ class MonitoringSettings:
     request_timeout: float
     eis_rss_urls: tuple[str, ...]
     ca_bundle_file: Path | None
+    profile_feeds_enabled: bool = True
+    profile_feed_limit: int = 5
 
     @property
     def source_configured(self) -> bool:
-        return bool(self.eis_rss_urls)
+        return bool(self.eis_rss_urls) or self.profile_feeds_enabled
 
 
 def _bool(name: str, default: bool) -> bool:
@@ -63,6 +65,7 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         max_items = int(os.environ.get("MONITOR_MAX_ITEMS", "20") or "20")
         max_notifications = int(os.environ.get("MONITOR_MAX_NOTIFICATIONS_PER_CYCLE", "5") or "5")
         timeout = float(os.environ.get("MONITOR_REQUEST_TIMEOUT", "30") or "30")
+        profile_feed_limit = int(os.environ.get("EIS_PROFILE_FEED_LIMIT", "5") or "5")
     except ValueError:
         raise MonitoringConfigurationError("Числовые MONITOR_* параметры содержат неверное значение.") from None
     if interval < 60 or interval > 86400:
@@ -73,6 +76,8 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         raise MonitoringConfigurationError("MONITOR_MAX_NOTIFICATIONS_PER_CYCLE должен быть от 1 до 20.")
     if not math.isfinite(timeout) or timeout <= 0 or timeout > 120:
         raise MonitoringConfigurationError("MONITOR_REQUEST_TIMEOUT должен быть от 0 до 120 секунд.")
+    if profile_feed_limit < 1 or profile_feed_limit > 20:
+        raise MonitoringConfigurationError("EIS_PROFILE_FEED_LIMIT должен быть от 1 до 20.")
 
     urls = _urls(os.environ.get("EIS_RSS_URLS", ""))
     ca_raw = (os.environ.get("EIS_CA_BUNDLE_FILE") or os.environ.get("GIGACHAT_CA_BUNDLE_FILE") or "").strip()
@@ -91,5 +96,7 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         max_notifications_per_cycle=max_notifications,
         request_timeout=timeout,
         eis_rss_urls=urls,
+        profile_feeds_enabled=_bool("EIS_PROFILE_FEEDS_ENABLED", True),
+        profile_feed_limit=profile_feed_limit,
         ca_bundle_file=ca_path.resolve() if ca_path else None,
     )

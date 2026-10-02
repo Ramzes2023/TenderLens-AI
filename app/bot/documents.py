@@ -43,7 +43,7 @@ def _identity(message: Message) -> tuple[int | None, int | None]:
     return user_id, chat_id
 
 
-async def _send_stored(message: Message, record) -> None:
+async def _send_stored(message: Message, record, scoring_override=None) -> None:
     from app.services.tender_analysis import AnalysisResult
     from .tender import format_tender
 
@@ -55,18 +55,29 @@ async def _send_stored(message: Message, record) -> None:
     result = AnalysisResult(record.analysis, record.analysis_truncated)
     for chunk in format_tender(result):
         await message.answer(chunk, parse_mode=None)
-    if record.scoring is not None:
+    scoring = scoring_override if scoring_override is not None else record.scoring
+    if scoring is not None:
         from .scoring import format_scoring
-        for chunk in format_scoring(record.scoring):
+        for chunk in format_scoring(scoring):
             await message.answer(chunk, parse_mode=None)
 
 
 async def pdf_handler(message: Message, bot: Bot, tender_provider=None, tender_max_chars: int = 20000,
-                      company_profile=None, tender_repository=None, rag_service=None) -> None:
+                      company_profile=None, tender_repository=None, rag_service=None,
+                      company_service=None) -> None:
     document = message.document
     if document is None:
         return
     name = document.file_name or "document.pdf"
+    owner_id, chat_id = _identity(message)
+    active_profile = company_profile
+    if company_service is not None and owner_id is not None:
+        try:
+            resolved = await asyncio.to_thread(company_service.profile_for_owner, owner_id)
+            if resolved is not None:
+                active_profile = resolved
+        except Exception as error:
+            logger.warning("Не удалось прочитать активный профиль компании (%s).", type(error).__name__)
     if document.mime_type != "application/pdf" and not name.lower().endswith(".pdf"):
         await message.answer("Отправьте PDF как файл (документ). Другие форматы пока не поддерживаются.")
         return
@@ -94,7 +105,6 @@ async def pdf_handler(message: Message, bot: Bot, tender_provider=None, tender_m
             else:
                 data = buffer.getvalue()
                 pdf_hash = hashlib.sha256(data).hexdigest()
-                owner_id, _ = _identity(message)
                 if tender_repository is not None and owner_id is not None:
                     try:
                         existing = await asyncio.to_thread(tender_repository.find_by_hash, owner_id, pdf_hash)
@@ -121,7 +131,14 @@ async def pdf_handler(message: Message, bot: Bot, tender_provider=None, tender_m
                                         )
                                 except Exception as error:
                                     logger.warning("Не удалось создать RAG-индекс (%s).", type(error).__name__)
-                        await _send_stored(message, existing)
+                        scoring_override = None
+                        if active_profile is not None:
+                            try:
+                                from app.scoring.engine import score_tender
+                                scoring_override = score_tender(existing.analysis, active_profile)
+                            except Exception as error:
+                                logger.warning("Не удалось пересчитать score по активной компании (%s).", type(error).__name__)
+                        await _send_stored(message, existing, scoring_override=scoring_override)
                         return
                 try:
                     result = await summarize_pdf(data)
@@ -150,14 +167,13 @@ async def pdf_handler(message: Message, bot: Bot, tender_provider=None, tender_m
         await message.answer(chunk, parse_mode=None)
 
     scoring = None
-    if company_profile is not None:
+    if active_profile is not None:
         from app.scoring.engine import score_tender
         from .scoring import format_scoring
-        scoring = score_tender(analysis.analysis, company_profile)
+        scoring = score_tender(analysis.analysis, active_profile)
         for chunk in format_scoring(scoring):
             await message.answer(chunk, parse_mode=None)
 
-    owner_id, chat_id = _identity(message)
     if rag_service is not None and owner_id is not None and pdf_hash is not None:
         try:
             count = await asyncio.to_thread(rag_service.index_pdf, owner_id, pdf_hash, result)

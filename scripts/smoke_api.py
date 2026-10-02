@@ -9,6 +9,7 @@ from urllib.request import Request, urlopen
 
 REQUIRED_PATHS = {
     "/health",
+    "/api/v1/companies",
     "/api/v1/tenders",
     "/api/v1/scoring/evaluate",
     "/api/v1/rag/ask",
@@ -32,7 +33,7 @@ def run(base_url: str, *, api_key: str | None = None) -> None:
     health = fetch_json(f"{base}/health", timeout=10.0)
     if health.get("status") != "ok":
         raise RuntimeError(f"Health is not ok: {health.get('status')!r}")
-    if health.get("version") != "1.0.0":
+    if health.get("version") != "1.1.0":
         raise RuntimeError(f"Unexpected API version: {health.get('version')!r}")
 
     openapi = fetch_json(f"{base}/openapi.json", timeout=10.0)

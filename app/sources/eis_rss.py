@@ -1,8 +1,8 @@
 """EIS (zakupki.gov.ru) RSS/Atom adapter.
 
-The source URL is configured by the operator instead of being constructed in code.
-This keeps search filters under human control and avoids depending on undocumented
-query-string details. Both RSS 2.0 and Atom payloads are accepted.
+Static source URLs can be configured by the operator. Phase 13 can also derive
+per-company search feeds from the active profile's keywords while retaining the
+static feeds as a fallback. Both RSS 2.0 and Atom payloads are accepted.
 """
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlencode
 
 import httpx
 
@@ -20,6 +21,41 @@ from .models import TenderNotice
 
 class SourceError(RuntimeError):
     pass
+
+EIS_EXTENDED_RSS_URL = "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html"
+
+
+def build_eis_rss_url(search_term: str) -> str:
+    """Build the same EIS filtered-search RSS shape used by the operator UI.
+
+    The adapter keeps static EIS_RSS_URLS support; generated URLs are used only
+    for per-company dynamic monitoring.
+    """
+    term = " ".join(search_term.split())
+    if not term:
+        raise ValueError("search_term must not be empty")
+    query = urlencode({
+        "searchString": term,
+        "morphology": "on",
+        "pageNumber": "1",
+        "fz44": "on",
+    })
+    return f"{EIS_EXTENDED_RSS_URL}?{query}"
+
+
+def build_eis_rss_urls(search_terms, *, max_feeds: int = 5) -> tuple[str, ...]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for raw in search_terms:
+        term = " ".join(str(raw).split())
+        key = term.casefold()
+        if not term or key in seen:
+            continue
+        seen.add(key)
+        result.append(build_eis_rss_url(term))
+        if len(result) >= max(1, min(int(max_feeds), 20)):
+            break
+    return tuple(result)
 
 
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -133,6 +169,15 @@ class EisRssSource:
     timeout: float = 30.0
     ca_bundle_file: Path | None = None
     name: str = "eis"
+
+    def for_search_terms(self, search_terms, *, max_feeds: int = 5) -> "EisRssSource":
+        generated = build_eis_rss_urls(search_terms, max_feeds=max_feeds)
+        return EisRssSource(
+            urls=generated or self.urls,
+            timeout=self.timeout,
+            ca_bundle_file=self.ca_bundle_file,
+            name=self.name,
+        )
 
     async def fetch(self, limit: int = 20) -> list[TenderNotice]:
         limit = max(1, min(int(limit), 100))

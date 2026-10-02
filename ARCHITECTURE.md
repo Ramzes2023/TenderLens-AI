@@ -106,7 +106,7 @@ Host / Docker Desktop / Linux
   127.0.0.1:8000
           |
 +--------------------------+
-| TenderLens AI v1.0.0 API |
+| TenderLens AI v1.1.0 API |
 | Python 3.12 / Uvicorn    |
 | non-root uid 10001       |
 +------------+-------------+
@@ -140,3 +140,9 @@ Local SQLite/Qdrant are intentionally owned by one API process. Do not mount the
 5. **RAG answer** — grounded in retrieved chunks and pages, still subject to retrieval/model error.
 
 This separation is central to the design: uncertain AI interpretation does not silently become a deterministic business rule.
+
+## Phase 13 — multi-company core
+
+A new `app.companies` boundary persists several validated `CompanyProfile` workspaces per owner. The active workspace is resolved at request/message time and injected into monitoring and scoring. EIS monitoring can generate per-company RSS searches from `search_keywords`, while static `EIS_RSS_URLS` remains a fallback. Monitoring deduplication is namespaced by active company.
+
+This is deliberately an application-level tenant scope, not yet public SaaS authentication. The next production boundary is authenticated users + organization memberships in PostgreSQL.

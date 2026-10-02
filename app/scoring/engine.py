@@ -94,9 +94,9 @@ def _region(analysis: TenderAnalysis, profile: CompanyProfile) -> CriterionResul
 
 def _budget(analysis: TenderAnalysis, profile: CompanyProfile) -> tuple[CriterionResult, list[str]]:
     stops: list[str] = []
-    if profile.max_contract_value is None:
+    if profile.max_contract_value is None and profile.min_contract_value is None:
         return (_criterion("budget", "Бюджет", "not_scored",
-                           "В профиле компании не задан максимальный размер контракта."), stops)
+                           "В профиле компании не задан диапазон стоимости контракта."), stops)
     if analysis.initial_price is None:
         return (_criterion("budget", "Бюджет", "not_scored",
                            "НМЦК не извлечена из документа."), stops)
@@ -112,9 +112,21 @@ def _budget(analysis: TenderAnalysis, profile: CompanyProfile) -> tuple[Criterio
             stops.append(message)
         return _criterion("budget", "Бюджет", "failed", message, [str(tender_currency)], 0.0), stops
 
-    if analysis.initial_price <= profile.max_contract_value:
-        explanation = (f"НМЦК {analysis.initial_price:,.2f} не превышает лимит профиля "
-                       f"{profile.max_contract_value:,.2f}.").replace(",", " ")
+    if (profile.min_contract_value is not None
+            and analysis.initial_price < profile.min_contract_value):
+        message = (f"НМЦК {analysis.initial_price:,.2f} ниже минимального интересующего размера "
+                   f"{profile.min_contract_value:,.2f}.").replace(",", " ")
+        if profile.hard_stop_on_budget:
+            stops.append(message)
+        return _criterion("budget", "Бюджет", "failed", message, [], 0.0), stops
+
+    if (profile.max_contract_value is None
+            or analysis.initial_price <= profile.max_contract_value):
+        if profile.max_contract_value is None:
+            explanation = (f"НМЦК {analysis.initial_price:,.2f} соответствует минимальному порогу профиля.").replace(",", " ")
+        else:
+            explanation = (f"НМЦК {analysis.initial_price:,.2f} не превышает лимит профиля "
+                           f"{profile.max_contract_value:,.2f}.").replace(",", " ")
         return _criterion("budget", "Бюджет", "matched", explanation, [], 1.0), stops
 
     message = (f"НМЦК {analysis.initial_price:,.2f} превышает лимит профиля "

@@ -1,6 +1,6 @@
 # TenderLens AI — implementation checklist
 
-## v1.0.0 completed
+## v1.1.0 completed
 
 - [x] Phase 1 — project foundation, package structure and configuration.
 - [x] Phase 2 — Telegram bot startup and basic commands.

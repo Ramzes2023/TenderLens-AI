@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_release_version_is_portfolio_v1():
-    assert __version__ == "1.0.0"
+    assert __version__ == "1.1.0"
 
 
 def test_portfolio_documents_exist_and_are_linked():

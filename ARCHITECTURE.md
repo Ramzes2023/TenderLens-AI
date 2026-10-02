@@ -106,7 +106,7 @@ Host / Docker Desktop / Linux
   127.0.0.1:8000
           |
 +--------------------------+
-| TenderLens AI v1.0.0 API |
+| TenderLens AI v1.1.0 API |
 | Python 3.12 / Uvicorn    |
 | non-root uid 10001       |
 +------------+-------------+

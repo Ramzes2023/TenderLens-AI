@@ -9,6 +9,7 @@ from aiogram import Bot
 from aiogram.types import Message
 
 from app.monitoring import MonitoringRepositoryError, TenderMonitorService
+from app.companies import CompanyRepositoryError, CompanyService
 from app.sources import SourceError
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ def format_match(match, *, index: int | None = None) -> str:
 async def _service_or_message(message: Message, monitoring_service: TenderMonitorService | None):
     if monitoring_service is None:
         await message.answer(
-            "Мониторинг источников не настроен. Укажите EIS_RSS_URLS в .env и перезапустите бота."
+            "Мониторинг источников не настроен. Проверьте EIS_RSS_URLS / EIS_PROFILE_FEEDS_ENABLED и перезапустите бота."
         )
         return None
     return monitoring_service
@@ -107,24 +108,36 @@ async def monitor_off_handler(message: Message, monitoring_service: TenderMonito
     await message.answer("⏸ Автомониторинг выключен. /tenders остаётся доступной для ручной проверки.")
 
 
-async def monitor_status_handler(message: Message, monitoring_service: TenderMonitorService | None = None) -> None:
+async def monitor_status_handler(message: Message, monitoring_service: TenderMonitorService | None = None,
+                                 company_service: CompanyService | None = None) -> None:
     service = await _service_or_message(message, monitoring_service)
     if service is None or message.from_user is None:
         return
+    owner_id = message.from_user.id
     try:
-        subscription = await service.subscription(message.from_user.id)
-    except MonitoringRepositoryError:
-        await message.answer("Не удалось прочитать monitoring-подписку.")
+        subscription = await service.subscription(owner_id)
+        workspace = (await asyncio.to_thread(company_service.active, owner_id)) if company_service else None
+    except (MonitoringRepositoryError, CompanyRepositoryError):
+        await message.answer("Не удалось прочитать monitoring/company состояние.")
         return
     state = "включён" if subscription and subscription.enabled else "выключен"
     global_state = "запущен" if service.settings.enabled else "отключён"
+    profile = workspace.profile if workspace is not None else await service.profile_for_owner(owner_id)
+    if profile is not None and getattr(service.settings, "profile_feeds_enabled", False) and profile.monitoring_keywords:
+        feed_count = min(len(profile.monitoring_keywords), getattr(service.settings, "profile_feed_limit", 5))
+        feed_mode = "персональные поиски по активной компании"
+    else:
+        feed_count = len(service.settings.eis_rss_urls)
+        feed_mode = "статические RSS"
+    company_line = workspace.name if workspace is not None else (profile.company_name if profile else "не выбрана")
     await message.answer(
         "📡 Мониторинг ЕИС\n"
         f"Фоновый цикл: {global_state}\n"
         f"Ваша подписка: {state}\n"
+        f"Активная компания: {company_line}\n"
         f"Интервал: {service.settings.interval_seconds} сек.\n"
-        f"RSS-источников: {len(service.settings.eis_rss_urls)}\n"
-        "Pre-filter использует только данные RSS; полный score выполняется после анализа документа."
+        f"RSS-поисков: {feed_count} ({feed_mode})\n"
+        "Pre-filter использует данные RSS и активный профиль; полный score выполняется после анализа документа."
     )
 
 
@@ -134,9 +147,9 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService, stop_event: asyn
         try:
             subscriptions = await service.active_subscriptions()
             if subscriptions:
-                matches = await service.fetch_matches()
                 for subscription in subscriptions:
                     try:
+                        matches = await service.fetch_matches(subscription.owner_user_id)
                         new_matches = await service.claim_new(subscription.owner_user_id, matches)
                         for match in new_matches[:service.settings.max_notifications_per_cycle]:
                             await bot.send_message(
@@ -144,8 +157,8 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService, stop_event: asyn
                                 "🆕 НОВАЯ ЗАКУПКА\n\n" + format_match(match),
                                 disable_web_page_preview=True,
                             )
-                    except MonitoringRepositoryError:
-                        logger.warning("Monitoring dedup failed for one subscription.")
+                    except (MonitoringRepositoryError, SourceError):
+                        logger.warning("Monitoring scan failed for one subscription.")
                     except Exception:
                         logger.warning("Telegram notification failed for one subscription.")
         except (MonitoringRepositoryError, SourceError):

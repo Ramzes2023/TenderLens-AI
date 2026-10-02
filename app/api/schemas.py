@@ -6,7 +6,7 @@ from typing import Annotated
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.tender import TenderAnalysis
-from app.scoring.models import ScoringResult
+from app.scoring.models import CompanyProfile, ScoringResult
 
 PositiveId = Annotated[int, Field(gt=0)]
 Hash64 = Annotated[str, Field(pattern=r"^[0-9a-fA-F]{64}$")]
@@ -71,6 +71,8 @@ class MonitorStatusResponse(BaseModel):
     interval_seconds: int
     rss_feeds: int
     subscription_enabled: bool
+    active_company: str | None = None
+    feed_mode: str = "static"
 
 
 class MonitorScanRequest(BaseModel):
@@ -104,3 +106,26 @@ class PdfAnalysisResponse(BaseModel):
     scoring: ScoringResult | None
     rag_indexed_chunks: int | None = None
     warnings: list[str] = Field(default_factory=list)
+
+
+class CompanyCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    owner_user_id: PositiveId
+    name: Annotated[str, Field(min_length=1, max_length=200)]
+    profile: CompanyProfile
+    make_active: bool = True
+
+
+class CompanyActivateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    owner_user_id: PositiveId
+
+
+class CompanyResponse(BaseModel):
+    id: int
+    owner_user_id: int
+    name: str
+    profile: CompanyProfile
+    is_active: bool
+    created_at: str
+    updated_at: str

@@ -56,3 +56,7 @@ Raw PDF bytes are not retained by the analysis/history flow. RAG chunks are pers
 - Rate limiting, metrics, tracing and structured audit events.
 - Additional procurement source adapters.
 - Separate worker/scheduler topology once state is server-backed.
+
+## Phase 13 — multi-company commercialization foundation
+
+TenderLens now supports multiple persistent company workspaces per owner, active-company switching, per-company EIS keyword searches, company-scoped monitoring deduplication, and active-profile scoring through Telegram and FastAPI. This is the foundation for onboarding different industries without editing server configuration per customer.

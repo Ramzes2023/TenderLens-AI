@@ -39,3 +39,16 @@
 - [ ] Optional second LLM provider.
 - [ ] Automated retention policies for RAG/database data.
 - [ ] Deployment to a public HTTPS environment after security hardening.
+
+## Phase 13 — Multi-company core
+
+- [x] Persistent company workspaces in SQLite.
+- [x] Active company per owner.
+- [x] Telegram company create/list/show/switch commands.
+- [x] Per-company EIS RSS searches generated from profile keywords.
+- [x] Per-company monitoring deduplication scope.
+- [x] Active-company deterministic scoring for PDF analysis.
+- [x] Company CRUD subset in protected FastAPI.
+- [ ] Web authentication and organization memberships.
+- [ ] Supplier-intelligence sources for `buy` mode.
+- [ ] International tender source adapters.

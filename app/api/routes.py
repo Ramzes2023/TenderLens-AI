@@ -20,6 +20,9 @@ from app.services.tender_analysis import AnalysisError, analyze_tender
 
 from .runtime import ApiRuntime
 from .schemas import (
+    CompanyActivateRequest,
+    CompanyCreateRequest,
+    CompanyResponse,
     HealthResponse,
     MonitorNoticeResponse,
     MonitorScanRequest,
@@ -78,6 +81,20 @@ def _detail(record) -> TenderDetail:
     )
 
 
+
+
+def _company_response(workspace) -> CompanyResponse:
+    return CompanyResponse(
+        id=workspace.id,
+        owner_user_id=workspace.owner_user_id,
+        name=workspace.name,
+        profile=workspace.profile,
+        is_active=workspace.is_active,
+        created_at=workspace.created_at,
+        updated_at=workspace.updated_at,
+    )
+
+
 @router.get("/health", response_model=HealthResponse, tags=["system"])
 async def health(request: Request) -> HealthResponse:
     runtime = _runtime(request)
@@ -90,6 +107,62 @@ async def health(request: Request) -> HealthResponse:
         version=__version__,
         components=components,
     )
+
+
+@router.get(
+    "/api/v1/companies",
+    response_model=list[CompanyResponse],
+    tags=["companies"],
+    dependencies=[Depends(_protected)],
+)
+async def list_companies(request: Request, owner_user_id: int = Query(gt=0)) -> list[CompanyResponse]:
+    service = _runtime(request).company_service
+    if service is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Company workspaces are unavailable.")
+    try:
+        items = await asyncio.to_thread(service.list, owner_user_id)
+    except Exception:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Company storage is unavailable.") from None
+    return [_company_response(item) for item in items]
+
+
+@router.post(
+    "/api/v1/companies",
+    response_model=CompanyResponse,
+    tags=["companies"],
+    dependencies=[Depends(_protected)],
+)
+async def create_company(payload: CompanyCreateRequest, request: Request) -> CompanyResponse:
+    service = _runtime(request).company_service
+    if service is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Company workspaces are unavailable.")
+    try:
+        item = await asyncio.to_thread(
+            service.create, payload.owner_user_id, payload.name, payload.profile,
+            make_active=payload.make_active,
+        )
+    except Exception as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from None
+    return _company_response(item)
+
+
+@router.post(
+    "/api/v1/companies/{company_id}/activate",
+    response_model=CompanyResponse,
+    tags=["companies"],
+    dependencies=[Depends(_protected)],
+)
+async def activate_company(company_id: int, payload: CompanyActivateRequest, request: Request) -> CompanyResponse:
+    if company_id <= 0:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "company_id must be positive.")
+    service = _runtime(request).company_service
+    if service is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Company workspaces are unavailable.")
+    try:
+        item = await asyncio.to_thread(service.set_active, payload.owner_user_id, company_id)
+    except Exception as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from None
+    return _company_response(item)
 
 
 @router.get(
@@ -144,8 +217,18 @@ async def get_tender(
     tags=["scoring"],
     dependencies=[Depends(_protected)],
 )
-async def evaluate_score(analysis: TenderAnalysis, request: Request) -> ScoringResult:
-    profile = _runtime(request).company_profile
+async def evaluate_score(
+    analysis: TenderAnalysis,
+    request: Request,
+    owner_user_id: int | None = Query(default=None, gt=0),
+) -> ScoringResult:
+    runtime = _runtime(request)
+    profile = runtime.company_profile
+    if owner_user_id is not None and runtime.company_service is not None:
+        try:
+            profile = await asyncio.to_thread(runtime.company_service.profile_for_owner, owner_user_id)
+        except Exception:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Company profile is unavailable.") from None
     if profile is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Company profile is unavailable.")
     return score_tender(analysis, profile)
@@ -197,11 +280,29 @@ async def monitoring_status(
     if service is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Monitoring is unavailable.")
     subscription = await service.subscription(owner_user_id)
+    runtime = _runtime(request)
+    workspace = None
+    if runtime.company_service is not None:
+        try:
+            workspace = await asyncio.to_thread(runtime.company_service.active, owner_user_id)
+        except Exception:
+            workspace = None
+    profile = workspace.profile if workspace is not None else runtime.company_profile
+    if profile is None and hasattr(service, "profile_for_owner"):
+        profile = await service.profile_for_owner(owner_user_id)
+    if profile is not None and getattr(service.settings, "profile_feeds_enabled", False) and profile.monitoring_keywords:
+        feed_count = min(len(profile.monitoring_keywords), getattr(service.settings, "profile_feed_limit", 5))
+        feed_mode = "company-profile"
+    else:
+        feed_count = len(service.settings.eis_rss_urls)
+        feed_mode = "static"
     return MonitorStatusResponse(
         background_enabled=service.settings.enabled,
         interval_seconds=service.settings.interval_seconds,
-        rss_feeds=len(service.settings.eis_rss_urls),
+        rss_feeds=feed_count,
         subscription_enabled=bool(subscription and subscription.enabled),
+        active_company=(workspace.name if workspace is not None else (profile.company_name if profile else None)),
+        feed_mode=feed_mode,
     )
 
 
@@ -268,6 +369,16 @@ async def analyze_pdf_endpoint(
     except DatabaseError as error:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from None
     if existing is not None:
+        duplicate_scoring = existing.scoring
+        if runtime.company_service is not None:
+            try:
+                duplicate_profile = await asyncio.to_thread(
+                    runtime.company_service.profile_for_owner, owner_user_id
+                )
+                if duplicate_profile is not None:
+                    duplicate_scoring = score_tender(existing.analysis, duplicate_profile)
+            except Exception:
+                pass
         return PdfAnalysisResponse(
             duplicate=True,
             record_id=existing.id,
@@ -277,9 +388,9 @@ async def analyze_pdf_endpoint(
             characters=existing.characters,
             analysis_truncated=existing.analysis_truncated,
             analysis=existing.analysis,
-            scoring=existing.scoring,
+            scoring=duplicate_scoring,
             rag_indexed_chunks=None,
-            warnings=["Duplicate PDF: stored analysis reused; LLM was not called."],
+            warnings=["Duplicate PDF: stored analysis reused; LLM was not called. Scoring uses the active company profile."],
         )
 
     summary = await summarize_pdf(data)
@@ -303,8 +414,16 @@ async def analyze_pdf_endpoint(
     except LLMError:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "LLM request failed.") from None
 
-    scoring = score_tender(result.analysis, runtime.company_profile) if runtime.company_profile else None
     warnings: list[str] = []
+    active_profile = runtime.company_profile
+    if runtime.company_service is not None:
+        try:
+            resolved_profile = await asyncio.to_thread(runtime.company_service.profile_for_owner, owner_user_id)
+            if resolved_profile is not None:
+                active_profile = resolved_profile
+        except Exception:
+            warnings.append("Active company profile could not be loaded; fallback profile used.")
+    scoring = score_tender(result.analysis, active_profile) if active_profile else None
     rag_chunks: int | None = None
     if runtime.rag_service is not None:
         try:

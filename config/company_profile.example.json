@@ -1,6 +1,8 @@
 {
   "profile_version": "demo-1",
   "company_name": "TenderLens Demo Supplier",
+  "business_mode": "sell",
+  "industry": "electrical-equipment",
   "product_keywords": [
     "электротехническое оборудование",
     "автоматические выключатели",
@@ -8,12 +10,26 @@
     "шкафы управления",
     "промышленная автоматика"
   ],
+  "search_keywords": [
+    "электротехническое оборудование",
+    "автоматические выключатели",
+    "контакторы",
+    "шкафы управления",
+    "промышленная автоматика"
+  ],
+  "excluded_keywords": [],
   "allowed_regions": [
     "Москва",
     "Московская область",
     "Санкт-Петербург"
   ],
-  "accepted_currencies": ["RUB"],
+  "allowed_countries": [
+    "Russia"
+  ],
+  "accepted_currencies": [
+    "RUB"
+  ],
+  "min_contract_value": 100000,
   "max_contract_value": 15000000,
   "max_bid_security_percent": 3,
   "max_contract_security_percent": 10,

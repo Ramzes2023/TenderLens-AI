@@ -9,6 +9,7 @@ from urllib.request import Request, urlopen
 
 REQUIRED_PATHS = {
     "/health",
+    "/api/v1/companies",
     "/api/v1/tenders",
     "/api/v1/scoring/evaluate",
     "/api/v1/rag/ask",

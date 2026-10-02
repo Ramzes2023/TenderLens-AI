@@ -8,7 +8,8 @@
 
 - **Telegram bot:** PDF upload, history, RAG questions, EIS monitoring and subscriptions.
 - **Tender analysis:** PyMuPDF → structured `TenderAnalysis` → GigaChat provider abstraction.
-- **Deterministic scoring:** transparent Python rules against a versioned company profile.
+- **Multi-company workspaces:** one owner can keep several company profiles and switch the active profile without restart.
+- **Deterministic scoring:** transparent Python rules against the active versioned company profile.
 - **Semantic RAG:** page-aware chunks → multilingual FastEmbed embeddings → Qdrant local-mode retrieval → grounded LLM answer with page references.
 - **Persistence:** owner-scoped SQLite history and SHA-256 deduplication.
 - **Live tender discovery:** configurable RSS feeds from ЕИС / zakupki.gov.ru with pre-filtering and deduplication.
@@ -22,6 +23,8 @@
 flowchart LR
     TG[Telegram] --> BOT[aiogram bot]
     EIS[ЕИС RSS] --> MON[Monitoring / pre-filter]
+    CO[Company workspaces] --> MON
+    CO --> SCORE
     BOT --> PDF[PDF parser]
     PDF --> LLM[Structured LLM analysis]
     LLM --> SCORE[Deterministic scoring]
@@ -78,6 +81,7 @@ Expected health shape:
     "database": "ready",
     "llm": "ready",
     "scoring": "ready",
+    "companies": "ready",
     "rag": "ready",
     "monitoring": "ready"
   }
@@ -118,6 +122,8 @@ Useful commands:
 - `/ask <question>` — semantic RAG question about the latest indexed PDF
 - `/tenders` — manual EIS RSS scan
 - `/monitor_on`, `/monitor_off`, `/monitor_status` — background EIS notifications
+- `/companies`, `/company_show` — company workspaces
+- `/company_add ...`, `/company_use <id>` — create/switch the active company profile
 
 PDF constraints: up to 10 MiB and 200 pages. Text PDFs are parsed locally. OCR is intentionally not implemented in v1.0.0; scanned-only PDFs are reported as such instead of silently inventing text.
 
@@ -126,6 +132,9 @@ PDF constraints: up to 10 MiB and 200 pages. Text PDFs are parsed locally. OCR i
 | Method | Endpoint | Purpose |
 |---|---|---|
 | GET | `/health` | Service/component readiness |
+| GET | `/api/v1/companies` | Owner-scoped company profiles |
+| POST | `/api/v1/companies` | Create company profile |
+| POST | `/api/v1/companies/{id}/activate` | Switch active company |
 | GET | `/api/v1/tenders` | Owner-scoped tender history |
 | GET | `/api/v1/tenders/{id}` | Tender detail |
 | POST | `/api/v1/analysis/pdf` | PDF analysis pipeline |
@@ -146,7 +155,7 @@ If `TENDERLENS_API_KEY` is set, `/api/v1/*` requires `X-API-Key`. `/health` and 
 - Persistence: `DATABASE_URL`, `DATA_DIR`
 - Scoring: `COMPANY_PROFILE_FILE`
 - RAG: `RAG_*`, `FASTEMBED_CACHE_PATH`
-- Monitoring: `EIS_RSS_URLS`, `MONITOR_*`
+- Monitoring: `EIS_RSS_URLS`, `EIS_PROFILE_FEEDS_ENABLED`, `EIS_PROFILE_FEED_LIMIT`, `MONITOR_*`
 - API: `API_HOST`, `API_PORT`, `TENDERLENS_API_KEY`
 - Docker: `TENDERLENS_DOCKER_BIND`, `TENDERLENS_DOCKER_PORT`, `DOCKER_OUTBOUND_PROXY_URL`, `DOCKER_TELEGRAM_PROXY_URL`
 
@@ -178,11 +187,14 @@ A reproducible 5–10 minute demo is in [`docs/DEMO.md`](docs/DEMO.md). A synthe
 
 For an interview-oriented description of design decisions and trade-offs, see [`docs/PORTFOLIO.md`](docs/PORTFOLIO.md).
 
+Multi-company behavior and the current sell-side/buy-side boundary are documented in [`docs/MULTI_COMPANY.md`](docs/MULTI_COMPANY.md).
+
 ## Current limitations / next production steps
 
 - OCR for scan-only documents.
 - Server-backed PostgreSQL and Qdrant for multiple replicas.
 - Real user authentication/authorization beyond optional API key + owner scope.
+- Supplier-intelligence adapters for `buy` profiles and international procurement sources.
 - Rate limiting, observability/metrics, migrations and retention policies.
 - More tender source adapters (B2B-Center, РТС-тендер, Сбербанк-АСТ, Росатом).
 - Optional alternative LLM provider implementation.

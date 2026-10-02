@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.api.config import ApiSettings
 from app.api.main import create_app
 from app.api.runtime import ApiRuntime
+from app.companies import CompanyRepository, CompanyService
 from app.database.repository import TenderRepository
 from app.models.tender import TenderAnalysis
 from app.scoring.models import CompanyProfile
@@ -45,8 +46,11 @@ class ApiTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        repo = TenderRepository(Path(self.tmp.name) / "api.db")
+        db_path = Path(self.tmp.name) / "api.db"
+        repo = TenderRepository(db_path)
         repo.initialize()
+        company_repo = CompanyRepository(db_path)
+        company_repo.initialize()
         self.record = repo.save_success(
             owner_user_id=42,
             chat_id=42,
@@ -73,9 +77,11 @@ class ApiTests(unittest.TestCase):
             allowed_regions=["Москва"],
             max_contract_value=5000,
         )
+        company_service = CompanyService(company_repo, fallback_profile=profile)
         runtime = ApiRuntime(
             provider=FakeProvider(),
             company_profile=profile,
+            company_service=company_service,
             tender_repository=repo,
             rag_service=FakeRag(),
             monitoring_service=FakeMonitoring(),
@@ -161,6 +167,37 @@ class ApiTests(unittest.TestCase):
         scan = self.client.post("/api/v1/monitoring/scan", json={"owner_user_id": 42})
         self.assertEqual(scan.status_code, 200)
         self.assertEqual(scan.json()[0]["external_id"], "n1")
+
+    def test_company_workspace_endpoints_and_owner_specific_scoring(self):
+        profile_payload = {
+            "profile_version": "workspace-1",
+            "company_name": "AluTrade",
+            "business_mode": "sell",
+            "product_keywords": ["алюминий"],
+            "search_keywords": ["алюминий", "алюминиевый профиль"],
+            "accepted_currencies": ["RUB"],
+            "max_contract_value": 50000000
+        }
+        created = self.client.post(
+            "/api/v1/companies",
+            json={"owner_user_id": 42, "name": "AluTrade", "profile": profile_payload, "make_active": True},
+        )
+        self.assertEqual(created.status_code, 200)
+        company_id = created.json()["id"]
+        self.assertTrue(created.json()["is_active"])
+        listed = self.client.get("/api/v1/companies", params={"owner_user_id": 42})
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed.json()[0]["id"], company_id)
+
+        analysis = TenderAnalysis(
+            title="Поставка алюминия", procurement_object="алюминий",
+            initial_price=1000000, currency="RUB"
+        ).model_dump(mode="json")
+        score = self.client.post(
+            "/api/v1/scoring/evaluate", params={"owner_user_id": 42}, json=analysis
+        )
+        self.assertEqual(score.status_code, 200)
+        self.assertEqual(score.json()["profile_name"], "AluTrade")
 
 
 class ApiRuntimeBuildTests(unittest.TestCase):

@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.monitoring import TenderMonitorService
     from app.rag.service import RagService
     from app.scoring.models import CompanyProfile
+    from app.companies import CompanyService
 
 
 @dataclass
@@ -21,6 +22,7 @@ class ApiRuntime:
     provider: "LLMProvider | Any | None" = None
     tender_max_chars: int = 20000
     company_profile: "CompanyProfile | Any | None" = None
+    company_service: "CompanyService | Any | None" = None
     tender_repository: "TenderRepository | Any | None" = None
     rag_service: "RagService | Any | None" = None
     monitoring_service: "TenderMonitorService | Any | None" = None
@@ -30,7 +32,8 @@ class ApiRuntime:
         return {
             "database": "ready" if self.tender_repository is not None else "unavailable",
             "llm": "ready" if self.provider is not None else "unavailable",
-            "scoring": "ready" if self.company_profile is not None else "unavailable",
+            "scoring": "ready" if (self.company_profile is not None or self.company_service is not None) else "unavailable",
+            "companies": "ready" if self.company_service is not None else "unavailable",
             "rag": "ready" if self.rag_service is not None else "unavailable",
             "monitoring": "ready" if self.monitoring_service is not None else "unavailable",
         }
@@ -67,6 +70,21 @@ def build_runtime() -> ApiRuntime:
         runtime.component_errors["database"] = "Database unavailable"
 
     try:
+        from app.companies import CompanyRepository, CompanyService
+        from app.database import load_database_settings
+
+        db_path = (
+            runtime.tender_repository.path
+            if runtime.tender_repository is not None
+            else load_database_settings().path
+        )
+        company_repository = CompanyRepository(db_path)
+        company_repository.initialize()
+        runtime.company_service = CompanyService(company_repository, fallback_profile=runtime.company_profile)
+    except Exception:
+        runtime.component_errors["companies"] = "Company workspaces unavailable"
+
+    try:
         from app.rag import RagService, load_rag_settings
 
         rag_settings = load_rag_settings()
@@ -97,7 +115,9 @@ def build_runtime() -> ApiRuntime:
                 ca_bundle_file=monitor_settings.ca_bundle_file,
             )
             runtime.monitoring_service = TenderMonitorService(
-                monitor_settings, source, repository, runtime.company_profile
+                monitor_settings, source, repository, runtime.company_profile,
+                profile_resolver=(runtime.company_service.profile_for_owner if runtime.company_service else None),
+                scope_resolver=(runtime.company_service.scope_for_owner if runtime.company_service else None),
             )
         else:
             runtime.component_errors["monitoring"] = "EIS RSS source not configured"

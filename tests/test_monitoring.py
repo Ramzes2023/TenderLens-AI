@@ -7,7 +7,7 @@ from app.monitoring.repository import MonitoringRepository
 from app.monitoring.service import TenderMonitorService, prefilter_notice
 from app.monitoring.config import MonitoringSettings
 from app.scoring.models import CompanyProfile
-from app.sources.eis_rss import parse_eis_feed
+from app.sources.eis_rss import build_eis_rss_urls, parse_eis_feed
 from app.sources.models import TenderNotice
 
 
@@ -31,6 +31,17 @@ class FakeSource:
     async def fetch(self, limit=20):
         self.calls += 1
         return self.notices[:limit]
+
+
+
+
+class DynamicFakeSource(FakeSource):
+    def __init__(self, notices, terms=()):
+        super().__init__(notices)
+        self.terms = tuple(terms)
+
+    def for_search_terms(self, search_terms, *, max_feeds=5):
+        return DynamicFakeSource(self.notices, tuple(search_terms)[:max_feeds])
 
 
 class MonitoringTests(unittest.TestCase):
@@ -108,6 +119,46 @@ class MonitoringTests(unittest.TestCase):
         first, second = asyncio.run(scenario())
         self.assertEqual(len(first), 1)
         self.assertEqual(second, [])
+
+    def test_build_eis_urls_encodes_company_keywords(self):
+        urls = build_eis_rss_urls(["алюминиевый профиль", "лист алюминиевый"], max_feeds=2)
+        self.assertEqual(len(urls), 2)
+        self.assertIn("searchString=%D0%B0%D0%BB%D1%8E%D0%BC", urls[0])
+        self.assertIn("fz44=on", urls[0])
+
+    def test_service_uses_owner_specific_profile_terms(self):
+        notice = TenderNotice(
+            source="eis", external_id="alu-1", title="Поставка алюминиевого профиля",
+            url="https://example.test", initial_price=1_000_000, currency="RUB",
+        )
+        profiles = {
+            1: CompanyProfile(profile_version="1", company_name="Alu", product_keywords=["алюминиевого профиля"], search_keywords=["алюминиевый профиль"]),
+            2: CompanyProfile(profile_version="1", company_name="Cable", product_keywords=["кабель"], search_keywords=["кабель"]),
+        }
+        async def scenario():
+            with tempfile.TemporaryDirectory() as directory:
+                repo = MonitoringRepository(Path(directory) / "test.db")
+                repo.initialize()
+                source = DynamicFakeSource([notice])
+                service = TenderMonitorService(
+                    self.settings(), source, repo, None,
+                    profile_resolver=lambda owner: profiles[owner],
+                    scope_resolver=lambda owner: str(owner),
+                )
+                alu = await service.fetch_matches(1)
+                cable = await service.fetch_matches(2)
+                first = await service.claim_new(1, alu)
+                second_same_company = await service.claim_new(1, alu)
+                other_company_scope = await service.claim_new(2, [alu[0]])
+                dynamic = service._source_for_profile(profiles[1])
+                return alu, cable, first, second_same_company, other_company_scope, dynamic.terms
+        alu, cable, first, second, other_scope, terms = asyncio.run(scenario())
+        self.assertEqual(len(alu), 1)
+        self.assertEqual(cable, [])
+        self.assertEqual(len(first), 1)
+        self.assertEqual(second, [])
+        self.assertEqual(len(other_scope), 1)
+        self.assertEqual(terms, ("алюминиевый профиль",))
 
 
 if __name__ == "__main__":

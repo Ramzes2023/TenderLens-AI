@@ -1,6 +1,6 @@
 # Security notes
 
-TenderLens AI v1.2.0 is a portfolio/single-node MVP. These notes describe what is protected, what is persisted, and what must change before an internet-facing production deployment.
+TenderLens AI v1.3.0 is a portfolio/single-node MVP. These notes describe what is protected, what is persisted, and what must change before an internet-facing production deployment.
 
 ## Secrets
 

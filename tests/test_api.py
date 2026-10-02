@@ -96,7 +96,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["status"], "ok")
-        self.assertEqual(body["version"], "1.2.0")
+        self.assertEqual(body["version"], "1.3.0")
         self.assertNotIn("phase", body)
         self.assertEqual(body["components"]["database"], "ready")
         self.assertEqual(self.client.get("/openapi.json").status_code, 200)

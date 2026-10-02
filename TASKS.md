@@ -1,5 +1,13 @@
 # TenderLens AI — implementation checklist
 
+## v1.2.0 completed
+- Guided Telegram company onboarding via /company_setup.
+- Step-by-step company profile creation with confirmation.
+- Added /company_cancel support.
+- Preserved /company_add for advanced users.
+- Added automated onboarding tests.
+- Release version bumped to 1.2.0.
+
 ## v1.1.0 completed
 
 - [x] Phase 1 — project foundation, package structure and configuration.

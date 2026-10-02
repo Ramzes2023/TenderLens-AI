@@ -2,7 +2,7 @@
 
 ## Supported portfolio deployment
 
-TenderLens v1.0.0 ships a single-node Docker Compose deployment for the FastAPI service.
+TenderLens ships a single-node Docker Compose deployment with two services: `api` (FastAPI) and `bot` (Telegram polling + EIS monitoring).
 
 Requirements:
 
@@ -18,7 +18,7 @@ docker compose up -d
 docker compose ps
 ```
 
-The API is bound to `127.0.0.1:8000` by default.
+The API is bound to `127.0.0.1:8000` by default. The `bot` service exposes no port and runs Telegram long polling in the background.
 
 ```powershell
 curl.exe http://127.0.0.1:8000/health
@@ -43,9 +43,10 @@ Then verify `/health` again.
 
 The named volume stores:
 
-- `/app/data/tenderlens.db`
-- `/app/data/qdrant`
-- `/app/data/fastembed_cache`
+- `/app/data/tenderlens.db` (shared SQLite history/monitoring state)
+- `/app/data/qdrant` (API local RAG index)
+- `/app/data/qdrant-bot` (Telegram bot local RAG index)
+- `/app/data/fastembed_cache` (shared embedding model cache)
 
 Inspect volumes:
 
@@ -69,6 +70,7 @@ docker compose down -v
 
 ```powershell
 docker compose logs -f api
+docker compose logs -f bot
 ```
 
 Do not paste logs publicly if you have enabled additional verbose vendor diagnostics or added custom code that logs request data.
@@ -81,8 +83,8 @@ This is still not full production authentication. Public exposure also needs HTT
 
 ## Proxy note
 
-A host proxy at `127.0.0.1` is not automatically the same address from inside a container. Configure container-reachable networking deliberately. For the FastEmbed one-time health command, `-e OUTBOUND_PROXY_URL=` can force direct access when appropriate.
+A host proxy at `127.0.0.1` is not the same address from inside a container. Compose therefore overrides the host `OUTBOUND_PROXY_URL` / `TELEGRAM_PROXY_URL` with Docker-specific variables. Leave `DOCKER_OUTBOUND_PROXY_URL` and `DOCKER_TELEGRAM_PROXY_URL` empty for normal container networking, or set them to a proxy URL that is actually reachable from the container. For the FastEmbed one-time health command, `-e OUTBOUND_PROXY_URL=` can force direct access when appropriate.
 
 ## Scaling limitation
 
-Do not run several application replicas against the same Qdrant local directory. For multiple workers/replicas migrate to PostgreSQL and Qdrant server/Cloud first.
+Qdrant local mode is file-backed. API and bot therefore use separate local Qdrant directories while sharing SQLite and the model cache. Do not scale either service to multiple replicas with local Qdrant/SQLite; migrate to PostgreSQL and Qdrant server/Cloud first.

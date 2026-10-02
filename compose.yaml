@@ -19,11 +19,45 @@ services:
       GIGACHAT_CA_BUNDLE_FILE: /app/certs/russian_trusted_root_ca_pem.crt
       EIS_CA_BUNDLE_FILE: /app/certs/russian_trusted_root_ca_pem.crt
       TENDERLENS_HEALTHCHECK_URL: http://127.0.0.1:8000/health
+      # A Windows localhost proxy is not reachable as 127.0.0.1 from inside Docker.
+      # Empty by default = normal container networking. Set DOCKER_OUTBOUND_PROXY_URL
+      # only when you have a proxy URL that is reachable from the container.
+      OUTBOUND_PROXY_URL: "${DOCKER_OUTBOUND_PROXY_URL:-}"
     ports:
       - "${TENDERLENS_DOCKER_BIND:-127.0.0.1}:${TENDERLENS_DOCKER_PORT:-8000}:8000"
     volumes:
       - tenderlens_data:/app/data
     stop_grace_period: 20s
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tenderlens-ai:1.0.0
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: ["python", "-m", "app.bot"]
+    environment:
+      DATABASE_URL: sqlite:////app/data/tenderlens.db
+      DATA_DIR: /app/data
+      # Qdrant local mode is file-backed and must not be opened by two processes
+      # against the same directory. The bot therefore owns a separate local RAG
+      # index while sharing SQLite/history and the FastEmbed model cache with API.
+      RAG_QDRANT_PATH: /app/data/qdrant-bot
+      FASTEMBED_CACHE_PATH: /app/data/fastembed_cache
+      COMPANY_PROFILE_FILE: /app/config/company_profile.example.json
+      GIGACHAT_CA_BUNDLE_FILE: /app/certs/russian_trusted_root_ca_pem.crt
+      EIS_CA_BUNDLE_FILE: /app/certs/russian_trusted_root_ca_pem.crt
+      OUTBOUND_PROXY_URL: "${DOCKER_OUTBOUND_PROXY_URL:-}"
+      TELEGRAM_PROXY_URL: "${DOCKER_TELEGRAM_PROXY_URL:-}"
+    volumes:
+      - tenderlens_data:/app/data
+    stop_grace_period: 30s
+    # Dockerfile healthcheck probes the HTTP API. The bot is a long-polling worker,
+    # so process exit/restart is the relevant liveness signal here.
+    healthcheck:
+      disable: true
 
 volumes:
   tenderlens_data:

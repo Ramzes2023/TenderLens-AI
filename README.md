@@ -37,7 +37,7 @@ flowchart LR
 
 Detailed boundaries and data flow: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-## Quick start — Docker API
+## Quick start — Docker API + Telegram bot
 
 Requirements: Docker Desktop / Docker Engine and a local `.env` created from `.env.example`.
 
@@ -58,6 +58,8 @@ docker compose restart api
 ```
 
 Swagger UI: `http://127.0.0.1:8000/docs`
+
+`docker compose up -d` starts two long-running services: `api` and `bot`. The bot keeps Telegram polling and EIS background monitoring alive even after the PowerShell window is closed.
 
 Automated local smoke check:
 
@@ -105,7 +107,7 @@ Run the Telegram bot locally:
 .\.venv\Scripts\python.exe -m app.bot
 ```
 
-The Docker Compose profile currently runs the API service as the single owner of local SQLite/Qdrant state. The Telegram bot is run separately in the local development workflow. For multi-process production deployment, move SQLite/Qdrant local-mode state to server-backed services first.
+Docker Compose runs both the API and Telegram bot. They share SQLite history and the FastEmbed model cache, while each process uses its own Qdrant local directory because Qdrant local mode is file-backed and cannot safely be opened by multiple processes against the same storage path. For a production multi-service deployment, migrate to PostgreSQL and Qdrant server/Cloud.
 
 ## Telegram workflow
 
@@ -146,7 +148,7 @@ If `TENDERLENS_API_KEY` is set, `/api/v1/*` requires `X-API-Key`. `/health` and 
 - RAG: `RAG_*`, `FASTEMBED_CACHE_PATH`
 - Monitoring: `EIS_RSS_URLS`, `MONITOR_*`
 - API: `API_HOST`, `API_PORT`, `TENDERLENS_API_KEY`
-- Docker: `TENDERLENS_DOCKER_BIND`, `TENDERLENS_DOCKER_PORT`
+- Docker: `TENDERLENS_DOCKER_BIND`, `TENDERLENS_DOCKER_PORT`, `DOCKER_OUTBOUND_PROXY_URL`, `DOCKER_TELEGRAM_PROXY_URL`
 
 Never commit `.env`, API keys, bot tokens, local databases or Qdrant data.
 

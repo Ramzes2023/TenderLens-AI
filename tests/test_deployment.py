@@ -59,6 +59,13 @@ class DeploymentAssetsTests(unittest.TestCase):
         self.assertIn("DATABASE_URL: sqlite:////app/data/tenderlens.db", text)
         self.assertIn("RAG_QDRANT_PATH: /app/data/qdrant", text)
         self.assertIn("image: tenderlens-ai:1.0.0", text)
+        self.assertIn("  bot:", text)
+        self.assertIn('command: ["python", "-m", "app.bot"]', text)
+        self.assertIn("RAG_QDRANT_PATH: /app/data/qdrant-bot", text)
+        self.assertIn('OUTBOUND_PROXY_URL: "${DOCKER_OUTBOUND_PROXY_URL:-}"', text)
+        self.assertIn('TELEGRAM_PROXY_URL: "${DOCKER_TELEGRAM_PROXY_URL:-}"', text)
+        self.assertIn("healthcheck:", text)
+        self.assertIn("disable: true", text)
 
 
 if __name__ == "__main__":

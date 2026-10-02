@@ -1,19 +1,39 @@
 """Telegram commands and PDF entry point for analysis/scoring."""
 
 from aiogram import F, Router
-from .documents import pdf_handler
-from .history import history_handler
-from .rag import ask_handler
-from .monitoring import (monitor_off_handler, monitor_on_handler, monitor_status_handler,
-                         tenders_handler)
-from .companies import (companies_handler, company_add_handler, company_show_handler,
-                        company_use_handler)
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
+
+from .companies import (
+    CompanySetup,
+    companies_handler,
+    company_add_handler,
+    company_setup_budget_handler,
+    company_setup_cancel_handler,
+    company_setup_confirm_handler,
+    company_setup_handler,
+    company_setup_keywords_handler,
+    company_setup_mode_handler,
+    company_setup_name_handler,
+    company_setup_regions_handler,
+    company_show_handler,
+    company_use_handler,
+)
+from .documents import pdf_handler
+from .history import history_handler
+from .monitoring import (
+    monitor_off_handler,
+    monitor_on_handler,
+    monitor_status_handler,
+    tenders_handler,
+)
+from .rag import ask_handler
 
 START_TEXT = (
     "Здравствуйте! TenderLens AI — система мониторинга тендеров и анализа "
     "тендерной документации с применением искусственного интеллекта.\n\n"
+    "Создать персональный профиль компании можно пошагово через /company_setup. "
+    "После этого мониторинг и scoring будут работать по вашему профилю.\n\n"
     "Отправьте PDF: я сообщу число страниц и объём извлечённого текста. "
     "При настроенном GigaChat текст отправляется в AI для извлечения фактов, затем Python сравнивает результат с профилем компании по прозрачным правилам. "
     "Система также читает настроенные RSS-ленты ЕИС и присылает новые подходящие закупки.\nИспользуйте /help для списка команд."
@@ -26,7 +46,10 @@ HELP_TEXT = (
     "/monitor_off — выключить автоуведомления\n"
     "/monitor_status — статус мониторинга\n"
     "/companies — список профилей компаний\n/company_show — активная компания\n"
-    "/company_add ... — создать профиль компании\n/company_use <id> — переключить активную компанию\n\n"
+    "/company_setup — пошагово создать профиль компании\n"
+    "/company_cancel — отменить пошаговую настройку\n"
+    "/company_add ... — быстрый технический формат создания\n"
+    "/company_use <id> — переключить активную компанию\n\n"
     "Отправьте PDF как документ: до 10 МиБ и 200 страниц. "
     "Покажу имя, страницы и количество символов. Текст читаемого PDF отправляется в GigaChat для AI-сводки; затем доступен детерминированный fit-score по профилю компании. OCR недоступен."
 )
@@ -58,7 +81,18 @@ def create_router() -> Router:
     router.message.register(monitor_status_handler, Command("monitor_status"))
     router.message.register(companies_handler, Command("companies"))
     router.message.register(company_show_handler, Command("company_show"))
+    router.message.register(company_setup_handler, Command("company_setup"))
+    router.message.register(company_setup_cancel_handler, Command("company_cancel"))
     router.message.register(company_add_handler, Command("company_add"))
     router.message.register(company_use_handler, Command("company_use"))
+
+    # FSM handlers must be registered after explicit commands so /company_cancel wins.
+    router.message.register(company_setup_name_handler, CompanySetup.name)
+    router.message.register(company_setup_mode_handler, CompanySetup.mode)
+    router.message.register(company_setup_keywords_handler, CompanySetup.keywords)
+    router.message.register(company_setup_regions_handler, CompanySetup.regions)
+    router.message.register(company_setup_budget_handler, CompanySetup.budget)
+    router.message.register(company_setup_confirm_handler, CompanySetup.confirm)
+
     router.message.register(pdf_handler, F.document)
     return router

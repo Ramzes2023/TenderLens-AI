@@ -5,9 +5,20 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 
 from .companies import (
+    CompanyDelete,
+    CompanyEdit,
     CompanySetup,
     companies_handler,
     company_add_handler,
+    company_delete_confirm_handler,
+    company_delete_handler,
+    company_edit_budget_handler,
+    company_edit_confirm_handler,
+    company_edit_handler,
+    company_edit_keywords_handler,
+    company_edit_mode_handler,
+    company_edit_name_handler,
+    company_edit_regions_handler,
     company_setup_budget_handler,
     company_setup_cancel_handler,
     company_setup_confirm_handler,
@@ -17,6 +28,7 @@ from .companies import (
     company_setup_name_handler,
     company_setup_regions_handler,
     company_show_handler,
+    company_use_callback_handler,
     company_use_handler,
 )
 from .documents import pdf_handler
@@ -33,7 +45,8 @@ START_TEXT = (
     "Здравствуйте! TenderLens AI — система мониторинга тендеров и анализа "
     "тендерной документации с применением искусственного интеллекта.\n\n"
     "Создать персональный профиль компании можно пошагово через /company_setup. "
-    "После этого мониторинг и scoring будут работать по вашему профилю.\n\n"
+    "Управлять профилями можно через /companies, /company_edit и /company_delete. "
+    "После этого мониторинг и scoring будут работать по активному профилю.\n\n"
     "Отправьте PDF: я сообщу число страниц и объём извлечённого текста. "
     "При настроенном GigaChat текст отправляется в AI для извлечения фактов, затем Python сравнивает результат с профилем компании по прозрачным правилам. "
     "Система также читает настроенные RSS-ленты ЕИС и присылает новые подходящие закупки.\nИспользуйте /help для списка команд."
@@ -45,11 +58,13 @@ HELP_TEXT = (
     "/monitor_on — включить автоуведомления о новых закупках\n"
     "/monitor_off — выключить автоуведомления\n"
     "/monitor_status — статус мониторинга\n"
-    "/companies — список профилей компаний\n/company_show — активная компания\n"
+    "/companies — список компаний и кнопки переключения\n/company_show — активная компания\n"
     "/company_setup — пошагово создать профиль компании\n"
-    "/company_cancel — отменить пошаговую настройку\n"
+    "/company_edit [id] — изменить активную или указанную компанию\n"
+    "/company_delete [id] — безопасно удалить активную или указанную компанию\n"
+    "/company_cancel — отменить текущую операцию с компанией\n"
     "/company_add ... — быстрый технический формат создания\n"
-    "/company_use <id> — переключить активную компанию\n\n"
+    "/company_use [id] — переключить активную компанию; без id покажет кнопки\n\n"
     "Отправьте PDF как документ: до 10 МиБ и 200 страниц. "
     "Покажу имя, страницы и количество символов. Текст читаемого PDF отправляется в GigaChat для AI-сводки; затем доступен детерминированный fit-score по профилю компании. OCR недоступен."
 )
@@ -82,9 +97,13 @@ def create_router() -> Router:
     router.message.register(companies_handler, Command("companies"))
     router.message.register(company_show_handler, Command("company_show"))
     router.message.register(company_setup_handler, Command("company_setup"))
+    router.message.register(company_edit_handler, Command("company_edit"))
+    router.message.register(company_delete_handler, Command("company_delete"))
     router.message.register(company_setup_cancel_handler, Command("company_cancel"))
     router.message.register(company_add_handler, Command("company_add"))
     router.message.register(company_use_handler, Command("company_use"))
+
+    router.callback_query.register(company_use_callback_handler, F.data.startswith("company_use:"))
 
     # FSM handlers must be registered after explicit commands so /company_cancel wins.
     router.message.register(company_setup_name_handler, CompanySetup.name)
@@ -93,6 +112,15 @@ def create_router() -> Router:
     router.message.register(company_setup_regions_handler, CompanySetup.regions)
     router.message.register(company_setup_budget_handler, CompanySetup.budget)
     router.message.register(company_setup_confirm_handler, CompanySetup.confirm)
+
+    router.message.register(company_edit_name_handler, CompanyEdit.name)
+    router.message.register(company_edit_mode_handler, CompanyEdit.mode)
+    router.message.register(company_edit_keywords_handler, CompanyEdit.keywords)
+    router.message.register(company_edit_regions_handler, CompanyEdit.regions)
+    router.message.register(company_edit_budget_handler, CompanyEdit.budget)
+    router.message.register(company_edit_confirm_handler, CompanyEdit.confirm)
+
+    router.message.register(company_delete_confirm_handler, CompanyDelete.confirm)
 
     router.message.register(pdf_handler, F.document)
     return router

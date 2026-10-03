@@ -1,6 +1,6 @@
-# Phase 18C ? Organization-Scoped Shared Company Workspaces
+# Phase 18C - Organization-Scoped Shared Company Workspaces
 
-Base commit: `c664e7c` ? Phase 18B Organization API + transactional RBAC.
+Base commit: `c664e7c` - Phase 18B Organization API + transactional RBAC.
 
 Phase 18C introduces shared company workspaces whose security boundary is
 `organization_id` rather than an individual legacy `owner_user_id`.

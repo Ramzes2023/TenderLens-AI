@@ -208,7 +208,7 @@ class CompanyRepository:
 
     def set_active(self, owner_user_id: int, company_id: int) -> CompanyWorkspace:
         if self._reserved_organization_owner(owner_user_id):
-            raise CompanyRepositoryError("???????? ?? ???????.")
+            raise CompanyRepositoryError("Company not found.")
 
         now = self._now()
         try:
@@ -239,7 +239,7 @@ class CompanyRepository:
     def update_profile(self, owner_user_id: int, company_id: int, profile: CompanyProfile,
                        *, name: str | None = None) -> CompanyWorkspace:
         if self._reserved_organization_owner(owner_user_id):
-            raise CompanyRepositoryError("???????? ?? ???????.")
+            raise CompanyRepositoryError("Company not found.")
 
         now = self._now()
         try:
@@ -309,7 +309,7 @@ class CompanyRepository:
             raise CompanyRepositoryError("Не удалось удалить профиль компании.") from None
 
     # ================================================================
-    # Phase 18C ? organization-scoped company operations.
+    # Phase 18C - organization-scoped company operations.
     #
     # Membership authorization and writes happen on the same SQLite
     # connection/transaction to avoid check-then-write races.
@@ -423,7 +423,7 @@ class CompanyRepository:
         clean_name = " ".join(name.split())[:200]
         if not clean_name:
             raise CompanyRepositoryError(
-                "???????? ???????? ?? ????? ???? ??????."
+                "Company name cannot be empty."
             )
 
         timestamp = self._now()
@@ -473,7 +473,7 @@ class CompanyRepository:
 
             if row is None:
                 raise CompanyRepositoryError(
-                    "?? ??????? ????????? ??????? ????????."
+                    "Could not save company profile."
                 )
 
             return self._workspace(row, None)
@@ -482,7 +482,7 @@ class CompanyRepository:
             raise
         except sqlite3.IntegrityError:
             raise CompanyRepositoryError(
-                "???????? ? ????? ????????? ??? ?????????? ? ???????????."
+                "Company with this name already exists in the organization."
             ) from None
         except sqlite3.Error:
             raise CompanyRepositoryError(
@@ -524,7 +524,7 @@ class CompanyRepository:
 
                     if current is None:
                         raise CompanyNotFoundError(
-                            "???????? ?? ???????."
+                            "Company not found."
                         )
 
                     clean_name = current["name"]
@@ -533,7 +533,7 @@ class CompanyRepository:
                         clean_name = " ".join(name.split())[:200]
                         if not clean_name:
                             raise CompanyRepositoryError(
-                                "???????? ???????? ?? ????? ???? ??????."
+                                "Company name cannot be empty."
                             )
 
                     profile_json = (
@@ -575,7 +575,7 @@ class CompanyRepository:
             raise
         except sqlite3.IntegrityError:
             raise CompanyRepositoryError(
-                "???????? ? ????? ????????? ??? ?????????? ? ???????????."
+                "Company with this name already exists in the organization."
             ) from None
         except sqlite3.Error:
             raise CompanyRepositoryError(
@@ -612,7 +612,7 @@ class CompanyRepository:
 
                     if cursor.rowcount != 1:
                         raise CompanyNotFoundError(
-                            "???????? ?? ???????."
+                            "Company not found."
                         )
 
         except (

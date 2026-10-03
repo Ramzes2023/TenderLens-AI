@@ -92,7 +92,7 @@ def _company_error(error):
         code = status.HTTP_403_FORBIDDEN
     elif isinstance(error, CompanyNotFoundError):
         code = status.HTTP_404_NOT_FOUND
-    elif "??? ??????????" in str(error).lower():
+    elif "already exists" in str(error).lower():
         code = status.HTTP_409_CONFLICT
     elif "unavailable" in str(error).lower():
         code = status.HTTP_503_SERVICE_UNAVAILABLE

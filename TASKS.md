@@ -1,3 +1,18 @@
+## v1.6.0 release candidate preparation
+
+- [x] Phase 18A-F2 organization/RBAC feature work completed on the development branch.
+- [x] Source version and Compose target advanced from 1.5.0 to 1.6.0 without moving the existing v1.5.0 tag.
+- [x] Release-facing README, architecture, security, project and Dashboard documentation updated for Phase 18.
+- [x] Full v1.6.0 regression after invitation referrer hardening: 279 passed, 1 skipped, 38 subtests passed.
+- [x] Built isolated `tenderlens-ai:1.6.0-rc1`, verified embedded version 1.6.0, Docker health and component readiness.
+- [x] Passed isolated Docker session/organization/invitation/security smoke, including one-time acceptance, replay protection, SHA-256-at-rest token verification and no-referrer invitation/auth pages.
+- [x] Passed additive Phase 18 migration against a consistent snapshot of the current v1.5.0 production SQLite database: integrity OK, foreign-key check clean and all original v1.5.0 rows preserved.
+- [x] Verified existing Web account/session/Telegram link, AluTrade, active company, 40 monitoring dedup rows and monitoring subscription survive the v1.5.0 -> v1.6.0 migration; AluTrade is backfilled to the personal organization.
+- [ ] Push release-prep commit and open the Phase 18 pull request.
+- [ ] Require CI to pass before merge.
+- [ ] Create the v1.6.0 tag/GitHub Release only after explicit release approval.
+- [ ] Production deployment remains a separate explicit step.
+
 ## v1.5.0 released and deployed
 
 - [x] Added email/password Web account registration, login and logout.
@@ -87,7 +102,7 @@
 - [ ] OCR for scan-only PDFs.
 - [ ] PostgreSQL + schema migration tooling.
 - [ ] Qdrant server/Cloud for multi-process deployment.
-- [ ] Organizations, memberships, roles/permissions and distributed/edge rate limiting for public multi-tenant deployment.
+- [ ] Distributed/edge rate limiting, structured audit events and server-backed tenancy infrastructure for public multi-tenant deployment.
 - [ ] Metrics/tracing/centralized logs.
 - [ ] Additional source adapters: B2B-Center, РТС-тендер, Сбербанк-АСТ, Росатом.
 - [ ] Optional second LLM provider.
@@ -104,12 +119,12 @@
 - [x] Active-company deterministic scoring for PDF analysis.
 - [x] Company CRUD subset in protected FastAPI.
 - [x] Web authentication and account/session owner isolation (Phase 17).
-- [ ] Organization memberships and roles/permissions (Phase 18).
+- [x] Organization memberships and roles/permissions (Phase 18).
 - [ ] Supplier-intelligence sources for `buy` mode.
 - [ ] International tender source adapters.
 
 
-## Phase 18 — Multi-Tenant Security + Organizations + Roles (development)
+## Phase 18 - Multi-Tenant Security + Organizations + Roles (feature-complete; release preparation)
 
 ### Phase 18A — Organization/membership foundation
 - [x] Additive SQLite organizations and organization_members, role enum/CHECK, FK/indexes.
@@ -168,9 +183,9 @@
 - [x] Phase 18F2: member role management and removal UI.
 - [x] Phase 18F2: invitation creation, listing, revocation and copy-link UX.
 - [x] Phase 18F2: browser invitation preview/accept flow with safe auth return.
-- [ ] Next: Phase 18 release-candidate preparation.
+- [x] Phase 18 release-candidate preparation started with the v1.6.0 source/documentation bump.
 - [ ] Later: background organization notifications.
 
 Not full multi-tenant security: existing endpoints still authorize owner_user_id.
-No billing, invitations, Dashboard redesign, release bump or production migration performed.
+No billing, background organization notifications, public HTTPS deployment or production migration performed.
 See PHASE18A.md for migration and security boundaries.

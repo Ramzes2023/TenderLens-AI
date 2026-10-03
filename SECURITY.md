@@ -1,6 +1,6 @@
 # Security notes
 
-TenderLens AI v1.5.0 is a single-node release with Web accounts, session authentication and Telegram identity linking. These notes describe what is protected, what is persisted, and what must still change before a public multi-tenant production deployment.
+TenderLens AI v1.6.0 is a single-node release with Web accounts, session authentication, shared organizations, role-based authorization, invitation flows and Telegram identity linking. These notes describe what is protected, what is persisted, and what must still change before a public multi-replica production deployment.
 
 ## Secrets
 
@@ -17,7 +17,7 @@ Do not commit or share:
 
 ## Stored data
 
-- SQLite stores structured tender analysis, scoring metadata, hashes, timestamps and monitoring state.
+- SQLite stores accounts/sessions, organizations/memberships/invitations, structured tender analysis, scoring metadata, hashes, timestamps and monitoring state.
 - Qdrant stores RAG chunk text, page/chunk metadata and embeddings.
 - Raw PDF bytes are not retained by the tender history pipeline.
 - FastEmbed model files are cached locally.
@@ -40,6 +40,19 @@ State-changing browser requests reject explicit cross-site provenance using `Ori
 
 Login failures use a bounded in-memory limiter (default 5 failures in 5 minutes per client/email key, maximum 4096 active keys). A successful authentication resets that key. Because this limiter is process-local, public multi-replica deployments still require reverse-proxy or shared-store throttling.
 
+## Organizations, roles and invitations
+
+- Every registered Web account receives a stable personal organization.
+- Shared organization access requires explicit membership.
+- Roles are `owner`, `admin`, `member` and `viewer`; backend checks, not Dashboard controls, are the authorization boundary.
+- Membership-changing operations and protected organization mutations re-check authorization transactionally where required.
+- Shared organization companies, active-company state, tender history, scoring/monitoring context and PDF/RAG namespaces are isolated from legacy owner namespaces.
+- Reserved synthetic organization owner IDs are internal compatibility keys and are rejected as legacy HTTP owner identity.
+- Organization APIs are session-based; the legacy API key is not organization identity.
+- Invitation tokens are high entropy and only SHA-256 digests are stored. Invitations are email-bound, expire, can be revoked and are atomically consumed once.
+- Invitation URLs contain the one-time token, so unconsumed invitation URLs must be treated as secrets.
+- Invitation, login and registration browser pages emit `Referrer-Policy: no-referrer` so invitation tokens carried in the URL are not sent as referrer data.
+
 ## API exposure
 
 Default Docker bind is `127.0.0.1`; keep it that way until the dedicated public deployment phase.
@@ -47,19 +60,19 @@ Default Docker bind is `127.0.0.1`; keep it that way until the dedicated public 
 For non-local/public exposure:
 
 1. terminate HTTPS at a trusted reverse proxy and verify forwarded-host/proxy configuration;
-2. keep `TENDERLENS_API_KEY` for integrations that need the legacy API path;
-3. add organization membership, roles/permissions and audit boundaries before onboarding multiple customer teams;
+2. keep `TENDERLENS_API_KEY` only for integrations that need the supported legacy/personal API path;
+3. preserve session-only organization authorization and add structured audit events before broad customer-team administration;
 4. enforce edge/distributed rate limiting and request-size controls;
 5. define retention/backups and secret rotation;
 6. move local SQLite/Qdrant state to server-backed services before scaling replicas.
 
-The API key remains a shared integration secret, not tenant identity. Web session authentication is real user identity for the current single-node account model, but organization-level authorization is a later phase.
+The API key remains a shared integration secret, not tenant identity. Web sessions are user identity, while organization membership and role checks form the shared-workspace authorization boundary.
 
 ## Telegram
 
 Telegram user IDs scope history and RAG retrieval in the bot flow. Web accounts start in a synthetic owner namespace. `Connect Telegram` creates a random one-time ticket with a 10-minute lifetime; only its SHA-256 digest is stored. Telegram deep-link redemption obtains the real `from_user.id`, atomically claims the ticket, and then performs the guarded owner migration. Reuse/expiry is rejected, a newer ticket invalidates the previous one, and a failed migration releases only its own claim marker.
 
-Linking is deliberately blocked when owner-scoped PDF/RAG state cannot be migrated safely without also moving the external Qdrant namespace. This account/owner model is still application-level scoping, not the final Organizations/Roles multi-tenant authorization model.
+Linking is deliberately blocked when owner-scoped PDF/RAG state cannot be migrated safely without also moving the external Qdrant namespace. Telegram/personal owner compatibility remains separate from shared organization namespaces; linking a Web account to Telegram does not grant or rewrite organization memberships.
 
 ## Logging
 

@@ -15,6 +15,7 @@ flowchart TB
         BOT[aiogram transport]
         API[FastAPI transport]
         AUTH[Account/session service]
+        ORG[Organization / membership service]
         SRC[Source adapters]
         PARSE[PDF parser]
         ANALYZE[Structured analysis service]
@@ -37,7 +38,9 @@ flowchart TB
     WEB --> API
     HTTP --> API
     API --> AUTH
+    API --> ORG
     AUTH --> DB
+    ORG --> DB
     EIS --> SRC --> MON
     BOT --> PARSE
     API --> PARSE
@@ -81,13 +84,13 @@ Fit is not a probability of winning and not a participation decision.
 
 ### Persistence and deduplication
 
-`app.database.TenderRepository` uses SQLite for the single-node MVP. `(owner_user_id, pdf_sha256)` prevents exact PDF duplicates within one Telegram/API owner scope.
+`app.database.TenderRepository` uses SQLite for the single-node MVP. Personal/Telegram history remains owner-scoped, while shared organization history uses a reserved internal organization namespace. Exact-PDF deduplication therefore remains isolated between personal owners and different organizations.
 
 Monitoring uses the same SQLite file but separate state/tables for seen notices and subscriptions.
 
 ### Semantic RAG
 
-`app.rag.chunking` creates page-aware overlapping chunks. `FastEmbedEmbeddingProvider` uses a multilingual ONNX model locally. `QdrantVectorStore` stores chunk text, metadata and vectors. Retrieval always filters by owner and document hash before the retrieved context is sent to the LLM.
+`app.rag.chunking` creates page-aware overlapping chunks. `FastEmbedEmbeddingProvider` uses a multilingual ONNX model locally. `QdrantVectorStore` stores chunk text, metadata and vectors. Personal retrieval filters by owner/document hash; shared organization retrieval uses the reserved organization namespace plus document hash before context is sent to the LLM.
 
 Changing embedding dimensionality requires a new Qdrant collection name instead of reusing an incompatible index.
 
@@ -101,7 +104,17 @@ Monitoring is intentionally a **pre-filter**. RSS metadata is not authoritative 
 
 FastAPI exposes health, account/session auth, company workspaces, history, analysis, scoring, RAG and monitoring. Browser users authenticate with the HttpOnly session cookie; owner-scoped endpoints derive identity from that session. The legacy `TENDERLENS_API_KEY` path remains for integrations/backward compatibility. `/health` and OpenAPI stay available for readiness/documentation.
 
-Phase 17 adds real Web account identity but not yet Organizations/Roles. Therefore the current account/owner boundary is suitable for the single-node release, while multi-user customer teams require the next tenant-authorization layer.
+Phase 18 adds shared organization identity above the personal/legacy owner boundary. Organization APIs resolve the authenticated account, require membership, enforce owner/admin/member/viewer permissions, and never treat the legacy API key or reserved synthetic organization owner IDs as organization identity.
+
+### Organization tenancy boundary
+
+Every registered account has a stable personal organization, while shared organizations use explicit membership rows with owner/admin/member/viewer roles. Shared companies and active-company state belong to an organization rather than to a browser-supplied owner ID.
+
+Organization tender history, PDF duplicate detection and RAG use an internal reserved organization namespace for compatibility with existing storage abstractions. That synthetic namespace is not an authentication credential and is blocked from legacy owner-facing HTTP APIs.
+
+Organization scoring and on-demand monitoring resolve the shared active company at request time. Monitoring deduplication is namespaced by organization/company context. Long-running organization PDF/RAG/monitoring workflows re-check membership before protected persistence where required.
+
+Invitation acceptance is email-bound and atomically adds membership while consuming a one-time SHA-256-at-rest token.
 
 ### Web ↔ Telegram identity linking
 
@@ -117,7 +130,7 @@ Host / Docker Desktop / Linux
   127.0.0.1:8000
           |
 +--------------------------+
-| TenderLens AI v1.5.0 API |
+| TenderLens AI v1.6.0 API |
 | Python 3.12 / Uvicorn    |
 | non-root uid 10001       |
 +------------+-------------+
@@ -156,4 +169,4 @@ This separation is central to the design: uncertain AI interpretation does not s
 
 A new `app.companies` boundary persists several validated `CompanyProfile` workspaces per owner. The active workspace is resolved at request/message time and injected into monitoring and scoring. EIS monitoring can generate per-company RSS searches from `search_keywords`, while static `EIS_RSS_URLS` remains a fallback. Monitoring deduplication is namespaced by active company.
 
-This began as an application-level owner scope. Phase 17 adds authenticated Web accounts and safe Web↔Telegram identity linking; the next tenant boundary is organization membership, roles/permissions and audit isolation before public multi-customer SaaS deployment.
+This began as an application-level owner scope. Phase 17 added authenticated Web accounts and safe Web/Telegram identity linking. Phase 18 adds organization membership, role enforcement and shared resource isolation; public multi-customer deployment still requires server-backed state, structured audit events and edge security controls.

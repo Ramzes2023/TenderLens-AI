@@ -1,19 +1,21 @@
 # TenderLens AI
 
-**TenderLens AI v1.5.0** is a portfolio-grade Python platform for tender monitoring and document intelligence. It combines authenticated Web accounts, Telegram workflows, live EIS RSS monitoring, PDF extraction, structured LLM analysis, deterministic company-fit scoring, semantic RAG with Qdrant, SQLite persistence, a FastAPI backend, an authenticated browser dashboard, and Docker deployment.
+**TenderLens AI v1.6.0** is a portfolio-grade Python platform for tender monitoring and document intelligence. It combines authenticated Web accounts, shared organization workspaces with role-based access, invitation flows, Telegram workflows, live EIS RSS monitoring, PDF extraction, structured LLM analysis, deterministic company-fit scoring, organization-isolated semantic RAG with Qdrant, SQLite persistence, a FastAPI backend, an authenticated browser dashboard, and Docker deployment.
 
 > The system supports a human procurement decision; it does **not** autonomously decide whether to participate in a tender or submit bids.
 
 ## What it demonstrates
 
-- **Web accounts:** email/password registration, HttpOnly session cookies, owner-scoped API access and authenticated Dashboard.
+- **Web accounts:** email/password registration, HttpOnly session cookies, personal workspace compatibility and authenticated Dashboard.
+- **Organizations + RBAC:** shared workspaces, owner/admin/member/viewer roles, membership management, shared companies, active-company context and session-only organization APIs.
+- **Invitations:** email-bound one-time organization invitations with SHA-256 token digests, expiration, revocation, replay protection and browser accept flow.
 - **Telegram bot:** PDF upload, history, RAG questions, EIS monitoring and subscriptions.
 - **Web ↔ Telegram identity:** one-time deep-link confirmation safely moves a fresh Web owner namespace to the verified Telegram user ID while preserving supported owner-scoped state.
 - **Tender analysis:** PyMuPDF → structured `TenderAnalysis` → GigaChat provider abstraction.
 - **Multi-company workspaces:** one owner can keep several company profiles and switch the active profile without restart.
 - **Deterministic scoring:** transparent Python rules against the active versioned company profile.
 - **Semantic RAG:** page-aware chunks → multilingual FastEmbed embeddings → Qdrant local-mode retrieval → grounded LLM answer with page references.
-- **Persistence:** owner-scoped SQLite history and SHA-256 deduplication.
+- **Persistence:** personal and organization-isolated SQLite history with SHA-256 deduplication.
 - **Live tender discovery:** configurable RSS feeds from ЕИС / zakupki.gov.ru with pre-filtering and deduplication.
 - **Backend API:** FastAPI + OpenAPI/Swagger for history, scoring, PDF analysis, RAG and monitoring.
 - **Deployment:** non-root Docker image, healthcheck, persistent named volume and localhost-only bind by default.
@@ -78,7 +80,7 @@ Expected health shape:
 {
   "status": "ok",
   "service": "TenderLens AI",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "components": {
     "database": "ready",
     "llm": "ready",
@@ -128,7 +130,7 @@ Useful commands:
 - `/company_add ...`, `/company_use <id>` — create/switch the active company profile
 - `/link <code>` — confirm a Web-to-Telegram account link (the Dashboard deep link is the normal entry point)
 
-PDF constraints: up to 10 MiB and 200 pages. Text PDFs are parsed locally. OCR is intentionally not implemented in v1.5.0; scanned-only PDFs are reported as such instead of silently inventing text.
+PDF constraints: up to 10 MiB and 200 pages. Text PDFs are parsed locally. OCR is intentionally not implemented in v1.6.0; scanned-only PDFs are reported as such instead of silently inventing text.
 
 ## Main API endpoints
 
@@ -140,10 +142,19 @@ PDF constraints: up to 10 MiB and 200 pages. Text PDFs are parsed locally. OCR i
 | POST | `/api/v1/auth/logout` | Invalidate current session |
 | GET | `/api/v1/auth/me` | Current authenticated account |
 | POST | `/api/v1/auth/telegram-link` | Create a short-lived Telegram deep-link ticket |
-| GET | `/api/v1/companies` | Owner-scoped company profiles |
-| POST | `/api/v1/companies` | Create company profile |
-| POST | `/api/v1/companies/{id}/activate` | Switch active company |
-| GET | `/api/v1/tenders` | Owner-scoped tender history |
+| GET | `/api/v1/companies` | Personal/legacy owner-scoped company profiles |
+| POST | `/api/v1/companies` | Create personal company profile |
+| POST | `/api/v1/companies/{id}/activate` | Switch personal active company |
+| GET | `/api/v1/organizations` | Organizations visible to the current Web account |
+| POST | `/api/v1/organizations` | Create a shared organization |
+| GET | `/api/v1/organizations/{id}/members` | Owner/admin membership management view |
+| POST | `/api/v1/organizations/{id}/invitations` | Create an organization invitation |
+| GET | `/api/v1/organizations/{id}/companies` | Shared organization company workspaces |
+| POST | `/api/v1/organizations/{id}/companies` | Create a shared organization company |
+| GET | `/api/v1/organizations/{id}/tenders` | Organization-scoped tender history |
+| POST | `/api/v1/organizations/{id}/analysis/pdf` | Organization-scoped PDF analysis |
+| POST | `/api/v1/organizations/{id}/rag/ask` | Organization-scoped semantic RAG |
+| GET | `/api/v1/tenders` | Personal/legacy owner-scoped tender history |
 | GET | `/api/v1/tenders/{id}` | Tender detail |
 | POST | `/api/v1/analysis/pdf` | PDF analysis pipeline |
 | POST | `/api/v1/scoring/evaluate` | Deterministic fit score |
@@ -151,7 +162,7 @@ PDF constraints: up to 10 MiB and 200 pages. Text PDFs are parsed locally. OCR i
 | GET | `/api/v1/monitoring/status` | Monitoring status |
 | POST | `/api/v1/monitoring/scan` | Manual source scan |
 
-Browser Web flows use the HttpOnly `tenderlens_session` cookie. Session-authenticated owner-scoped endpoints resolve the owner from the account instead of trusting a browser-supplied owner ID. The legacy `X-API-Key` path remains available for integrations/backward compatibility when `TENDERLENS_API_KEY` is configured. `/health` and OpenAPI remain accessible for local readiness/documentation.
+Browser Web flows use the HttpOnly `tenderlens_session` cookie. Session-authenticated personal endpoints resolve the owner from the account instead of trusting a browser-supplied owner ID. Organization endpoints use account membership plus role checks and do not accept the legacy API key as organization identity. The legacy `X-API-Key` path remains available only for supported personal/integration compatibility when `TENDERLENS_API_KEY` is configured. `/health` and OpenAPI remain accessible for local readiness/documentation.
 
 ## Configuration
 
@@ -201,7 +212,7 @@ Multi-company behavior and the current sell-side/buy-side boundary are documente
 
 - OCR for scan-only documents.
 - Server-backed PostgreSQL and Qdrant for multiple replicas.
-- Organization memberships, roles/permissions and audit boundaries for true multi-tenant B2B use.
+- Structured audit events and server-backed tenancy infrastructure for larger public multi-tenant deployments.
 - Public VPS/domain/HTTPS deployment and reverse-proxy hardening.
 - The login limiter is intentionally in-process for the single-node release; distributed/edge throttling is still required before multi-replica public deployment.
 - Supplier-intelligence adapters for `buy` profiles and international procurement sources.
@@ -209,12 +220,14 @@ Multi-company behavior and the current sell-side/buy-side boundary are documente
 - More tender source adapters (B2B-Center, РТС-тендер, Сбербанк-АСТ, Росатом).
 - Optional alternative LLM provider implementation.
 
-These are deliberate boundaries of v1.5.0, not hidden capabilities.
+These are deliberate boundaries of v1.6.0, not hidden capabilities.
 
-## Web accounts and Dashboard
+## Web accounts, organizations and Dashboard
 
-Phase 17 turns the Phase 16 operator dashboard into an authenticated Web account flow at `http://127.0.0.1:8000/dashboard`. Users can register/login, create an owner-scoped company profile, run company-aware EIS monitoring, and connect the Web account to Telegram. The connection uses a short-lived one-time deep-link token whose SHA-256 digest is stored in SQLite; Telegram confirms the real user ID before the supported owner-scoped state is migrated. The existing Web session survives the owner migration.
+Phase 17 introduced authenticated Web accounts, session cookies and Web-to-Telegram identity linking. Phase 18 adds a second tenancy layer for shared customer teams: personal organizations, shared organizations, explicit owner/admin/member/viewer memberships, organization-scoped companies and active-company context, tender history, scoring, monitoring, PDF analysis, RAG and email-bound invitation acceptance.
 
-Password hashes use scrypt. Session cookies are HttpOnly + SameSite=Lax and become Secure on HTTPS. Browser state-changing requests are protected against explicit cross-site provenance using `Origin` / `Sec-Fetch-Site`, login failures are bounded by an in-process rate limiter, and expired sessions are cleaned as new sessions are created.
+The Dashboard keeps the personal v1.5-compatible workspace available while allowing the user to switch into shared organization workspaces. Viewer roles are read-only for mutations; owner/admin/member permissions are reflected in the UI while backend authorization remains authoritative. Organization APIs are session-only and the legacy API key is not organization identity.
 
-The release remains intentionally single-node and localhost-first. Organizations/roles and public HTTPS production are later phases; Web accounts in v1.5.0 are not yet the final multi-tenant SaaS authorization model.
+Password hashes use scrypt. Session cookies are HttpOnly + SameSite=Lax and become Secure on HTTPS. Browser state-changing requests are protected against explicit cross-site provenance using `Origin` / `Sec-Fetch-Site`, login failures are bounded by an in-process limiter, and expired sessions are cleaned as new sessions are created.
+
+v1.6.0 remains intentionally single-node and localhost-first. The organization boundary is implemented, but public multi-replica SaaS deployment still requires HTTPS/reverse-proxy hardening, shared rate limiting, structured audit logging, PostgreSQL/migration tooling and server-backed Qdrant.

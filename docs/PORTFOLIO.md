@@ -2,7 +2,7 @@
 
 ## 30-second summary
 
-TenderLens AI is a Python tender-intelligence platform. It monitors live ЕИС RSS feeds, accepts tender PDFs through Telegram or FastAPI, extracts structured facts with GigaChat, applies deterministic company-fit scoring, stores history/deduplicates in SQLite, and provides semantic document Q&A with multilingual FastEmbed embeddings and Qdrant. The API is containerized with Docker and covered by automated tests/CI.
+TenderLens AI is a Python tender-intelligence platform with authenticated Web accounts and shared organization workspaces. It monitors live EIS feeds, accepts tender PDFs through Telegram or FastAPI, extracts structured facts with GigaChat, applies deterministic company-fit scoring, isolates personal and organization tender/RAG data, supports owner/admin/member/viewer RBAC and invitation-based team onboarding, and provides semantic document Q&A with multilingual FastEmbed embeddings and Qdrant. The API is containerized with Docker and covered by automated tests/CI.
 
 ## What is technically strongest
 
@@ -41,7 +41,7 @@ For a single-node portfolio MVP it is reliable, transparent and dependency-light
 Strict structured schemas, JSON validation, bounded RAG context, page references, deterministic scoring outside the model, and explicit unknown values. These reduce risk; they do not make LLM output infallible.
 
 **What would you implement next for production?**  
-PostgreSQL + migrations, Qdrant server, proper auth/RBAC, rate limiting, observability, OCR, retention policies and more source adapters.
+PostgreSQL + migrations, Qdrant server, structured audit events, distributed/edge rate limiting, observability, public HTTPS hardening, OCR, retention policies and more source adapters.
 
 ## Claims to avoid
 

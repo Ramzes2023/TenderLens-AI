@@ -152,6 +152,8 @@ async def login_page(
         headers={
             "Cache-Control":
                 "no-store",
+            "Referrer-Policy":
+                "no-referrer",
         },
     )
 
@@ -186,6 +188,8 @@ async def register_page(
         headers={
             "Cache-Control":
                 "no-store",
+            "Referrer-Policy":
+                "no-referrer",
         },
     )
 
@@ -205,6 +209,8 @@ async def invitation_page(
         headers={
             "Cache-Control":
                 "no-store",
+            "Referrer-Policy":
+                "no-referrer",
         },
     )
 

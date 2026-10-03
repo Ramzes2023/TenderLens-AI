@@ -1,3 +1,18 @@
+## v1.6.0 release candidate preparation
+
+- [x] Phase 18A-F2 organization/RBAC feature work completed on the development branch.
+- [x] Source version and Compose target advanced from 1.5.0 to 1.6.0 without moving the existing v1.5.0 tag.
+- [x] Release-facing README, architecture, security, project and Dashboard documentation updated for Phase 18.
+- [x] Full v1.6.0 regression after invitation referrer hardening: 279 passed, 1 skipped, 38 subtests passed.
+- [x] Built isolated `tenderlens-ai:1.6.0-rc1`, verified embedded version 1.6.0, Docker health and component readiness.
+- [x] Passed isolated Docker session/organization/invitation/security smoke, including one-time acceptance, replay protection, SHA-256-at-rest token verification and no-referrer invitation/auth pages.
+- [x] Passed additive Phase 18 migration against a consistent snapshot of the current v1.5.0 production SQLite database: integrity OK, foreign-key check clean and all original v1.5.0 rows preserved.
+- [x] Verified existing Web account/session/Telegram link, AluTrade, active company, 40 monitoring dedup rows and monitoring subscription survive the v1.5.0 -> v1.6.0 migration; AluTrade is backfilled to the personal organization.
+- [ ] Push release-prep commit and open the Phase 18 pull request.
+- [ ] Require CI to pass before merge.
+- [ ] Create the v1.6.0 tag/GitHub Release only after explicit release approval.
+- [ ] Production deployment remains a separate explicit step.
+
 ## v1.5.0 released and deployed
 
 - [x] Added email/password Web account registration, login and logout.
@@ -87,7 +102,7 @@
 - [ ] OCR for scan-only PDFs.
 - [ ] PostgreSQL + schema migration tooling.
 - [ ] Qdrant server/Cloud for multi-process deployment.
-- [ ] Organizations, memberships, roles/permissions and distributed/edge rate limiting for public multi-tenant deployment.
+- [ ] Distributed/edge rate limiting, structured audit events and server-backed tenancy infrastructure for public multi-tenant deployment.
 - [ ] Metrics/tracing/centralized logs.
 - [ ] Additional source adapters: B2B-Center, РТС-тендер, Сбербанк-АСТ, Росатом.
 - [ ] Optional second LLM provider.
@@ -104,6 +119,73 @@
 - [x] Active-company deterministic scoring for PDF analysis.
 - [x] Company CRUD subset in protected FastAPI.
 - [x] Web authentication and account/session owner isolation (Phase 17).
-- [ ] Organization memberships and roles/permissions (Phase 18).
+- [x] Organization memberships and roles/permissions (Phase 18).
 - [ ] Supplier-intelligence sources for `buy` mode.
 - [ ] International tender source adapters.
+
+
+## Phase 18 - Multi-Tenant Security + Organizations + Roles (feature-complete; release preparation)
+
+### Phase 18A — Organization/membership foundation
+- [x] Additive SQLite organizations and organization_members, role enum/CHECK, FK/indexes.
+- [x] Atomic registration + personal organization + owner membership.
+- [x] Idempotent startup/backfill; unique personal_account_id prevents duplicates.
+- [x] Nullable company organization_id; only unambiguous authenticated owner mappings.
+- [x] Internal repository/service, explicit allowed-role authorization primitives.
+- [x] Last-owner preservation and concurrency tests on temporary SQLite databases.
+- [x] Legacy Telegram owners and v1.5.0 HTTP/session/API-key behavior remain compatible.
+- [ ] Later Phase 18: organization-scoped enforcement across endpoints/resources.
+- [x] Phase 18B: session-only Organization HTTP API.
+- [x] Phase 18B: transactional owner/admin RBAC for membership management.
+- [x] Phase 18B: legacy API key is not accepted as organization identity.
+- [x] Phase 18B: same-origin protection and cross-organization access tests.
+- [x] Phase 18C: organization-scoped shared company workspaces.
+- [x] Phase 18C: owner/admin/member/viewer company RBAC.
+- [x] Phase 18C: transactional company authorization and mutation.
+- [x] Phase 18C: reserved organization owner namespace isolated from legacy owner APIs.
+- [x] Phase 18C: legacy API-key path cannot expose shared organization companies.
+- [x] Phase 18D1: shared active company per organization.
+- [x] Phase 18D1: organization-wide active selection visible to all members.
+- [x] Phase 18D1: owner/admin/member activation; viewer read-only.
+- [x] Phase 18D1: cross-organization activation isolation and concurrency coverage.
+- [x] Phase 18D1: active-company replacement after deletion.
+- [x] Phase 18D2: organization-scoped deterministic scoring using the shared active company.
+- [x] Phase 18D2: organization-scoped on-demand EIS monitoring using the shared active company.
+- [x] Phase 18D2: organization/company-specific monitoring dedup namespace.
+- [x] Phase 18D2: transactional membership re-check before monitoring dedup persistence.
+- [x] Phase 18D2: organization monitoring state isolated from legacy owner/Telegram monitoring.
+- [x] Phase 18D2: session-only workflow identity and same-origin write protection.
+- [x] Phase 18E1: shared organization tender-history namespace in SQLite.
+- [x] Phase 18E1: organization tender read/write RBAC.
+- [x] Phase 18E1: reserved organization owner namespace centralized and blocked from legacy owner APIs.
+- [x] Phase 18E1: organization tender IDs and PDF hashes isolated across organizations.
+- [x] Phase 18E1: organization history separated from legacy personal/Telegram tender history.
+- [x] Phase 18E2: organization-scoped PDF upload and analysis.
+- [x] Phase 18E2: organization PDF duplicate detection isolated by organization namespace.
+- [x] Phase 18E2: shared active-company scoring for organization PDF analysis.
+- [x] Phase 18E2: organization semantic RAG using the reserved synthetic owner namespace.
+- [x] Phase 18E2: legacy, organization A and organization B RAG namespaces isolated for the same PDF hash.
+- [x] Phase 18E2: membership re-checks around long-running PDF/RAG workflows.
+- [x] Phase 18E2: organization PDF/RAG endpoints remain session-only and cross-origin protected.
+- [x] Phase 18F1: organization invitation persistence and one-time token flow.
+- [x] Phase 18F1: invitation tokens SHA-256 hashed at rest.
+- [x] Phase 18F1: invite existing or not-yet-registered users by email.
+- [x] Phase 18F1: owner/admin invitation management with admin/member/viewer target roles.
+- [x] Phase 18F1: atomic invitation acceptance and replay/concurrency protection.
+- [x] Phase 18F1: email-bound acceptance, revocation and expiration handling.
+- [x] Phase 18F1: session-only and same-origin protected invitation mutations.
+- [x] Phase 18F2: organization Dashboard selector and workspace UI.
+- [x] Phase 18F2: preserve personal v1.5 workspace and existing account data.
+- [x] Phase 18F2: shared organization companies and active-company switching.
+- [x] Phase 18F2: organization monitoring status and on-demand scan UI.
+- [x] Phase 18F2: organization tender-history UI.
+- [x] Phase 18F2: role-aware owner/admin/member/viewer Dashboard controls.
+- [x] Phase 18F2: member role management and removal UI.
+- [x] Phase 18F2: invitation creation, listing, revocation and copy-link UX.
+- [x] Phase 18F2: browser invitation preview/accept flow with safe auth return.
+- [x] Phase 18 release-candidate preparation started with the v1.6.0 source/documentation bump.
+- [ ] Later: background organization notifications.
+
+Not full multi-tenant security: existing endpoints still authorize owner_user_id.
+No billing, background organization notifications, public HTTPS deployment or production migration performed.
+See PHASE18A.md for migration and security boundaries.

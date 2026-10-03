@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .models import AuthAccount, AuthSession
+from app.organizations.migration import migrate, ensure_personal, backfill_companies
 
 WEB_OWNER_OFFSET = 4_000_000_000_000
 
@@ -76,6 +77,8 @@ class AuthRepository:
                         CREATE INDEX IF NOT EXISTS idx_auth_telegram_links_account
                         ON auth_telegram_links(account_id, expires_at);
                     """)
+                    conn.execute("BEGIN IMMEDIATE")
+                    migrate(conn)
         except (OSError, sqlite3.Error):
             raise AuthRepositoryError("Could not initialize authentication storage.") from None
 
@@ -88,6 +91,7 @@ class AuthRepository:
                     account_id = int(cursor.lastrowid)
                     owner_user_id = WEB_OWNER_OFFSET + account_id
                     conn.execute("UPDATE auth_accounts SET owner_user_id=? WHERE id=?", (owner_user_id, account_id))
+                    ensure_personal(conn, account_id)
                     row = conn.execute("SELECT * FROM auth_accounts WHERE id=?", (account_id,)).fetchone()
             if row is None:
                 raise AuthRepositoryError("Could not create account.")
@@ -312,6 +316,7 @@ class AuthRepository:
                     )
                     if cursor.rowcount != 1:
                         raise AuthRepositoryError("Account not found.")
+                    backfill_companies(conn, target_owner)
 
                     row = conn.execute(
                         "SELECT * FROM auth_accounts WHERE id=?",

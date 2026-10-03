@@ -75,11 +75,17 @@ docker compose logs -f bot
 
 Do not paste logs publicly if you have enabled additional verbose vendor diagnostics or added custom code that logs request data.
 
-## API key
+## Authentication and API key
 
-For anything beyond localhost demo use, set a strong `TENDERLENS_API_KEY` and send it as `X-API-Key` to `/api/v1/*`.
+Browser users authenticate with the HttpOnly Web session cookie.
 
-This is still not full production authentication. Public exposure also needs HTTPS, identity/authorization, rate limiting, monitoring and hardened secret management.
+Shared organization APIs require session identity plus organization membership
+and role authorization. `TENDERLENS_API_KEY` remains available only for
+supported legacy/personal integration paths and is not organization identity.
+
+The default deployment remains localhost-first. Public exposure additionally
+needs HTTPS/reverse-proxy hardening, distributed rate limiting, monitoring,
+structured audit logging, retention/backups and hardened secret management.
 
 ## Proxy note
 

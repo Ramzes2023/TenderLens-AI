@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from app.scoring.models import CompanyProfile
     from app.companies import CompanyService
     from app.auth import AuthService
+    from app.organizations import OrganizationService
 
 
 @dataclass
@@ -25,6 +26,7 @@ class ApiRuntime:
     company_profile: "CompanyProfile | Any | None" = None
     company_service: "CompanyService | Any | None" = None
     auth_service: "AuthService | Any | None" = None
+    organization_service: "OrganizationService | Any | None" = None
     tender_repository: "TenderRepository | Any | None" = None
     rag_service: "RagService | Any | None" = None
     monitoring_service: "TenderMonitorService | Any | None" = None
@@ -37,6 +39,7 @@ class ApiRuntime:
             "scoring": "ready" if (self.company_profile is not None or self.company_service is not None) else "unavailable",
             "companies": "ready" if self.company_service is not None else "unavailable",
             "auth": "ready" if self.auth_service is not None else "unavailable",
+            "organizations": "ready" if self.organization_service is not None else "unavailable",
             "rag": "ready" if self.rag_service is not None else "unavailable",
             "monitoring": "ready" if self.monitoring_service is not None else "unavailable",
         }
@@ -101,6 +104,22 @@ def build_runtime() -> ApiRuntime:
         runtime.auth_service = AuthService(auth_repository)
     except Exception:
         runtime.component_errors["auth"] = "Authentication unavailable"
+
+    try:
+        from app.organizations import OrganizationRepository, OrganizationService
+
+        if runtime.auth_service is None:
+            raise RuntimeError("Authentication unavailable")
+
+        organization_repository = OrganizationRepository(
+            runtime.auth_service.repository.path
+        )
+        organization_repository.initialize()
+        runtime.organization_service = OrganizationService(
+            organization_repository
+        )
+    except Exception:
+        runtime.component_errors["organizations"] = "Organizations unavailable"
 
     try:
         from app.rag import RagService, load_rag_settings

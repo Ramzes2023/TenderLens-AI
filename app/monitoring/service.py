@@ -116,17 +116,80 @@ class TenderMonitorService:
             )
         return self.source
 
-    async def fetch_matches(self, owner_user_id: int | None = None) -> list[MonitorMatch]:
-        profile = await self.profile_for_owner(owner_user_id)
+    async def fetch_matches_for_profile(
+        self,
+        profile: CompanyProfile | None,
+    ) -> list[MonitorMatch]:
         source = self._source_for_profile(profile)
         notices = await source.fetch(self.settings.max_items)
         result: list[MonitorMatch] = []
+
         for notice in notices:
-            match = prefilter_notice(notice, profile)
+            match = prefilter_notice(
+                notice,
+                profile,
+            )
             if match is not None:
                 result.append(match)
+
         return result
 
+    async def fetch_matches(
+        self,
+        owner_user_id: int | None = None,
+    ) -> list[MonitorMatch]:
+        profile = await self.profile_for_owner(owner_user_id)
+        return await self.fetch_matches_for_profile(profile)
+
+    async def claim_new_for_organization(
+        self,
+        *,
+        account_id: int,
+        organization_id: int,
+        owner_user_id: int,
+        company_scope: str,
+        matches: list[MonitorMatch],
+    ) -> list[MonitorMatch]:
+        new: list[MonitorMatch] = []
+
+        for match in matches:
+            notice = match.notice
+            dedup_source = (
+                f"{notice.source}:company:{company_scope}"
+            )
+
+            first = await asyncio.to_thread(
+                self.repository.mark_seen_for_organization,
+                account_id=account_id,
+                organization_id=organization_id,
+                owner_user_id=owner_user_id,
+                source=dedup_source,
+                external_id=notice.external_id,
+            )
+
+            if first:
+                new.append(match)
+
+        return new
+
+    async def scan_new_for_organization(
+        self,
+        *,
+        account_id: int,
+        organization_id: int,
+        owner_user_id: int,
+        profile: CompanyProfile,
+        company_scope: str,
+    ) -> list[MonitorMatch]:
+        matches = await self.fetch_matches_for_profile(profile)
+
+        return await self.claim_new_for_organization(
+            account_id=account_id,
+            organization_id=organization_id,
+            owner_user_id=owner_user_id,
+            company_scope=company_scope,
+            matches=matches,
+        )
 
     async def dedup_source(self, owner_user_id: int, source: str) -> str:
         if self.scope_resolver is None:

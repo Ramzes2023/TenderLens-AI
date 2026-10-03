@@ -34,7 +34,7 @@ TenderLens AI v1.6.0 extends the authenticated single-node platform with shared 
 4. **Unknown data is not silently converted into a negative score.** Missing fields are tracked as completeness gaps.
 5. **Tenancy is explicit.** Personal/Telegram compatibility remains owner-scoped, while shared organization resources require membership and are isolated by organization namespace.
 6. **Secrets are runtime configuration.** `.env` and local data are ignored by Git and excluded from Docker build context.
-7. **Portfolio claims match implementation.** OCR, multi-replica production storage, full authentication and automatic bid submission are not claimed.
+7. **Portfolio claims match implementation.** OCR, multi-replica public production readiness and automatic bid submission are not claimed.
 
 ## Verified end-to-end scenarios
 

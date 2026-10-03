@@ -1,102 +1,89 @@
 # TenderLens AI — 5–10 minute demo
 
-This script is designed for a portfolio interview or screen-share demo.
+A prepared portfolio walkthrough, not a claim of a hosted public SaaS.
+Use synthetic documents and separate demo accounts; never demonstrate with customer secrets.
 
-## 1. Show automated quality checks
+## Prepare before the timer starts
 
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q
-```
+- Follow the [fresh-checkout quick start](../README.md#quick-start). Start the API service first.
+- Check `/health`. Configure GigaChat credentials and quota, the trusted CA bundle,
+  and the embedding model cache using the [deployment guide](DEPLOYMENT.md).
+  Downloading models is not part of the timed demo.
+- Prepare `examples/sample_tender.pdf`, a company profile, and two demo accounts.
+- Configure a working EIS feed if demonstrating live discovery. An empty feed is a valid result.
+- Run the test suite beforehand and show its real output or the latest CI run.
+- If using Telegram, start only one polling process per token. Do not start a local
+  bot while its Docker counterpart is running. API and bot have separate local RAG indexes.
 
-Explain: tests cover configuration, Telegram routing, PDF limits, LLM boundaries, scoring, database/dedup, RAG, monitoring, API and deployment assets without calling live external APIs.
+## Minutes 0–1: identity and personal workspace
 
-## 2. Start the containerized API
+Open `/dashboard`, register or sign in, and show the Personal workspace.
+Explain that the session identifies the account: the browser does not ask for an
+API key or an arbitrary owner ID. Personal company/history data stays separate
+from shared organization data.
 
-```powershell
-docker compose up -d
-docker compose ps
-curl.exe http://127.0.0.1:8000/health
-```
+## Minutes 1–3: a team workspace
 
-Expected: container status `healthy` and `status: ok`. On a fresh Docker volume, if RAG reports unavailable, initialize the model cache once:
+Create/select a shared organization and add a synthetic company profile.
+As owner/admin, create an invitation for the second account's email with viewer role.
+Open that invitation in a separate browser profile, sign in as that account and accept.
 
-```powershell
-docker compose exec -e OUTBOUND_PROXY_URL= api python -m app.rag.health
-docker compose restart api
-```
+Show the viewer's read-only controls. Explain that backend membership/role checks,
+not hidden buttons, enforce permissions. Invitations are email-bound, expire,
+can be revoked and are accepted atomically; this is not a claim of email verification.
+Do not show or publish live invitation URLs in a recorded demo.
 
-Then run the smoke checker:
+## Minutes 3–5: facts and an explainable score
 
-```powershell
-.\.venv\Scripts\python.exe scripts\smoke_api.py
-```
+In the owner browser session, open `/docs` on the same origin as the Dashboard.
+Use the current OpenAPI request schema for:
 
-## 3. Open Swagger
+- `POST /api/v1/organizations/{id}/analysis/pdf`
+- the selected organization's company/profile context.
 
-Open `http://127.0.0.1:8000/docs`.
+Upload `examples/sample_tender.pdf` using the organization ID returned by the API
+or selected in the Dashboard. Inspect the extracted facts and deterministic score
+separately. Submit the same file in the same context to demonstrate deduplication.
 
-Show:
+The Dashboard provides workspace/history operations; this step demonstrates the
+backend analysis API, not a Dashboard PDF-upload screen. Organization APIs require
+an authenticated session, not the legacy API key.
 
-- `/health`
-- `/api/v1/tenders`
-- `/api/v1/analysis/pdf`
-- `/api/v1/scoring/evaluate`
-- `/api/v1/rag/ask`
-- monitoring endpoints
+Alternative: send the PDF to the configured Telegram bot to demonstrate the personal
+workflow. Telegram linking does not turn that workflow into a shared organization.
 
-Explain that the HTTP transport calls the same domain services as Telegram rather than reimplementing logic.
+## Minutes 5–7: grounded questions
 
-## 4. Show the Telegram document workflow
+Through the same API transport and organization context, use
+`POST /api/v1/organizations/{id}/rag/ask`. Supply the document identifier and fields
+required by the current OpenAPI schema. Ask a question such as:
 
-Run the bot locally if it is not already running:
+> Что произойдет, если поставщик задержит доставку?
 
-```powershell
-.\.venv\Scripts\python.exe -m app.bot
-```
+Compare the answer and cited pages with the actual PDF. Missing evidence should
+be acknowledged, not presented as fact. The question is useful even if the document
+contains no answer.
 
-Send `examples/sample_tender.pdf` to the bot.
+For the Telegram alternative, use `/ask` after uploading the PDF through that bot.
+Do not assume that an API-indexed document is also indexed by the bot.
 
-Point out the pipeline:
+## Minutes 7–9: discovery and permissions
 
-1. local PDF parsing;
-2. strict structured AI extraction;
-3. deterministic profile fit score;
-4. SQLite persistence and SHA-256 dedup;
-5. RAG index creation.
+Run an on-demand scan in the selected Dashboard workspace. Show actual results,
+including an empty result or a source error if that is what happened. EIS RSS is a
+discovery/pre-filter layer, not full tender-document analysis.
 
-Send the same PDF again and show that exact duplicate analysis is reused instead of spending another full LLM request.
+Compare the viewer workspace again: permitted reads remain available, mutations
+are denied by the backend. Explain that organization monitoring is on-demand;
+background organization notifications remain future work.
 
-## 5. Demonstrate semantic RAG
+## Minute 10: explain the trade-offs
 
-Ask a paraphrased question rather than copying the PDF wording:
+- LLM extraction, deterministic scoring and human decisions have separate roles.
+- Retrieval is scoped by personal/organization namespace and document hash.
+- SQLite and Qdrant local keep the MVP inspectable but constrain multi-process scale.
+- Live model requests consume provider quota; mocks make tests independent of it.
 
-```text
-/ask Что произойдет, если поставщик задержит доставку?
-```
-
-Explain: the multilingual embedding model retrieves semantically related chunks from Qdrant, and the answer cites the retrieved page.
-
-## 6. Demonstrate live EIS monitoring
-
-```text
-/monitor_status
-/tenders
-```
-
-If `MONITORING_ENABLED=true`:
-
-```text
-/monitor_on
-```
-
-Explain that RSS is intentionally only a discovery/pre-filter layer. A discovered notice is not treated as authoritative full tender analysis until documents are processed.
-
-## 7. Close with engineering trade-offs
-
-Mention three choices:
-
-- **Deterministic scoring outside the LLM** for reproducibility.
-- **Owner/document filters in RAG** to avoid cross-document retrieval.
-- **Single-node SQLite/Qdrant local deployment** for a reliable portfolio MVP; production scale would move both to server-backed services.
-
-Then show `SECURITY.md` and the CI workflow to demonstrate that limitations and operational risks are documented rather than hidden.
+Close with [security limits](../SECURITY.md), [architecture](../ARCHITECTURE.md)
+and [interview notes](PORTFOLIO.md). Public hosting, HTTPS hardening, server-backed
+storage and operational controls are next steps, not current production claims.

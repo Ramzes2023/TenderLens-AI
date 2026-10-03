@@ -55,3 +55,57 @@ Do not describe the current version as:
 - a crawler for every Russian tender platform.
 
 The implemented feature set is already strong without overstating it.
+
+
+## Two-minute technical walkthrough
+
+Start at the Dashboard: a session identifies the account; membership and explicit
+roles select the shared workspace. Company context is resolved on the backend,
+not trusted from a browser-supplied owner ID. Legacy Telegram owners remain a
+separate compatibility path.
+
+Follow one PDF: bounded extraction feeds a provider-independent generation call;
+a strict schema validates its JSON. Python scoring compares extracted facts with
+the active company profile, keeping completeness separate from fit. SQLite keeps
+structured results and the hash. Page-aware chunks are embedded locally and stored
+in Qdrant; retrieval applies namespace/document filters before the LLM answers.
+
+Then follow an invitation: its raw random token is shown once, a digest is persisted,
+acceptance checks the account email and consumes it atomically. Explain why a UI
+button is not authorization and why shared API keys are not tenant identities.
+
+Close with the deployment boundary: Compose provides one API and one bot, not a
+horizontal cluster. Each owns its local Qdrant index. A shared vector server and
+PostgreSQL/migration tooling are prerequisites for the next scale step.
+
+## Hard problems and trade-offs
+
+| Problem | Current choice | Trade-off |
+|---|---|---|
+| Team isolation without breaking Telegram | Separate organization namespace and session-only organization APIs | Compatibility paths need explicit regression tests. |
+| Replay and concurrent invitation acceptance | Expiry, SHA-256 digests and atomic consume | A raw unused invitation URL remains a secret. |
+| Web-to-Telegram linking | Guarded owner migration; reject unsafe PDF/RAG moves | Not every established account can be linked automatically. |
+| Local vector-store file locks | Separate API/bot Qdrant directories | Shared SQL history does not mean shared retrieval indexes. |
+| Uncertain document interpretation | Validation, unknown values, bounded context and human review | Correct JSON is not proof of factual accuracy. |
+| Affordable local setup | SQLite + Qdrant local + CPU embeddings | Single-node operation and model-download/setup costs. |
+
+## More interview questions
+
+**Does a viewer-only button state protect data?** No. Backend membership and role
+checks are authoritative; the UI merely reflects them.
+
+**Can an integration API key access every organization?** Organization APIs require
+a Web session and membership. Legacy keys support personal/integration compatibility,
+not organization identity.
+
+**Are team notifications running in the background?** Organization scans are on-demand.
+Background organization notifications remain backlog; personal Telegram subscriptions exist.
+
+**What would a public launch require first?** A VPS/domain, HTTPS and trusted proxy
+configuration; PostgreSQL with migrations and Qdrant server; edge/shared throttling,
+structured audit events, monitoring, backup/restore drills, retention and secret rotation.
+These are planned requirements, not completed production capabilities.
+
+Present this as a working engineering portfolio project. Describe your actual role
+and AI-assisted development honestly; do not claim customers or employment experience
+that this repository cannot establish.

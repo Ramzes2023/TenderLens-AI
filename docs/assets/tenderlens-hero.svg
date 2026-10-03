@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+<title id="title">TenderLens AI — tender intelligence for teams</title>
+<desc id="desc">Conceptual workflow, not a screenshot: PDF documents and EIS feeds enter analysis, scoring, RAG and team workspaces. Version 1.6.0, localhost-first.</desc>
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#081426"/><stop offset="1" stop-color="#172c48"/></linearGradient></defs>
+<rect width="1280" height="640" rx="24" fill="url(#bg)"/>
+<g font-family="Segoe UI,Arial,sans-serif">
+<text x="64" y="76" fill="#8baeff" font-size="16" letter-spacing="3">DOCUMENT INTELLIGENCE / TEAM WORKSPACES</text>
+<text x="64" y="154" fill="#f4f7ff" font-size="62" font-weight="700">TenderLens AI</text>
+<text x="64" y="204" fill="#c0cde0" font-size="25">Discover opportunities. Understand conditions. Keep decisions human.</text>
+<rect x="1090" y="112" width="122" height="48" rx="24" fill="#294573"/>
+<text x="1112" y="144" fill="#dce8ff" font-size="23">v1.6.0</text>
+<g stroke="#45618b" stroke-width="2" fill="none"><path d="M314 344H398M314 448H398M398 344V448M398 396H464M790 396H856"/></g>
+<g fill="#13263f" stroke="#3b5478"><rect x="64" y="298" width="250" height="92" rx="14"/><rect x="64" y="408" width="250" height="92" rx="14"/><rect x="464" y="298" width="326" height="202" rx="18"/><rect x="856" y="298" width="356" height="202" rx="18"/></g>
+<g fill="#f1f5ff" font-size="25" font-weight="600"><text x="88" y="336">Tender PDFs</text><text x="88" y="446">EIS feeds</text><text x="490" y="339">Analysis + context</text><text x="884" y="339">Explainable outputs</text></g>
+<g fill="#b4c5dc" font-size="20"><text x="88" y="366">Bounded text extraction</text><text x="88" y="476">Discovery, not final truth</text><text x="490" y="382">Structured LLM facts</text><text x="490" y="422">Organization + company</text><text x="490" y="462">Role-based team workspaces</text><text x="884" y="382">Deterministic company fit</text><text x="884" y="422">Scoped RAG + source pages</text><text x="884" y="462">History + monitoring</text></g>
+<path d="M64 544H1212" stroke="#3b5478"/>
+<text x="64" y="590" fill="#8baeff" font-size="18">PYTHON · FASTAPI · TELEGRAM · SQLITE · QDRANT · DOCKER</text>
+<text x="955" y="590" fill="#b4c5dc" font-size="18">Single-node / localhost-first</text>
+</g></svg>

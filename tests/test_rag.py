@@ -197,6 +197,206 @@ class RagServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("semantic search", provider.prompts[0])
             self.assertIn("стр. 2", provider.prompts[0])
 
+    async def test_organization_namespace_isolated_from_legacy_owner(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = RagService(
+                self.settings(directory),
+                embedder=FakeSemanticEmbedder(),
+            )
+
+            digest = "e" * 64
+
+            legacy_summary = PdfSummary(
+                "ok",
+                1,
+                40,
+                0,
+                "???? ???????? legacy 10 ????.",
+                ("???? ???????? legacy 10 ????.",),
+            )
+
+            organization_summary = PdfSummary(
+                "ok",
+                1,
+                50,
+                0,
+                "???? ???????? organization 20 ????.",
+                ("???? ???????? organization 20 ????.",),
+            )
+
+            service.index_pdf(
+                42,
+                digest,
+                legacy_summary,
+            )
+
+            service.index_pdf_for_organization(
+                42,
+                digest,
+                organization_summary,
+            )
+
+            self.assertTrue(
+                service.has_document(
+                    42,
+                    digest,
+                )
+            )
+
+            self.assertTrue(
+                service.has_document_for_organization(
+                    42,
+                    digest,
+                )
+            )
+
+            self.assertFalse(
+                service.has_document_for_organization(
+                    43,
+                    digest,
+                )
+            )
+
+            legacy = service.retrieve(
+                42,
+                digest,
+                "????? ???? ?????????",
+            )
+
+            organization = service.retrieve_for_organization(
+                42,
+                digest,
+                "????? ???? ?????????",
+            )
+
+            self.assertTrue(legacy)
+            self.assertTrue(organization)
+
+            self.assertIn(
+                "legacy 10",
+                legacy[0].text,
+            )
+
+            self.assertIn(
+                "organization 20",
+                organization[0].text,
+            )
+
+    async def test_same_hash_isolated_across_legacy_and_two_organizations(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = RagService(
+                self.settings(directory),
+                embedder=FakeSemanticEmbedder(),
+            )
+
+            digest = "f" * 64
+
+            legacy_summary = PdfSummary(
+                "ok",
+                1,
+                30,
+                0,
+                "???? legacy 11 ????.",
+                ("???? legacy 11 ????.",),
+            )
+
+            organization_a_summary = PdfSummary(
+                "ok",
+                1,
+                30,
+                0,
+                "???? organization A 22 ???.",
+                ("???? organization A 22 ???.",),
+            )
+
+            organization_b_summary = PdfSummary(
+                "ok",
+                1,
+                30,
+                0,
+                "???? organization B 33 ???.",
+                ("???? organization B 33 ???.",),
+            )
+
+            service.index_pdf(
+                42,
+                digest,
+                legacy_summary,
+            )
+
+            service.index_pdf_for_organization(
+                42,
+                digest,
+                organization_a_summary,
+            )
+
+            service.index_pdf_for_organization(
+                43,
+                digest,
+                organization_b_summary,
+            )
+
+            legacy = service.retrieve(
+                42,
+                digest,
+                "????? ?????",
+            )
+
+            organization_a = (
+                service.retrieve_for_organization(
+                    42,
+                    digest,
+                    "????? ?????",
+                )
+            )
+
+            organization_b = (
+                service.retrieve_for_organization(
+                    43,
+                    digest,
+                    "????? ?????",
+                )
+            )
+
+            self.assertTrue(legacy)
+            self.assertTrue(organization_a)
+            self.assertTrue(organization_b)
+
+            self.assertIn(
+                "legacy 11",
+                legacy[0].text,
+            )
+
+            self.assertIn(
+                "organization A 22",
+                organization_a[0].text,
+            )
+
+            self.assertIn(
+                "organization B 33",
+                organization_b[0].text,
+            )
+
+            self.assertNotIn(
+                "organization",
+                legacy[0].text,
+            )
+
+            self.assertNotIn(
+                "legacy",
+                organization_a[0].text,
+            )
+
+            self.assertNotIn(
+                "organization B",
+                organization_a[0].text,
+            )
+
+            self.assertNotIn(
+                "organization A",
+                organization_b[0].text,
+            )
+
     async def test_fallback_to_full_text_when_page_texts_missing(self):
         with tempfile.TemporaryDirectory() as directory:
             service = RagService(self.settings(directory), embedder=FakeSemanticEmbedder())

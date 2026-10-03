@@ -145,8 +145,15 @@
 - [x] Phase 18E1: reserved organization owner namespace centralized and blocked from legacy owner APIs.
 - [x] Phase 18E1: organization tender IDs and PDF hashes isolated across organizations.
 - [x] Phase 18E1: organization history separated from legacy personal/Telegram tender history.
-- [ ] Next Phase 18E2: organization PDF analysis and Qdrant/RAG namespace.
-- [ ] Later: invitations, background organization notifications, organization UI and release preparation.
+- [x] Phase 18E2: organization-scoped PDF upload and analysis.
+- [x] Phase 18E2: organization PDF duplicate detection isolated by organization namespace.
+- [x] Phase 18E2: shared active-company scoring for organization PDF analysis.
+- [x] Phase 18E2: organization semantic RAG using the reserved synthetic owner namespace.
+- [x] Phase 18E2: legacy, organization A and organization B RAG namespaces isolated for the same PDF hash.
+- [x] Phase 18E2: membership re-checks around long-running PDF/RAG workflows.
+- [x] Phase 18E2: organization PDF/RAG endpoints remain session-only and cross-origin protected.
+- [ ] Next: invitations and organization UI / release preparation.
+- [ ] Later: background organization notifications.
 
 Not full multi-tenant security: existing endpoints still authorize owner_user_id.
 No billing, invitations, Dashboard redesign, release bump or production migration performed.

@@ -6,6 +6,7 @@ import asyncio
 from app.llm.base import LLMProvider
 from app.llm.config import load_settings as load_llm_settings
 from app.parsers.pdf import PdfSummary
+from app.tenancy import organization_owner_id
 
 from .chunking import chunk_pages
 from .config import RagSettings
@@ -48,6 +49,54 @@ class RagService:
 
     def has_document(self, owner_user_id: int, pdf_sha256: str) -> bool:
         return self.store.has_document(owner_user_id, pdf_sha256)
+
+    def has_document_for_organization(
+        self,
+        organization_id: int,
+        pdf_sha256: str,
+    ) -> bool:
+        return self.has_document(
+            organization_owner_id(organization_id),
+            pdf_sha256,
+        )
+
+    def index_pdf_for_organization(
+        self,
+        organization_id: int,
+        pdf_sha256: str,
+        summary: PdfSummary,
+    ) -> int:
+        return self.index_pdf(
+            organization_owner_id(organization_id),
+            pdf_sha256,
+            summary,
+        )
+
+    def retrieve_for_organization(
+        self,
+        organization_id: int,
+        pdf_sha256: str,
+        question: str,
+    ) -> list[RetrievedChunk]:
+        return self.retrieve(
+            organization_owner_id(organization_id),
+            pdf_sha256,
+            question,
+        )
+
+    async def answer_for_organization(
+        self,
+        organization_id: int,
+        pdf_sha256: str,
+        question: str,
+        provider: LLMProvider,
+    ) -> RagAnswer:
+        return await self.answer(
+            organization_owner_id(organization_id),
+            pdf_sha256,
+            question,
+            provider,
+        )
 
     def index_pdf(self, owner_user_id: int, pdf_sha256: str, summary: PdfSummary) -> int:
         page_texts = tuple(summary.page_texts or ())

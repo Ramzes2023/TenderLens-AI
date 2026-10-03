@@ -104,6 +104,10 @@ class CompanyRepository:
     def _reserved_organization_owner(owner_user_id: int) -> bool:
         return int(owner_user_id) >= ORGANIZATION_OWNER_OFFSET
 
+    @staticmethod
+    def _organization_owner_id(organization_id: int) -> int:
+        return ORGANIZATION_OWNER_OFFSET + int(organization_id)
+
     def _active_id(self, conn: sqlite3.Connection, owner_user_id: int) -> int | None:
         row = conn.execute(
             "SELECT company_id FROM company_active WHERE owner_user_id=?",
@@ -356,6 +360,10 @@ class CompanyRepository:
                     account_id,
                     organization_id,
                 )
+                active_id = self._active_id(
+                    conn,
+                    self._organization_owner_id(organization_id),
+                )
                 rows = conn.execute(
                     """SELECT *
                        FROM company_workspaces
@@ -364,10 +372,8 @@ class CompanyRepository:
                     (int(organization_id),),
                 ).fetchall()
 
-            # Organization-active selection is intentionally not introduced
-            # in this checkpoint, so shared rows are returned inactive.
             return [
-                self._workspace(row, None)
+                self._workspace(row, active_id)
                 for row in rows
             ]
         except CompanyAuthorizationError:
@@ -390,6 +396,10 @@ class CompanyRepository:
                     account_id,
                     organization_id,
                 )
+                active_id = self._active_id(
+                    conn,
+                    self._organization_owner_id(organization_id),
+                )
                 row = conn.execute(
                     """SELECT *
                        FROM company_workspaces
@@ -401,7 +411,7 @@ class CompanyRepository:
                 ).fetchone()
 
             return (
-                self._workspace(row, None)
+                self._workspace(row, active_id)
                 if row is not None
                 else None
             )
@@ -440,6 +450,10 @@ class CompanyRepository:
                         {"owner", "admin", "member"},
                     )
 
+                    organization_owner_id = self._organization_owner_id(
+                        organization_id
+                    )
+
                     cursor = conn.execute(
                         """INSERT INTO company_workspaces(
                             owner_user_id,
@@ -450,7 +464,7 @@ class CompanyRepository:
                             updated_at
                         ) VALUES (?, ?, ?, ?, ?, ?)""",
                         (
-                            ORGANIZATION_OWNER_OFFSET + int(organization_id),
+                            organization_owner_id,
                             int(organization_id),
                             clean_name,
                             profile.model_dump_json(),
@@ -460,6 +474,26 @@ class CompanyRepository:
                     )
 
                     company_id = int(cursor.lastrowid)
+
+                    active_id = self._active_id(
+                        conn,
+                        organization_owner_id,
+                    )
+
+                    if active_id is None:
+                        conn.execute(
+                            """INSERT INTO company_active(
+                                owner_user_id,
+                                company_id,
+                                updated_at
+                            ) VALUES (?, ?, ?)""",
+                            (
+                                organization_owner_id,
+                                company_id,
+                                timestamp,
+                            ),
+                        )
+                        active_id = company_id
 
                     row = conn.execute(
                         """SELECT *
@@ -476,7 +510,7 @@ class CompanyRepository:
                     "Could not save company profile."
                 )
 
-            return self._workspace(row, None)
+            return self._workspace(row, active_id)
 
         except CompanyAuthorizationError:
             raise
@@ -484,6 +518,121 @@ class CompanyRepository:
             raise CompanyRepositoryError(
                 "Company with this name already exists in the organization."
             ) from None
+        except sqlite3.Error:
+            raise CompanyRepositoryError(
+                "Company storage is unavailable."
+            ) from None
+
+    def active_for_organization(
+        self,
+        account_id: int,
+        organization_id: int,
+    ) -> CompanyWorkspace | None:
+        try:
+            with closing(self._connect()) as conn:
+                self._require_org_role(
+                    conn,
+                    account_id,
+                    organization_id,
+                )
+
+                active_id = self._active_id(
+                    conn,
+                    self._organization_owner_id(organization_id),
+                )
+
+                if active_id is None:
+                    return None
+
+                row = conn.execute(
+                    """SELECT *
+                       FROM company_workspaces
+                       WHERE organization_id=? AND id=?""",
+                    (
+                        int(organization_id),
+                        active_id,
+                    ),
+                ).fetchone()
+
+            return (
+                self._workspace(row, active_id)
+                if row is not None
+                else None
+            )
+
+        except CompanyAuthorizationError:
+            raise
+        except sqlite3.Error:
+            raise CompanyRepositoryError(
+                "Company storage is unavailable."
+            ) from None
+
+    def set_active_for_organization(
+        self,
+        *,
+        account_id: int,
+        organization_id: int,
+        company_id: int,
+    ) -> CompanyWorkspace:
+        timestamp = self._now()
+
+        try:
+            with closing(self._connect()) as conn:
+                with conn:
+                    conn.execute("BEGIN IMMEDIATE")
+
+                    self._require_org_role(
+                        conn,
+                        account_id,
+                        organization_id,
+                        {"owner", "admin", "member"},
+                    )
+
+                    row = conn.execute(
+                        """SELECT *
+                           FROM company_workspaces
+                           WHERE organization_id=? AND id=?""",
+                        (
+                            int(organization_id),
+                            int(company_id),
+                        ),
+                    ).fetchone()
+
+                    if row is None:
+                        raise CompanyNotFoundError(
+                            "Company not found."
+                        )
+
+                    organization_owner_id = self._organization_owner_id(
+                        organization_id
+                    )
+
+                    conn.execute(
+                        """INSERT INTO company_active(
+                            owner_user_id,
+                            company_id,
+                            updated_at
+                        ) VALUES (?, ?, ?)
+                        ON CONFLICT(owner_user_id) DO UPDATE SET
+                            company_id=excluded.company_id,
+                            updated_at=excluded.updated_at""",
+                        (
+                            organization_owner_id,
+                            int(company_id),
+                            timestamp,
+                        ),
+                    )
+
+            return self._workspace(
+                row,
+                int(company_id),
+            )
+
+        except (
+            CompanyAuthorizationError,
+            CompanyNotFoundError,
+        ):
+            raise
         except sqlite3.Error:
             raise CompanyRepositoryError(
                 "Company storage is unavailable."
@@ -601,6 +750,14 @@ class CompanyRepository:
                         {"owner", "admin"},
                     )
 
+                    organization_owner_id = self._organization_owner_id(
+                        organization_id
+                    )
+                    active_id = self._active_id(
+                        conn,
+                        organization_owner_id,
+                    )
+
                     cursor = conn.execute(
                         """DELETE FROM company_workspaces
                            WHERE organization_id=? AND id=?""",
@@ -614,6 +771,39 @@ class CompanyRepository:
                         raise CompanyNotFoundError(
                             "Company not found."
                         )
+
+                    if active_id == int(company_id):
+                        replacement = conn.execute(
+                            """SELECT id
+                               FROM company_workspaces
+                               WHERE organization_id=?
+                               ORDER BY updated_at DESC, id DESC
+                               LIMIT 1""",
+                            (int(organization_id),),
+                        ).fetchone()
+
+                        if replacement is not None:
+                            conn.execute(
+                                """INSERT INTO company_active(
+                                    owner_user_id,
+                                    company_id,
+                                    updated_at
+                                ) VALUES (?, ?, ?)
+                                ON CONFLICT(owner_user_id) DO UPDATE SET
+                                    company_id=excluded.company_id,
+                                    updated_at=excluded.updated_at""",
+                                (
+                                    organization_owner_id,
+                                    int(replacement["id"]),
+                                    self._now(),
+                                ),
+                            )
+                        else:
+                            conn.execute(
+                                """DELETE FROM company_active
+                                   WHERE owner_user_id=?""",
+                                (organization_owner_id,),
+                            )
 
         except (
             CompanyAuthorizationError,

@@ -80,6 +80,28 @@ class CompanyService:
             profile=profile,
         )
 
+    def active_for_organization(
+        self,
+        account_id: int,
+        organization_id: int,
+    ) -> CompanyWorkspace | None:
+        return self.repository.active_for_organization(
+            account_id,
+            organization_id,
+        )
+
+    def set_active_for_organization(
+        self,
+        account_id: int,
+        organization_id: int,
+        company_id: int,
+    ) -> CompanyWorkspace:
+        return self.repository.set_active_for_organization(
+            account_id=account_id,
+            organization_id=organization_id,
+            company_id=company_id,
+        )
+
     def update_for_organization(
         self,
         account_id: int,

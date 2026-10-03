@@ -129,7 +129,12 @@
 - [x] Phase 18C: transactional company authorization and mutation.
 - [x] Phase 18C: reserved organization owner namespace isolated from legacy owner APIs.
 - [x] Phase 18C: legacy API-key path cannot expose shared organization companies.
-- [ ] Next: organization active-company context and scoring/monitoring integration.
+- [x] Phase 18D1: shared active company per organization.
+- [x] Phase 18D1: organization-wide active selection visible to all members.
+- [x] Phase 18D1: owner/admin/member activation; viewer read-only.
+- [x] Phase 18D1: cross-organization activation isolation and concurrency coverage.
+- [x] Phase 18D1: active-company replacement after deletion.
+- [ ] Next Phase 18D2: organization scoring and monitoring context.
 - [ ] Later: tender/RAG organization scope, invitations, organization UI and release preparation.
 
 Not full multi-tenant security: existing endpoints still authorize owner_user_id.

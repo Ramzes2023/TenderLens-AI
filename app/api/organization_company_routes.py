@@ -42,6 +42,7 @@ class OrganizationCompanyResponse(BaseModel):
     organization_id: int
     name: str
     profile: CompanyProfile
+    is_active: bool
     created_at: str
     updated_at: str
 
@@ -82,6 +83,7 @@ def _response(workspace):
         organization_id=workspace.organization_id,
         name=workspace.name,
         profile=workspace.profile,
+        is_active=workspace.is_active,
         created_at=workspace.created_at,
         updated_at=workspace.updated_at,
     )
@@ -172,6 +174,36 @@ async def create_company(
 
 
 @router.get(
+    "/active",
+    response_model=OrganizationCompanyResponse | None,
+)
+async def active_company(
+    organization_id: int,
+    request: Request,
+    response: Response,
+):
+    account = await _account(request)
+    service = _service(request)
+
+    try:
+        company = await asyncio.to_thread(
+            service.active_for_organization,
+            account.id,
+            organization_id,
+        )
+    except CompanyRepositoryError as error:
+        _company_error(error)
+
+    response.headers["Cache-Control"] = "no-store"
+
+    return (
+        _response(company)
+        if company is not None
+        else None
+    )
+
+
+@router.get(
     "/{company_id}",
     response_model=OrganizationCompanyResponse,
 )
@@ -205,6 +237,35 @@ async def get_company(
             status.HTTP_404_NOT_FOUND,
             "Company not found.",
         )
+
+    response.headers["Cache-Control"] = "no-store"
+    return _response(company)
+
+
+@router.post(
+    "/{company_id}/activate",
+    response_model=OrganizationCompanyResponse,
+)
+async def activate_company(
+    organization_id: int,
+    company_id: int,
+    request: Request,
+    response: Response,
+):
+    require_same_origin_browser_request(request)
+
+    account = await _account(request)
+    service = _service(request)
+
+    try:
+        company = await asyncio.to_thread(
+            service.set_active_for_organization,
+            account.id,
+            organization_id,
+            company_id,
+        )
+    except CompanyRepositoryError as error:
+        _company_error(error)
 
     response.headers["Cache-Control"] = "no-store"
     return _response(company)

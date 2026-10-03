@@ -232,6 +232,265 @@ class OrganizationCompanyApiTests(unittest.TestCase):
             "Updated Member Company",
         )
 
+    def test_active_company_is_shared_across_members(self):
+        self.as_account(self.owner)
+
+        first = self.client.post(
+            self.url(),
+            json={
+                "name": "First Active",
+                "profile": self.profile(
+                    "First Active",
+                    "first",
+                ),
+            },
+        )
+        self.assertEqual(first.status_code, 201, first.text)
+        first_id = first.json()["id"]
+        self.assertTrue(first.json()["is_active"])
+
+        second = self.client.post(
+            self.url(),
+            json={
+                "name": "Second Company",
+                "profile": self.profile(
+                    "Second Company",
+                    "second",
+                ),
+            },
+        )
+        self.assertEqual(second.status_code, 201, second.text)
+        second_id = second.json()["id"]
+        self.assertFalse(second.json()["is_active"])
+
+        self.as_account(self.member)
+
+        active = self.client.get(
+            self.url("/active")
+        )
+        self.assertEqual(active.status_code, 200)
+        self.assertEqual(
+            active.json()["id"],
+            first_id,
+        )
+
+        switched = self.client.post(
+            self.url(f"/{second_id}/activate")
+        )
+        self.assertEqual(
+            switched.status_code,
+            200,
+            switched.text,
+        )
+        self.assertTrue(
+            switched.json()["is_active"]
+        )
+
+        self.as_account(self.owner)
+
+        active = self.client.get(
+            self.url("/active")
+        )
+        self.assertEqual(
+            active.json()["id"],
+            second_id,
+        )
+
+        listed = self.client.get(self.url())
+        states = {
+            item["id"]: item["is_active"]
+            for item in listed.json()
+        }
+        self.assertFalse(states[first_id])
+        self.assertTrue(states[second_id])
+
+    def test_viewer_can_read_active_but_cannot_activate(self):
+        self.as_account(self.owner)
+
+        first = self.client.post(
+            self.url(),
+            json={
+                "name": "Viewer Active",
+                "profile": self.profile(
+                    "Viewer Active",
+                    "viewer-active",
+                ),
+            },
+        )
+        self.assertEqual(first.status_code, 201)
+        company_id = first.json()["id"]
+
+        self.as_account(self.viewer)
+
+        active = self.client.get(
+            self.url("/active")
+        )
+        self.assertEqual(active.status_code, 200)
+        self.assertEqual(
+            active.json()["id"],
+            company_id,
+        )
+
+        denied = self.client.post(
+            self.url(f"/{company_id}/activate")
+        )
+        self.assertEqual(
+            denied.status_code,
+            403,
+        )
+
+    def test_delete_active_selects_remaining_shared_company(self):
+        self.as_account(self.owner)
+
+        first = self.client.post(
+            self.url(),
+            json={
+                "name": "Delete Active One",
+                "profile": self.profile(
+                    "Delete Active One",
+                    "delete-one",
+                ),
+            },
+        )
+        second = self.client.post(
+            self.url(),
+            json={
+                "name": "Delete Active Two",
+                "profile": self.profile(
+                    "Delete Active Two",
+                    "delete-two",
+                ),
+            },
+        )
+
+        first_id = first.json()["id"]
+        second_id = second.json()["id"]
+
+        switched = self.client.post(
+            self.url(f"/{second_id}/activate")
+        )
+        self.assertEqual(switched.status_code, 200)
+
+        self.as_account(self.admin)
+
+        deleted = self.client.delete(
+            self.url(f"/{second_id}")
+        )
+        self.assertEqual(deleted.status_code, 204)
+
+        active = self.client.get(
+            self.url("/active")
+        )
+        self.assertEqual(active.status_code, 200)
+        self.assertEqual(
+            active.json()["id"],
+            first_id,
+        )
+        self.assertTrue(
+            active.json()["is_active"]
+        )
+
+    def test_cannot_activate_company_from_another_organization(self):
+        second = self.org_repo.create(
+            "Foreign Active Organization",
+            self.outsider.id,
+        )
+
+        foreign = self.companies.create_for_organization(
+            self.outsider,
+            second.id,
+            "Foreign Active Company",
+            self._profile_model(
+                "Foreign Active Company",
+                "foreign-active",
+            ),
+        )
+
+        self.as_account(self.owner)
+
+        response = self.client.post(
+            self.url(f"/{foreign.id}/activate")
+        )
+
+        self.assertEqual(
+            response.status_code,
+            404,
+        )
+
+    def test_concurrent_activation_keeps_single_valid_active_company(self):
+        from concurrent.futures import ThreadPoolExecutor
+
+        first = self.companies.create_for_organization(
+            self.owner,
+            self.organization.id,
+            "Concurrent Active One",
+            self._profile_model(
+                "Concurrent Active One",
+                "concurrent-one",
+            ),
+        )
+
+        second = self.companies.create_for_organization(
+            self.owner,
+            self.organization.id,
+            "Concurrent Active Two",
+            self._profile_model(
+                "Concurrent Active Two",
+                "concurrent-two",
+            ),
+        )
+
+        def activate(company_id):
+            return self.companies.set_active_for_organization(
+                self.owner.id,
+                self.organization.id,
+                company_id,
+            ).id
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(
+                executor.map(
+                    activate,
+                    [first.id, second.id],
+                )
+            )
+
+        self.assertCountEqual(
+            results,
+            [first.id, second.id],
+        )
+
+        active = self.companies.active_for_organization(
+            self.owner.id,
+            self.organization.id,
+        )
+
+        self.assertIsNotNone(active)
+        self.assertIn(
+            active.id,
+            {first.id, second.id},
+        )
+
+        listed = self.companies.list_for_organization(
+            self.owner.id,
+            self.organization.id,
+        )
+
+        active_items = [
+            item
+            for item in listed
+            if item.is_active
+        ]
+
+        self.assertEqual(
+            len(active_items),
+            1,
+        )
+        self.assertEqual(
+            active_items[0].id,
+            active.id,
+        )
+
     def test_viewer_is_read_only(self):
         self.as_account(self.owner)
 

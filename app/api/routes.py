@@ -260,14 +260,25 @@ async def evaluate_score(
 ) -> ScoringResult:
     owner_user_id = await resolve_owner(request, owner_user_id)
     runtime = _runtime(request)
+    account = await current_account(request, touch=False)
     profile = runtime.company_profile
     if owner_user_id is not None and runtime.company_service is not None:
         try:
-            profile = await asyncio.to_thread(runtime.company_service.profile_for_owner, owner_user_id)
+            if account is not None:
+                workspace = await asyncio.to_thread(runtime.company_service.active, owner_user_id)
+                profile = workspace.profile if workspace is not None else None
+            else:
+                profile = await asyncio.to_thread(runtime.company_service.profile_for_owner, owner_user_id)
         except Exception:
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Company profile is unavailable.") from None
     if profile is None:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Company profile is unavailable.")
+        code = status.HTTP_409_CONFLICT if account is not None else status.HTTP_503_SERVICE_UNAVAILABLE
+        detail = (
+            "Create a company profile before using company scoring."
+            if account is not None
+            else "Company profile is unavailable."
+        )
+        raise HTTPException(code, detail)
     return score_tender(analysis, profile)
 
 
@@ -320,12 +331,24 @@ async def monitoring_status(
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Monitoring is unavailable.")
     subscription = await service.subscription(owner_user_id)
     runtime = _runtime(request)
+    account = await current_account(request, touch=False)
     workspace = None
     if runtime.company_service is not None:
         try:
             workspace = await asyncio.to_thread(runtime.company_service.active, owner_user_id)
         except Exception:
             workspace = None
+
+    if account is not None and workspace is None:
+        return MonitorStatusResponse(
+            background_enabled=service.settings.enabled,
+            interval_seconds=service.settings.interval_seconds,
+            rss_feeds=0,
+            subscription_enabled=False,
+            active_company=None,
+            feed_mode="no-company",
+        )
+
     profile = workspace.profile if workspace is not None else runtime.company_profile
     if profile is None and hasattr(service, "profile_for_owner"):
         profile = await service.profile_for_owner(owner_user_id)
@@ -353,9 +376,28 @@ async def monitoring_status(
 )
 async def monitoring_scan(payload: MonitorScanRequest, request: Request) -> list[MonitorNoticeResponse]:
     owner_user_id = await resolve_owner(request, payload.owner_user_id)
-    service = _runtime(request).monitoring_service
+    runtime = _runtime(request)
+    service = runtime.monitoring_service
     if service is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Monitoring is unavailable.")
+
+    account = await current_account(request, touch=False)
+    if account is not None:
+        workspace = None
+        if runtime.company_service is not None:
+            try:
+                workspace = await asyncio.to_thread(runtime.company_service.active, owner_user_id)
+            except Exception:
+                raise HTTPException(
+                    status.HTTP_503_SERVICE_UNAVAILABLE,
+                    "Company storage is unavailable.",
+                ) from None
+        if workspace is None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Create a company profile before running monitoring.",
+            )
+
     try:
         matches = await service.scan_new(owner_user_id)
     except Exception:

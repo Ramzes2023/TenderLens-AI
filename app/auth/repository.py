@@ -104,21 +104,215 @@ class AuthRepository:
             raise AuthRepositoryError("Could not read account.") from None
 
     def link_owner(self, account_id: int, owner_user_id: int) -> AuthAccount:
-        if int(owner_user_id) <= 0:
+        # Safely claim a legacy Telegram owner namespace for a web account.
+        # Lightweight web-owned state is migrated transactionally. PDF history
+        # is blocked because Qdrant RAG points are also keyed by owner_user_id
+        # and live outside SQLite.
+        target_owner = int(owner_user_id)
+        if target_owner <= 0:
             raise AuthRepositoryError("owner_user_id must be positive.")
         now = self._now()
+
+        def table_exists(conn: sqlite3.Connection, table: str) -> bool:
+            row = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                (table,),
+            ).fetchone()
+            return row is not None
+
+        def owner_count(conn: sqlite3.Connection, table: str, owner: int) -> int:
+            if not table_exists(conn, table):
+                return 0
+            row = conn.execute(
+                f"SELECT COUNT(*) AS n FROM {table} WHERE owner_user_id=?",
+                (owner,),
+            ).fetchone()
+            return int(row["n"]) if row else 0
+
         try:
             with closing(self._connect()) as conn:
                 with conn:
-                    cursor = conn.execute("UPDATE auth_accounts SET owner_user_id=?, updated_at=? WHERE id=?", (int(owner_user_id), now, int(account_id)))
+                    account = conn.execute(
+                        "SELECT * FROM auth_accounts WHERE id=?",
+                        (int(account_id),),
+                    ).fetchone()
+                    if account is None:
+                        raise AuthRepositoryError("Account not found.")
+
+                    source_owner = int(account["owner_user_id"])
+                    if source_owner == target_owner:
+                        return self._account(account)
+
+                    other = conn.execute(
+                        "SELECT id FROM auth_accounts WHERE owner_user_id=? AND id<>?",
+                        (target_owner, int(account_id)),
+                    ).fetchone()
+                    if other is not None:
+                        raise AuthRepositoryError(
+                            "This owner is already linked to another account."
+                        )
+
+                    if owner_count(conn, "tenders", source_owner):
+                        raise AuthRepositoryError(
+                            "Cannot link this account after web PDF history exists. "
+                            "Migrate the owner-scoped RAG index first."
+                        )
+
+                    known_owner_tables = {
+                        "auth_accounts",
+                        "company_workspaces",
+                        "company_active",
+                        "monitor_subscriptions",
+                        "monitor_seen",
+                        "tenders",
+                        "rag_chunks",
+                    }
+                    tables = conn.execute(
+                        "SELECT name FROM sqlite_master "
+                        "WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+                    ).fetchall()
+                    for table_row in tables:
+                        table = str(table_row["name"])
+                        columns = {
+                            str(column["name"])
+                            for column in conn.execute(f"PRAGMA table_info({table})").fetchall()
+                        }
+                        if "owner_user_id" not in columns or table in known_owner_tables:
+                            continue
+                        if owner_count(conn, table, source_owner):
+                            raise AuthRepositoryError(
+                                f"Cannot link owner safely: unsupported owner-scoped table {table} has data."
+                            )
+
+                    if table_exists(conn, "company_workspaces"):
+                        duplicate = conn.execute(
+                            """
+                            SELECT source.name
+                            FROM company_workspaces AS source
+                            JOIN company_workspaces AS target
+                              ON target.owner_user_id=?
+                             AND source.owner_user_id=?
+                             AND target.name=source.name
+                            LIMIT 1
+                            """,
+                            (target_owner, source_owner),
+                        ).fetchone()
+                        if duplicate is not None:
+                            raise AuthRepositoryError(
+                                "Cannot link owners because both sides contain a company "
+                                f"named {duplicate['name']!r}."
+                            )
+
+                        source_active = None
+                        target_active = None
+                        if table_exists(conn, "company_active"):
+                            source_active = conn.execute(
+                                "SELECT company_id FROM company_active WHERE owner_user_id=?",
+                                (source_owner,),
+                            ).fetchone()
+                            target_active = conn.execute(
+                                "SELECT company_id FROM company_active WHERE owner_user_id=?",
+                                (target_owner,),
+                            ).fetchone()
+
+                        conn.execute(
+                            "UPDATE company_workspaces SET owner_user_id=? WHERE owner_user_id=?",
+                            (target_owner, source_owner),
+                        )
+
+                        if table_exists(conn, "company_active"):
+                            if source_active is not None and target_active is None:
+                                conn.execute(
+                                    "UPDATE company_active SET owner_user_id=?, updated_at=? "
+                                    "WHERE owner_user_id=?",
+                                    (target_owner, now, source_owner),
+                                )
+                            else:
+                                conn.execute(
+                                    "DELETE FROM company_active WHERE owner_user_id=?",
+                                    (source_owner,),
+                                )
+
+                    if table_exists(conn, "monitor_seen"):
+                        conn.execute(
+                            """
+                            INSERT OR IGNORE INTO monitor_seen(
+                                owner_user_id, source, external_id, first_seen_at
+                            )
+                            SELECT ?, source, external_id, first_seen_at
+                            FROM monitor_seen
+                            WHERE owner_user_id=?
+                            """,
+                            (target_owner, source_owner),
+                        )
+                        conn.execute(
+                            "DELETE FROM monitor_seen WHERE owner_user_id=?",
+                            (source_owner,),
+                        )
+
+                    if table_exists(conn, "monitor_subscriptions"):
+                        source_subscription = conn.execute(
+                            "SELECT * FROM monitor_subscriptions WHERE owner_user_id=?",
+                            (source_owner,),
+                        ).fetchone()
+                        target_subscription = conn.execute(
+                            "SELECT * FROM monitor_subscriptions WHERE owner_user_id=?",
+                            (target_owner,),
+                        ).fetchone()
+                        if source_subscription is not None:
+                            if target_subscription is None:
+                                source_chat = int(source_subscription["chat_id"])
+                                chat_id = target_owner if source_chat == source_owner else source_chat
+                                conn.execute(
+                                    "UPDATE monitor_subscriptions "
+                                    "SET owner_user_id=?, chat_id=?, updated_at=? "
+                                    "WHERE owner_user_id=?",
+                                    (target_owner, chat_id, now, source_owner),
+                                )
+                            else:
+                                conn.execute(
+                                    "DELETE FROM monitor_subscriptions WHERE owner_user_id=?",
+                                    (source_owner,),
+                                )
+
+                    if table_exists(conn, "rag_chunks"):
+                        conn.execute(
+                            """
+                            INSERT OR IGNORE INTO rag_chunks(
+                                owner_user_id, pdf_sha256, chunk_index, page_number,
+                                chunk_text, vector_blob, created_at
+                            )
+                            SELECT ?, pdf_sha256, chunk_index, page_number,
+                                   chunk_text, vector_blob, created_at
+                            FROM rag_chunks
+                            WHERE owner_user_id=?
+                            """,
+                            (target_owner, source_owner),
+                        )
+                        conn.execute(
+                            "DELETE FROM rag_chunks WHERE owner_user_id=?",
+                            (source_owner,),
+                        )
+
+                    cursor = conn.execute(
+                        "UPDATE auth_accounts SET owner_user_id=?, updated_at=? WHERE id=?",
+                        (target_owner, now, int(account_id)),
+                    )
                     if cursor.rowcount != 1:
                         raise AuthRepositoryError("Account not found.")
-                    row = conn.execute("SELECT * FROM auth_accounts WHERE id=?", (int(account_id),)).fetchone()
+
+                    row = conn.execute(
+                        "SELECT * FROM auth_accounts WHERE id=?",
+                        (int(account_id),),
+                    ).fetchone()
+
             if row is None:
                 raise AuthRepositoryError("Account not found.")
             return self._account(row)
         except sqlite3.IntegrityError:
-            raise AuthRepositoryError("This owner is already linked to another account.") from None
+            raise AuthRepositoryError(
+                "Could not link owners because their stored data conflicts."
+            ) from None
         except AuthRepositoryError:
             raise
         except sqlite3.Error:

@@ -120,6 +120,11 @@
 - [x] Last-owner preservation and concurrency tests on temporary SQLite databases.
 - [x] Legacy Telegram owners and v1.5.0 HTTP/session/API-key behavior remain compatible.
 - [ ] Later Phase 18: organization-scoped enforcement across endpoints/resources.
+- [x] Phase 18B: session-only Organization HTTP API.
+- [x] Phase 18B: transactional owner/admin RBAC for membership management.
+- [x] Phase 18B: legacy API key is not accepted as organization identity.
+- [x] Phase 18B: same-origin protection and cross-organization access tests.
+- [ ] Next: organization-scope company workspaces while preserving legacy owner compatibility.
 - [ ] Later: invitations, organization UI and release preparation.
 
 Not full multi-tenant security: existing endpoints still authorize owner_user_id.

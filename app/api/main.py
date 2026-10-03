@@ -9,6 +9,7 @@ from app import __version__
 
 from .config import ApiSettings, load_api_settings
 from .auth_routes import router as auth_router
+from .organization_routes import router as organization_router
 from .routes import router
 from .runtime import ApiRuntime, build_runtime
 from .security import LoginRateLimiter
@@ -34,6 +35,7 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
     )
     app.state.login_rate_limiter = LoginRateLimiter()
     app.include_router(auth_router)
+    app.include_router(organization_router)
     app.include_router(router)
     return app
 

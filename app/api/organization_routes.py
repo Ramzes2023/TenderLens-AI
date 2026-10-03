@@ -464,6 +464,34 @@ async def get_organization(
 
 
 @router.get(
+    "/{organization_id}/membership/me",
+    response_model=MembershipResponse,
+)
+async def own_membership(
+    organization_id: int,
+    request: Request,
+    response: Response,
+):
+    account = await _account(request)
+    service = _service(request)
+
+    try:
+        membership = await asyncio.to_thread(
+            service.require_membership,
+            account,
+            organization_id,
+        )
+    except OrganizationError as error:
+        _raise_org_error(error)
+
+    response.headers["Cache-Control"] = "no-store"
+
+    return _membership_response(
+        membership
+    )
+
+
+@router.get(
     "/{organization_id}/members",
     response_model=list[MembershipResponse],
 )

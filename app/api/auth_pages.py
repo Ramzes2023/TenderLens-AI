@@ -1,12 +1,18 @@
 """Self-contained authentication pages for TenderLens web accounts."""
 from __future__ import annotations
 
+import json
+
 from html import escape
+from urllib.parse import quote
 
 from app import __version__
 
 
-def _page(mode: str) -> str:
+def _page(
+    mode: str,
+    next_path: str = "/dashboard",
+) -> str:
     register = mode == "register"
     if mode not in {"login", "register"}:
         raise ValueError("Unsupported auth page mode")
@@ -15,11 +21,23 @@ def _page(mode: str) -> str:
     endpoint = "/api/v1/auth/register" if register else "/api/v1/auth/login"
     button = "Create account" if register else "Sign in"
     switch_href = "/login" if register else "/register"
+
+    if next_path != "/dashboard":
+        switch_href = (
+            f"{switch_href}?next="
+            f"{quote(next_path, safe='')}"
+        )
     switch_label = "Sign in" if register else "Create account"
     switch_text = "Already have an account?" if register else "New to TenderLens?"
     autocomplete = "new-password" if register else "current-password"
     hint = '<div class="hint">Use at least 12 characters.</div>' if register else ""
     version = escape(__version__)
+    next_path_json = (
+        json.dumps(next_path)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+    )
 
     return f"""<!doctype html>
 <html lang="en">
@@ -87,7 +105,7 @@ def _page(mode: str) -> str:
       try {{
         const r=await fetch('{endpoint}',{{method:'POST',headers:{{'Content-Type':'application/json'}},credentials:'same-origin',body:JSON.stringify({{email:document.getElementById('email').value.trim(),password:document.getElementById('password').value}})}});
         if(!r.ok){{let d='Authentication failed.';try{{const j=await r.json();if(j.detail)d=typeof j.detail==='string'?j.detail:JSON.stringify(j.detail)}}catch(_){{}}throw new Error(d)}}
-        window.location.replace('/dashboard');
+        window.location.replace({next_path_json});
       }} catch(err) {{ msg.textContent=err.message||String(err); msg.style.display='block'; }}
       finally {{ btn.disabled=false; }}
     }});
@@ -96,12 +114,22 @@ def _page(mode: str) -> str:
 </html>"""
 
 
-def login_html() -> str:
-    return _page("login")
+def login_html(
+    next_path: str = "/dashboard",
+) -> str:
+    return _page(
+        "login",
+        next_path,
+    )
 
 
-def register_html() -> str:
-    return _page("register")
+def register_html(
+    next_path: str = "/dashboard",
+) -> str:
+    return _page(
+        "register",
+        next_path,
+    )
 
 
 __all__ = ["login_html", "register_html"]

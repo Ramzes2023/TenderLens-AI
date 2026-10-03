@@ -159,8 +159,16 @@
 - [x] Phase 18F1: atomic invitation acceptance and replay/concurrency protection.
 - [x] Phase 18F1: email-bound acceptance, revocation and expiration handling.
 - [x] Phase 18F1: session-only and same-origin protected invitation mutations.
-- [ ] Next Phase 18F2: organization Dashboard UI, member management and invitation UX.
-- [ ] After Phase 18F2: Phase 18 release-candidate preparation.
+- [x] Phase 18F2: organization Dashboard selector and workspace UI.
+- [x] Phase 18F2: preserve personal v1.5 workspace and existing account data.
+- [x] Phase 18F2: shared organization companies and active-company switching.
+- [x] Phase 18F2: organization monitoring status and on-demand scan UI.
+- [x] Phase 18F2: organization tender-history UI.
+- [x] Phase 18F2: role-aware owner/admin/member/viewer Dashboard controls.
+- [x] Phase 18F2: member role management and removal UI.
+- [x] Phase 18F2: invitation creation, listing, revocation and copy-link UX.
+- [x] Phase 18F2: browser invitation preview/accept flow with safe auth return.
+- [ ] Next: Phase 18 release-candidate preparation.
 - [ ] Later: background organization notifications.
 
 Not full multi-tenant security: existing endpoints still authorize owner_user_id.

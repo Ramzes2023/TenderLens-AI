@@ -244,6 +244,71 @@ class OrganizationApiTests(unittest.TestCase):
         )
         self.assertEqual(remove.status_code, 409)
 
+    def test_member_can_read_own_role_without_manager_access(self):
+        self.as_account(self.a)
+
+        organization = self.create_shared(
+            "Own Membership Test"
+        )
+
+        org_id = organization["id"]
+
+        added = self.client.post(
+            f"/api/v1/organizations/{org_id}/members",
+            json={
+                "account_id": self.b.id,
+                "role": "viewer",
+            },
+        )
+
+        self.assertEqual(
+            added.status_code,
+            201,
+            added.text,
+        )
+
+        self.as_account(self.b)
+
+        own = self.client.get(
+            f"/api/v1/organizations/{org_id}/membership/me"
+        )
+
+        self.assertEqual(
+            own.status_code,
+            200,
+            own.text,
+        )
+
+        self.assertEqual(
+            own.json()["account_id"],
+            self.b.id,
+        )
+
+        self.assertEqual(
+            own.json()["role"],
+            "viewer",
+        )
+
+        manager_list = self.client.get(
+            f"/api/v1/organizations/{org_id}/members"
+        )
+
+        self.assertEqual(
+            manager_list.status_code,
+            403,
+        )
+
+        self.as_account(self.c)
+
+        outsider = self.client.get(
+            f"/api/v1/organizations/{org_id}/membership/me"
+        )
+
+        self.assertEqual(
+            outsider.status_code,
+            403,
+        )
+
     def test_non_manager_cannot_list_or_manage_members(self):
         self.as_account(self.a)
         organization = self.create_shared(

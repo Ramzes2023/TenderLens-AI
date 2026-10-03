@@ -134,8 +134,14 @@
 - [x] Phase 18D1: owner/admin/member activation; viewer read-only.
 - [x] Phase 18D1: cross-organization activation isolation and concurrency coverage.
 - [x] Phase 18D1: active-company replacement after deletion.
-- [ ] Next Phase 18D2: organization scoring and monitoring context.
-- [ ] Later: tender/RAG organization scope, invitations, organization UI and release preparation.
+- [x] Phase 18D2: organization-scoped deterministic scoring using the shared active company.
+- [x] Phase 18D2: organization-scoped on-demand EIS monitoring using the shared active company.
+- [x] Phase 18D2: organization/company-specific monitoring dedup namespace.
+- [x] Phase 18D2: transactional membership re-check before monitoring dedup persistence.
+- [x] Phase 18D2: organization monitoring state isolated from legacy owner/Telegram monitoring.
+- [x] Phase 18D2: session-only workflow identity and same-origin write protection.
+- [ ] Next: organization-scoped tender/PDF/RAG data boundaries.
+- [ ] Later: invitations, background organization notifications, organization UI and release preparation.
 
 Not full multi-tenant security: existing endpoints still authorize owner_user_id.
 No billing, invitations, Dashboard redesign, release bump or production migration performed.

@@ -152,7 +152,15 @@
 - [x] Phase 18E2: legacy, organization A and organization B RAG namespaces isolated for the same PDF hash.
 - [x] Phase 18E2: membership re-checks around long-running PDF/RAG workflows.
 - [x] Phase 18E2: organization PDF/RAG endpoints remain session-only and cross-origin protected.
-- [ ] Next: invitations and organization UI / release preparation.
+- [x] Phase 18F1: organization invitation persistence and one-time token flow.
+- [x] Phase 18F1: invitation tokens SHA-256 hashed at rest.
+- [x] Phase 18F1: invite existing or not-yet-registered users by email.
+- [x] Phase 18F1: owner/admin invitation management with admin/member/viewer target roles.
+- [x] Phase 18F1: atomic invitation acceptance and replay/concurrency protection.
+- [x] Phase 18F1: email-bound acceptance, revocation and expiration handling.
+- [x] Phase 18F1: session-only and same-origin protected invitation mutations.
+- [ ] Next Phase 18F2: organization Dashboard UI, member management and invitation UX.
+- [ ] After Phase 18F2: Phase 18 release-candidate preparation.
 - [ ] Later: background organization notifications.
 
 Not full multi-tenant security: existing endpoints still authorize owner_user_id.

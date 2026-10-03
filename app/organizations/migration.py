@@ -60,6 +60,45 @@ def migrate(conn):
         created_at TEXT NOT NULL,
         PRIMARY KEY(organization_id,account_id))""")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_org_members_account ON organization_members(account_id,organization_id)")
+
+    conn.execute("""CREATE TABLE IF NOT EXISTS organization_invitations(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        email TEXT NOT NULL COLLATE NOCASE,
+        role TEXT NOT NULL CHECK(role IN ('admin','member','viewer')),
+        token_hash TEXT NOT NULL UNIQUE,
+        invited_by_account_id INTEGER NOT NULL REFERENCES auth_accounts(id) ON DELETE RESTRICT,
+        expires_at TEXT NOT NULL,
+        accepted_at TEXT,
+        revoked_at TEXT,
+        created_at TEXT NOT NULL)""")
+
+    conn.execute(
+        """CREATE INDEX IF NOT EXISTS idx_org_invites_org
+           ON organization_invitations(
+               organization_id,
+               created_at DESC
+           )"""
+    )
+
+    conn.execute(
+        """CREATE INDEX IF NOT EXISTS idx_org_invites_email
+           ON organization_invitations(
+               email,
+               expires_at
+           )"""
+    )
+
+    conn.execute(
+        """CREATE UNIQUE INDEX IF NOT EXISTS uq_org_pending_invite_email
+           ON organization_invitations(
+               organization_id,
+               email
+           )
+           WHERE accepted_at IS NULL
+             AND revoked_at IS NULL"""
+    )
+
     if table_exists(conn, "company_workspaces"):
         columns = {row[1] for row in conn.execute("PRAGMA table_info(company_workspaces)")}
         if "organization_id" not in columns:

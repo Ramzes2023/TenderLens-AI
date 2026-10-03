@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .migration import ensure_personal, migrate, now
-from .models import Membership, Organization, Role
+from .models import Invitation, Membership, Organization, Role
 
 
 class OrganizationError(ValueError):
@@ -108,6 +108,33 @@ class OrganizationRepository:
             row["account_id"],
             Role(row["role"]),
             row["created_at"],
+        )
+
+    @staticmethod
+    def _invitation(row):
+        if row is None:
+            return None
+
+        return Invitation(
+            id=int(row["id"]),
+            organization_id=int(row["organization_id"]),
+            email=str(row["email"]),
+            role=Role(row["role"]),
+            invited_by_account_id=int(
+                row["invited_by_account_id"]
+            ),
+            expires_at=str(row["expires_at"]),
+            accepted_at=(
+                str(row["accepted_at"])
+                if row["accepted_at"] is not None
+                else None
+            ),
+            revoked_at=(
+                str(row["revoked_at"])
+                if row["revoked_at"] is not None
+                else None
+            ),
+            created_at=str(row["created_at"]),
         )
 
     def get_membership(self, organization_id, account_id):
@@ -388,4 +415,370 @@ class OrganizationRepository:
                 organization_id,
                 account_id,
                 None,
+            )
+
+    # -----------------------------------------------------------------
+    # Phase 18F1 invitation operations.
+    # -----------------------------------------------------------------
+
+    def create_invitation_authorized(
+        self,
+        *,
+        actor_account_id,
+        organization_id,
+        email,
+        role,
+        token_hash,
+        expires_at,
+    ):
+        role = Role(role)
+
+        if role == Role.OWNER:
+            raise OrganizationError(
+                "Owner role cannot be granted by invitation."
+            )
+
+        timestamp = now()
+
+        with self.transaction(True) as conn:
+            self._manager_role(
+                conn,
+                organization_id,
+                actor_account_id,
+            )
+
+            # Expired pending invitations must not permanently block
+            # re-inviting the same email address.
+            conn.execute(
+                """UPDATE organization_invitations
+                   SET revoked_at=?
+                   WHERE organization_id=?
+                     AND email=?
+                     AND accepted_at IS NULL
+                     AND revoked_at IS NULL
+                     AND expires_at<=?""",
+                (
+                    timestamp,
+                    int(organization_id),
+                    email,
+                    timestamp,
+                ),
+            )
+
+            account = conn.execute(
+                """SELECT id, is_active
+                   FROM auth_accounts
+                   WHERE email=?""",
+                (email,),
+            ).fetchone()
+
+            if account is not None:
+                if not bool(account["is_active"]):
+                    raise OrganizationError(
+                        "Invited account is inactive."
+                    )
+
+                membership = conn.execute(
+                    """SELECT 1
+                       FROM organization_members
+                       WHERE organization_id=?
+                         AND account_id=?""",
+                    (
+                        int(organization_id),
+                        int(account["id"]),
+                    ),
+                ).fetchone()
+
+                if membership is not None:
+                    raise OrganizationError(
+                        "Membership already exists."
+                    )
+
+            existing = conn.execute(
+                """SELECT 1
+                   FROM organization_invitations
+                   WHERE organization_id=?
+                     AND email=?
+                     AND accepted_at IS NULL
+                     AND revoked_at IS NULL""",
+                (
+                    int(organization_id),
+                    email,
+                ),
+            ).fetchone()
+
+            if existing is not None:
+                raise OrganizationError(
+                    "Active invitation already exists."
+                )
+
+            try:
+                cursor = conn.execute(
+                    """INSERT INTO organization_invitations(
+                        organization_id,
+                        email,
+                        role,
+                        token_hash,
+                        invited_by_account_id,
+                        expires_at,
+                        accepted_at,
+                        revoked_at,
+                        created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?)""",
+                    (
+                        int(organization_id),
+                        email,
+                        role.value,
+                        token_hash,
+                        int(actor_account_id),
+                        expires_at,
+                        timestamp,
+                    ),
+                )
+            except sqlite3.IntegrityError:
+                raise OrganizationError(
+                    "Active invitation already exists."
+                ) from None
+
+            row = conn.execute(
+                """SELECT *
+                   FROM organization_invitations
+                   WHERE id=?""",
+                (int(cursor.lastrowid),),
+            ).fetchone()
+
+            return self._invitation(row)
+
+    def list_invitations_authorized(
+        self,
+        *,
+        actor_account_id,
+        organization_id,
+    ):
+        timestamp = now()
+
+        with self.transaction(True) as conn:
+            self._manager_role(
+                conn,
+                organization_id,
+                actor_account_id,
+            )
+
+            conn.execute(
+                """UPDATE organization_invitations
+                   SET revoked_at=?
+                   WHERE organization_id=?
+                     AND accepted_at IS NULL
+                     AND revoked_at IS NULL
+                     AND expires_at<=?""",
+                (
+                    timestamp,
+                    int(organization_id),
+                    timestamp,
+                ),
+            )
+
+            rows = conn.execute(
+                """SELECT *
+                   FROM organization_invitations
+                   WHERE organization_id=?
+                     AND accepted_at IS NULL
+                     AND revoked_at IS NULL
+                   ORDER BY created_at DESC, id DESC""",
+                (int(organization_id),),
+            ).fetchall()
+
+            return [
+                self._invitation(row)
+                for row in rows
+            ]
+
+    def revoke_invitation_authorized(
+        self,
+        *,
+        actor_account_id,
+        organization_id,
+        invitation_id,
+    ):
+        timestamp = now()
+
+        with self.transaction(True) as conn:
+            self._manager_role(
+                conn,
+                organization_id,
+                actor_account_id,
+            )
+
+            row = conn.execute(
+                """SELECT *
+                   FROM organization_invitations
+                   WHERE id=?
+                     AND organization_id=?""",
+                (
+                    int(invitation_id),
+                    int(organization_id),
+                ),
+            ).fetchone()
+
+            if row is None:
+                raise OrganizationError(
+                    "Invitation not found."
+                )
+
+            if (
+                row["accepted_at"] is not None
+                or row["revoked_at"] is not None
+            ):
+                raise OrganizationError(
+                    "Invitation is no longer active."
+                )
+
+            conn.execute(
+                """UPDATE organization_invitations
+                   SET revoked_at=?
+                   WHERE id=?""",
+                (
+                    timestamp,
+                    int(invitation_id),
+                ),
+            )
+
+    def preview_invitation(
+        self,
+        *,
+        token_hash,
+        current_time,
+    ):
+        with self.transaction() as conn:
+            row = conn.execute(
+                """SELECT i.*, o.name AS organization_name
+                   FROM organization_invitations i
+                   JOIN organizations o
+                     ON o.id=i.organization_id
+                   WHERE i.token_hash=?""",
+                (token_hash,),
+            ).fetchone()
+
+            if row is None:
+                raise OrganizationError(
+                    "Invitation is invalid or expired."
+                )
+
+            if (
+                row["accepted_at"] is not None
+                or row["revoked_at"] is not None
+                or str(row["expires_at"]) <= current_time
+            ):
+                raise OrganizationError(
+                    "Invitation is invalid or expired."
+                )
+
+            return (
+                self._invitation(row),
+                str(row["organization_name"]),
+            )
+
+    def accept_invitation(
+        self,
+        *,
+        account_id,
+        token_hash,
+        current_time,
+    ):
+        with self.transaction(True) as conn:
+            row = conn.execute(
+                """SELECT *
+                   FROM organization_invitations
+                   WHERE token_hash=?""",
+                (token_hash,),
+            ).fetchone()
+
+            if row is None:
+                raise OrganizationError(
+                    "Invitation is invalid or expired."
+                )
+
+            if (
+                row["accepted_at"] is not None
+                or row["revoked_at"] is not None
+                or str(row["expires_at"]) <= current_time
+            ):
+                raise OrganizationError(
+                    "Invitation is invalid or expired."
+                )
+
+            account = conn.execute(
+                """SELECT id, email, is_active
+                   FROM auth_accounts
+                   WHERE id=?""",
+                (int(account_id),),
+            ).fetchone()
+
+            if account is None or not bool(account["is_active"]):
+                raise OrganizationError(
+                    "Organization access denied."
+                )
+
+            if (
+                str(account["email"]).strip().lower()
+                != str(row["email"]).strip().lower()
+            ):
+                raise OrganizationError(
+                    "Invitation email does not match signed-in account."
+                )
+
+            existing = conn.execute(
+                """SELECT *
+                   FROM organization_members
+                   WHERE organization_id=?
+                     AND account_id=?""",
+                (
+                    int(row["organization_id"]),
+                    int(account_id),
+                ),
+            ).fetchone()
+
+            if existing is None:
+                conn.execute(
+                    """INSERT INTO organization_members(
+                        organization_id,
+                        account_id,
+                        role,
+                        created_at
+                    ) VALUES (?, ?, ?, ?)""",
+                    (
+                        int(row["organization_id"]),
+                        int(account_id),
+                        str(row["role"]),
+                        current_time,
+                    ),
+                )
+
+            # Consuming the invitation must never change an existing
+            # membership role created through another authorized path.
+            conn.execute(
+                """UPDATE organization_invitations
+                   SET accepted_at=?
+                   WHERE id=?
+                     AND accepted_at IS NULL
+                     AND revoked_at IS NULL""",
+                (
+                    current_time,
+                    int(row["id"]),
+                ),
+            )
+
+            membership_row = conn.execute(
+                """SELECT *
+                   FROM organization_members
+                   WHERE organization_id=?
+                     AND account_id=?""",
+                (
+                    int(row["organization_id"]),
+                    int(account_id),
+                ),
+            ).fetchone()
+
+            return self._membership(
+                membership_row
             )

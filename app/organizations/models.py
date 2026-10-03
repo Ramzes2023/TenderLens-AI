@@ -25,3 +25,16 @@ class Membership:
     account_id: int
     role: Role
     created_at: str
+
+
+@dataclass(frozen=True)
+class Invitation:
+    id: int
+    organization_id: int
+    email: str
+    role: Role
+    invited_by_account_id: int
+    expires_at: str
+    accepted_at: str | None
+    revoked_at: str | None
+    created_at: str

@@ -42,6 +42,35 @@ class MembershipRoleRequest(BaseModel):
     role: Role
 
 
+class InvitationCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: str = Field(min_length=3, max_length=254)
+    role: Role
+
+
+class InvitationResponse(BaseModel):
+    id: int
+    organization_id: int
+    email: str
+    role: Role
+    expires_at: str
+    created_at: str
+
+
+class InvitationCreatedResponse(InvitationResponse):
+    token: str
+    accept_path: str
+
+
+class InvitationPreviewResponse(BaseModel):
+    organization_id: int
+    organization_name: str
+    email_hint: str
+    role: Role
+    expires_at: str
+
+
 class MembershipResponse(BaseModel):
     organization_id: int
     account_id: int
@@ -83,6 +112,38 @@ def _organization_response(organization):
     )
 
 
+def _invitation_response(invitation):
+    return InvitationResponse(
+        id=invitation.id,
+        organization_id=invitation.organization_id,
+        email=invitation.email,
+        role=invitation.role,
+        expires_at=invitation.expires_at,
+        created_at=invitation.created_at,
+    )
+
+
+def _email_hint(email):
+    local, _, domain = email.partition("@")
+
+    if len(local) <= 1:
+        masked = "*"
+    else:
+        masked = (
+            local[0]
+            + "*" * min(
+                max(len(local) - 1, 1),
+                8,
+            )
+        )
+
+    return (
+        f"{masked}@{domain}"
+        if domain
+        else masked
+    )
+
+
 def _membership_response(membership):
     return MembershipResponse(
         organization_id=membership.organization_id,
@@ -96,8 +157,13 @@ def _raise_org_error(error: OrganizationError):
     detail = str(error)
     lowered = detail.lower()
 
-    if "access denied" in lowered:
+    if (
+        "access denied" in lowered
+        or "does not match signed-in account" in lowered
+    ):
         code = status.HTTP_403_FORBIDDEN
+    elif "invalid or expired" in lowered:
+        code = status.HTTP_410_GONE
     elif "not found" in lowered:
         code = status.HTTP_404_NOT_FOUND
     elif (
@@ -193,6 +259,177 @@ async def create_organization(
 
     response.headers["Cache-Control"] = "no-store"
     return _organization_response(organization)
+
+
+
+
+@router.get(
+    "/invitations/{token}",
+    response_model=InvitationPreviewResponse,
+)
+async def preview_invitation(
+    token: str,
+    request: Request,
+    response: Response,
+):
+    service = _service(request)
+
+    try:
+        invitation, organization_name = (
+            await asyncio.to_thread(
+                service.preview_invitation,
+                token,
+            )
+        )
+    except OrganizationError as error:
+        _raise_org_error(error)
+
+    response.headers["Cache-Control"] = "no-store"
+
+    return InvitationPreviewResponse(
+        organization_id=invitation.organization_id,
+        organization_name=organization_name,
+        email_hint=_email_hint(
+            invitation.email
+        ),
+        role=invitation.role,
+        expires_at=invitation.expires_at,
+    )
+
+
+@router.post(
+    "/invitations/{token}/accept",
+    response_model=MembershipResponse,
+)
+async def accept_invitation(
+    token: str,
+    request: Request,
+    response: Response,
+):
+    require_same_origin_browser_request(
+        request
+    )
+
+    account = await _account(request)
+    service = _service(request)
+
+    try:
+        membership = await asyncio.to_thread(
+            service.accept_invitation,
+            account,
+            token,
+        )
+    except OrganizationError as error:
+        _raise_org_error(error)
+
+    response.headers["Cache-Control"] = "no-store"
+
+    return _membership_response(
+        membership
+    )
+
+
+@router.get(
+    "/{organization_id}/invitations",
+    response_model=list[InvitationResponse],
+)
+async def list_invitations(
+    organization_id: int,
+    request: Request,
+    response: Response,
+):
+    account = await _account(request)
+    service = _service(request)
+
+    try:
+        invitations = await asyncio.to_thread(
+            service.list_invitations,
+            account,
+            organization_id,
+        )
+    except OrganizationError as error:
+        _raise_org_error(error)
+
+    response.headers["Cache-Control"] = "no-store"
+
+    return [
+        _invitation_response(item)
+        for item in invitations
+    ]
+
+
+@router.post(
+    "/{organization_id}/invitations",
+    response_model=InvitationCreatedResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_invitation(
+    organization_id: int,
+    payload: InvitationCreateRequest,
+    request: Request,
+    response: Response,
+):
+    require_same_origin_browser_request(
+        request
+    )
+
+    account = await _account(request)
+    service = _service(request)
+
+    try:
+        invitation, token = await asyncio.to_thread(
+            service.create_invitation,
+            account,
+            organization_id,
+            payload.email,
+            payload.role,
+        )
+    except OrganizationError as error:
+        _raise_org_error(error)
+
+    response.headers["Cache-Control"] = "no-store"
+
+    return InvitationCreatedResponse(
+        **_invitation_response(
+            invitation
+        ).model_dump(),
+        token=token,
+        accept_path=(
+            f"/api/v1/organizations/"
+            f"invitations/{token}/accept"
+        ),
+    )
+
+
+@router.delete(
+    "/{organization_id}/invitations/{invitation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def revoke_invitation(
+    organization_id: int,
+    invitation_id: int,
+    request: Request,
+    response: Response,
+):
+    require_same_origin_browser_request(
+        request
+    )
+
+    account = await _account(request)
+    service = _service(request)
+
+    try:
+        await asyncio.to_thread(
+            service.revoke_invitation,
+            account,
+            organization_id,
+            invitation_id,
+        )
+    except OrganizationError as error:
+        _raise_org_error(error)
+
+    response.headers["Cache-Control"] = "no-store"
+    return None
 
 
 @router.get(

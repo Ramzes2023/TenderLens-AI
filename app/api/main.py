@@ -11,6 +11,7 @@ from .config import ApiSettings, load_api_settings
 from .auth_routes import router as auth_router
 from .organization_routes import router as organization_router
 from .organization_company_routes import router as organization_company_router
+from .organization_data_routes import router as organization_data_router
 from .organization_workflow_routes import router as organization_workflow_router
 from .routes import router
 from .runtime import ApiRuntime, build_runtime
@@ -40,6 +41,7 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
     app.include_router(organization_router)
     app.include_router(organization_company_router)
     app.include_router(organization_workflow_router)
+    app.include_router(organization_data_router)
     app.include_router(router)
     return app
 

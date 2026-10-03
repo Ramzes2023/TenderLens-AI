@@ -140,7 +140,12 @@
 - [x] Phase 18D2: transactional membership re-check before monitoring dedup persistence.
 - [x] Phase 18D2: organization monitoring state isolated from legacy owner/Telegram monitoring.
 - [x] Phase 18D2: session-only workflow identity and same-origin write protection.
-- [ ] Next: organization-scoped tender/PDF/RAG data boundaries.
+- [x] Phase 18E1: shared organization tender-history namespace in SQLite.
+- [x] Phase 18E1: organization tender read/write RBAC.
+- [x] Phase 18E1: reserved organization owner namespace centralized and blocked from legacy owner APIs.
+- [x] Phase 18E1: organization tender IDs and PDF hashes isolated across organizations.
+- [x] Phase 18E1: organization history separated from legacy personal/Telegram tender history.
+- [ ] Next Phase 18E2: organization PDF analysis and Qdrant/RAG namespace.
 - [ ] Later: invitations, background organization notifications, organization UI and release preparation.
 
 Not full multi-tenant security: existing endpoints still authorize owner_user_id.

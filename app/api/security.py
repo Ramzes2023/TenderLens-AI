@@ -13,6 +13,8 @@ from urllib.parse import urlsplit
 from fastapi import HTTPException, Request, status
 from fastapi.security import APIKeyHeader
 
+from app.tenancy import is_organization_owner_id
+
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 SESSION_COOKIE = "tenderlens_session"
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
@@ -165,15 +167,33 @@ async def require_api_or_session(request: Request, supplied_key: str | None = No
 
 async def resolve_owner(request: Request, requested_owner_user_id: int | None) -> int | None:
     account = await current_account(request, touch=False)
+
     if account is None:
+        if (
+            requested_owner_user_id is not None
+            and is_organization_owner_id(requested_owner_user_id)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Reserved organization owner namespace.",
+            )
+
         return requested_owner_user_id
 
     owner_user_id = int(account.owner_user_id)
+
+    if is_organization_owner_id(owner_user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Reserved organization owner namespace.",
+        )
+
     if requested_owner_user_id is not None and int(requested_owner_user_id) != owner_user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This account cannot access the requested owner.",
         )
+
     return owner_user_id
 
 

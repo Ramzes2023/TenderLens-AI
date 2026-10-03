@@ -11,12 +11,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.scoring.models import CompanyProfile
+from app.tenancy import (
+    ORGANIZATION_OWNER_OFFSET,
+    is_organization_owner_id,
+    organization_owner_id,
+)
 
 from .models import CompanyWorkspace
 from app.organizations.migration import migrate, backfill_companies
-
-
-ORGANIZATION_OWNER_OFFSET = 8_000_000_000_000
 
 
 class CompanyRepositoryError(RuntimeError):
@@ -102,11 +104,11 @@ class CompanyRepository:
 
     @staticmethod
     def _reserved_organization_owner(owner_user_id: int) -> bool:
-        return int(owner_user_id) >= ORGANIZATION_OWNER_OFFSET
+        return is_organization_owner_id(owner_user_id)
 
     @staticmethod
     def _organization_owner_id(organization_id: int) -> int:
-        return ORGANIZATION_OWNER_OFFSET + int(organization_id)
+        return organization_owner_id(organization_id)
 
     def _active_id(self, conn: sqlite3.Connection, owner_user_id: int) -> int | None:
         row = conn.execute(

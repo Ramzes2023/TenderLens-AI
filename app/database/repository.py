@@ -13,11 +13,16 @@ from pathlib import Path
 
 from app.models.tender import TenderAnalysis
 from app.scoring.models import ScoringResult
+from app.tenancy import organization_owner_id
 
 SCHEMA_VERSION = 1
 
 
 class DatabaseError(RuntimeError):
+    pass
+
+
+class DatabaseAuthorizationError(DatabaseError):
     pass
 
 
@@ -119,6 +124,276 @@ class TenderRepository:
             )
         except Exception:
             raise DatabaseError("Сохранённая запись тендера повреждена.") from None
+
+    @staticmethod
+    def _require_org_role(
+        conn: sqlite3.Connection,
+        account_id: int,
+        organization_id: int,
+        allowed_roles: set[str] | None = None,
+    ) -> str:
+        row = conn.execute(
+            """SELECT role
+               FROM organization_members
+               WHERE organization_id=? AND account_id=?""",
+            (
+                int(organization_id),
+                int(account_id),
+            ),
+        ).fetchone()
+
+        if row is None:
+            raise DatabaseAuthorizationError(
+                "Organization tender access denied."
+            )
+
+        role = str(row["role"])
+
+        if (
+            allowed_roles is not None
+            and role not in allowed_roles
+        ):
+            raise DatabaseAuthorizationError(
+                "Organization tender access denied."
+            )
+
+        return role
+
+    def find_by_hash_for_organization(
+        self,
+        account_id: int,
+        organization_id: int,
+        pdf_sha256: str,
+    ) -> StoredTender | None:
+        owner_user_id = organization_owner_id(
+            organization_id
+        )
+
+        try:
+            with closing(self._connect()) as conn:
+                self._require_org_role(
+                    conn,
+                    account_id,
+                    organization_id,
+                )
+
+                row = conn.execute(
+                    """SELECT *
+                       FROM tenders
+                       WHERE owner_user_id=? AND pdf_sha256=?""",
+                    (
+                        owner_user_id,
+                        pdf_sha256,
+                    ),
+                ).fetchone()
+
+            return (
+                self._deserialize(row)
+                if row is not None
+                else None
+            )
+
+        except DatabaseAuthorizationError:
+            raise
+        except sqlite3.Error:
+            raise DatabaseError(
+                "Could not read organization tender history."
+            ) from None
+
+    def find_by_id_for_organization(
+        self,
+        account_id: int,
+        organization_id: int,
+        tender_id: int,
+    ) -> StoredTender | None:
+        owner_user_id = organization_owner_id(
+            organization_id
+        )
+
+        try:
+            with closing(self._connect()) as conn:
+                self._require_org_role(
+                    conn,
+                    account_id,
+                    organization_id,
+                )
+
+                row = conn.execute(
+                    """SELECT *
+                       FROM tenders
+                       WHERE owner_user_id=? AND id=?""",
+                    (
+                        owner_user_id,
+                        int(tender_id),
+                    ),
+                ).fetchone()
+
+            return (
+                self._deserialize(row)
+                if row is not None
+                else None
+            )
+
+        except DatabaseAuthorizationError:
+            raise
+        except (sqlite3.Error, ValueError, TypeError):
+            raise DatabaseError(
+                "Could not read organization tender history."
+            ) from None
+
+    def list_recent_for_organization(
+        self,
+        account_id: int,
+        organization_id: int,
+        limit: int = 10,
+    ) -> list[StoredTender]:
+        owner_user_id = organization_owner_id(
+            organization_id
+        )
+        limit = max(
+            1,
+            min(int(limit), 20),
+        )
+
+        try:
+            with closing(self._connect()) as conn:
+                self._require_org_role(
+                    conn,
+                    account_id,
+                    organization_id,
+                )
+
+                rows = conn.execute(
+                    """SELECT *
+                       FROM tenders
+                       WHERE owner_user_id=?
+                       ORDER BY updated_at DESC, id DESC
+                       LIMIT ?""",
+                    (
+                        owner_user_id,
+                        limit,
+                    ),
+                ).fetchall()
+
+            return [
+                self._deserialize(row)
+                for row in rows
+            ]
+
+        except DatabaseAuthorizationError:
+            raise
+        except (sqlite3.Error, ValueError, TypeError):
+            raise DatabaseError(
+                "Could not read organization tender history."
+            ) from None
+
+    def save_success_for_organization(
+        self,
+        *,
+        account_id: int,
+        organization_id: int,
+        pdf_sha256: str,
+        source_filename: str,
+        pages: int | None,
+        characters: int,
+        analysis: TenderAnalysis,
+        scoring: ScoringResult | None,
+        analysis_truncated: bool,
+    ) -> StoredTender:
+        owner_user_id = organization_owner_id(
+            organization_id
+        )
+        now = datetime.now(
+            timezone.utc
+        ).isoformat(
+            timespec="seconds"
+        )
+
+        analysis_json = analysis.model_dump_json()
+        scoring_json = (
+            scoring.model_dump_json()
+            if scoring is not None
+            else None
+        )
+
+        try:
+            with closing(self._connect()) as conn:
+                with conn:
+                    conn.execute("BEGIN IMMEDIATE")
+
+                    self._require_org_role(
+                        conn,
+                        account_id,
+                        organization_id,
+                        {
+                            "owner",
+                            "admin",
+                            "member",
+                        },
+                    )
+
+                    conn.execute(
+                        """INSERT INTO tenders(
+                            owner_user_id,
+                            chat_id,
+                            pdf_sha256,
+                            source_filename,
+                            pages,
+                            characters,
+                            analysis_json,
+                            scoring_json,
+                            analysis_truncated,
+                            created_at,
+                            updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(owner_user_id, pdf_sha256)
+                        DO UPDATE SET
+                            chat_id=excluded.chat_id,
+                            source_filename=excluded.source_filename,
+                            pages=excluded.pages,
+                            characters=excluded.characters,
+                            analysis_json=excluded.analysis_json,
+                            scoring_json=excluded.scoring_json,
+                            analysis_truncated=excluded.analysis_truncated,
+                            updated_at=excluded.updated_at""",
+                        (
+                            owner_user_id,
+                            owner_user_id,
+                            pdf_sha256,
+                            source_filename,
+                            pages,
+                            characters,
+                            analysis_json,
+                            scoring_json,
+                            int(analysis_truncated),
+                            now,
+                            now,
+                        ),
+                    )
+
+                    row = conn.execute(
+                        """SELECT *
+                           FROM tenders
+                           WHERE owner_user_id=? AND pdf_sha256=?""",
+                        (
+                            owner_user_id,
+                            pdf_sha256,
+                        ),
+                    ).fetchone()
+
+            if row is None:
+                raise DatabaseError(
+                    "Could not save organization tender."
+                )
+
+            return self._deserialize(row)
+
+        except DatabaseAuthorizationError:
+            raise
+        except sqlite3.Error:
+            raise DatabaseError(
+                "Could not save organization tender."
+            ) from None
 
     def find_by_hash(self, owner_user_id: int, pdf_sha256: str) -> StoredTender | None:
         try:

@@ -10,8 +10,8 @@ from app.companies import (
     CompanyAuthorizationError,
     CompanyRepositoryError,
 )
-from app.companies.repository import ORGANIZATION_OWNER_OFFSET
 from app.models.tender import TenderAnalysis
+from app.tenancy import organization_owner_id
 from app.monitoring import (
     MonitoringAuthorizationError,
     MonitoringRepositoryError,
@@ -277,9 +277,8 @@ async def organization_monitoring_scan(
 
     monitoring = _monitoring_service(request)
 
-    owner_user_id = (
-        ORGANIZATION_OWNER_OFFSET
-        + int(organization_id)
+    owner_user_id = organization_owner_id(
+        organization_id
     )
 
     try:

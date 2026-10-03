@@ -691,8 +691,11 @@ class OrganizationCompanyApiTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), [])
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.json()["detail"],
+            "Reserved organization owner namespace.",
+        )
 
     def test_cross_origin_write_is_rejected(self):
         self.as_account(self.owner)

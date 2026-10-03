@@ -1,4 +1,4 @@
-## v1.5.0 implementation complete — release gates pending
+## v1.5.0 released and deployed
 
 - [x] Added email/password Web account registration, login and logout.
 - [x] Added scrypt password hashing and high-entropy session tokens stored as SHA-256 digests.
@@ -16,13 +16,13 @@
 - [x] Added bounded login brute-force throttling and expired-session cleanup.
 - [x] Phase 17 regression: 196 passed, 1 skipped, 38 subtests passed before documentation/version bump.
 - [x] Release version bumped to 1.5.0.
-- [ ] Re-run full tests/compile checks after documentation/version bump.
+- [x] Re-ran full tests and compile checks after documentation/version bump: 196 passed, 1 skipped, 38 subtests passed.
 - [x] Built isolated `tenderlens-ai:1.5.0-rc1` Docker image and verified embedded version 1.5.0.
 - [x] Passed isolated Docker integration: health, register, session `/me`, company creation, Telegram-link ticket and cross-origin 403 protection.
 - [x] Passed migration test against a consistent COPY of the existing production SQLite DB: AluTrade, active-company and monitoring state preserved; Web session survived owner migration; DB integrity remained OK.
-- [ ] GitHub push / PR / CI / merge.
-- [ ] Tag `v1.5.0` and publish GitHub Release.
-- [ ] Back up production DB and deploy only after release validation; preserve the Docker volume and never use `docker compose down -v`.
+- [x] GitHub branch pushed; PR #5 passed all checks and was merged into `main`.
+- [x] Tagged `v1.5.0` and published the GitHub Release.
+- [x] Created and verified a pre-v1.5.0 production DB backup, deployed API and bot on `tenderlens-ai:1.5.0`, preserved the Docker volume, and verified production health/data integrity.
 
 ## v1.4.0 completed
 

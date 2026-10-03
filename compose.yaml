@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: tenderlens-ai:1.4.0
+    image: tenderlens-ai:1.5.0
     restart: unless-stopped
     env_file:
       - .env
@@ -33,7 +33,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: tenderlens-ai:1.4.0
+    image: tenderlens-ai:1.5.0
     restart: unless-stopped
     env_file:
       - .env

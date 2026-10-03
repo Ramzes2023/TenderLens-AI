@@ -26,6 +26,14 @@ class RegistrationError(AuthError):
     pass
 
 
+class TelegramLinkError(AuthError):
+    pass
+
+
+class TelegramLinkUnavailable(TelegramLinkError):
+    pass
+
+
 def normalize_email(email: str) -> str:
     value = (email or "").strip().lower()
     if len(value) > 254 or not _EMAIL_RE.fullmatch(value):
@@ -72,7 +80,9 @@ class AuthService:
     def create_session(self, account: AuthAccount) -> str:
         token = secrets.token_urlsafe(32)
         now = datetime.now(timezone.utc)
+        now_text = now.isoformat(timespec="seconds")
         expires_at = (now + timedelta(days=self.session_days)).isoformat(timespec="seconds")
+        self.repository.delete_expired_sessions(now_text)
         self.repository.create_session(account_id=account.id, token_hash=_token_hash(token), expires_at=expires_at)
         return token
 
@@ -89,6 +99,83 @@ class AuthService:
     def logout(self, token: str | None) -> None:
         if token:
             self.repository.delete_session(_token_hash(token))
+
+    def create_telegram_link(self, account: AuthAccount) -> tuple[str, str]:
+        from .repository import WEB_OWNER_OFFSET
+
+        if account.owner_user_id < WEB_OWNER_OFFSET:
+            raise TelegramLinkError("Telegram is already connected.")
+
+        token = secrets.token_urlsafe(24)
+        expires_at = (
+            datetime.now(timezone.utc) + timedelta(minutes=10)
+        ).isoformat(timespec="seconds")
+        try:
+            created = self.repository.create_telegram_link(
+                account_id=account.id,
+                token_hash=_token_hash(token),
+                expires_at=expires_at,
+            )
+        except AuthRepositoryError:
+            raise TelegramLinkUnavailable(
+                "Telegram linking is temporarily unavailable."
+            ) from None
+        if not created:
+            raise TelegramLinkError("Telegram is already connected.")
+        return token, expires_at
+
+    def consume_telegram_link(self, token: str, telegram_user_id: int) -> AuthAccount:
+        clean_token = (token or "").strip()
+        if not clean_token or len(clean_token) > 128:
+            raise TelegramLinkError(
+                "Telegram link is invalid, expired, or already used."
+            )
+
+        try:
+            telegram_owner = int(telegram_user_id)
+        except (TypeError, ValueError):
+            raise TelegramLinkError("Telegram user id is invalid.") from None
+        if telegram_owner <= 0:
+            raise TelegramLinkError("Telegram user id is invalid.")
+
+        claim_marker = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        token_hash = _token_hash(clean_token)
+
+        try:
+            account_id = self.repository.claim_telegram_link(
+                token_hash=token_hash,
+                now=claim_marker,
+            )
+        except AuthRepositoryError as error:
+            raise TelegramLinkError(str(error)) from None
+
+        if account_id is None:
+            raise TelegramLinkError(
+                "Telegram link is invalid, expired, or already used."
+            )
+
+        try:
+            account = self.repository.find_account_by_id(account_id)
+            if account is None:
+                raise TelegramLinkError("Account not found.")
+
+            from .repository import WEB_OWNER_OFFSET
+            if account.owner_user_id < WEB_OWNER_OFFSET:
+                raise TelegramLinkError("Telegram is already connected.")
+
+            return self.repository.link_owner(account.id, telegram_owner)
+        except (TelegramLinkError, AuthRepositoryError) as error:
+            try:
+                self.repository.release_telegram_link(
+                    token_hash=token_hash,
+                    consumed_at=claim_marker,
+                )
+            except AuthRepositoryError:
+                # Fail closed if the reservation cannot be released.
+                pass
+            if isinstance(error, TelegramLinkError):
+                raise
+            raise TelegramLinkError(str(error)) from None
 
     def link_legacy_owner(self, account: AuthAccount, owner_user_id: int) -> AuthAccount:
         try:

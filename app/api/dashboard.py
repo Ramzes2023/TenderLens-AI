@@ -5,6 +5,7 @@ from __future__ import annotations
 from html import escape
 
 from app import __version__
+from .telegram_ui import TELEGRAM_SCRIPT
 
 
 def dashboard_html() -> str:
@@ -47,6 +48,14 @@ def dashboard_html() -> str:
     <article class="p s4"><h2>System <span id="healthBadge" class="chip">checking</span></h2><div id="healthVersion" class="metric">—</div><div id="components" class="chips"></div></article>
     <article class="p s4"><h2>Monitoring</h2><div id="monitorCompany" class="metric">—</div><div id="monitorDetails" class="muted">Loading…</div></article>
     <article class="p s4"><h2>Companies</h2><div id="companyCount" class="metric">—</div><div class="muted">Profiles in your account</div></article>
+
+    <article class="p s12" id="telegramCard">
+      <h2>Telegram <span id="telegramStatus" class="chip">Checking…</span></h2>
+      <p class="muted">Connect your Telegram account to use the same TenderLens workspace in the bot and on the web.</p>
+      <div class="toolbar"><button id="connectTelegram" class="primary" disabled onclick="connectTelegram()">Connect Telegram</button>
+      <a id="telegramOpen" hidden target="_blank" rel="noopener noreferrer">Open Telegram</a></div>
+      <p id="telegramMessage" class="sub" role="status" aria-live="polite"></p>
+    </article>
 
     <article id="companyCreator" class="p s12 hidden">
       <h2>Create company <button onclick="hideCompanyForm()">Close</button></h2>
@@ -113,7 +122,7 @@ const state={{ownerId:null,hasActiveCompany:false}};
 const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 async function read(r){{if(r.status===401){{location.replace('/login');throw new Error('Authentication required')}}if(!r.ok){{let d=`${{r.status}} ${{r.statusText}}`;try{{const j=await r.json();if(j.detail)d=typeof j.detail==='string'?j.detail:JSON.stringify(j.detail)}}catch(_){{}}throw new Error(d)}}return r.status===204?null:r.json()}}
 async function api(path,opt={{}}){{const h=new Headers(opt.headers||{{}});if(opt.body&&!(opt.body instanceof FormData))h.set('Content-Type','application/json');return read(await fetch(path,{{...opt,headers:h,credentials:'same-origin',cache:'no-store'}}))}}
-async function loadAccount(){{const a=await api('/api/v1/auth/me');state.ownerId=a.owner_user_id;document.getElementById('email').textContent=a.email}}
+async function loadAccount(){{const a=await api('/api/v1/auth/me');state.ownerId=a.owner_user_id;document.getElementById('email').textContent=a.email;renderTelegram(a)}}
 function owner(){{if(!Number.isInteger(state.ownerId))throw new Error('Account owner unavailable');return state.ownerId}}
 function listValue(id){{return document.getElementById(id).value.split(/[,;\\n]+/).map(v=>v.trim()).filter(Boolean)}}
 function optionalMoney(id){{const raw=document.getElementById(id).value.trim();if(!raw)return null;const value=Number(raw);if(!Number.isFinite(value)||value<0)throw new Error('Contract values must be valid positive numbers.');return value}}
@@ -173,6 +182,7 @@ async function loadTenders(){{const items=await api(`/api/v1/tenders?owner_user_
 async function scanEis(){{const b=document.getElementById('scanButton'),r=document.getElementById('scanResults');try{{if(!state.hasActiveCompany){{r.innerHTML='<div class="empty">Create a company profile before running monitoring.</div>';return}}b.disabled=true;b.textContent='Scanning…';const items=await api('/api/v1/monitoring/scan',{{method:'POST',body:JSON.stringify({{owner_user_id:owner()}})}});r.innerHTML=items.length?items.map(i=>`<div class="row"><div class="title">${{esc(i.title||'EIS notice')}}</div><div class="sub">${{esc((i.reasons||[]).join(' · '))}} · <a href="${{esc(i.url)}}" target="_blank" rel="noopener noreferrer">Open notice</a></div></div>`).join(''):'<div class="empty">No new matching notices.</div>'}}catch(e){{r.innerHTML=`<div class="error">${{esc(e.message||e)}}</div>`}}finally{{b.disabled=!state.hasActiveCompany;b.textContent='Scan now'}}}}
 async function refreshAll(){{await loadAccount();await Promise.all([loadHealth(),loadCompanies(),loadMonitoring(),loadTenders()])}}
 async function logout(){{try{{await api('/api/v1/auth/logout',{{method:'POST'}})}}finally{{location.replace('/login')}}}}
+{TELEGRAM_SCRIPT}
 refreshAll().catch(e=>{{if(!String(e.message||e).includes('Authentication required'))document.getElementById('companies').innerHTML=`<div class="error">${{esc(e.message||e)}}</div>`}});
 </script>
 </body>

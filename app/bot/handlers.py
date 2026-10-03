@@ -33,6 +33,7 @@ from .companies import (
 )
 from .documents import pdf_handler
 from .history import history_handler
+from .linking import command_link_token, redeem_link, start_link_token
 from .monitoring import (
     monitor_off_handler,
     monitor_on_handler,
@@ -53,6 +54,7 @@ START_TEXT = (
 )
 HELP_TEXT = (
     "Доступные команды:\n/start — знакомство с TenderLens AI\n"
+    "/link <код> — подключить Telegram к TenderLens Web\n"
     "/help — список команд\n/status — проверка работы бота\n/history — последние обработанные тендеры\n/ask <вопрос> — вопрос по последнему PDF через RAG\n"
     "/tenders — проверить новые закупки из настроенных RSS ЕИС\n"
     "/monitor_on — включить автоуведомления о новых закупках\n"
@@ -71,8 +73,19 @@ HELP_TEXT = (
 STATUS_TEXT = "TenderLens AI is running."
 
 
-async def start_handler(message: Message) -> None:
+async def start_handler(message: Message, auth_service=None) -> None:
+    token = start_link_token(message)
+    if token is not None and await redeem_link(message, token, auth_service):
+        return
     await message.answer(START_TEXT)
+
+
+async def link_handler(message: Message, auth_service=None) -> None:
+    token = command_link_token(message)
+    if token is None:
+        await message.answer("Использование: /link <код>.")
+        return
+    await redeem_link(message, token, auth_service)
 
 
 async def help_handler(message: Message) -> None:
@@ -86,6 +99,7 @@ async def status_handler(message: Message) -> None:
 def create_router() -> Router:
     router = Router(name="commands")
     router.message.register(start_handler, CommandStart())
+    router.message.register(link_handler, Command("link"))
     router.message.register(help_handler, Command("help"))
     router.message.register(status_handler, Command("status"))
     router.message.register(history_handler, Command("history"))

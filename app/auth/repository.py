@@ -63,6 +63,18 @@ class AuthRepository:
                             FOREIGN KEY(account_id) REFERENCES auth_accounts(id) ON DELETE CASCADE
                         );
                         CREATE INDEX IF NOT EXISTS idx_auth_sessions_account ON auth_sessions(account_id, expires_at);
+                        CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires ON auth_sessions(expires_at);
+
+                        CREATE TABLE IF NOT EXISTS auth_telegram_links (
+                            token_hash TEXT PRIMARY KEY,
+                            account_id INTEGER NOT NULL,
+                            expires_at TEXT NOT NULL,
+                            consumed_at TEXT,
+                            created_at TEXT NOT NULL,
+                            FOREIGN KEY(account_id) REFERENCES auth_accounts(id) ON DELETE CASCADE
+                        );
+                        CREATE INDEX IF NOT EXISTS idx_auth_telegram_links_account
+                        ON auth_telegram_links(account_id, expires_at);
                     """)
         except (OSError, sqlite3.Error):
             raise AuthRepositoryError("Could not initialize authentication storage.") from None
@@ -317,6 +329,94 @@ class AuthRepository:
             raise
         except sqlite3.Error:
             raise AuthRepositoryError("Could not link account owner.") from None
+
+    def create_telegram_link(self, *, account_id: int, token_hash: str, expires_at: str) -> bool:
+        """Create a ticket only while the account is still web-owned.
+
+        Returns False when another process already completed Telegram linking.
+        """
+        now = self._now()
+        try:
+            with closing(self._connect()) as conn:
+                with conn:
+                    conn.execute("BEGIN IMMEDIATE")
+                    account = conn.execute(
+                        "SELECT owner_user_id FROM auth_accounts WHERE id=?",
+                        (int(account_id),),
+                    ).fetchone()
+                    if account is None:
+                        raise AuthRepositoryError("Account not found.")
+                    owner_user_id = account["owner_user_id"]
+                    if owner_user_id is None:
+                        raise AuthRepositoryError("Account owner is unavailable.")
+                    if 0 < int(owner_user_id) < WEB_OWNER_OFFSET:
+                        return False
+                    conn.execute(
+                        "DELETE FROM auth_telegram_links WHERE account_id=?",
+                        (int(account_id),),
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO auth_telegram_links(
+                            token_hash, account_id, expires_at, consumed_at, created_at
+                        ) VALUES (?, ?, ?, NULL, ?)
+                        """,
+                        (token_hash, int(account_id), expires_at, now),
+                    )
+            return True
+        except AuthRepositoryError:
+            raise
+        except sqlite3.Error:
+            raise AuthRepositoryError("Could not create Telegram link ticket.") from None
+
+    def claim_telegram_link(self, *, token_hash: str, now: str) -> int | None:
+        """Atomically reserve a valid one-time Telegram link ticket."""
+        try:
+            with closing(self._connect()) as conn:
+                with conn:
+                    row = conn.execute(
+                        """
+                        SELECT account_id
+                        FROM auth_telegram_links
+                        WHERE token_hash=?
+                          AND consumed_at IS NULL
+                          AND expires_at>?
+                        """,
+                        (token_hash, now),
+                    ).fetchone()
+                    if row is None:
+                        return None
+                    cursor = conn.execute(
+                        """
+                        UPDATE auth_telegram_links
+                        SET consumed_at=?
+                        WHERE token_hash=?
+                          AND consumed_at IS NULL
+                          AND expires_at>?
+                        """,
+                        (now, token_hash, now),
+                    )
+                    if cursor.rowcount != 1:
+                        return None
+                    return int(row["account_id"])
+        except sqlite3.Error:
+            raise AuthRepositoryError("Could not claim Telegram link ticket.") from None
+
+    def release_telegram_link(self, *, token_hash: str, consumed_at: str) -> None:
+        """Release this process' reservation when owner migration fails."""
+        try:
+            with closing(self._connect()) as conn:
+                with conn:
+                    conn.execute(
+                        """
+                        UPDATE auth_telegram_links
+                        SET consumed_at=NULL
+                        WHERE token_hash=? AND consumed_at=?
+                        """,
+                        (token_hash, consumed_at),
+                    )
+        except sqlite3.Error:
+            raise AuthRepositoryError("Could not release Telegram link ticket.") from None
 
     def create_session(self, *, account_id: int, token_hash: str, expires_at: str) -> AuthSession:
         now = self._now()

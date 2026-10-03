@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
+from app import __version__
 from app.api.config import ApiSettings
 from app.api.main import create_app
 from app.api.runtime import ApiRuntime
@@ -96,7 +97,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["status"], "ok")
-        self.assertEqual(body["version"], "1.4.0")
+        self.assertEqual(body["version"], __version__)
         self.assertNotIn("phase", body)
         self.assertEqual(body["components"]["database"], "ready")
         self.assertEqual(self.client.get("/openapi.json").status_code, 200)

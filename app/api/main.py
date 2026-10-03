@@ -11,6 +11,7 @@ from .config import ApiSettings, load_api_settings
 from .auth_routes import router as auth_router
 from .routes import router
 from .runtime import ApiRuntime, build_runtime
+from .security import LoginRateLimiter
 
 
 def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None = None) -> FastAPI:
@@ -31,6 +32,7 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
         ),
         lifespan=lifespan,
     )
+    app.state.login_rate_limiter = LoginRateLimiter()
     app.include_router(auth_router)
     app.include_router(router)
     return app

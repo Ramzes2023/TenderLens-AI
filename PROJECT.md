@@ -1,6 +1,6 @@
-# TenderLens AI — v1.4.0 project status
+# TenderLens AI — v1.5.0 project status
 
-TenderLens AI is a completed portfolio MVP for monitoring and analyzing procurement opportunities. The repository demonstrates the complete path from live source discovery to document analysis, structured scoring, semantic retrieval, persistence, API exposure and containerized deployment.
+TenderLens AI v1.5.0 is the authenticated single-node evolution of the portfolio MVP for monitoring and analyzing procurement opportunities. The repository now demonstrates the path from Web account onboarding and Telegram identity linking through live source discovery, document analysis, structured scoring, semantic retrieval, persistence, API exposure and containerized deployment.
 
 ## Implemented scope
 
@@ -15,7 +15,11 @@ TenderLens AI is a completed portfolio MVP for monitoring and analyzing procurem
 | Persistence / dedup | Complete | SQLite, SHA-256, owner-scoped history |
 | RAG | Complete | page chunks, multilingual FastEmbed, Qdrant local, grounded answers |
 | Tender monitoring | Complete | configurable EIS RSS, pre-filter, subscriptions, dedup |
-| FastAPI | Complete | health, history, PDF analysis, scoring, RAG, monitoring, Swagger |
+| FastAPI | Complete | health, account auth, companies, history, PDF analysis, scoring, RAG, monitoring, Swagger |
+| Web accounts | Complete | email/password registration/login/logout, HttpOnly sessions, owner isolation |
+| Web Dashboard | Complete | authenticated dashboard, Web company creation, EIS scan, Telegram connection UX |
+| Web ↔ Telegram identity | Complete | one-time hashed deep-link tickets, atomic redemption, guarded owner migration |
+| Auth hardening | Complete | browser same-origin provenance checks, bounded login throttling, expired-session cleanup |
 | Docker | Complete | non-root image, healthcheck, named persistent volume, localhost bind |
 | Portfolio polish | Complete | CI, smoke test, security/deployment/demo documentation, sample PDF |
 
@@ -39,11 +43,14 @@ TenderLens AI is a completed portfolio MVP for monitoring and analyzing procurem
 - EIS RSS live connectivity works with multiple configured feeds.
 - Monitoring finds and deduplicates live procurement notices and supports background subscription state.
 - FastAPI serves Swagger/OpenAPI and reports component readiness.
+- A Web user can register/login, create a company and run real owner-scoped EIS monitoring without entering an API key or owner ID.
+- Web → Telegram linking has passed a real end-to-end flow: the owner namespace migrates to the verified Telegram user ID while the Web session remains valid.
+- Telegram linking concurrency tests allow exactly one claim of a one-time ticket, and the full Phase 17 regression suite covers browser/session security behavior.
 - Docker image builds on Windows Docker Desktop / WSL2 and `/health` returns all components ready after the first FastEmbed cache initialization.
 
-## v1.4.0 boundary
+## v1.5.0 boundary
 
-The current deployment is intentionally **single-node**: one API process owns local SQLite and Qdrant local-mode files. This is appropriate for a portfolio/demo deployment. Horizontal scaling requires server-backed storage first.
+The current deployment is intentionally **single-node and localhost-first**. Web accounts are authenticated, but one account still maps to one owner identity; Organizations/Roles, public HTTPS deployment and multi-customer tenant administration are later phases. One API process owns local SQLite and Qdrant local-mode files. Horizontal scaling requires server-backed storage and shared/distributed security controls first.
 
 Raw PDF bytes are not retained by the analysis/history flow. RAG chunks are persisted in Qdrant because retrieval requires them. The configured external LLM can receive bounded extracted text; deployments must apply their own data-retention and provider-compliance policies.
 
@@ -52,11 +59,18 @@ Raw PDF bytes are not retained by the analysis/history flow. RAG chunks are pers
 - PostgreSQL + migrations.
 - Qdrant server/Cloud rather than local mode.
 - OCR worker for scan-only documents.
-- OAuth/JWT or organization identity provider.
-- Rate limiting, metrics, tracing and structured audit events.
+- Organizations, memberships, roles/permissions and structured audit events.
+- Public domain/HTTPS/reverse-proxy deployment with edge/distributed rate limiting.
+- Metrics and tracing.
 - Additional procurement source adapters.
 - Separate worker/scheduler topology once state is server-backed.
 
 ## Phase 13 — multi-company commercialization foundation
 
 TenderLens now supports multiple persistent company workspaces per owner, active-company switching, per-company EIS keyword searches, company-scoped monitoring deduplication, and active-profile scoring through Telegram and FastAPI. This is the foundation for onboarding different industries without editing server configuration per customer.
+
+## Phase 17 — Web accounts + authentication
+
+Phase 17 turns the Web Dashboard into a real account surface: register/login/logout, HttpOnly sessions, owner isolation, Web company creation, and safe Web-to-Telegram identity linking. The linking flow stores only SHA-256 ticket digests, uses a 10-minute one-time lifetime, atomically claims redemption, guards owner migration, and preserves the account session across the owner-ID change.
+
+Security hardening adds explicit browser cross-site provenance rejection for state-changing requests, a bounded in-process login limiter, and expired-session cleanup. The legacy API-key path remains for integrations. This release deliberately stops short of Organizations/Roles and public multi-tenant hosting.

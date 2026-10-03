@@ -1,12 +1,14 @@
 # TenderLens AI
 
-**TenderLens AI v1.4.0** is a portfolio-grade Python platform for tender monitoring and document intelligence. It combines Telegram workflows, live EIS RSS monitoring, PDF extraction, structured LLM analysis, deterministic company-fit scoring, semantic RAG with Qdrant, SQLite persistence, a FastAPI backend, a browser-based operator dashboard, and Docker deployment.
+**TenderLens AI v1.5.0** is a portfolio-grade Python platform for tender monitoring and document intelligence. It combines authenticated Web accounts, Telegram workflows, live EIS RSS monitoring, PDF extraction, structured LLM analysis, deterministic company-fit scoring, semantic RAG with Qdrant, SQLite persistence, a FastAPI backend, an authenticated browser dashboard, and Docker deployment.
 
 > The system supports a human procurement decision; it does **not** autonomously decide whether to participate in a tender or submit bids.
 
 ## What it demonstrates
 
+- **Web accounts:** email/password registration, HttpOnly session cookies, owner-scoped API access and authenticated Dashboard.
 - **Telegram bot:** PDF upload, history, RAG questions, EIS monitoring and subscriptions.
+- **Web ↔ Telegram identity:** one-time deep-link confirmation safely moves a fresh Web owner namespace to the verified Telegram user ID while preserving supported owner-scoped state.
 - **Tender analysis:** PyMuPDF → structured `TenderAnalysis` → GigaChat provider abstraction.
 - **Multi-company workspaces:** one owner can keep several company profiles and switch the active profile without restart.
 - **Deterministic scoring:** transparent Python rules against the active versioned company profile.
@@ -76,7 +78,7 @@ Expected health shape:
 {
   "status": "ok",
   "service": "TenderLens AI",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "components": {
     "database": "ready",
     "llm": "ready",
@@ -124,14 +126,20 @@ Useful commands:
 - `/monitor_on`, `/monitor_off`, `/monitor_status` — background EIS notifications
 - `/companies`, `/company_show` — company workspaces
 - `/company_add ...`, `/company_use <id>` — create/switch the active company profile
+- `/link <code>` — confirm a Web-to-Telegram account link (the Dashboard deep link is the normal entry point)
 
-PDF constraints: up to 10 MiB and 200 pages. Text PDFs are parsed locally. OCR is intentionally not implemented in v1.4.0; scanned-only PDFs are reported as such instead of silently inventing text.
+PDF constraints: up to 10 MiB and 200 pages. Text PDFs are parsed locally. OCR is intentionally not implemented in v1.5.0; scanned-only PDFs are reported as such instead of silently inventing text.
 
 ## Main API endpoints
 
 | Method | Endpoint | Purpose |
 |---|---|---|
 | GET | `/health` | Service/component readiness |
+| POST | `/api/v1/auth/register` | Create Web account and session |
+| POST | `/api/v1/auth/login` | Authenticate and create session |
+| POST | `/api/v1/auth/logout` | Invalidate current session |
+| GET | `/api/v1/auth/me` | Current authenticated account |
+| POST | `/api/v1/auth/telegram-link` | Create a short-lived Telegram deep-link ticket |
 | GET | `/api/v1/companies` | Owner-scoped company profiles |
 | POST | `/api/v1/companies` | Create company profile |
 | POST | `/api/v1/companies/{id}/activate` | Switch active company |
@@ -143,7 +151,7 @@ PDF constraints: up to 10 MiB and 200 pages. Text PDFs are parsed locally. OCR i
 | GET | `/api/v1/monitoring/status` | Monitoring status |
 | POST | `/api/v1/monitoring/scan` | Manual source scan |
 
-If `TENDERLENS_API_KEY` is set, `/api/v1/*` requires `X-API-Key`. `/health` and OpenAPI remain accessible for local readiness/documentation.
+Browser Web flows use the HttpOnly `tenderlens_session` cookie. Session-authenticated owner-scoped endpoints resolve the owner from the account instead of trusting a browser-supplied owner ID. The legacy `X-API-Key` path remains available for integrations/backward compatibility when `TENDERLENS_API_KEY` is configured. `/health` and OpenAPI remain accessible for local readiness/documentation.
 
 ## Configuration
 
@@ -193,13 +201,20 @@ Multi-company behavior and the current sell-side/buy-side boundary are documente
 
 - OCR for scan-only documents.
 - Server-backed PostgreSQL and Qdrant for multiple replicas.
-- Real user authentication/authorization beyond optional API key + owner scope.
+- Organization memberships, roles/permissions and audit boundaries for true multi-tenant B2B use.
+- Public VPS/domain/HTTPS deployment and reverse-proxy hardening.
+- The login limiter is intentionally in-process for the single-node release; distributed/edge throttling is still required before multi-replica public deployment.
 - Supplier-intelligence adapters for `buy` profiles and international procurement sources.
-- Rate limiting, observability/metrics, migrations and retention policies.
+- Observability/metrics, migrations and retention policies.
 - More tender source adapters (B2B-Center, РТС-тендер, Сбербанк-АСТ, Росатом).
 - Optional alternative LLM provider implementation.
 
-These are deliberate boundaries of v1.4.0, not hidden capabilities.
-## Web Dashboard
+These are deliberate boundaries of v1.5.0, not hidden capabilities.
 
-Phase 16 adds a local operator dashboard at http://127.0.0.1:8000/dashboard. It shows system health, company workspaces, the active company, monitoring status, recent analyzed tenders, and company-aware EIS scan results. Protected actions reuse the existing X-API-Key API authentication. The dashboard is currently intended for local/single-node use and is not yet a public multi-tenant SaaS frontend.
+## Web accounts and Dashboard
+
+Phase 17 turns the Phase 16 operator dashboard into an authenticated Web account flow at `http://127.0.0.1:8000/dashboard`. Users can register/login, create an owner-scoped company profile, run company-aware EIS monitoring, and connect the Web account to Telegram. The connection uses a short-lived one-time deep-link token whose SHA-256 digest is stored in SQLite; Telegram confirms the real user ID before the supported owner-scoped state is migrated. The existing Web session survives the owner migration.
+
+Password hashes use scrypt. Session cookies are HttpOnly + SameSite=Lax and become Secure on HTTPS. Browser state-changing requests are protected against explicit cross-site provenance using `Origin` / `Sec-Fetch-Site`, login failures are bounded by an in-process rate limiter, and expired sessions are cleaned as new sessions are created.
+
+The release remains intentionally single-node and localhost-first. Organizations/roles and public HTTPS production are later phases; Web accounts in v1.5.0 are not yet the final multi-tenant SaaS authorization model.

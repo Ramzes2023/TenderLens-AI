@@ -36,7 +36,7 @@ from .schemas import (
     TenderDetail,
     TenderListItem,
 )
-from .security import require_api_key
+from .security import require_api_or_session, resolve_owner
 
 router = APIRouter()
 api_key_scheme = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -47,7 +47,7 @@ def _runtime(request: Request) -> ApiRuntime:
 
 
 async def _protected(request: Request, key: str | None = Depends(api_key_scheme)) -> None:
-    await require_api_key(request, key)
+    await require_api_or_session(request, key)
 
 
 def _list_item(record) -> TenderListItem:
@@ -125,6 +125,7 @@ async def health(request: Request) -> HealthResponse:
     dependencies=[Depends(_protected)],
 )
 async def list_companies(request: Request, owner_user_id: int = Query(gt=0)) -> list[CompanyResponse]:
+    owner_user_id = await resolve_owner(request, owner_user_id)
     service = _runtime(request).company_service
     if service is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Company workspaces are unavailable.")
@@ -142,12 +143,13 @@ async def list_companies(request: Request, owner_user_id: int = Query(gt=0)) -> 
     dependencies=[Depends(_protected)],
 )
 async def create_company(payload: CompanyCreateRequest, request: Request) -> CompanyResponse:
+    owner_user_id = await resolve_owner(request, payload.owner_user_id)
     service = _runtime(request).company_service
     if service is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Company workspaces are unavailable.")
     try:
         item = await asyncio.to_thread(
-            service.create, payload.owner_user_id, payload.name, payload.profile,
+            service.create, owner_user_id, payload.name, payload.profile,
             make_active=payload.make_active,
         )
     except Exception as error:
@@ -164,11 +166,12 @@ async def create_company(payload: CompanyCreateRequest, request: Request) -> Com
 async def activate_company(company_id: int, payload: CompanyActivateRequest, request: Request) -> CompanyResponse:
     if company_id <= 0:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "company_id must be positive.")
+    owner_user_id = await resolve_owner(request, payload.owner_user_id)
     service = _runtime(request).company_service
     if service is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Company workspaces are unavailable.")
     try:
-        item = await asyncio.to_thread(service.set_active, payload.owner_user_id, company_id)
+        item = await asyncio.to_thread(service.set_active, owner_user_id, company_id)
     except Exception as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from None
     return _company_response(item)
@@ -185,6 +188,7 @@ async def list_tenders(
     owner_user_id: int = Query(gt=0),
     limit: int = Query(10, ge=1, le=20),
 ) -> list[TenderListItem]:
+    owner_user_id = await resolve_owner(request, owner_user_id)
     repository = _runtime(request).tender_repository
     if repository is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Database is unavailable.")
@@ -208,6 +212,7 @@ async def get_tender(
 ) -> TenderDetail:
     if tender_id <= 0:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "tender_id must be positive.")
+    owner_user_id = await resolve_owner(request, owner_user_id)
     repository = _runtime(request).tender_repository
     if repository is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Database is unavailable.")
@@ -231,6 +236,7 @@ async def evaluate_score(
     request: Request,
     owner_user_id: int | None = Query(default=None, gt=0),
 ) -> ScoringResult:
+    owner_user_id = await resolve_owner(request, owner_user_id)
     runtime = _runtime(request)
     profile = runtime.company_profile
     if owner_user_id is not None and runtime.company_service is not None:
@@ -250,6 +256,7 @@ async def evaluate_score(
     dependencies=[Depends(_protected)],
 )
 async def rag_ask(payload: RagAskRequest, request: Request) -> RagAskResponse:
+    owner_user_id = await resolve_owner(request, payload.owner_user_id)
     runtime = _runtime(request)
     if runtime.rag_service is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "RAG is unavailable.")
@@ -257,7 +264,7 @@ async def rag_ask(payload: RagAskRequest, request: Request) -> RagAskResponse:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "LLM is unavailable.")
     try:
         answer = await runtime.rag_service.answer(
-            payload.owner_user_id,
+            owner_user_id,
             payload.pdf_sha256.lower(),
             payload.question,
             runtime.provider,
@@ -285,6 +292,7 @@ async def monitoring_status(
     request: Request,
     owner_user_id: int = Query(gt=0),
 ) -> MonitorStatusResponse:
+    owner_user_id = await resolve_owner(request, owner_user_id)
     service = _runtime(request).monitoring_service
     if service is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Monitoring is unavailable.")
@@ -322,11 +330,12 @@ async def monitoring_status(
     dependencies=[Depends(_protected)],
 )
 async def monitoring_scan(payload: MonitorScanRequest, request: Request) -> list[MonitorNoticeResponse]:
+    owner_user_id = await resolve_owner(request, payload.owner_user_id)
     service = _runtime(request).monitoring_service
     if service is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Monitoring is unavailable.")
     try:
-        matches = await service.scan_new(payload.owner_user_id)
+        matches = await service.scan_new(owner_user_id)
     except Exception:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "EIS monitoring request failed.") from None
     return [
@@ -358,6 +367,7 @@ async def analyze_pdf_endpoint(
     owner_user_id: int = Form(gt=0),
     file: UploadFile = File(...),
 ) -> PdfAnalysisResponse:
+    owner_user_id = await resolve_owner(request, owner_user_id)
     runtime = _runtime(request)
     if runtime.tender_repository is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Database is unavailable.")

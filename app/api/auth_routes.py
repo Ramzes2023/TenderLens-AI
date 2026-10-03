@@ -9,8 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.auth import AuthAccount, InvalidCredentials, RegistrationError
 
+from .security import SESSION_COOKIE
+
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
-SESSION_COOKIE = "tenderlens_session"
 
 
 class RegisterRequest(BaseModel):

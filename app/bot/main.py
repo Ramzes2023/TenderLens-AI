@@ -50,7 +50,7 @@ def create_dispatcher() -> Dispatcher:
 
 async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: int = 20000,
                   company_profile=None, tender_repository=None, rag_service=None,
-                  monitoring_service=None, company_service=None) -> None:
+                  monitoring_service=None, company_service=None, auth_service=None) -> None:
     if settings.proxy_url:
         session = AiohttpSession(proxy=settings.proxy_url)
         try:
@@ -75,6 +75,8 @@ async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: in
             dispatcher["monitoring_service"] = monitoring_service
         if company_service is not None:
             dispatcher["company_service"] = company_service
+        if auth_service is not None:
+            dispatcher["auth_service"] = auth_service
         await bot.get_me()  # Validate credentials before announcing successful startup.
         monitor_task = None
         monitor_stop = None
@@ -150,6 +152,20 @@ def main() -> int:
     except Exception as error:
         logger.warning("Company workspaces отключены (%s).", type(error).__name__)
 
+    from app.auth import AuthRepository, AuthService
+    auth_service = None
+    try:
+        if tender_repository is not None:
+            auth_db_path = tender_repository.path
+        else:
+            from app.database import load_database_settings
+            auth_db_path = load_database_settings().path
+        auth_repository = AuthRepository(auth_db_path)
+        auth_repository.initialize()
+        auth_service = AuthService(auth_repository)
+    except Exception as error:
+        logger.warning("Web/Telegram linking отключён (%s).", type(error).__name__)
+
     from app.rag import RagConfigurationError, RagError, RagService, RagStoreError, load_rag_settings
     rag_service = None
     try:
@@ -192,7 +208,7 @@ def main() -> int:
     try:
         asyncio.run(run_bot(
             settings, provider, max_chars, company_profile, tender_repository,
-            rag_service, monitoring_service, company_service
+            rag_service, monitoring_service, company_service, auth_service
         ))
     except KeyboardInterrupt:
         logger.info("Бот остановлен пользователем.")

@@ -5,7 +5,7 @@ import asyncio
 import hashlib
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import APIKeyHeader
 
 from app import __version__
@@ -19,6 +19,7 @@ from app.scoring.models import ScoringResult
 from app.services.pdf import summarize_pdf
 from app.services.tender_analysis import AnalysisError, analyze_tender
 
+from .auth_pages import login_html, register_html
 from .dashboard import dashboard_html
 from .runtime import ApiRuntime
 from .schemas import (
@@ -36,7 +37,7 @@ from .schemas import (
     TenderDetail,
     TenderListItem,
 )
-from .security import require_api_key
+from .security import current_account, require_api_or_session, resolve_owner
 
 router = APIRouter()
 api_key_scheme = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -47,7 +48,7 @@ def _runtime(request: Request) -> ApiRuntime:
 
 
 async def _protected(request: Request, key: str | None = Depends(api_key_scheme)) -> None:
-    await require_api_key(request, key)
+    await require_api_or_session(request, key)
 
 
 def _list_item(record) -> TenderListItem:
@@ -97,11 +98,32 @@ def _company_response(workspace) -> CompanyResponse:
     )
 
 
-@router.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
-async def dashboard() -> HTMLResponse:
-    """Serve the local TenderLens operator dashboard."""
+@router.get("/", include_in_schema=False)
+async def root_page(request: Request):
+    account = await current_account(request, touch=False)
+    return RedirectResponse("/dashboard" if account is not None else "/login", status_code=303)
 
-    return HTMLResponse(dashboard_html())
+
+@router.get("/login", response_class=HTMLResponse, include_in_schema=False)
+async def login_page(request: Request):
+    if await current_account(request, touch=False) is not None:
+        return RedirectResponse("/dashboard", status_code=303)
+    return HTMLResponse(login_html(), headers={"Cache-Control": "no-store"})
+
+
+@router.get("/register", response_class=HTMLResponse, include_in_schema=False)
+async def register_page(request: Request):
+    if await current_account(request, touch=False) is not None:
+        return RedirectResponse("/dashboard", status_code=303)
+    return HTMLResponse(register_html(), headers={"Cache-Control": "no-store"})
+
+
+@router.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
+async def dashboard(request: Request):
+    """Serve the authenticated TenderLens web workspace."""
+    if await current_account(request, touch=False) is None:
+        return RedirectResponse("/login", status_code=303)
+    return HTMLResponse(dashboard_html(), headers={"Cache-Control": "no-store"})
 
 
 @router.get("/health", response_model=HealthResponse, tags=["system"])
@@ -125,6 +147,7 @@ async def health(request: Request) -> HealthResponse:
     dependencies=[Depends(_protected)],
 )
 async def list_companies(request: Request, owner_user_id: int = Query(gt=0)) -> list[CompanyResponse]:
+    owner_user_id = await resolve_owner(request, owner_user_id)
     service = _runtime(request).company_service
     if service is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Company workspaces are unavailable.")
@@ -142,12 +165,13 @@ async def list_companies(request: Request, owner_user_id: int = Query(gt=0)) -> 
     dependencies=[Depends(_protected)],
 )
 async def create_company(payload: CompanyCreateRequest, request: Request) -> CompanyResponse:
+    owner_user_id = await resolve_owner(request, payload.owner_user_id)
     service = _runtime(request).company_service
     if service is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Company workspaces are unavailable.")
     try:
         item = await asyncio.to_thread(
-            service.create, payload.owner_user_id, payload.name, payload.profile,
+            service.create, owner_user_id, payload.name, payload.profile,
             make_active=payload.make_active,
         )
     except Exception as error:
@@ -164,11 +188,12 @@ async def create_company(payload: CompanyCreateRequest, request: Request) -> Com
 async def activate_company(company_id: int, payload: CompanyActivateRequest, request: Request) -> CompanyResponse:
     if company_id <= 0:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "company_id must be positive.")
+    owner_user_id = await resolve_owner(request, payload.owner_user_id)
     service = _runtime(request).company_service
     if service is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Company workspaces are unavailable.")
     try:
-        item = await asyncio.to_thread(service.set_active, payload.owner_user_id, company_id)
+        item = await asyncio.to_thread(service.set_active, owner_user_id, company_id)
     except Exception as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from None
     return _company_response(item)
@@ -185,6 +210,7 @@ async def list_tenders(
     owner_user_id: int = Query(gt=0),
     limit: int = Query(10, ge=1, le=20),
 ) -> list[TenderListItem]:
+    owner_user_id = await resolve_owner(request, owner_user_id)
     repository = _runtime(request).tender_repository
     if repository is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Database is unavailable.")
@@ -208,6 +234,7 @@ async def get_tender(
 ) -> TenderDetail:
     if tender_id <= 0:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "tender_id must be positive.")
+    owner_user_id = await resolve_owner(request, owner_user_id)
     repository = _runtime(request).tender_repository
     if repository is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Database is unavailable.")
@@ -231,15 +258,27 @@ async def evaluate_score(
     request: Request,
     owner_user_id: int | None = Query(default=None, gt=0),
 ) -> ScoringResult:
+    owner_user_id = await resolve_owner(request, owner_user_id)
     runtime = _runtime(request)
+    account = await current_account(request, touch=False)
     profile = runtime.company_profile
     if owner_user_id is not None and runtime.company_service is not None:
         try:
-            profile = await asyncio.to_thread(runtime.company_service.profile_for_owner, owner_user_id)
+            if account is not None:
+                workspace = await asyncio.to_thread(runtime.company_service.active, owner_user_id)
+                profile = workspace.profile if workspace is not None else None
+            else:
+                profile = await asyncio.to_thread(runtime.company_service.profile_for_owner, owner_user_id)
         except Exception:
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Company profile is unavailable.") from None
     if profile is None:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Company profile is unavailable.")
+        code = status.HTTP_409_CONFLICT if account is not None else status.HTTP_503_SERVICE_UNAVAILABLE
+        detail = (
+            "Create a company profile before using company scoring."
+            if account is not None
+            else "Company profile is unavailable."
+        )
+        raise HTTPException(code, detail)
     return score_tender(analysis, profile)
 
 
@@ -250,6 +289,7 @@ async def evaluate_score(
     dependencies=[Depends(_protected)],
 )
 async def rag_ask(payload: RagAskRequest, request: Request) -> RagAskResponse:
+    owner_user_id = await resolve_owner(request, payload.owner_user_id)
     runtime = _runtime(request)
     if runtime.rag_service is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "RAG is unavailable.")
@@ -257,7 +297,7 @@ async def rag_ask(payload: RagAskRequest, request: Request) -> RagAskResponse:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "LLM is unavailable.")
     try:
         answer = await runtime.rag_service.answer(
-            payload.owner_user_id,
+            owner_user_id,
             payload.pdf_sha256.lower(),
             payload.question,
             runtime.provider,
@@ -285,17 +325,30 @@ async def monitoring_status(
     request: Request,
     owner_user_id: int = Query(gt=0),
 ) -> MonitorStatusResponse:
+    owner_user_id = await resolve_owner(request, owner_user_id)
     service = _runtime(request).monitoring_service
     if service is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Monitoring is unavailable.")
     subscription = await service.subscription(owner_user_id)
     runtime = _runtime(request)
+    account = await current_account(request, touch=False)
     workspace = None
     if runtime.company_service is not None:
         try:
             workspace = await asyncio.to_thread(runtime.company_service.active, owner_user_id)
         except Exception:
             workspace = None
+
+    if account is not None and workspace is None:
+        return MonitorStatusResponse(
+            background_enabled=service.settings.enabled,
+            interval_seconds=service.settings.interval_seconds,
+            rss_feeds=0,
+            subscription_enabled=False,
+            active_company=None,
+            feed_mode="no-company",
+        )
+
     profile = workspace.profile if workspace is not None else runtime.company_profile
     if profile is None and hasattr(service, "profile_for_owner"):
         profile = await service.profile_for_owner(owner_user_id)
@@ -322,11 +375,31 @@ async def monitoring_status(
     dependencies=[Depends(_protected)],
 )
 async def monitoring_scan(payload: MonitorScanRequest, request: Request) -> list[MonitorNoticeResponse]:
-    service = _runtime(request).monitoring_service
+    owner_user_id = await resolve_owner(request, payload.owner_user_id)
+    runtime = _runtime(request)
+    service = runtime.monitoring_service
     if service is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Monitoring is unavailable.")
+
+    account = await current_account(request, touch=False)
+    if account is not None:
+        workspace = None
+        if runtime.company_service is not None:
+            try:
+                workspace = await asyncio.to_thread(runtime.company_service.active, owner_user_id)
+            except Exception:
+                raise HTTPException(
+                    status.HTTP_503_SERVICE_UNAVAILABLE,
+                    "Company storage is unavailable.",
+                ) from None
+        if workspace is None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Create a company profile before running monitoring.",
+            )
+
     try:
-        matches = await service.scan_new(payload.owner_user_id)
+        matches = await service.scan_new(owner_user_id)
     except Exception:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "EIS monitoring request failed.") from None
     return [
@@ -358,6 +431,7 @@ async def analyze_pdf_endpoint(
     owner_user_id: int = Form(gt=0),
     file: UploadFile = File(...),
 ) -> PdfAnalysisResponse:
+    owner_user_id = await resolve_owner(request, owner_user_id)
     runtime = _runtime(request)
     if runtime.tender_repository is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Database is unavailable.")

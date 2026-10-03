@@ -6,6 +6,7 @@
 flowchart TB
     subgraph Inputs
         TG[Telegram user]
+        WEB[Web account / Dashboard]
         HTTP[HTTP / Swagger client]
         EIS[ЕИС RSS feeds]
     end
@@ -13,6 +14,7 @@ flowchart TB
     subgraph Application
         BOT[aiogram transport]
         API[FastAPI transport]
+        AUTH[Account/session service]
         SRC[Source adapters]
         PARSE[PDF parser]
         ANALYZE[Structured analysis service]
@@ -32,7 +34,10 @@ flowchart TB
     end
 
     TG --> BOT
+    WEB --> API
     HTTP --> API
+    API --> AUTH
+    AUTH --> DB
     EIS --> SRC --> MON
     BOT --> PARSE
     API --> PARSE
@@ -92,11 +97,17 @@ Changing embedding dimensionality requires a new Qdrant collection name instead 
 
 Monitoring is intentionally a **pre-filter**. RSS metadata is not authoritative enough for final scoring; full conditions belong to the document-analysis pipeline.
 
-### API boundary
+### API and identity boundary
 
-FastAPI exposes health, history, analysis, scoring, RAG and monitoring. `/api/v1/*` can be protected by `TENDERLENS_API_KEY`; `/health` and OpenAPI stay available for readiness/documentation.
+FastAPI exposes health, account/session auth, company workspaces, history, analysis, scoring, RAG and monitoring. Browser users authenticate with the HttpOnly session cookie; owner-scoped endpoints derive identity from that session. The legacy `TENDERLENS_API_KEY` path remains for integrations/backward compatibility. `/health` and OpenAPI stay available for readiness/documentation.
 
-The optional API key is not a substitute for real identity and authorization in an internet-facing multi-user service.
+Phase 17 adds real Web account identity but not yet Organizations/Roles. Therefore the current account/owner boundary is suitable for the single-node release, while multi-user customer teams require the next tenant-authorization layer.
+
+### Web ↔ Telegram identity linking
+
+A fresh Web account receives a synthetic owner ID (`WEB_OWNER_OFFSET + account_id`). `Connect Telegram` creates a 10-minute one-time secret; SQLite stores only its SHA-256 digest. The aiogram `/start link_<token>` / `/link <token>` path confirms Telegram `from_user.id`, atomically claims the ticket and invokes the guarded owner migration.
+
+Supported SQLite owner state (company workspaces, active company and monitoring state) moves transactionally. Existing Web sessions point to the account record rather than the old owner value, so the session remains valid after migration. PDF history linking is blocked when a simple SQLite owner rewrite would orphan the separate Qdrant RAG namespace.
 
 ## Deployment topology
 
@@ -106,7 +117,7 @@ Host / Docker Desktop / Linux
   127.0.0.1:8000
           |
 +--------------------------+
-| TenderLens AI v1.4.0 API |
+| TenderLens AI v1.5.0 API |
 | Python 3.12 / Uvicorn    |
 | non-root uid 10001       |
 +------------+-------------+
@@ -145,4 +156,4 @@ This separation is central to the design: uncertain AI interpretation does not s
 
 A new `app.companies` boundary persists several validated `CompanyProfile` workspaces per owner. The active workspace is resolved at request/message time and injected into monitoring and scoring. EIS monitoring can generate per-company RSS searches from `search_keywords`, while static `EIS_RSS_URLS` remains a fallback. Monitoring deduplication is namespaced by active company.
 
-This is deliberately an application-level tenant scope, not yet public SaaS authentication. The next production boundary is authenticated users + organization memberships in PostgreSQL.
+This began as an application-level owner scope. Phase 17 adds authenticated Web accounts and safe Web↔Telegram identity linking; the next tenant boundary is organization membership, roles/permissions and audit isolation before public multi-customer SaaS deployment.

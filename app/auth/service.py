@@ -1,0 +1,184 @@
+"""Application service for TenderLens account registration and sessions."""
+
+from __future__ import annotations
+
+import hashlib
+import re
+import secrets
+from datetime import datetime, timedelta, timezone
+
+from .models import AuthAccount
+from .passwords import PasswordPolicyError, hash_password, verify_password
+from .repository import AuthRepository, AuthRepositoryError
+
+_EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,189}$")
+
+
+class AuthError(RuntimeError):
+    pass
+
+
+class InvalidCredentials(AuthError):
+    pass
+
+
+class RegistrationError(AuthError):
+    pass
+
+
+class TelegramLinkError(AuthError):
+    pass
+
+
+class TelegramLinkUnavailable(TelegramLinkError):
+    pass
+
+
+def normalize_email(email: str) -> str:
+    value = (email or "").strip().lower()
+    if len(value) > 254 or not _EMAIL_RE.fullmatch(value):
+        raise RegistrationError("Enter a valid email address.")
+    local, domain = value.rsplit("@", 1)
+    if "." not in domain or domain.startswith(".") or domain.endswith("."):
+        raise RegistrationError("Enter a valid email address.")
+    return f"{local}@{domain}"
+
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+class AuthService:
+    def __init__(self, repository: AuthRepository, *, session_days: int = 7):
+        self.repository = repository
+        self.session_days = max(1, min(int(session_days), 30))
+
+    def register(self, email: str, password: str) -> AuthAccount:
+        clean_email = normalize_email(email)
+        try:
+            password_hash = hash_password(password)
+            return self.repository.create_account(clean_email, password_hash)
+        except PasswordPolicyError as error:
+            raise RegistrationError(str(error)) from None
+        except AuthRepositoryError as error:
+            raise RegistrationError(str(error)) from None
+
+    def authenticate(self, email: str, password: str) -> AuthAccount:
+        try:
+            clean_email = normalize_email(email)
+        except RegistrationError:
+            raise InvalidCredentials("Invalid email or password.") from None
+        record = self.repository.find_account_by_email(clean_email)
+        if record is None:
+            hash_password(password if 12 <= len(password) <= 128 else "invalid-password-value")
+            raise InvalidCredentials("Invalid email or password.")
+        account, encoded_hash = record
+        if not account.is_active or not verify_password(password, encoded_hash):
+            raise InvalidCredentials("Invalid email or password.")
+        return account
+
+    def create_session(self, account: AuthAccount) -> str:
+        token = secrets.token_urlsafe(32)
+        now = datetime.now(timezone.utc)
+        now_text = now.isoformat(timespec="seconds")
+        expires_at = (now + timedelta(days=self.session_days)).isoformat(timespec="seconds")
+        self.repository.delete_expired_sessions(now_text)
+        self.repository.create_session(account_id=account.id, token_hash=_token_hash(token), expires_at=expires_at)
+        return token
+
+    def account_for_token(self, token: str | None, *, touch: bool = True):
+        if not token:
+            return None
+        token_hash = _token_hash(token)
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        account = self.repository.find_account_for_session(token_hash, now)
+        if account is not None and touch:
+            self.repository.touch_session(token_hash)
+        return account
+
+    def logout(self, token: str | None) -> None:
+        if token:
+            self.repository.delete_session(_token_hash(token))
+
+    def create_telegram_link(self, account: AuthAccount) -> tuple[str, str]:
+        from .repository import WEB_OWNER_OFFSET
+
+        if account.owner_user_id < WEB_OWNER_OFFSET:
+            raise TelegramLinkError("Telegram is already connected.")
+
+        token = secrets.token_urlsafe(24)
+        expires_at = (
+            datetime.now(timezone.utc) + timedelta(minutes=10)
+        ).isoformat(timespec="seconds")
+        try:
+            created = self.repository.create_telegram_link(
+                account_id=account.id,
+                token_hash=_token_hash(token),
+                expires_at=expires_at,
+            )
+        except AuthRepositoryError:
+            raise TelegramLinkUnavailable(
+                "Telegram linking is temporarily unavailable."
+            ) from None
+        if not created:
+            raise TelegramLinkError("Telegram is already connected.")
+        return token, expires_at
+
+    def consume_telegram_link(self, token: str, telegram_user_id: int) -> AuthAccount:
+        clean_token = (token or "").strip()
+        if not clean_token or len(clean_token) > 128:
+            raise TelegramLinkError(
+                "Telegram link is invalid, expired, or already used."
+            )
+
+        try:
+            telegram_owner = int(telegram_user_id)
+        except (TypeError, ValueError):
+            raise TelegramLinkError("Telegram user id is invalid.") from None
+        if telegram_owner <= 0:
+            raise TelegramLinkError("Telegram user id is invalid.")
+
+        claim_marker = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        token_hash = _token_hash(clean_token)
+
+        try:
+            account_id = self.repository.claim_telegram_link(
+                token_hash=token_hash,
+                now=claim_marker,
+            )
+        except AuthRepositoryError as error:
+            raise TelegramLinkError(str(error)) from None
+
+        if account_id is None:
+            raise TelegramLinkError(
+                "Telegram link is invalid, expired, or already used."
+            )
+
+        try:
+            account = self.repository.find_account_by_id(account_id)
+            if account is None:
+                raise TelegramLinkError("Account not found.")
+
+            from .repository import WEB_OWNER_OFFSET
+            if account.owner_user_id < WEB_OWNER_OFFSET:
+                raise TelegramLinkError("Telegram is already connected.")
+
+            return self.repository.link_owner(account.id, telegram_owner)
+        except (TelegramLinkError, AuthRepositoryError) as error:
+            try:
+                self.repository.release_telegram_link(
+                    token_hash=token_hash,
+                    consumed_at=claim_marker,
+                )
+            except AuthRepositoryError:
+                # Fail closed if the reservation cannot be released.
+                pass
+            if isinstance(error, TelegramLinkError):
+                raise
+            raise TelegramLinkError(str(error)) from None
+
+    def link_legacy_owner(self, account: AuthAccount, owner_user_id: int) -> AuthAccount:
+        try:
+            return self.repository.link_owner(account.id, owner_user_id)
+        except AuthRepositoryError as error:
+            raise AuthError(str(error)) from None

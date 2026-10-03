@@ -42,3 +42,69 @@ class CompanyService:
 
     def delete(self, owner_user_id: int, company_id: int) -> bool:
         return self.repository.delete(owner_user_id, company_id)
+
+    # Phase 18C organization-scoped API.
+    def list_for_organization(
+        self,
+        account_id: int,
+        organization_id: int,
+    ) -> list[CompanyWorkspace]:
+        return self.repository.list_for_organization(
+            account_id,
+            organization_id,
+        )
+
+    def get_for_organization(
+        self,
+        account_id: int,
+        organization_id: int,
+        company_id: int,
+    ) -> CompanyWorkspace | None:
+        return self.repository.get_for_organization(
+            account_id,
+            organization_id,
+            company_id,
+        )
+
+    def create_for_organization(
+        self,
+        account,
+        organization_id: int,
+        name: str,
+        profile: CompanyProfile,
+    ) -> CompanyWorkspace:
+        return self.repository.create_for_organization(
+            account_id=account.id,
+            organization_id=organization_id,
+            name=name,
+            profile=profile,
+        )
+
+    def update_for_organization(
+        self,
+        account_id: int,
+        organization_id: int,
+        company_id: int,
+        *,
+        profile: CompanyProfile | None = None,
+        name: str | None = None,
+    ) -> CompanyWorkspace:
+        return self.repository.update_for_organization(
+            account_id=account_id,
+            organization_id=organization_id,
+            company_id=company_id,
+            profile=profile,
+            name=name,
+        )
+
+    def delete_for_organization(
+        self,
+        account_id: int,
+        organization_id: int,
+        company_id: int,
+    ) -> None:
+        return self.repository.delete_for_organization(
+            account_id=account_id,
+            organization_id=organization_id,
+            company_id=company_id,
+        )

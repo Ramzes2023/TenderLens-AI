@@ -15,6 +15,7 @@ class CompanyWorkspace(BaseModel):
 
     id: int = Field(gt=0)
     owner_user_id: int = Field(gt=0)
+    organization_id: int | None = Field(default=None, gt=0)
     name: str = Field(min_length=1, max_length=200)
     profile: CompanyProfile
     is_active: bool = False

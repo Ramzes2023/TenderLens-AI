@@ -65,6 +65,11 @@ def migrate(conn):
         if "organization_id" not in columns:
             conn.execute("ALTER TABLE company_workspaces ADD COLUMN organization_id INTEGER REFERENCES organizations(id) ON DELETE RESTRICT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_company_org ON company_workspaces(organization_id)")
+        conn.execute(
+            """CREATE UNIQUE INDEX IF NOT EXISTS uq_company_org_name
+               ON company_workspaces(organization_id, name)
+               WHERE organization_id IS NOT NULL"""
+        )
     if table_exists(conn, "auth_accounts"):
         for row in conn.execute("SELECT id FROM auth_accounts").fetchall():
             ensure_personal(conn, row[0])

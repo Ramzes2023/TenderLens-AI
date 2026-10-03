@@ -124,8 +124,13 @@
 - [x] Phase 18B: transactional owner/admin RBAC for membership management.
 - [x] Phase 18B: legacy API key is not accepted as organization identity.
 - [x] Phase 18B: same-origin protection and cross-organization access tests.
-- [ ] Next: organization-scope company workspaces while preserving legacy owner compatibility.
-- [ ] Later: invitations, organization UI and release preparation.
+- [x] Phase 18C: organization-scoped shared company workspaces.
+- [x] Phase 18C: owner/admin/member/viewer company RBAC.
+- [x] Phase 18C: transactional company authorization and mutation.
+- [x] Phase 18C: reserved organization owner namespace isolated from legacy owner APIs.
+- [x] Phase 18C: legacy API-key path cannot expose shared organization companies.
+- [ ] Next: organization active-company context and scoring/monitoring integration.
+- [ ] Later: tender/RAG organization scope, invitations, organization UI and release preparation.
 
 Not full multi-tenant security: existing endpoints still authorize owner_user_id.
 No billing, invitations, Dashboard redesign, release bump or production migration performed.

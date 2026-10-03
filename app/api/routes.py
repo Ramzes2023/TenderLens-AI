@@ -5,7 +5,7 @@ import asyncio
 import hashlib
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import APIKeyHeader
 
 from app import __version__
@@ -19,6 +19,7 @@ from app.scoring.models import ScoringResult
 from app.services.pdf import summarize_pdf
 from app.services.tender_analysis import AnalysisError, analyze_tender
 
+from .auth_pages import login_html, register_html
 from .dashboard import dashboard_html
 from .runtime import ApiRuntime
 from .schemas import (
@@ -36,7 +37,7 @@ from .schemas import (
     TenderDetail,
     TenderListItem,
 )
-from .security import require_api_or_session, resolve_owner
+from .security import current_account, require_api_or_session, resolve_owner
 
 router = APIRouter()
 api_key_scheme = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -97,11 +98,32 @@ def _company_response(workspace) -> CompanyResponse:
     )
 
 
-@router.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
-async def dashboard() -> HTMLResponse:
-    """Serve the local TenderLens operator dashboard."""
+@router.get("/", include_in_schema=False)
+async def root_page(request: Request):
+    account = await current_account(request, touch=False)
+    return RedirectResponse("/dashboard" if account is not None else "/login", status_code=303)
 
-    return HTMLResponse(dashboard_html())
+
+@router.get("/login", response_class=HTMLResponse, include_in_schema=False)
+async def login_page(request: Request):
+    if await current_account(request, touch=False) is not None:
+        return RedirectResponse("/dashboard", status_code=303)
+    return HTMLResponse(login_html(), headers={"Cache-Control": "no-store"})
+
+
+@router.get("/register", response_class=HTMLResponse, include_in_schema=False)
+async def register_page(request: Request):
+    if await current_account(request, touch=False) is not None:
+        return RedirectResponse("/dashboard", status_code=303)
+    return HTMLResponse(register_html(), headers={"Cache-Control": "no-store"})
+
+
+@router.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
+async def dashboard(request: Request):
+    """Serve the authenticated TenderLens web workspace."""
+    if await current_account(request, touch=False) is None:
+        return RedirectResponse("/login", status_code=303)
+    return HTMLResponse(dashboard_html(), headers={"Cache-Control": "no-store"})
 
 
 @router.get("/health", response_model=HealthResponse, tags=["system"])

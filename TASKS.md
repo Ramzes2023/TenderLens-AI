@@ -1,4 +1,4 @@
-## v1.6.0 release candidate preparation
+## v1.6.0 release finalization
 
 - [x] Phase 18A-F2 organization/RBAC feature work completed on the development branch.
 - [x] Source version and Compose target advanced from 1.5.0 to 1.6.0 without moving the existing v1.5.0 tag.
@@ -8,8 +8,8 @@
 - [x] Passed isolated Docker session/organization/invitation/security smoke, including one-time acceptance, replay protection, SHA-256-at-rest token verification and no-referrer invitation/auth pages.
 - [x] Passed additive Phase 18 migration against a consistent snapshot of the current v1.5.0 production SQLite database: integrity OK, foreign-key check clean and all original v1.5.0 rows preserved.
 - [x] Verified existing Web account/session/Telegram link, AluTrade, active company, 40 monitoring dedup rows and monitoring subscription survive the v1.5.0 -> v1.6.0 migration; AluTrade is backfilled to the personal organization.
-- [ ] Push release-prep commit and open the Phase 18 pull request.
-- [ ] Require CI to pass before merge.
+- [x] Release-prep commit pushed; PR #7 opened and merged into `main`.
+- [x] PR #7 CI passed before merge, including tests and Docker build checks.
 - [ ] Create the v1.6.0 tag/GitHub Release only after explicit release approval.
 - [ ] Production deployment remains a separate explicit step.
 

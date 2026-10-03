@@ -1,9 +1,9 @@
 # TenderLens AI v1.6.0
 
-Status: release candidate preparation.
+Status: validated for v1.6.0 release.
 
-This document describes the intended v1.6.0 release content. It does not mean
-that the Git tag, GitHub Release or production deployment already exists.
+This document describes the validated v1.6.0 release content. Git tagging and
+GitHub Release publication are separate from production deployment.
 
 ## Highlights
 
@@ -89,11 +89,10 @@ Completed locally for RC1:
 - byte-for-byte preservation of all original-column v1.5.0 rows;
 - preservation of the existing account/session/Telegram link, AluTrade, active-company and monitoring state.
 
-## Remaining release gates
+## Release publication
 
-Before publishing the final release:
+PR #7 passed CI and was merged into `main`.
 
-- CI on the release pull request.
-
-Tagging, GitHub Release publication and production deployment remain separate
-explicit decisions after those checks pass.
+The release is published by creating the `v1.6.0` Git tag and GitHub Release
+from the validated final commit. Production deployment remains a separate
+explicit step.

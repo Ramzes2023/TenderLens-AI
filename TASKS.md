@@ -107,3 +107,21 @@
 - [ ] Organization memberships and roles/permissions (Phase 18).
 - [ ] Supplier-intelligence sources for `buy` mode.
 - [ ] International tender source adapters.
+
+
+## Phase 18 — Multi-Tenant Security + Organizations + Roles (development)
+
+### Phase 18A — Organization/membership foundation
+- [x] Additive SQLite organizations and organization_members, role enum/CHECK, FK/indexes.
+- [x] Atomic registration + personal organization + owner membership.
+- [x] Idempotent startup/backfill; unique personal_account_id prevents duplicates.
+- [x] Nullable company organization_id; only unambiguous authenticated owner mappings.
+- [x] Internal repository/service, explicit allowed-role authorization primitives.
+- [x] Last-owner preservation and concurrency tests on temporary SQLite databases.
+- [x] Legacy Telegram owners and v1.5.0 HTTP/session/API-key behavior remain compatible.
+- [ ] Later Phase 18: organization-scoped enforcement across endpoints/resources.
+- [ ] Later: invitations, organization UI and release preparation.
+
+Not full multi-tenant security: existing endpoints still authorize owner_user_id.
+No billing, invitations, Dashboard redesign, release bump or production migration performed.
+See PHASE18A.md for migration and security boundaries.

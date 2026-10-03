@@ -13,6 +13,7 @@ from pathlib import Path
 from app.scoring.models import CompanyProfile
 
 from .models import CompanyWorkspace
+from app.organizations.migration import migrate, backfill_companies
 
 
 class CompanyRepositoryError(RuntimeError):
@@ -57,6 +58,8 @@ class CompanyRepository:
                         );
                         """
                     )
+                    conn.execute("BEGIN IMMEDIATE")
+                    migrate(conn)
         except (OSError, sqlite3.Error):
             raise CompanyRepositoryError("Не удалось инициализировать company workspace storage.") from None
 
@@ -104,6 +107,7 @@ class CompanyRepository:
                         (int(owner_user_id), clean_name, profile.model_dump_json(), now, now),
                     )
                     company_id = int(cursor.lastrowid)
+                    backfill_companies(conn, owner_user_id)
                     active_id = self._active_id(conn, owner_user_id)
                     if make_active or active_id is None:
                         conn.execute(

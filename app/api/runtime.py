@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from app.rag.service import RagService
     from app.scoring.models import CompanyProfile
     from app.companies import CompanyService
+    from app.auth import AuthService
 
 
 @dataclass
@@ -23,6 +24,7 @@ class ApiRuntime:
     tender_max_chars: int = 20000
     company_profile: "CompanyProfile | Any | None" = None
     company_service: "CompanyService | Any | None" = None
+    auth_service: "AuthService | Any | None" = None
     tender_repository: "TenderRepository | Any | None" = None
     rag_service: "RagService | Any | None" = None
     monitoring_service: "TenderMonitorService | Any | None" = None
@@ -34,6 +36,7 @@ class ApiRuntime:
             "llm": "ready" if self.provider is not None else "unavailable",
             "scoring": "ready" if (self.company_profile is not None or self.company_service is not None) else "unavailable",
             "companies": "ready" if self.company_service is not None else "unavailable",
+            "auth": "ready" if self.auth_service is not None else "unavailable",
             "rag": "ready" if self.rag_service is not None else "unavailable",
             "monitoring": "ready" if self.monitoring_service is not None else "unavailable",
         }
@@ -83,6 +86,21 @@ def build_runtime() -> ApiRuntime:
         runtime.company_service = CompanyService(company_repository, fallback_profile=runtime.company_profile)
     except Exception:
         runtime.component_errors["companies"] = "Company workspaces unavailable"
+
+    try:
+        from app.auth import AuthRepository, AuthService
+        from app.database import load_database_settings
+
+        db_path = (
+            runtime.tender_repository.path
+            if runtime.tender_repository is not None
+            else load_database_settings().path
+        )
+        auth_repository = AuthRepository(db_path)
+        auth_repository.initialize()
+        runtime.auth_service = AuthService(auth_repository)
+    except Exception:
+        runtime.component_errors["auth"] = "Authentication unavailable"
 
     try:
         from app.rag import RagService, load_rag_settings

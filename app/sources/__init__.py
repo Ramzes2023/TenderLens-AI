@@ -67,6 +67,12 @@ from .za_etenders import (
     ZaETendersSource,
     parse_za_etenders_response,
 )
+from .india_cppp import (
+    INDIA_CPPP_HOME_URL,
+    INDIA_CPPP_LIST_URL,
+    IndiaCpppSource,
+    parse_india_cppp_listing,
+)
 
 __all__ = [
     "TenderSource",
@@ -116,4 +122,9 @@ __all__ = [
     "ZA_ETENDERS_OPPORTUNITIES_URL",
     "ZaETendersSource",
     "parse_za_etenders_response",
+
+    "INDIA_CPPP_HOME_URL",
+    "INDIA_CPPP_LIST_URL",
+    "IndiaCpppSource",
+    "parse_india_cppp_listing",
 ]

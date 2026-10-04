@@ -26,6 +26,12 @@ from .catalog import (
     SourceCatalog,
     build_source_catalog,
 )
+from .ted_api import (
+    TED_FIELDS,
+    TED_SEARCH_URL,
+    TedApiSource,
+    parse_ted_search_response,
+)
 
 __all__ = [
     "TenderSource",
@@ -47,4 +53,8 @@ __all__ = [
     "SourceRunStatus",
     "SourceCatalog",
     "build_source_catalog",
+    "TED_FIELDS",
+    "TED_SEARCH_URL",
+    "TedApiSource",
+    "parse_ted_search_response",
 ]

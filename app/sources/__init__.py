@@ -42,6 +42,12 @@ from .uk_fts_api import (
     UkFindTenderApiSource,
     parse_uk_fts_response,
 )
+from .canada_buys_dataset import (
+    CANADABUYS_OPEN_TENDERS_URL,
+    CANADABUYS_SEARCH_URL,
+    CanadaBuysDatasetSource,
+    parse_canadabuys_csv,
+)
 
 __all__ = [
     "TenderSource",
@@ -73,4 +79,8 @@ __all__ = [
     "UK_FTS_SEARCH_URL",
     "UkFindTenderApiSource",
     "parse_uk_fts_response",
+    "CANADABUYS_OPEN_TENDERS_URL",
+    "CANADABUYS_SEARCH_URL",
+    "CanadaBuysDatasetSource",
+    "parse_canadabuys_csv",
 ]

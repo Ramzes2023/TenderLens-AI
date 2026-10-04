@@ -26,15 +26,15 @@ class Phase19PublicEdgeTests(unittest.TestCase):
         )
 
         self.assertIn(
-            '      - "80:80"',
+            '      - "${TENDERLENS_HTTP_PORT:-80}:80"',
             text,
         )
         self.assertIn(
-            '      - "443:443"',
+            '      - "${TENDERLENS_HTTPS_PORT:-443}:443"',
             text,
         )
         self.assertIn(
-            '      - "443:443/udp"',
+            '      - "${TENDERLENS_HTTPS_PORT:-443}:443/udp"',
             text,
         )
 
@@ -53,6 +53,14 @@ class Phase19PublicEdgeTests(unittest.TestCase):
         )
         self.assertIn(
             "ipv4_address: 172.30.19.2",
+            text,
+        )
+        self.assertIn(
+            "ipv4_address: 172.30.19.3",
+            text,
+        )
+        self.assertIn(
+            "ipv4_address: 172.30.19.4",
             text,
         )
         self.assertIn(

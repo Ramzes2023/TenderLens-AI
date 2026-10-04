@@ -27,7 +27,8 @@ services:
     volumes:
       - tenderlens_data:/app/data
     networks:
-      - edge
+      edge:
+        ipv4_address: 172.30.19.3
     stop_grace_period: 20s
 
   bot:
@@ -53,7 +54,8 @@ services:
     volumes:
       - tenderlens_data:/app/data
     networks:
-      - edge
+      edge:
+        ipv4_address: 172.30.19.4
     stop_grace_period: 30s
     healthcheck:
       disable: true
@@ -68,9 +70,9 @@ services:
       TENDERLENS_DOMAIN: "${TENDERLENS_DOMAIN:?TENDERLENS_DOMAIN must be set}"
       ACME_EMAIL: "${ACME_EMAIL:?ACME_EMAIL must be set}"
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      - "${TENDERLENS_HTTP_PORT:-80}:80"
+      - "${TENDERLENS_HTTPS_PORT:-443}:443"
+      - "${TENDERLENS_HTTPS_PORT:-443}:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

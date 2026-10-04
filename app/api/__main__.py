@@ -19,6 +19,8 @@ def main() -> int:
         host=settings.host,
         port=settings.port,
         reload=settings.reload,
+        proxy_headers=True,
+        forwarded_allow_ips=settings.forwarded_allow_ips,
     )
     return 0
 

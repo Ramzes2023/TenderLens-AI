@@ -51,7 +51,7 @@
 - Added Web Dashboard documentation and automated tests.
 - Release version bumped to 1.4.0.
 
-# TenderLens AI — implementation checklist
+# VALYQON AI — implementation checklist
 
 ## v1.3.0 completed
 - Added guided company profile editing.

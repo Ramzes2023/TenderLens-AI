@@ -1,1 +1,1 @@
-"""Deployment helpers for TenderLens AI."""
+"""Deployment helpers for VALYQON AI."""

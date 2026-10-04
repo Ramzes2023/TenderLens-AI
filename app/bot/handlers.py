@@ -43,7 +43,7 @@ from .monitoring import (
 from .rag import ask_handler
 
 START_TEXT = (
-    "Здравствуйте! TenderLens AI — система мониторинга тендеров и анализа "
+    "Здравствуйте! VALYQON AI — система мониторинга тендеров и анализа "
     "тендерной документации с применением искусственного интеллекта.\n\n"
     "Создать персональный профиль компании можно пошагово через /company_setup. "
     "Управлять профилями можно через /companies, /company_edit и /company_delete. "
@@ -53,8 +53,8 @@ START_TEXT = (
     "Система также читает настроенные RSS-ленты ЕИС и присылает новые подходящие закупки.\nИспользуйте /help для списка команд."
 )
 HELP_TEXT = (
-    "Доступные команды:\n/start — знакомство с TenderLens AI\n"
-    "/link <код> — подключить Telegram к TenderLens Web\n"
+    "Доступные команды:\n/start — знакомство с VALYQON AI\n"
+    "/link <код> — подключить Telegram к VALYQON AI Web\n"
     "/help — список команд\n/status — проверка работы бота\n/history — последние обработанные тендеры\n/ask <вопрос> — вопрос по последнему PDF через RAG\n"
     "/tenders — проверить новые закупки из настроенных RSS ЕИС\n"
     "/monitor_on — включить автоуведомления о новых закупках\n"
@@ -70,7 +70,7 @@ HELP_TEXT = (
     "Отправьте PDF как документ: до 10 МиБ и 200 страниц. "
     "Покажу имя, страницы и количество символов. Текст читаемого PDF отправляется в GigaChat для AI-сводки; затем доступен детерминированный fit-score по профилю компании. OCR недоступен."
 )
-STATUS_TEXT = "TenderLens AI is running."
+STATUS_TEXT = "VALYQON AI is running."
 
 
 async def start_handler(message: Message, auth_service=None) -> None:

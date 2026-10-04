@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
-<title id="title">TenderLens AI — tender intelligence for teams</title>
+<title id="title">VALYQON AI — tender intelligence for teams</title>
 <desc id="desc">Conceptual workflow, not a screenshot: PDF documents and EIS feeds enter analysis, scoring, RAG and team workspaces. Version 1.6.0, localhost-first.</desc>
 <defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#081426"/><stop offset="1" stop-color="#172c48"/></linearGradient></defs>
 <rect width="1280" height="640" rx="24" fill="url(#bg)"/>
 <g font-family="Segoe UI,Arial,sans-serif">
-<text x="64" y="76" fill="#8baeff" font-size="16" letter-spacing="3">DOCUMENT INTELLIGENCE / TEAM WORKSPACES</text>
-<text x="64" y="154" fill="#f4f7ff" font-size="62" font-weight="700">TenderLens AI</text>
-<text x="64" y="204" fill="#c0cde0" font-size="25">Discover opportunities. Understand conditions. Keep decisions human.</text>
+<text x="64" y="76" fill="#8baeff" font-size="16" letter-spacing="3">AI PROCUREMENT INTELLIGENCE PLATFORM</text>
+<text x="64" y="154" fill="#f4f7ff" font-size="62" font-weight="700">VALYQON AI</text>
+<text x="64" y="204" fill="#c0cde0" font-size="25">Find. Analyze. Score. Win.</text>
 <rect x="1090" y="112" width="122" height="48" rx="24" fill="#294573"/>
 <text x="1112" y="144" fill="#dce8ff" font-size="23">v1.6.0</text>
 <g stroke="#45618b" stroke-width="2" fill="none"><path d="M314 344H398M314 448H398M398 344V448M398 396H464M790 396H856"/></g>

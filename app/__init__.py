@@ -1,4 +1,4 @@
-"""TenderLens AI — tender monitoring and document intelligence platform."""
+"""VALYQON AI — tender monitoring and document intelligence platform."""
 
 __version__ = "1.6.0"
 

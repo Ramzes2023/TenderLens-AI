@@ -1,8 +1,8 @@
-# Portfolio notes — how to present TenderLens AI
+# Portfolio notes — how to present VALYQON AI
 
 ## 30-second summary
 
-TenderLens AI is a Python tender-intelligence platform with authenticated Web accounts and shared organization workspaces. It monitors live EIS feeds, accepts tender PDFs through Telegram or FastAPI, extracts structured facts with GigaChat, applies deterministic company-fit scoring, isolates personal and organization tender/RAG data, supports owner/admin/member/viewer RBAC and invitation-based team onboarding, and provides semantic document Q&A with multilingual FastEmbed embeddings and Qdrant. The API is containerized with Docker and covered by automated tests/CI.
+VALYQON AI is a Python tender-intelligence platform with authenticated Web accounts and shared organization workspaces. It monitors live EIS feeds, accepts tender PDFs through Telegram or FastAPI, extracts structured facts with GigaChat, applies deterministic company-fit scoring, isolates personal and organization tender/RAG data, supports owner/admin/member/viewer RBAC and invitation-based team onboarding, and provides semantic document Q&A with multilingual FastEmbed embeddings and Qdrant. The API is containerized with Docker and covered by automated tests/CI.
 
 ## What is technically strongest
 
@@ -29,7 +29,7 @@ SQLite and Qdrant local mode are a deliberate single-node MVP choice. The reposi
 ## Useful interview questions and answers
 
 **Why not let the LLM decide whether to participate?**  
-Because that mixes uncertain interpretation with a high-impact business rule. TenderLens separates extracted facts from deterministic scoring and leaves the final decision to a person.
+Because that mixes uncertain interpretation with a high-impact business rule. VALYQON AI separates extracted facts from deterministic scoring and leaves the final decision to a person.
 
 **Why Qdrant if the project is small?**  
 It demonstrates a real vector-store abstraction and metadata-filtered retrieval while local mode keeps the demo operationally simple. The same conceptual boundary can move to Qdrant server/Cloud later.
@@ -101,10 +101,11 @@ not organization identity.
 **Are team notifications running in the background?** Organization scans are on-demand.
 Background organization notifications remain backlog; personal Telegram subscriptions exist.
 
-**What would a public launch require first?** A VPS/domain, HTTPS and trusted proxy
-configuration; PostgreSQL with migrations and Qdrant server; edge/shared throttling,
-structured audit events, monitoring, backup/restore drills, retention and secret rotation.
-These are planned requirements, not completed production capabilities.
+**What comes after a single-node HTTPS deployment?** The public Compose edge already
+provides Caddy HTTPS, security headers and trusted proxy configuration. Multi-node
+operation would require PostgreSQL with migrations and Qdrant server. Shared throttling,
+structured audit events, monitoring, backup/restore drills, retention and secret rotation
+remain operational work; HTTPS alone does not establish those capabilities.
 
 Present this as a working engineering portfolio project. Describe your actual role
 and AI-assisted development honestly; do not claim customers or employment experience

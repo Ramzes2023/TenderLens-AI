@@ -1,4 +1,4 @@
-"""Authenticated browser dashboard for TenderLens."""
+"""Authenticated browser dashboard for VALYQON AI."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ def dashboard_html() -> str:
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow">
-  <title>TenderLens AI Dashboard</title>
+  <title>VALYQON AI Dashboard</title>
   <style>
     :root {{ color-scheme:dark; --bg:#08111f; --panel:#101c31; --panel2:#162641; --text:#f4f7fb; --muted:#9eacc4; --line:#293c5d; --accent:#79a7ff; --good:#60d394; --warn:#ffcf70; }}
     * {{ box-sizing:border-box; }} body {{ margin:0; font-family:Inter,system-ui,sans-serif; background:radial-gradient(circle at top right,rgba(80,120,220,.16),transparent 34rem),var(--bg); color:var(--text); }}
@@ -41,7 +41,7 @@ def dashboard_html() -> str:
 <body>
 <main class="shell">
   <div class="top">
-    <div><h1>TenderLens AI</h1><div class="muted">Procurement intelligence dashboard</div></div>
+    <div><h1>VALYQON AI</h1><div class="muted">AI Procurement Intelligence Platform</div></div>
     <div class="toolbar"><span id="email" class="badge">Loading account…</span><span class="badge">v{version}</span><a href="/docs"><button>API Docs</button></a><button onclick="refreshAll()">Refresh</button><button onclick="logout()">Sign out</button></div>
   </div>
 
@@ -52,7 +52,7 @@ def dashboard_html() -> str:
 
     <article class="p s12" id="telegramCard">
       <h2>Telegram <span id="telegramStatus" class="chip">Checking…</span></h2>
-      <p class="muted">Connect your Telegram account to use the same TenderLens workspace in the bot and on the web.</p>
+      <p class="muted">Connect your Telegram account to use the same VALYQON AI workspace in the bot and on the web.</p>
       <div class="toolbar"><button id="connectTelegram" class="primary" disabled onclick="connectTelegram()">Connect Telegram</button>
       <a id="telegramOpen" hidden target="_blank" rel="noopener noreferrer">Open Telegram</a></div>
       <p id="telegramMessage" class="sub" role="status" aria-live="polite"></p>
@@ -195,7 +195,7 @@ def dashboard_html() -> str:
         <div class="f12">
           <label for="keywords">Products / monitoring keywords *</label>
           <textarea id="keywords" placeholder="aluminium profiles, aluminum structures, фасадный профиль"></textarea>
-          <div class="help">These words define what TenderLens searches for and scores against.</div>
+          <div class="help">These words define what VALYQON AI searches for and scores against.</div>
         </div>
         <div class="f12">
           <label for="excludedKeywords">Excluded keywords</label>
@@ -226,7 +226,7 @@ def dashboard_html() -> str:
     <article class="p s12"><h2>Live EIS scan <button id="scanButton" class="primary" onclick="scanEis()">Scan now</button></h2><div id="scanResults"><div class="empty">Run a scan to see new matching notices.</div></div></article>
   </section>
 
-  <footer>TenderLens AI v{version} · authenticated web workspace</footer>
+  <footer>VALYQON AI v{version} · authenticated web workspace</footer>
 </main>
 <script>
 const state={{accountId:null,ownerId:null,hasActiveCompany:false}};

@@ -1,4 +1,4 @@
-"""SQLite persistence for TenderLens web accounts and sessions."""
+"""SQLite persistence for VALYQON AI web accounts and sessions."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 # Security notes
 
-TenderLens AI v1.6.0 is a single-node release with Web accounts, session authentication, shared organizations, role-based authorization, invitation flows and Telegram identity linking. These notes describe what is protected, what is persisted, and what must still change before a public multi-replica production deployment.
+VALYQON AI v1.6.0 is a single-node release with Web accounts, session authentication, shared organizations, role-based authorization, invitation flows and Telegram identity linking. These notes describe what is protected, what is persisted, and what must still change before a public multi-replica production deployment.
 
 ## Secrets
 
@@ -80,4 +80,4 @@ The bot redacts known token/proxy secrets and suppresses verbose vendor HTTP log
 
 ## Procurement safety boundary
 
-TenderLens does not submit bids or make the final participate/do-not-participate decision. RSS data is pre-filter metadata. LLM-extracted facts, scores and RAG answers must be checked against authoritative tender documents before commercial/legal action.
+VALYQON AI does not submit bids or make the final participate/do-not-participate decision. RSS data is pre-filter metadata. LLM-extracted facts, scores and RAG answers must be checked against authoritative tender documents before commercial/legal action.

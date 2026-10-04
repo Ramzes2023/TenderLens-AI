@@ -1,6 +1,6 @@
 # Examples
 
-`sample_tender.pdf` is a synthetic tender created only for TenderLens demonstration/testing. It is not an actual procurement notice and contains no real bid invitation.
+`sample_tender.pdf` is a synthetic tender created only for VALYQON AI demonstration/testing. It is not an actual procurement notice and contains no real bid invitation.
 
 Suggested demo:
 

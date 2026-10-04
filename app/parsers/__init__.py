@@ -1,1 +1,1 @@
-"""TenderLens AI: foundation only; implementation is planned."""
+"""VALYQON AI: foundation only; implementation is planned."""

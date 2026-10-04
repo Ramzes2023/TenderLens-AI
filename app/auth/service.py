@@ -1,4 +1,4 @@
-"""Application service for TenderLens account registration and sessions."""
+"""Application service for VALYQON AI account registration and sessions."""
 
 from __future__ import annotations
 

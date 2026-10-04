@@ -1,4 +1,4 @@
-"""Strict container healthcheck for TenderLens AI.
+"""Strict container healthcheck for VALYQON AI.
 
 The public `/health` endpoint intentionally returns HTTP 200 even when some
 optional components are unavailable so operators can inspect the degraded
@@ -33,9 +33,9 @@ def check(url: str | None = None, timeout: float = 5.0) -> bool:
 def main() -> int:
     healthy = check()
     if not healthy:
-        print("TenderLens healthcheck failed", file=sys.stderr)
+        print("VALYQON AI healthcheck failed", file=sys.stderr)
         return 1
-    print("TenderLens healthcheck OK")
+    print("VALYQON AI healthcheck OK")
     return 0
 
 

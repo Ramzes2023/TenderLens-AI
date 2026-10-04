@@ -1,4 +1,4 @@
-"""Web account authentication routes for TenderLens."""
+"""Web account authentication routes for VALYQON AI."""
 
 from __future__ import annotations
 

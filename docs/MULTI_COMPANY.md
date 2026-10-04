@@ -1,6 +1,6 @@
 # Multi-company workspaces (Phase 13)
 
-TenderLens can now keep several company profiles for one Telegram/API owner and switch the active company without changing `.env` or restarting the application.
+VALYQON AI can now keep several company profiles for one Telegram/API owner and switch the active company without changing `.env` or restarting the application.
 
 The active company controls:
 

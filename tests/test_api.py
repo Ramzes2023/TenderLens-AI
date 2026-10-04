@@ -98,6 +98,8 @@ class ApiTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["status"], "ok")
         self.assertEqual(body["version"], __version__)
+        self.assertEqual(body["service"], "TenderLens AI")
+        self.assertEqual(self.client.get("/openapi.json").json()["info"]["title"], "VALYQON AI API")
         self.assertNotIn("phase", body)
         self.assertEqual(body["components"]["database"], "ready")
         self.assertEqual(self.client.get("/openapi.json").status_code, 200)

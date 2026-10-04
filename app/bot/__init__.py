@@ -1,1 +1,1 @@
-"""TenderLens AI Telegram command interface."""
+"""VALYQON AI Telegram command interface."""

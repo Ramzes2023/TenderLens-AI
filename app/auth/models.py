@@ -1,4 +1,4 @@
-"""Authentication domain models for TenderLens web accounts."""
+"""Authentication domain models for VALYQON AI web accounts."""
 
 from __future__ import annotations
 

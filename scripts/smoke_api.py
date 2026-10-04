@@ -1,4 +1,4 @@
-"""Small dependency-free smoke check for a running TenderLens API."""
+"""Small dependency-free smoke check for a running VALYQON AI API."""
 from __future__ import annotations
 
 import argparse
@@ -43,7 +43,7 @@ def run(base_url: str, *, api_key: str | None = None) -> None:
         raise RuntimeError("OpenAPI missing endpoints: " + ", ".join(sorted(missing)))
 
     components = health.get("components") or {}
-    print("TenderLens API smoke check: OK")
+    print("VALYQON AI API smoke check: OK")
     print(f"version={health.get('version')} status={health.get('status')}")
     print("components=" + ", ".join(f"{k}:{v}" for k, v in sorted(components.items())))
     print(f"openapi_paths={len(paths)}")

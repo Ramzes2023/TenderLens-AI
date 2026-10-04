@@ -2,7 +2,7 @@
 
 ## Supported portfolio deployment
 
-TenderLens ships a single-node Docker Compose deployment with two services: `api` (FastAPI) and `bot` (Telegram polling + EIS monitoring).
+VALYQON AI ships a single-node Docker Compose deployment with two services: `api` (FastAPI) and `bot` (Telegram polling + EIS monitoring).
 
 Requirements:
 
@@ -60,7 +60,7 @@ Stop containers without deleting state:
 docker compose down
 ```
 
-Delete the named volume only when you intentionally want to erase local TenderLens state:
+Delete the named volume only when you intentionally want to erase local VALYQON AI state:
 
 ```powershell
 docker compose down -v
@@ -94,3 +94,15 @@ A host proxy at `127.0.0.1` is not the same address from inside a container. Com
 ## Scaling limitation
 
 Qdrant local mode is file-backed. API and bot therefore use separate local Qdrant directories while sharing SQLite and the model cache. Do not scale either service to multiple replicas with local Qdrant/SQLite; migrate to PostgreSQL and Qdrant server/Cloud first.
+
+## Public HTTPS edge
+
+`compose.public.yaml` adds Caddy TLS termination, HTTP-to-HTTPS redirect, security
+headers and explicit trusted-proxy networking. Only Caddy publishes ports 80/443;
+the API is internal. Public settings are documented in `.env.public.example`.
+Existing production keeps its current runtime env, project name and volume.
+The branding change requires no data or infrastructure migration; see
+[compatibility](BRANDING_COMPATIBILITY.md). This guide does not authorize a deployment.
+
+Single-node storage, process-local throttling and operational backup/retention
+requirements still apply. HTTPS does not imply high availability or certification.

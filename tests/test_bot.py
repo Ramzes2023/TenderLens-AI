@@ -115,7 +115,7 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
                     method = bot.session.make_request.call_args.args[1]
                     self.assertEqual(method.text, expected)
                     self.assertEqual(method.chat_id, 42)
-        self.assertEqual(STATUS_TEXT, "TenderLens AI is running.")
+        self.assertEqual(STATUS_TEXT, "VALYQON AI is running.")
 
 
 class LifecycleTests(unittest.IsolatedAsyncioTestCase):

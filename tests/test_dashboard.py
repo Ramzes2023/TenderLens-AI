@@ -29,7 +29,7 @@ class DashboardTests(unittest.TestCase):
     def test_core_sections(self):
         html = dashboard_html()
         for text in (
-            "TenderLens AI",
+            "VALYQON AI",
             "Company workspaces",
             "Recent analyzed documents",
             "Live EIS scan",

@@ -1,4 +1,4 @@
-"""FastAPI application factory for TenderLens AI."""
+"""FastAPI application factory for VALYQON AI."""
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -28,7 +28,7 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
         yield
 
     app = FastAPI(
-        title="TenderLens AI API",
+        title="VALYQON AI API",
         version=__version__,
         description=(
             "Tender intelligence backend: PDF analysis, deterministic scoring, "

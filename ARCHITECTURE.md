@@ -1,4 +1,4 @@
-# TenderLens AI — architecture
+# VALYQON AI — architecture
 
 ## System view
 
@@ -130,7 +130,7 @@ Host / Docker Desktop / Linux
   127.0.0.1:8000
           |
 +--------------------------+
-| TenderLens AI v1.6.0 API |
+| VALYQON AI v1.6.0 API |
 | Python 3.12 / Uvicorn    |
 | non-root uid 10001       |
 +------------+-------------+

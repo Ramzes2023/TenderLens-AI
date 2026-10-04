@@ -85,7 +85,7 @@ async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: in
             monitor_stop = asyncio.Event()
             monitor_task = asyncio.create_task(monitor_loop(bot, monitoring_service, monitor_stop))
             logger.info("Автомониторинг тендеров запущен.")
-        logger.info("TenderLens AI запущен. Остановка: Ctrl+C.")
+        logger.info("VALYQON AI запущен. Остановка: Ctrl+C.")
         try:
             await dispatcher.start_polling(
                 bot,

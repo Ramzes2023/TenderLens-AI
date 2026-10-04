@@ -1,6 +1,9 @@
-# TenderLens AI - v1.6.0 project status
+# VALYQON AI - v1.6.0 project status
 
-TenderLens AI v1.6.0 extends the authenticated single-node platform with shared organization workspaces, explicit membership roles and invitation-based team onboarding. The repository now demonstrates the path from Web account onboarding and Telegram identity linking through organization-scoped procurement discovery, document analysis, structured scoring, semantic retrieval, persistence, API exposure and containerized deployment.
+Phase 20 branding is prepared for review; the application version remains 1.6.0.
+This branch does not deploy or relabel the historical v1.6.0 release.
+
+VALYQON AI v1.6.0 extends the authenticated single-node platform with shared organization workspaces, explicit membership roles and invitation-based team onboarding. The repository now demonstrates the path from Web account onboarding and Telegram identity linking through organization-scoped procurement discovery, document analysis, structured scoring, semantic retrieval, persistence, API exposure and containerized deployment.
 
 ## Implemented scope
 
@@ -71,7 +74,7 @@ The current deployment remains intentionally **single-node and localhost-first**
 
 ## Phase 13 — multi-company commercialization foundation
 
-TenderLens now supports multiple persistent company workspaces per owner, active-company switching, per-company EIS keyword searches, company-scoped monitoring deduplication, and active-profile scoring through Telegram and FastAPI. This is the foundation for onboarding different industries without editing server configuration per customer.
+VALYQON AI now supports multiple persistent company workspaces per owner, active-company switching, per-company EIS keyword searches, company-scoped monitoring deduplication, and active-profile scoring through Telegram and FastAPI. This is the foundation for onboarding different industries without editing server configuration per customer.
 
 ## Phase 17 — Web accounts + authentication
 

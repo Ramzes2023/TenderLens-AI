@@ -56,6 +56,11 @@ from .austender_rss import (
     parse_austender_detail_page,
     parse_austender_rss,
 )
+from .nz_gets_rss import (
+    NZ_GETS_RSS_URL,
+    NzGetsRssSource,
+    parse_nz_gets_rss,
+)
 
 __all__ = [
     "TenderSource",
@@ -97,4 +102,7 @@ __all__ = [
     "AusTenderRssSource",
     "parse_austender_detail_page",
     "parse_austender_rss",
+    "NZ_GETS_RSS_URL",
+    "NzGetsRssSource",
+    "parse_nz_gets_rss",
 ]

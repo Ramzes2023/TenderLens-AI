@@ -61,6 +61,12 @@ from .nz_gets_rss import (
     NzGetsRssSource,
     parse_nz_gets_rss,
 )
+from .za_etenders import (
+    ZA_ETENDERS_ACTIVE_TENDERS_URL,
+    ZA_ETENDERS_OPPORTUNITIES_URL,
+    ZaETendersSource,
+    parse_za_etenders_response,
+)
 
 __all__ = [
     "TenderSource",
@@ -105,4 +111,9 @@ __all__ = [
     "NZ_GETS_RSS_URL",
     "NzGetsRssSource",
     "parse_nz_gets_rss",
+
+    "ZA_ETENDERS_ACTIVE_TENDERS_URL",
+    "ZA_ETENDERS_OPPORTUNITIES_URL",
+    "ZaETendersSource",
+    "parse_za_etenders_response",
 ]

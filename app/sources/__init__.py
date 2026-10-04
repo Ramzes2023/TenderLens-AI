@@ -8,14 +8,19 @@ from .eis_rss import (
     build_eis_rss_urls,
 )
 from .registry import (
+    SourceCapabilities,
+    SourceMetadata,
     SourceRegistration,
     SourceRegistry,
     SourceRegistryError,
+    SourceTransport,
 )
 from .multi import (
     MultiSourceFetcher,
     MultiSourceFetchReport,
     SourceFailure,
+    SourceRunState,
+    SourceRunStatus,
 )
 
 __all__ = [
@@ -25,10 +30,15 @@ __all__ = [
     "SourceError",
     "build_eis_rss_url",
     "build_eis_rss_urls",
+    "SourceCapabilities",
+    "SourceMetadata",
     "SourceRegistration",
     "SourceRegistry",
     "SourceRegistryError",
+    "SourceTransport",
     "MultiSourceFetcher",
     "MultiSourceFetchReport",
     "SourceFailure",
+    "SourceRunState",
+    "SourceRunStatus",
 ]

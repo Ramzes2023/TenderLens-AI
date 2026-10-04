@@ -1,4 +1,4 @@
-"""Authentication, CSRF and API-key access helpers for TenderLens HTTP routes."""
+"""Authentication, CSRF and API-key access helpers for VALYQON AI HTTP routes."""
 
 from __future__ import annotations
 

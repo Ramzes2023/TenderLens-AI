@@ -1,6 +1,8 @@
-# TenderLens AI
+# VALYQON AI
 
-**Tender intelligence for teams — from opportunities to explainable document insights.**
+**AI Procurement Intelligence Platform**
+
+*Find. Analyze. Score. Win.*
 
 Monitor EIS feeds, extract facts from PDFs, compare tenders with a company profile,
 and ask questions grounded in source pages. Web and Telegram workflows share a Python
@@ -16,8 +18,9 @@ backend; v1.6.0 adds organizations, RBAC and invitation-based team onboarding.
 
 [Quick demo](docs/DEMO.md) · [Architecture](ARCHITECTURE.md) · [Interview notes](docs/PORTFOLIO.md) · [Security](SECURITY.md)
 
-> **Scope:** single-node and localhost-first, not a public production SaaS.
-> TenderLens supports a human procurement decision. It does not submit bids,
+> **Scope:** single-node platform with authenticated workspaces and an optional HTTPS reverse proxy.
+> The default local setup is localhost-first; multi-node/high-availability SaaS is not claimed.
+> VALYQON AI supports a human procurement decision. It does not submit bids,
 > predict winning probability or autonomously decide whether to participate.
 
 The company-fit score is **not a probability of winning** and is not an autonomous recommendation to participate in a tender.
@@ -87,6 +90,15 @@ The [architecture guide](ARCHITECTURE.md) explains the complete service and stor
 | Retrieval | FastEmbed multilingual embeddings, Qdrant local |
 | State | SQLite accounts, organizations, history and monitoring |
 | Delivery | Non-root Docker image, Compose, GitHub Actions |
+
+## Branding and deployment compatibility
+
+VALYQON AI is the new product brand. The repository name and existing deployment
+identifiers remain unchanged. `TENDERLENS_*` settings stay canonical; existing
+configuration, session cookies, databases and Docker volumes require no migration.
+The stable `/health` service identifier remains `TenderLens AI` for external probes.
+See [compatibility details](docs/BRANDING_COMPATIBILITY.md). This branch does not
+deploy the rebrand or change the current release version.
 
 ## Quick start
 
@@ -188,8 +200,12 @@ API and bot use separate local Qdrant indexes: shared history does not imply a s
 retrieval index. Organization monitoring is on-demand; background team notifications
 remain future work.
 
+**Deployment support:** `compose.public.yaml` provides a single-node HTTPS edge
+with Caddy, security headers, explicit trusted proxies and no published API port.
+See [public deployment](docs/DEPLOYMENT.md#public-https-edge).
+
 **Next production steps:**
-- Public VPS, domain/DNS, HTTPS and reverse-proxy hardening.
+- Operational monitoring and hardening for the intended public workload.
 - PostgreSQL with proper migrations; Qdrant server/Cloud for multi-process retrieval.
 - Distributed/edge rate limiting, structured audit events and observability.
 - Tested backups/restores, retention policies and secret rotation.

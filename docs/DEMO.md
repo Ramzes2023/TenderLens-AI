@@ -1,4 +1,4 @@
-# TenderLens AI — 5–10 minute demo
+# VALYQON AI — 5–10 minute demo
 
 A prepared portfolio walkthrough, not a claim of a hosted public SaaS.
 Use synthetic documents and separate demo accounts; never demonstrate with customer secrets.

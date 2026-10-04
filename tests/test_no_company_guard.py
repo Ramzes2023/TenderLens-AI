@@ -40,7 +40,7 @@ class NoCompanySaasGuardTests(unittest.TestCase):
 
         fallback = CompanyProfile(
             profile_version="1",
-            company_name="TenderLens Demo Supplier",
+            company_name="VALYQON AI Demo Supplier",
             product_keywords=["demo"],
             search_keywords=["demo"],
         )

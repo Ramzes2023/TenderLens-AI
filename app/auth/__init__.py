@@ -1,4 +1,4 @@
-"""TenderLens web authentication core."""
+"""VALYQON AI web authentication core."""
 
 from .models import AuthAccount, AuthSession
 from .passwords import PasswordPolicyError, hash_password, validate_password, verify_password

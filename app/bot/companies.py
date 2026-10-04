@@ -135,7 +135,7 @@ async def companies_handler(message: Message, company_service: CompanyService | 
             "/company_setup\n\n"
             "Для опытных пользователей остаётся короткий формат:\n"
             "/company_add Название | sell | ключ1, ключ2 | регион1, регион2 | 50000000\n\n"
-            "Пока персонального профиля нет, TenderLens использует demo-профиль администратора."
+            "Пока персонального профиля нет, VALYQON AI использует demo-профиль администратора."
         )
         return
     await message.answer(
@@ -548,7 +548,7 @@ async def company_setup_confirm_handler(
         )
     await message.answer(
         f"✅ Компания создана и стала активной: #{item.id} {item.name}.\n"
-        f"TenderLens будет строить {len(profile.monitoring_keywords)} персональных EIS-поиска(ов).\n\n"
+        f"VALYQON AI будет строить {len(profile.monitoring_keywords)} персональных EIS-поиска(ов).\n\n"
         "Проверить профиль: /company_show\n"
         "Проверить закупки: /tenders\n"
         "Статус мониторинга: /monitor_status"
@@ -761,7 +761,7 @@ async def company_delete_handler(
     await message.answer(
         "⚠️ УДАЛЕНИЕ КОМПАНИИ\n\n"
         f"Вы собираетесь удалить #{item.id} {item.name}.\n"
-        "Это удалит профиль компании из TenderLens.\n\n"
+        "Это удалит профиль компании из VALYQON AI.\n\n"
         "Для подтверждения напишите точно: УДАЛИТЬ\n"
         "Для отмены: НЕТ или /company_cancel"
     )
@@ -807,7 +807,7 @@ async def company_delete_confirm_handler(
     else:
         await message.answer(
             f"✅ Компания #{company_id} {company_name} удалена.\n"
-            "Персональных компаний больше нет. TenderLens вернётся к fallback-профилю, если он настроен.\n"
+            "Персональных компаний больше нет. VALYQON AI вернётся к fallback-профилю, если он настроен.\n"
             "Создать новую: /company_setup"
         )
 

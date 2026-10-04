@@ -54,12 +54,12 @@ async def redeem_link(
     except TelegramLinkError:
         await message.answer(
             "Ссылка недействительна, истекла или уже использована. "
-            "Создайте новую ссылку в TenderLens Web."
+            "Создайте новую ссылку в VALYQON AI Web."
         )
         return True
 
     await message.answer(
-        "✅ Telegram успешно подключён к TenderLens Web. "
+        "✅ Telegram успешно подключён к VALYQON AI Web. "
         "Теперь сайт и бот используют один профиль владельца."
     )
     return True

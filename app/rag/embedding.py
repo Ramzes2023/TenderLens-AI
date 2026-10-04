@@ -1,4 +1,4 @@
-"""Embedding providers for TenderLens RAG.
+"""Embedding providers for VALYQON AI RAG.
 
 Phase 8.1 defaults to a local multilingual FastEmbed model so semantic RAG does
 not require a paid embeddings API. GigaChat embeddings remain available as an

@@ -1,4 +1,4 @@
-"""Self-contained authentication pages for TenderLens web accounts."""
+"""Self-contained authentication pages for VALYQON AI web accounts."""
 from __future__ import annotations
 
 import json
@@ -28,7 +28,7 @@ def _page(
             f"{quote(next_path, safe='')}"
         )
     switch_label = "Sign in" if register else "Create account"
-    switch_text = "Already have an account?" if register else "New to TenderLens?"
+    switch_text = "Already have an account?" if register else "New to VALYQON AI?"
     autocomplete = "new-password" if register else "current-password"
     hint = '<div class="hint">Use at least 12 characters.</div>' if register else ""
     version = escape(__version__)
@@ -45,7 +45,7 @@ def _page(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
-  <title>{escape(title)} · TenderLens AI</title>
+  <title>{escape(title)} · VALYQON AI</title>
   <style>
     :root {{ color-scheme:dark; --bg:#07101f; --panel:#0f1b31; --line:#263a5d; --text:#f4f7fb; --muted:#9fb0cb; --accent:#79a7ff; }}
     * {{ box-sizing:border-box; }}
@@ -74,13 +74,14 @@ def _page(
 <body>
   <main class="card">
     <section class="hero">
-      <div class="logo">TenderLens AI</div>
-      <h1>Procurement intelligence, built around your company.</h1>
+      <div class="logo">VALYQON AI</div>
+      <h1>AI Procurement Intelligence Platform</h1>
+      <p>Find. Analyze. Score. Win.</p>
       <p>Track opportunities, analyze tender documents and keep company-specific procurement intelligence in one secure workspace.</p>
     </section>
     <section class="form">
       <h2>{escape(title)}</h2>
-      <p>{'Start your TenderLens workspace.' if register else 'Sign in to your procurement intelligence workspace.'}</p>
+      <p>{'Start your VALYQON AI workspace.' if register else 'Sign in to your procurement intelligence workspace.'}</p>
       <div id="msg" class="msg"></div>
       <form id="auth">
         <div class="field">
@@ -95,7 +96,7 @@ def _page(
         <button id="submit" type="submit">{escape(button)}</button>
       </form>
       <p class="switch">{escape(switch_text)} <a href="{switch_href}">{escape(switch_label)}</a></p>
-      <div class="version">TenderLens AI v{version}</div>
+      <div class="version">VALYQON AI v{version}</div>
     </section>
   </main>
   <script>

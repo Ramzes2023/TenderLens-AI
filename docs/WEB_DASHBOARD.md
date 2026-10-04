@@ -1,6 +1,6 @@
 # Web Dashboard
 
-The TenderLens Dashboard is the authenticated browser workspace for personal
+The VALYQON AI Dashboard is the authenticated browser workspace for personal
 and shared organization procurement workflows.
 
 ## URL
@@ -70,6 +70,6 @@ used by the API.
 Organization APIs require session identity plus membership/role authorization.
 The legacy `X-API-Key` path is not organization identity.
 
-TenderLens v1.6.0 remains localhost-first. Public deployment still requires
-HTTPS/reverse-proxy hardening, distributed throttling, server-backed storage,
-retention/backups and structured audit logging.
+The default deployment remains localhost-first; the public Compose option provides
+a single-node Caddy HTTPS edge. Distributed throttling, server-backed storage,
+retention/backups and structured audit logging remain separate operational concerns.

@@ -33,7 +33,7 @@ def invitation_page_html(
         content="noindex,nofollow">
 
   <title>
-    Organization invitation ? TenderLens AI
+    Organization invitation ? VALYQON AI
   </title>
 
   <style>
@@ -149,7 +149,7 @@ def invitation_page_html(
 <body>
   <main class="card">
     <div class="label">
-      TenderLens AI
+      VALYQON AI
     </div>
 
     <h1>
@@ -231,7 +231,7 @@ def invitation_page_html(
     </div>
 
     <div class="version">
-      TenderLens AI v{version}
+      VALYQON AI v{version}
     </div>
   </main>
 
@@ -313,7 +313,7 @@ async function loadInvitation(){{
     document.getElementById(
       'intro'
     ).textContent=
-      'You have been invited to join a TenderLens organization.';
+      'You have been invited to join a VALYQON AI organization.';
 
     document.getElementById(
       'organization'

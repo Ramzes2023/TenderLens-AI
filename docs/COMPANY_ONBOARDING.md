@@ -10,7 +10,7 @@ Start with:
 /company_setup
 ```
 
-TenderLens asks five questions:
+VALYQON AI asks five questions:
 
 1. Company name.
 2. Business mode (`sell`, `buy`, `both`).

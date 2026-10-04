@@ -77,7 +77,7 @@ class QdrantVectorStore:
         vectors = info.config.params.vectors
         size = getattr(vectors, "size", None)
         if size is None and isinstance(vectors, dict) and vectors:
-            # Named-vector configs are not used by TenderLens, but fail clearly.
+            # Named-vector configs are not used by VALYQON AI, but fail clearly.
             raise QdrantStoreError("Qdrant collection использует несовместимую named-vector конфигурацию.")
         if int(size) != dimensions:
             raise QdrantStoreError(

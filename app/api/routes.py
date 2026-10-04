@@ -1,4 +1,4 @@
-"""FastAPI routes exposing TenderLens services without Telegram."""
+"""FastAPI routes exposing VALYQON AI services without Telegram."""
 from __future__ import annotations
 
 import asyncio
@@ -217,7 +217,7 @@ async def invitation_page(
 
 @router.get("/dashboard", response_class=HTMLResponse, include_in_schema=False)
 async def dashboard(request: Request):
-    """Serve the authenticated TenderLens web workspace."""
+    """Serve the authenticated VALYQON AI web workspace."""
     if await current_account(request, touch=False) is None:
         return RedirectResponse("/login", status_code=303)
     return HTMLResponse(dashboard_html(), headers={"Cache-Control": "no-store"})

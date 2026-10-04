@@ -22,6 +22,10 @@ from .multi import (
     SourceRunState,
     SourceRunStatus,
 )
+from .catalog import (
+    SourceCatalog,
+    build_source_catalog,
+)
 
 __all__ = [
     "TenderSource",
@@ -41,4 +45,6 @@ __all__ = [
     "SourceFailure",
     "SourceRunState",
     "SourceRunStatus",
+    "SourceCatalog",
+    "build_source_catalog",
 ]

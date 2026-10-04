@@ -175,35 +175,68 @@ def main() -> int:
     except (RagConfigurationError, RagError, RagStoreError):
         logger.warning("RAG отключён: проверьте RAG_* настройки и доступ к локальному индексу.")
 
-    from app.monitoring import (MonitoringConfigurationError, MonitoringRepository,
-                                MonitoringRepositoryError, TenderMonitorService,
-                                load_monitoring_settings)
-    from app.sources import EisRssSource
+    from app.monitoring import (
+        MonitoringConfigurationError,
+        MonitoringRepository,
+        MonitoringRepositoryError,
+        TenderMonitorService,
+        load_monitoring_settings,
+    )
+    from app.sources import SourceRegistryError, build_source_catalog
+
     monitoring_service = None
+
     try:
         monitor_settings = load_monitoring_settings()
-        if monitor_settings.source_configured:
+        source_catalog = build_source_catalog(monitor_settings)
+        enabled_sources = source_catalog.registry.registrations(
+            enabled_only=True
+        )
+
+        if enabled_sources:
             if tender_repository is None:
                 from app.database import load_database_settings
                 db_path = load_database_settings().path
             else:
                 db_path = tender_repository.path
+
             monitor_repository = MonitoringRepository(db_path)
             monitor_repository.initialize()
-            source = EisRssSource(
-                urls=monitor_settings.eis_rss_urls,
-                timeout=monitor_settings.request_timeout,
-                ca_bundle_file=monitor_settings.ca_bundle_file,
-            )
+
+            # EIS remains the monitoring adapter until global searchable
+            # connectors are enabled in the following source phases.
+            source = source_catalog.registry.get("eis").source
+
             monitoring_service = TenderMonitorService(
-                monitor_settings, source, monitor_repository, company_profile,
-                profile_resolver=(company_service.profile_for_owner if company_service is not None else None),
-                scope_resolver=(company_service.scope_for_owner if company_service is not None else None),
+                monitor_settings,
+                source,
+                monitor_repository,
+                company_profile,
+                profile_resolver=(
+                    company_service.profile_for_owner
+                    if company_service is not None
+                    else None
+                ),
+                scope_resolver=(
+                    company_service.scope_for_owner
+                    if company_service is not None
+                    else None
+                ),
             )
+
         elif monitor_settings.enabled:
-            logger.warning("Автомониторинг включён, но EIS_RSS_URLS пуст — monitoring не запущен.")
-    except (MonitoringConfigurationError, MonitoringRepositoryError):
-        logger.warning("Monitoring отключён: проверьте MONITOR_* / EIS_* настройки и SQLite.")
+            logger.warning(
+                "?????????????? ???????, ?? ???????? ?????????? ???."
+            )
+
+    except (
+        MonitoringConfigurationError,
+        MonitoringRepositoryError,
+        SourceRegistryError,
+    ):
+        logger.warning(
+            "Monitoring ????????: ????????? source/MONITOR ????????? ? SQLite."
+        )
 
     try:
         asyncio.run(run_bot(

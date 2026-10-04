@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from app.companies import CompanyService
     from app.auth import AuthService
     from app.organizations import OrganizationService
+    from app.sources import SourceCatalog
 
 
 @dataclass
@@ -30,6 +31,7 @@ class ApiRuntime:
     tender_repository: "TenderRepository | Any | None" = None
     rag_service: "RagService | Any | None" = None
     monitoring_service: "TenderMonitorService | Any | None" = None
+    source_catalog: "SourceCatalog | Any | None" = None
     component_errors: dict[str, str] = field(default_factory=dict)
 
     def component_status(self) -> dict[str, str]:
@@ -42,6 +44,7 @@ class ApiRuntime:
             "organizations": "ready" if self.organization_service is not None else "unavailable",
             "rag": "ready" if self.rag_service is not None else "unavailable",
             "monitoring": "ready" if self.monitoring_service is not None else "unavailable",
+            "sources": "ready" if self.source_catalog is not None else "unavailable",
         }
 
 
@@ -132,32 +135,62 @@ def build_runtime() -> ApiRuntime:
     except Exception:
         runtime.component_errors["rag"] = "RAG unavailable"
 
+    monitor_settings = None
+
     try:
-        from app.database import load_database_settings
-        from app.monitoring import MonitoringRepository, TenderMonitorService, load_monitoring_settings
-        from app.sources import EisRssSource
+        from app.monitoring import load_monitoring_settings
+        from app.sources import build_source_catalog
 
         monitor_settings = load_monitoring_settings()
-        if monitor_settings.source_configured:
+        runtime.source_catalog = build_source_catalog(monitor_settings)
+    except Exception:
+        runtime.component_errors["sources"] = "Source catalog unavailable"
+
+    try:
+        from app.database import load_database_settings
+        from app.monitoring import MonitoringRepository, TenderMonitorService
+
+        if monitor_settings is None or runtime.source_catalog is None:
+            raise RuntimeError("Source catalog unavailable")
+
+        enabled_sources = runtime.source_catalog.registry.registrations(
+            enabled_only=True
+        )
+
+        if enabled_sources:
             db_path = (
                 runtime.tender_repository.path
                 if runtime.tender_repository is not None
                 else load_database_settings().path
             )
+
             repository = MonitoringRepository(db_path)
             repository.initialize()
-            source = EisRssSource(
-                urls=monitor_settings.eis_rss_urls,
-                timeout=monitor_settings.request_timeout,
-                ca_bundle_file=monitor_settings.ca_bundle_file,
-            )
+
+            # Keep EIS profile-search compatibility while source construction
+            # is centralized in the catalog.
+            source = runtime.source_catalog.registry.get("eis").source
+
             runtime.monitoring_service = TenderMonitorService(
-                monitor_settings, source, repository, runtime.company_profile,
-                profile_resolver=(runtime.company_service.profile_for_owner if runtime.company_service else None),
-                scope_resolver=(runtime.company_service.scope_for_owner if runtime.company_service else None),
+                monitor_settings,
+                source,
+                repository,
+                runtime.company_profile,
+                profile_resolver=(
+                    runtime.company_service.profile_for_owner
+                    if runtime.company_service
+                    else None
+                ),
+                scope_resolver=(
+                    runtime.company_service.scope_for_owner
+                    if runtime.company_service
+                    else None
+                ),
             )
         else:
-            runtime.component_errors["monitoring"] = "EIS RSS source not configured"
+            runtime.component_errors["monitoring"] = (
+                "No procurement source configured"
+            )
     except Exception:
         runtime.component_errors["monitoring"] = "Monitoring unavailable"
 

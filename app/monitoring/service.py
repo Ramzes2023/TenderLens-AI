@@ -4,17 +4,14 @@ from __future__ import annotations
 import asyncio
 import re
 from dataclasses import dataclass
-from typing import Callable, Protocol
+from typing import Callable
 
 from app.scoring.models import CompanyProfile
+from app.sources.base import TenderSource
 from app.sources.models import TenderNotice
 
 from .config import MonitoringSettings
 from .repository import MonitoringRepository, Subscription
-
-
-class TenderSource(Protocol):
-    async def fetch(self, limit: int = 20) -> list[TenderNotice]: ...
 
 
 @dataclass(frozen=True)

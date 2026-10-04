@@ -37,6 +37,11 @@ from .sam_gov_api import (
     SamGovApiSource,
     parse_sam_gov_response,
 )
+from .uk_fts_api import (
+    UK_FTS_SEARCH_URL,
+    UkFindTenderApiSource,
+    parse_uk_fts_response,
+)
 
 __all__ = [
     "TenderSource",
@@ -65,4 +70,7 @@ __all__ = [
     "SAM_GOV_SEARCH_URL",
     "SamGovApiSource",
     "parse_sam_gov_response",
+    "UK_FTS_SEARCH_URL",
+    "UkFindTenderApiSource",
+    "parse_uk_fts_response",
 ]

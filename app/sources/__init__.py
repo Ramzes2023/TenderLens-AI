@@ -48,6 +48,14 @@ from .canada_buys_dataset import (
     CanadaBuysDatasetSource,
     parse_canadabuys_csv,
 )
+from .austender_rss import (
+    AUSTENDER_ATM_BASE_URL,
+    AUSTENDER_RSS_URL,
+    AusTenderRssItem,
+    AusTenderRssSource,
+    parse_austender_detail_page,
+    parse_austender_rss,
+)
 
 __all__ = [
     "TenderSource",
@@ -83,4 +91,10 @@ __all__ = [
     "CANADABUYS_SEARCH_URL",
     "CanadaBuysDatasetSource",
     "parse_canadabuys_csv",
+    "AUSTENDER_ATM_BASE_URL",
+    "AUSTENDER_RSS_URL",
+    "AusTenderRssItem",
+    "AusTenderRssSource",
+    "parse_austender_detail_page",
+    "parse_austender_rss",
 ]

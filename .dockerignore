@@ -3,6 +3,7 @@
 .env
 .env.*
 !.env.example
+!.env.public.example
 .venv
 venv
 __pycache__

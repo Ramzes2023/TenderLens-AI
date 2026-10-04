@@ -1,0 +1,92 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tenderlens-ai:phase19-public
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      APP_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      API_RELOAD: "false"
+      TENDERLENS_TRUSTED_PROXY_IPS: 172.30.19.2
+      DATABASE_URL: sqlite:////app/data/tenderlens.db
+      DATA_DIR: /app/data
+      RAG_QDRANT_PATH: /app/data/qdrant
+      FASTEMBED_CACHE_PATH: /app/data/fastembed_cache
+      COMPANY_PROFILE_FILE: /app/config/company_profile.example.json
+      GIGACHAT_CA_BUNDLE_FILE: /app/certs/russian_trusted_root_ca_pem.crt
+      EIS_CA_BUNDLE_FILE: /app/certs/russian_trusted_root_ca_pem.crt
+      TENDERLENS_HEALTHCHECK_URL: http://127.0.0.1:8000/health
+      OUTBOUND_PROXY_URL: "${DOCKER_OUTBOUND_PROXY_URL:-}"
+    expose:
+      - "8000"
+    volumes:
+      - tenderlens_data:/app/data
+    networks:
+      - edge
+    stop_grace_period: 20s
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tenderlens-ai:phase19-public
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: ["python", "-m", "app.bot"]
+    environment:
+      APP_ENV: production
+      DATABASE_URL: sqlite:////app/data/tenderlens.db
+      DATA_DIR: /app/data
+      RAG_QDRANT_PATH: /app/data/qdrant-bot
+      FASTEMBED_CACHE_PATH: /app/data/fastembed_cache
+      COMPANY_PROFILE_FILE: /app/config/company_profile.example.json
+      GIGACHAT_CA_BUNDLE_FILE: /app/certs/russian_trusted_root_ca_pem.crt
+      EIS_CA_BUNDLE_FILE: /app/certs/russian_trusted_root_ca_pem.crt
+      OUTBOUND_PROXY_URL: "${DOCKER_OUTBOUND_PROXY_URL:-}"
+      TELEGRAM_PROXY_URL: "${DOCKER_TELEGRAM_PROXY_URL:-}"
+    volumes:
+      - tenderlens_data:/app/data
+    networks:
+      - edge
+    stop_grace_period: 30s
+    healthcheck:
+      disable: true
+
+  caddy:
+    image: caddy:2.11.6-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      TENDERLENS_DOMAIN: "${TENDERLENS_DOMAIN:?TENDERLENS_DOMAIN must be set}"
+      ACME_EMAIL: "${ACME_EMAIL:?ACME_EMAIL must be set}"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      edge:
+        ipv4_address: 172.30.19.2
+
+networks:
+  edge:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.19.0/24
+
+volumes:
+  tenderlens_data:
+  caddy_data:
+  caddy_config:

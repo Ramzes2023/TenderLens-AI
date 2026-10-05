@@ -1,6 +1,8 @@
 """FastAPI routes exposing VALYQON AI services without Telegram."""
 from __future__ import annotations
 
+from .landing import landing_html
+
 import asyncio
 import hashlib
 
@@ -119,7 +121,7 @@ def _company_response(workspace) -> CompanyResponse:
 @router.get("/", include_in_schema=False)
 async def root_page(request: Request):
     account = await current_account(request, touch=False)
-    return RedirectResponse("/dashboard" if account is not None else "/login", status_code=303)
+    return HTMLResponse(landing_html(account is not None), headers={"Cache-Control": "no-store"})
 
 
 @router.get(

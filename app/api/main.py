@@ -4,6 +4,8 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 
 from app import __version__
 
@@ -36,6 +38,7 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
         ),
         lifespan=lifespan,
     )
+    app.mount("/assets", StaticFiles(directory=Path(__file__).parent / "static"), name="assets")
     app.state.login_rate_limiter = LoginRateLimiter()
     app.include_router(auth_router)
     app.include_router(organization_router)

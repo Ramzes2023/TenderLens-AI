@@ -7,9 +7,10 @@ from html import escape
 from app import __version__
 from .organization_ui import ORGANIZATION_SCRIPT
 from .telegram_ui import TELEGRAM_SCRIPT
+from .saas_shell import shell_html
 
 
-def dashboard_html() -> str:
+def _dashboard_html() -> str:
     version = escape(__version__)
     return f"""<!doctype html>
 <html lang="en">
@@ -630,6 +631,10 @@ refreshAll().catch(e=>{{if(!String(e.message||e).includes('Authentication requir
 </script>
 </body>
 </html>"""
+
+
+def dashboard_html() -> str:
+    return shell_html(_dashboard_html())
 
 
 __all__ = ["dashboard_html"]

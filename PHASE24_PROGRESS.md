@@ -222,3 +222,18 @@ Do not add procurement sources.
 Do not resume the abandoned TED document experiment.
 
 PRODUCTION_TOUCHED=False
+## Premium UI/UX continuation
+
+Starting SHA: 1ff95899cbb8ce4cefe314f5f277fab815b759ca. Verified clean branch.
+Completed visual areas: redesigned split landing hero with labeled HTML example,
+product workflow, coverage cards, intelligence/monitoring/team story and pricing teaser.
+Auth retains its two-panel architecture, with shared navy/blue styling, back navigation,
+password visibility control and generic error handling.
+Current incomplete area: premium application shell, overview, discovery and company polish.
+Files changed: landing.py, auth_pages.py, static/premium.css.
+Tests: 19 existing landing/auth/security/UI checks and 2 new premium checks passed.
+Diff whitespace validation passed.
+Commits: pending first premium checkpoint.
+Manual browser review: still pending; no new browser dependencies installed.
+Known issues: no visual smoke claim; application views not yet upgraded.
+Exact next step: validate landing/auth checkpoint, then refine shell and product workspaces.

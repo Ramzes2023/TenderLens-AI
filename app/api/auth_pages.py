@@ -70,16 +70,19 @@ def _page(
     .version {{ text-align:center; color:#7184a3; font-size:.74rem; margin-top:22px; }}
     @media(max-width:760px) {{ .card {{ grid-template-columns:1fr; }} .hero {{ display:none; }} .form {{ padding:34px 24px; }} }}
   </style>
+<link rel="stylesheet" href="/assets/premium.css">
 </head>
-<body>
+<body class="auth-premium">
   <main class="card">
     <section class="hero">
       <div class="logo">VALYQON AI</div>
-      <h1>AI Procurement Intelligence Platform</h1>
+      <h1>Procurement intelligence.<br>Built around you.</h1>
       <p>Find. Analyze. Score. Win.</p>
       <p>Track opportunities, analyze tender documents and keep company-specific procurement intelligence in one secure workspace.</p>
+      <ul class="auth-capabilities"><li>Global procurement sources</li><li>Company matching</li><li>Explainable scoring</li></ul>
     </section>
     <section class="form">
+      <a class="back-link" href="/">← Back to VALYQON</a>
       <h2>{escape(title)}</h2>
       <p>{'Start your VALYQON AI workspace.' if register else 'Sign in to your procurement intelligence workspace.'}</p>
       <div id="msg" class="msg"></div>
@@ -90,7 +93,7 @@ def _page(
         </div>
         <div class="field">
           <label for="password">Password</label>
-          <input id="password" type="password" maxlength="128" autocomplete="{autocomplete}" required placeholder="••••••••••••">
+          <div class="password-control"><input id="password" type="password" maxlength="128" autocomplete="{autocomplete}" required placeholder="••••••••••••"><button type="button" id="togglePassword" class="password-toggle" aria-controls="password" aria-pressed="false">Show</button></div>
           {hint}
         </div>
         <button id="submit" type="submit">{escape(button)}</button>
@@ -100,14 +103,15 @@ def _page(
     </section>
   </main>
   <script>
+    document.getElementById('togglePassword').addEventListener('click',()=>{{const input=document.getElementById('password'),toggle=document.getElementById('togglePassword');const show=input.type==='password';input.type=show?'text':'password';toggle.textContent=show?'Hide':'Show';toggle.setAttribute('aria-pressed',String(show));}});
     const form=document.getElementById('auth'),msg=document.getElementById('msg'),btn=document.getElementById('submit');
     form.addEventListener('submit',async e=>{{
       e.preventDefault(); msg.style.display='none'; btn.disabled=true;
       try {{
         const r=await fetch('{endpoint}',{{method:'POST',headers:{{'Content-Type':'application/json'}},credentials:'same-origin',body:JSON.stringify({{email:document.getElementById('email').value.trim(),password:document.getElementById('password').value}})}});
-        if(!r.ok){{let d='Authentication failed.';try{{const j=await r.json();if(j.detail)d=typeof j.detail==='string'?j.detail:JSON.stringify(j.detail)}}catch(_){{}}throw new Error(d)}}
+        if(!r.ok){{throw new Error(r.status===429?'Too many attempts. Please try again later.':'Unable to sign in or create this account. Check your details and try again.')}}
         window.location.replace({next_path_json});
-      }} catch(err) {{ msg.textContent=err.message||String(err); msg.style.display='block'; }}
+      }} catch(err) {{ msg.textContent=err instanceof TypeError?'Connection unavailable. Please try again.':err.message||'Authentication unavailable. Please try again.'; msg.style.display='block'; }}
       finally {{ btn.disabled=false; }}
     }});
   </script>

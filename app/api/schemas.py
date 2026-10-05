@@ -94,8 +94,15 @@ class MonitorNoticeResponse(BaseModel):
     reasons: list[str]
 
 
+class TenderDiscoveryItem(MonitorNoticeResponse):
+    analysis_stage: str = "metadata_preview"
+    metadata_analysis: TenderAnalysis
+    preliminary_scoring: ScoringResult
+    full_ai_analyzed: bool = False
+
+
 class TenderDiscoveryResponse(BaseModel):
-    items: list[MonitorNoticeResponse]
+    items: list[TenderDiscoveryItem]
     attempted_sources: list[str]
     successful_sources: list[str]
     failed_sources: list[str]

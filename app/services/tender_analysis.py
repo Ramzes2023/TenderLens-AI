@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pydantic import ValidationError
 from app.llm.base import LLMProvider
 from app.models.tender import TenderAnalysis
+from app.sources.models import TenderNotice
 
 DEFAULT_MAX_CHARS = 20000
 
@@ -47,6 +48,52 @@ def prepare_text(text: str, max_chars: int = DEFAULT_MAX_CHARS) -> PreparedText:
     if not text:
         raise AnalysisError("В документе нет текста для анализа.")
     return PreparedText(text[:max_chars], len(text) > max_chars, len(text))
+
+
+def analysis_from_notice(
+    notice: TenderNotice,
+) -> TenderAnalysis:
+    """Build a factual metadata-only analysis without calling an LLM.
+
+    Only fields with a direct semantic mapping from TenderNotice are copied.
+    Document requirements, securities, risks and technical requirements remain
+    unknown until source detail/documents are retrieved and analyzed.
+    """
+
+    def text_or_none(
+        value: str | None,
+    ) -> str | None:
+        if value is None:
+            return None
+
+        value = value.strip()
+
+        if not value:
+            return None
+
+        return value[:3000]
+
+    return TenderAnalysis(
+        title=text_or_none(
+            notice.title
+        ),
+        tender_number=text_or_none(
+            notice.tender_number
+        ),
+        customer=text_or_none(
+            notice.customer
+        ),
+        initial_price=notice.initial_price,
+        currency=text_or_none(
+            notice.currency
+        ),
+        submission_deadline=text_or_none(
+            notice.deadline
+        ),
+        delivery_region=text_or_none(
+            notice.region
+        ),
+    )
 
 
 def _unique_object(pairs):

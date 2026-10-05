@@ -428,6 +428,60 @@ class OrganizationWorkflowTests(unittest.TestCase):
             "global-aluminium-1",
         )
 
+        item = payload["items"][0]
+
+        self.assertEqual(
+            item["analysis_stage"],
+            "metadata_preview",
+        )
+
+        self.assertFalse(
+            item["full_ai_analyzed"]
+        )
+
+        self.assertEqual(
+            item["metadata_analysis"]["title"],
+            "Supply of aluminium profile",
+        )
+
+        self.assertEqual(
+            item["metadata_analysis"]["initial_price"],
+            2_000_000,
+        )
+
+        self.assertEqual(
+            item["metadata_analysis"]["currency"],
+            "EUR",
+        )
+
+        self.assertIsNone(
+            item["metadata_analysis"]["contract_term"]
+        )
+
+        self.assertEqual(
+            item["preliminary_scoring"]["profile_name"],
+            "Discover Aluminium",
+        )
+
+        criteria = {
+            criterion["code"]:
+                criterion
+            for criterion
+            in item[
+                "preliminary_scoring"
+            ]["criteria"]
+        }
+
+        self.assertEqual(
+            criteria["category"]["status"],
+            "matched",
+        )
+
+        self.assertEqual(
+            criteria["budget"]["status"],
+            "not_scored",
+        )
+
         self.assertEqual(
             payload["attempted_sources"],
             [

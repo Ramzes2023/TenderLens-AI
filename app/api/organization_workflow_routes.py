@@ -18,11 +18,13 @@ from app.monitoring import (
 )
 from app.organizations import OrganizationError
 from app.scoring.engine import score_tender
+from app.services.tender_analysis import analysis_from_notice
 from app.scoring.models import ScoringResult
 
 from .schemas import (
     MonitorNoticeResponse,
     MonitorStatusResponse,
+    TenderDiscoveryItem,
     TenderDiscoveryResponse,
 )
 from .security import (
@@ -140,6 +142,38 @@ async def _active_company(
     return workspace
 
 
+def _discovery_item(
+    match,
+    profile,
+):
+    notice = match.notice
+
+    metadata_analysis = analysis_from_notice(
+        notice
+    )
+
+    return TenderDiscoveryItem(
+        source=notice.source,
+        external_id=notice.external_id,
+        title=notice.title,
+        url=notice.url,
+        tender_number=notice.tender_number,
+        customer=notice.customer,
+        initial_price=notice.initial_price,
+        currency=notice.currency,
+        deadline=notice.deadline,
+        region=notice.region,
+        reasons=list(match.reasons),
+        analysis_stage="metadata_preview",
+        metadata_analysis=metadata_analysis,
+        preliminary_scoring=score_tender(
+            metadata_analysis,
+            profile,
+        ),
+        full_ai_analyzed=False,
+    )
+
+
 def _notice_response(match):
     notice = match.notice
 
@@ -219,7 +253,10 @@ async def organization_discover_tenders(
 
     return TenderDiscoveryResponse(
         items=[
-            _notice_response(match)
+            _discovery_item(
+                match,
+                workspace.profile,
+            )
             for match in matches
         ],
         attempted_sources=list(

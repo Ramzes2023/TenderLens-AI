@@ -10,7 +10,7 @@ from aiogram.types import Message
 
 from app.monitoring import MonitoringRepositoryError, TenderMonitorService
 from app.companies import CompanyRepositoryError, CompanyService
-from app.sources import SourceError
+from app.sources import SourceCatalog, SourceError
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,7 @@ def format_match(match, *, index: int | None = None) -> str:
     notice = match.notice
     prefix = f"{index}. " if index is not None else ""
     lines = [f"{prefix}📌 {notice.title}"]
+    lines.append(f"Источник: {notice.source}")
     if notice.tender_number:
         lines.append(f"Номер: {notice.tender_number}")
     if notice.customer:
@@ -51,25 +52,128 @@ async def _service_or_message(message: Message, monitoring_service: TenderMonito
     return monitoring_service
 
 
-async def tenders_handler(message: Message, monitoring_service: TenderMonitorService | None = None) -> None:
-    service = await _service_or_message(message, monitoring_service)
-    if service is None or message.from_user is None:
+async def tenders_handler(
+    message: Message,
+    monitoring_service: TenderMonitorService | None = None,
+    source_catalog: SourceCatalog | None = None,
+) -> None:
+    service = await _service_or_message(
+        message,
+        monitoring_service,
+    )
+
+    if (
+        service is None
+        or message.from_user is None
+    ):
         return
-    status = await message.answer("Проверяю новые закупки в настроенных RSS-источниках ЕИС…")
+
+    status = await message.answer(
+        "Проверяю новые закупки "
+        "в официальных источниках VALYQON…"
+    )
+
+    report = None
+
     try:
-        matches = await service.scan_new(message.from_user.id)
-    except (SourceError, MonitoringRepositoryError):
-        await status.edit_text("Не удалось проверить ЕИС. Проверьте RSS URL, сеть, proxy и TLS CA.")
+        if source_catalog is None:
+            matches = await service.scan_new(
+                message.from_user.id
+            )
+        else:
+            matches, report = (
+                await service.scan_new_from_catalog(
+                    source_catalog,
+                    message.from_user.id,
+                )
+            )
+
+    except (
+        SourceError,
+        MonitoringRepositoryError,
+    ):
+        await status.edit_text(
+            "Не удалось проверить источники закупок. "
+            "Проверьте сеть и конфигурацию VALYQON."
+        )
         return
+
+    if report is not None:
+        if not report.attempted_sources:
+            await status.edit_text(
+                "Нет включённых источников закупок."
+            )
+            return
+
+        if report.total_failure:
+            await status.edit_text(
+                "Не удалось получить данные "
+                "ни из одного включённого источника."
+            )
+            return
+
+    lines: list[str] = []
+
+    if matches:
+        lines.append(
+            "Найдено новых подходящих закупок: "
+            f"{len(matches)}"
+        )
+    else:
+        lines.append(
+            "Новых подходящих закупок "
+            "с момента последней проверки нет."
+        )
+
+    if report is not None:
+        lines.append(
+            "Источники: "
+            f"{len(report.successful_sources)}/"
+            f"{len(report.attempted_sources)} успешно."
+        )
+
+        if report.failures:
+            failed = ", ".join(
+                failure.source
+                for failure in report.failures[:5]
+            )
+
+            lines.append(
+                "Частично недоступны: "
+                + failed
+            )
+
+    await status.edit_text(
+        "\n".join(lines)
+    )
+
     if not matches:
-        await status.edit_text("Новых подходящих закупок с момента последней проверки нет.")
         return
-    await status.edit_text(f"Найдено новых подходящих закупок: {len(matches)}")
-    for index, match in enumerate(matches[:service.settings.max_notifications_per_cycle], 1):
-        await message.answer(format_match(match, index=index), disable_web_page_preview=True)
-    remaining = len(matches) - service.settings.max_notifications_per_cycle
+
+    limit = (
+        service.settings
+        .max_notifications_per_cycle
+    )
+
+    for index, match in enumerate(
+        matches[:limit],
+        1,
+    ):
+        await message.answer(
+            format_match(
+                match,
+                index=index,
+            ),
+            disable_web_page_preview=True,
+        )
+
+    remaining = len(matches) - limit
+
     if remaining > 0:
-        await message.answer(f"Ещё {remaining} новых записей сохранены как просмотренные. Увеличьте лимит при необходимости.")
+        await message.answer(
+            f"Ещё {remaining} новых записей "
+            "сохранены как просмотренные."
+        )
 
 
 async def monitor_on_handler(message: Message, monitoring_service: TenderMonitorService | None = None) -> None:

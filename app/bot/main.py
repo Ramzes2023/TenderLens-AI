@@ -50,7 +50,8 @@ def create_dispatcher() -> Dispatcher:
 
 async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: int = 20000,
                   company_profile=None, tender_repository=None, rag_service=None,
-                  monitoring_service=None, company_service=None, auth_service=None) -> None:
+                  monitoring_service=None, company_service=None, auth_service=None,
+                  source_catalog=None) -> None:
     if settings.proxy_url:
         session = AiohttpSession(proxy=settings.proxy_url)
         try:
@@ -77,6 +78,8 @@ async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: in
             dispatcher["company_service"] = company_service
         if auth_service is not None:
             dispatcher["auth_service"] = auth_service
+        if source_catalog is not None:
+            dispatcher["source_catalog"] = source_catalog
         await bot.get_me()  # Validate credentials before announcing successful startup.
         monitor_task = None
         monitor_stop = None
@@ -185,6 +188,7 @@ def main() -> int:
     from app.sources import SourceRegistryError, build_source_catalog
 
     monitoring_service = None
+    source_catalog = None
 
     try:
         monitor_settings = load_monitoring_settings()
@@ -243,7 +247,8 @@ def main() -> int:
     try:
         asyncio.run(run_bot(
             settings, provider, max_chars, company_profile, tender_repository,
-            rag_service, monitoring_service, company_service, auth_service
+            rag_service, monitoring_service, company_service, auth_service,
+            source_catalog=source_catalog
         ))
     except KeyboardInterrupt:
         logger.info("Бот остановлен пользователем.")

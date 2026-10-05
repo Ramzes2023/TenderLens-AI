@@ -9,6 +9,7 @@ from app.monitoring.config import MonitoringSettings
 from app.scoring.models import CompanyProfile
 from app.sources.eis_rss import build_eis_rss_urls, parse_eis_feed
 from app.sources.models import TenderNotice
+from app.sources.multi import MultiSourceFetchReport
 
 
 RSS = '''<?xml version="1.0" encoding="UTF-8"?>
@@ -42,6 +43,47 @@ class DynamicFakeSource(FakeSource):
 
     def for_search_terms(self, search_terms, *, max_feeds=5):
         return DynamicFakeSource(self.notices, tuple(search_terms)[:max_feeds])
+
+
+class FakeCatalog:
+    def __init__(self, notices):
+        self.notices = notices
+        self.calls = []
+
+    async def fetch(
+        self,
+        *,
+        limit_per_source=20,
+        source_keys=None,
+        search_terms=(),
+        max_eis_feeds=5,
+    ):
+        self.calls.append(
+            {
+                "limit_per_source":
+                    limit_per_source,
+                "source_keys":
+                    source_keys,
+                "search_terms":
+                    tuple(search_terms),
+                "max_eis_feeds":
+                    max_eis_feeds,
+            }
+        )
+
+        return MultiSourceFetchReport(
+            notices=tuple(self.notices),
+            failures=(),
+            attempted_sources=(
+                "eis",
+                "ted",
+            ),
+            successful_sources=(
+                "eis",
+                "ted",
+            ),
+            statuses=(),
+        )
 
 
 class MonitoringTests(unittest.TestCase):
@@ -159,6 +201,149 @@ class MonitoringTests(unittest.TestCase):
         self.assertEqual(second, [])
         self.assertEqual(len(other_scope), 1)
         self.assertEqual(terms, ("алюминиевый профиль",))
+
+
+    def test_prefilter_does_not_compare_foreign_currency_budget(self):
+        notice = TenderNotice(
+            source="ted",
+            external_id="foreign-currency-1",
+            title=(
+                "Поставка низковольтного "
+                "оборудования"
+            ),
+            url=(
+                "https://example.test/"
+                "foreign-currency-1"
+            ),
+            initial_price=100_000_000,
+            currency="EUR",
+        )
+
+        match = prefilter_notice(
+            notice,
+            self.profile(),
+        )
+
+        self.assertIsNotNone(match)
+
+        self.assertTrue(
+            any(
+                "Валюта" in reason
+                for reason in match.reasons
+            )
+        )
+
+    def test_service_scans_global_catalog_and_deduplicates_by_source(self):
+        notices = [
+            TenderNotice(
+                source="eis",
+                external_id="same-id",
+                title=(
+                    "Поставка низковольтного "
+                    "оборудования"
+                ),
+                url="https://example.test/eis",
+                currency="RUB",
+            ),
+            TenderNotice(
+                source="ted",
+                external_id="same-id",
+                title=(
+                    "Поставка низковольтного "
+                    "оборудования"
+                ),
+                url="https://example.test/ted",
+                currency="RUB",
+            ),
+        ]
+
+        catalog = FakeCatalog(
+            notices
+        )
+
+        async def scenario():
+            with tempfile.TemporaryDirectory() as directory:
+                repo = MonitoringRepository(
+                    Path(directory) / "test.db"
+                )
+
+                repo.initialize()
+
+                service = TenderMonitorService(
+                    self.settings(),
+                    FakeSource([]),
+                    repo,
+                    self.profile(),
+                )
+
+                first, report = (
+                    await service.scan_new_from_catalog(
+                        catalog,
+                        1,
+                    )
+                )
+
+                second, _ = (
+                    await service.scan_new_from_catalog(
+                        catalog,
+                        1,
+                    )
+                )
+
+                return (
+                    first,
+                    second,
+                    report,
+                )
+
+        (
+            first,
+            second,
+            report,
+        ) = asyncio.run(
+            scenario()
+        )
+
+        self.assertEqual(
+            len(first),
+            2,
+        )
+
+        self.assertEqual(
+            second,
+            [],
+        )
+
+        self.assertEqual(
+            {
+                item.notice.source
+                for item in first
+            },
+            {
+                "eis",
+                "ted",
+            },
+        )
+
+        self.assertEqual(
+            report.successful_sources,
+            (
+                "eis",
+                "ted",
+            ),
+        )
+
+        self.assertEqual(
+            catalog.calls[0]["search_terms"],
+            (
+                "низковольтного оборудования",
+            ),
+        )
+
+        self.assertEqual(
+            catalog.calls[0]["max_eis_feeds"],
+            5,
+        )
 
 
 if __name__ == "__main__":

@@ -4,11 +4,15 @@ from __future__ import annotations
 import asyncio
 import re
 from dataclasses import dataclass
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from app.scoring.models import CompanyProfile
 from app.sources.base import TenderSource
 from app.sources.models import TenderNotice
+
+if TYPE_CHECKING:
+    from app.sources.catalog import SourceCatalog
+    from app.sources.multi import MultiSourceFetchReport
 
 from .config import MonitoringSettings
 from .repository import MonitoringRepository, Subscription
@@ -63,16 +67,75 @@ def prefilter_notice(notice: TenderNotice, profile: CompanyProfile | None) -> Mo
             return None
         reasons.append("Направление: " + ", ".join(matched[:5]))
 
-    if notice.initial_price is not None:
-        if profile.min_contract_value is not None and notice.initial_price < profile.min_contract_value:
+    currency = (
+        notice.currency or ""
+    ).strip()
+
+    accepted_currencies = {
+        item.strip().casefold()
+        for item in profile.accepted_currencies
+        if item.strip()
+    }
+
+    budget_comparable = (
+        notice.initial_price is not None
+        and bool(currency)
+        and len(accepted_currencies) == 1
+        and currency.casefold()
+        in accepted_currencies
+    )
+
+    if (
+        notice.initial_price is not None
+        and currency
+        and accepted_currencies
+        and currency.casefold()
+        not in accepted_currencies
+    ):
+        reasons.append(
+            "Валюта отличается от валюты бюджета профиля; "
+            "суммы напрямую не сравнивались."
+        )
+
+    if (
+        notice.initial_price is not None
+        and not currency
+    ):
+        reasons.append(
+            "Стоимость известна без валюты; "
+            "бюджет напрямую не сравнивался."
+        )
+
+    if budget_comparable:
+        if (
+            profile.min_contract_value is not None
+            and notice.initial_price
+            < profile.min_contract_value
+        ):
             if profile.hard_stop_on_budget:
                 return None
-            reasons.append("Стоимость ниже целевого минимума профиля.")
+
+            reasons.append(
+                "Стоимость ниже целевого "
+                "минимума профиля."
+            )
+
         if profile.max_contract_value is not None:
-            if notice.initial_price > profile.max_contract_value and profile.hard_stop_on_budget:
+            if (
+                notice.initial_price
+                > profile.max_contract_value
+                and profile.hard_stop_on_budget
+            ):
                 return None
-            if notice.initial_price <= profile.max_contract_value:
-                reasons.append("Бюджет известен и не превышает лимит профиля.")
+
+            if (
+                notice.initial_price
+                <= profile.max_contract_value
+            ):
+                reasons.append(
+                    "Бюджет известен и "
+                    "не превышает лимит профиля."
+                )
 
     if notice.region and profile.allowed_regions:
         matches_region = any(_contains(notice.region, region) or _contains(region, notice.region)
@@ -137,6 +200,67 @@ class TenderMonitorService:
     ) -> list[MonitorMatch]:
         profile = await self.profile_for_owner(owner_user_id)
         return await self.fetch_matches_for_profile(profile)
+
+    async def fetch_matches_from_catalog(
+        self,
+        catalog: "SourceCatalog",
+        owner_user_id: int | None = None,
+    ) -> tuple[
+        list[MonitorMatch],
+        "MultiSourceFetchReport",
+    ]:
+        """Fetch and pre-filter enabled global procurement sources."""
+
+        profile = await self.profile_for_owner(
+            owner_user_id
+        )
+
+        search_terms = (
+            tuple(profile.monitoring_keywords)
+            if profile is not None
+            else ()
+        )
+
+        report = await catalog.fetch(
+            limit_per_source=self.settings.max_items,
+            search_terms=search_terms,
+            max_eis_feeds=self.settings.profile_feed_limit,
+        )
+
+        matches: list[MonitorMatch] = []
+
+        for notice in report.notices:
+            match = prefilter_notice(
+                notice,
+                profile,
+            )
+
+            if match is not None:
+                matches.append(match)
+
+        return matches, report
+
+    async def scan_new_from_catalog(
+        self,
+        catalog: "SourceCatalog",
+        owner_user_id: int,
+    ) -> tuple[
+        list[MonitorMatch],
+        "MultiSourceFetchReport",
+    ]:
+        matches, report = (
+            await self.fetch_matches_from_catalog(
+                catalog,
+                owner_user_id,
+            )
+        )
+
+        new_matches = await self.claim_new(
+            owner_user_id,
+            matches,
+        )
+
+        return new_matches, report
 
     async def claim_new_for_organization(
         self,

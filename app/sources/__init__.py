@@ -74,6 +74,14 @@ from .india_cppp import (
     parse_india_cppp_listing,
 )
 
+from .kz_goszakup import (
+    KZ_GOSZAKUP_API_BASE_URL,
+    KZ_GOSZAKUP_ANNOUNCEMENTS_URL,
+    KZ_GOSZAKUP_PUBLIC_ANNOUNCEMENT_BASE_URL,
+    KazakhstanGoszakupApiSource,
+    parse_kz_goszakup_response,
+)
+
 __all__ = [
     "TenderSource",
     "TenderNotice",
@@ -127,4 +135,9 @@ __all__ = [
     "INDIA_CPPP_LIST_URL",
     "IndiaCpppSource",
     "parse_india_cppp_listing",
+    "KZ_GOSZAKUP_API_BASE_URL",
+    "KZ_GOSZAKUP_ANNOUNCEMENTS_URL",
+    "KZ_GOSZAKUP_PUBLIC_ANNOUNCEMENT_BASE_URL",
+    "KazakhstanGoszakupApiSource",
+    "parse_kz_goszakup_response",
 ]

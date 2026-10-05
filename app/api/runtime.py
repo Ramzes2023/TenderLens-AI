@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from app.auth import AuthService
     from app.organizations import OrganizationService
     from app.sources import SourceCatalog
+    from app.support import SupportRepository
 
 
 @dataclass
@@ -33,6 +34,7 @@ class ApiRuntime:
     monitoring_service: "TenderMonitorService | Any | None" = None
     tender_discovery_service: "TenderMonitorService | Any | None" = None
     source_catalog: "SourceCatalog | Any | None" = None
+    support_repository: "SupportRepository | Any | None" = None
     component_errors: dict[str, str] = field(default_factory=dict)
 
     def component_status(self) -> dict[str, str]:
@@ -47,6 +49,7 @@ class ApiRuntime:
             "monitoring": "ready" if self.monitoring_service is not None else "unavailable",
             "discovery": "ready" if self.tender_discovery_service is not None else "unavailable",
             "sources": "ready" if self.source_catalog is not None else "unavailable",
+            "support": "ready" if self.support_repository is not None else "unavailable",
         }
 
 
@@ -109,6 +112,35 @@ def build_runtime() -> ApiRuntime:
         runtime.auth_service = AuthService(auth_repository)
     except Exception:
         runtime.component_errors["auth"] = "Authentication unavailable"
+
+    try:
+        from app.support import SupportRepository
+        from app.database import load_database_settings
+
+        db_path = (
+            runtime.auth_service.repository.path
+            if runtime.auth_service is not None
+            else (
+                runtime.tender_repository.path
+                if runtime.tender_repository is not None
+                else load_database_settings().path
+            )
+        )
+
+        support_repository = SupportRepository(
+            db_path
+        )
+
+        support_repository.initialize()
+
+        runtime.support_repository = (
+            support_repository
+        )
+
+    except Exception:
+        runtime.component_errors[
+            "support"
+        ] = "Support Center unavailable"
 
     try:
         from app.organizations import OrganizationRepository, OrganizationService

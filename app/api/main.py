@@ -11,6 +11,7 @@ from app import __version__
 
 from .config import ApiSettings, load_api_settings
 from .auth_routes import router as auth_router
+from .support_routes import router as support_router
 from .organization_routes import router as organization_router
 from .organization_company_routes import router as organization_company_router
 from .organization_data_routes import router as organization_data_router
@@ -41,6 +42,7 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
     app.mount("/assets", StaticFiles(directory=Path(__file__).parent / "static"), name="assets")
     app.state.login_rate_limiter = LoginRateLimiter()
     app.include_router(auth_router)
+    app.include_router(support_router)
     app.include_router(organization_router)
     app.include_router(organization_company_router)
     app.include_router(organization_workflow_router)

@@ -43,7 +43,7 @@ def _dashboard_html() -> str:
 <main class="shell">
   <div class="top">
     <div><h1>VALYQON AI</h1><div class="muted">AI Procurement Intelligence Platform</div></div>
-    <div class="toolbar"><span id="email" class="badge">Loading account…</span><span class="badge">v{version}</span><a href="/docs"><button>API Docs</button></a><button onclick="refreshAll()">Refresh</button><button onclick="logout()">Sign out</button></div>
+    <div class="toolbar"><span id="email" class="badge">Loading account…</span><span class="badge">v{version}</span><a href="/docs" class="badge">API Docs</a><button onclick="refreshAll()">Refresh</button><button onclick="logout()">Sign out</button></div>
   </div>
 
   <section class="grid">
@@ -170,7 +170,7 @@ def _dashboard_html() -> str:
     </article>
 
     <article id="companyCreator" class="p s12 hidden">
-      <h2>Create company <button onclick="hideCompanyForm()">Close</button></h2>
+      <h2><span id="companyFormTitle">Create company</span> <button onclick="hideCompanyForm()">Close</button></h2>
       <div class="form-grid">
         <div class="f6">
           <label for="companyName">Company name *</label>
@@ -194,20 +194,24 @@ def _dashboard_html() -> str:
           <div class="help">Separate several values with commas or semicolons.</div>
         </div>
         <div class="f12">
-          <label for="keywords">Products / monitoring keywords *</label>
+          <label for="keywords">Products &amp; services *</label>
           <textarea id="keywords" placeholder="aluminium profiles, aluminum structures, фасадный профиль"></textarea>
-          <div class="help">These words define what VALYQON AI searches for and scores against.</div>
+          <div class="help">Product keywords describe your capabilities. Search keywords below control discovery.</div>
         </div>
+        <div class="f12"><label for="searchKeywords">Search keywords</label><textarea id="searchKeywords" placeholder="Optional: leave empty to use products / services"></textarea></div>
+        <div class="f6"><label for="countries">Target countries</label><input id="countries" placeholder="Germany, Canada"><div class="help">Comma-separated supported markets.</div></div>
+        <div class="f6"><label for="currencies">Accepted currencies</label><input id="currencies" value="RUB" placeholder="EUR, USD, RUB"><div class="help">No currency conversion is performed. Budget limits use the notice currency.</div></div>
+        <div class="f12"><label for="documentsAvailable">Available certificates / document keywords</label><input id="documentsAvailable" placeholder="ISO 9001, supplier registration"></div>
         <div class="f12">
           <label for="excludedKeywords">Excluded keywords</label>
           <input id="excludedKeywords" placeholder="repair, used, scrap">
         </div>
         <div class="f6">
-          <label for="minContract">Minimum contract value (RUB)</label>
+          <label for="minContract">Minimum contract value</label>
           <input id="minContract" type="number" min="0" step="1" placeholder="0">
         </div>
         <div class="f6">
-          <label for="maxContract">Maximum contract value (RUB)</label>
+          <label for="maxContract">Maximum contract value</label>
           <input id="maxContract" type="number" min="1" step="1" placeholder="50000000">
         </div>
       </div>
@@ -238,9 +242,9 @@ async function loadAccount(){{const a=await api('/api/v1/auth/me');state.account
 function owner(){{if(!Number.isInteger(state.ownerId))throw new Error('Account owner unavailable');return state.ownerId}}
 function listValue(id){{return document.getElementById(id).value.split(/[,;\\n]+/).map(v=>v.trim()).filter(Boolean)}}
 function optionalMoney(id){{const raw=document.getElementById(id).value.trim();if(!raw)return null;const value=Number(raw);if(!Number.isFinite(value)||value<0)throw new Error('Contract values must be valid positive numbers.');return value}}
-function showCompanyForm(){{if(!canWriteWorkspace())return;document.getElementById('companyCreator').classList.remove('hidden');document.getElementById('companyName').focus()}}
+function showCompanyForm(){{if(!canWriteWorkspace())return;resetCompanyForm();document.getElementById('companyCreator').classList.remove('hidden');document.getElementById('companyName').focus()}}
 function hideCompanyForm(){{document.getElementById('companyCreator').classList.add('hidden');document.getElementById('companyFormError').innerHTML=''}}
-function resetCompanyForm(){{['companyName','industry','regions','keywords','excludedKeywords','minContract','maxContract'].forEach(id=>document.getElementById(id).value='');document.getElementById('businessMode').value='sell'}}
+function resetCompanyForm(){{['companyName','industry','regions','keywords','searchKeywords','countries','documentsAvailable','excludedKeywords','minContract','maxContract'].forEach(id=>document.getElementById(id).value='');document.getElementById('businessMode').value='sell';document.getElementById('currencies').value='RUB';state.editCompanyId=null;state.editProfile=null;document.getElementById('companyFormTitle').textContent='Create company';document.getElementById('createCompanyButton').textContent='Create & activate'}}
 async function loadHealth(){{const d=await (await fetch('/health',{{cache:'no-store'}})).json();document.getElementById('healthVersion').textContent='v'+d.version;const b=document.getElementById('healthBadge');b.textContent=d.status;b.className='chip '+(d.status==='ok'?'good':'warn');document.getElementById('components').innerHTML=Object.entries(d.components||{{}}).map(([k,v])=>`<span class="chip ${{v==='ready'?'good':'warn'}}">${{esc(k)}}: ${{esc(v)}}</span>`).join('')}}
 async function loadCompanies(){{
   const path=usingSharedOrganization()
@@ -303,12 +307,21 @@ async function loadCompanies(){{
           </div>
         </div>
 
-        ${{activate}}
+        <div>${{activate}} ${{usingSharedOrganization()&&canWriteWorkspace()?`<button onclick="editCompany(${{item.id}})">Edit profile</button>`:''}}</div>
       </div>
     </div>`;
   }}).join('');
 
   updateWorkspaceControls();
+}}
+function editCompany(id){{
+  if(!usingSharedOrganization()||!canWriteWorkspace())return;
+  const item=state.companies.find(x=>x.id===id);if(!item)return;
+  showCompanyForm();state.editCompanyId=id;state.editProfile=item.profile;
+  const p=item.profile;
+  const fields={{companyName:item.name,businessMode:p.business_mode,industry:p.industry,regions:(p.allowed_regions||[]).join(', '),keywords:(p.product_keywords||[]).join(', '),searchKeywords:(p.search_keywords||[]).join(', '),countries:(p.allowed_countries||[]).join(', '),currencies:(p.accepted_currencies||[]).join(', '),documentsAvailable:(p.available_document_keywords||[]).join(', '),excludedKeywords:(p.excluded_keywords||[]).join(', '),minContract:p.min_contract_value,maxContract:p.max_contract_value}};
+  Object.entries(fields).forEach(([key,value])=>document.getElementById(key).value=value??'');
+  document.getElementById('companyFormTitle').textContent='Edit company profile';document.getElementById('createCompanyButton').textContent='Save profile';
 }}
 async function createCompany(){{
   const errorRoot=document.getElementById(
@@ -374,29 +387,38 @@ async function createCompany(){{
     button.textContent='Creating?';
 
     const profile={{
-      profile_version:'1',
+      ...state.editProfile,
+      profile_version:state.editProfile?.profile_version||'1',
       company_name:name,
       business_mode:document.getElementById('businessMode').value,
       industry:document.getElementById('industry').value.trim()||null,
       product_keywords:keywords,
-      search_keywords:keywords,
+      search_keywords:listValue('searchKeywords'),
       excluded_keywords:listValue('excludedKeywords'),
       allowed_regions:regions,
-      allowed_countries:[],
-      accepted_currencies:['RUB'],
+      allowed_countries:listValue('countries'),
+      accepted_currencies:listValue('currencies').map(v=>v.toUpperCase()),
       min_contract_value:minValue,
       max_contract_value:maxValue,
-      max_bid_security_percent:null,
-      max_contract_security_percent:null,
-      available_document_keywords:[],
-      hard_stop_on_region:regions.length>0,
-      hard_stop_on_budget:true,
-      hard_stop_on_currency:true,
-      hard_stop_on_bid_security:false,
-      hard_stop_on_contract_security:false
+      max_bid_security_percent:state.editProfile?.max_bid_security_percent??null,
+      max_contract_security_percent:state.editProfile?.max_contract_security_percent??null,
+      available_document_keywords:listValue('documentsAvailable'),
+      hard_stop_on_region:state.editProfile?.hard_stop_on_region??(regions.length>0),
+      hard_stop_on_budget:state.editProfile?.hard_stop_on_budget??(true),
+      hard_stop_on_currency:state.editProfile?.hard_stop_on_currency??(true),
+      hard_stop_on_bid_security:state.editProfile?.hard_stop_on_bid_security??(false),
+      hard_stop_on_contract_security:state.editProfile?.hard_stop_on_contract_security??(false)
     }};
 
-    if(usingSharedOrganization()){{
+    const editing=Boolean(state.editCompanyId);
+    state.uiEpoch=(state.uiEpoch||0)+1;
+    state.activeCompanyId=null;
+    state.activeCompanyName='Loading workspace…';
+    window.dispatchEvent(new Event('workspace-context'));
+    if(editing){{
+      if(!usingSharedOrganization())throw new Error('Select a shared organization to edit profiles.');
+      await api(`${{organizationBase()}}/companies/${{state.editCompanyId}}`,{{method:'PATCH',body:JSON.stringify({{name,profile}})}});
+    }}else if(usingSharedOrganization()){{
       const created=await api(
         `${{organizationBase()}}/companies`,
         {{
@@ -436,12 +458,13 @@ async function createCompany(){{
     document.getElementById(
       'companyActionMessage'
     ).innerHTML=
-      '<div class="success">Company created and activated.</div>';
+      editing?'<div class="success">Company profile saved.</div>':'<div class="success">Company created and activated.</div>';
 
     await Promise.all([
       loadCompanies(),
       loadMonitoring()
     ]);
+    if(!editing&&usingSharedOrganization())location.hash='discover';
 
   }}catch(e){{
     errorRoot.innerHTML=
@@ -450,7 +473,7 @@ async function createCompany(){{
   }}finally{{
     button.disabled=false;
     button.textContent=
-      'Create & activate';
+      state.editCompanyId?'Save profile':'Create & activate';
   }}
 }}
 async function activateCompany(id){{
@@ -632,7 +655,7 @@ async function refreshAll(){{
 async function logout(){{try{{await api('/api/v1/auth/logout',{{method:'POST'}})}}finally{{location.replace('/login')}}}}
 {ORGANIZATION_SCRIPT}
 {TELEGRAM_SCRIPT}
-refreshAll().catch(e=>{{if(!String(e.message||e).includes('Authentication required'))document.getElementById('companies').innerHTML=`<div class="error">${{esc(e.message||e)}}</div>`}});
+refreshAll().catch(e=>{{if(!String(e.message||e).includes('Authentication required'))document.getElementById('appNotice').textContent='Workspace unavailable. Check your connection and select Refresh to retry.'}});
 </script>
 </body>
 </html>"""

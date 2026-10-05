@@ -194,6 +194,8 @@ class OrganizationWorkflowTests(unittest.TestCase):
                 TenderNotice(
                     source="ted",
                     external_id="global-aluminium-1",
+                    published_at="2026-10-01T10:00:00Z",
+                    summary="Supply contract for aluminium profiles",
                     title="Supply of aluminium profile",
                     url="https://example.test/ted/1",
                     initial_price=2_000_000,
@@ -429,6 +431,8 @@ class OrganizationWorkflowTests(unittest.TestCase):
         )
 
         item = payload["items"][0]
+        self.assertEqual(item["published_at"], "2026-10-01T10:00:00Z")
+        self.assertEqual(item["summary"], "Supply contract for aluminium profiles")
 
         self.assertEqual(
             item["analysis_stage"],

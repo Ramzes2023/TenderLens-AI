@@ -38,13 +38,21 @@ class AuthPageRoutingTests(unittest.TestCase):
         self.client = self.ctx.__enter__()
         self.addCleanup(self.ctx.__exit__, None, None, None)
 
-    def test_anonymous_redirects(self):
+    def test_anonymous_landing_and_dashboard_redirect(self):
         root = self.client.get("/")
-        self.assertEqual(root.status_code, 303)
-        self.assertEqual(root.headers["location"], "/login")
+        self.assertEqual(root.status_code, 200)
+        self.assertIn("VALYQON AI", root.text)
+        self.assertEqual(
+            root.headers.get("cache-control"),
+            "no-store",
+        )
+
         dashboard = self.client.get("/dashboard")
         self.assertEqual(dashboard.status_code, 303)
-        self.assertEqual(dashboard.headers["location"], "/login")
+        self.assertEqual(
+            dashboard.headers["location"],
+            "/login",
+        )
 
     def test_auth_pages_open_anonymously(self):
         self.assertEqual(self.client.get("/login").status_code, 200)

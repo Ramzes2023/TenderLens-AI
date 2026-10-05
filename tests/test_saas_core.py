@@ -46,3 +46,16 @@ def test_discovery_browser_contracts():
         pytest.skip('Node is required for browser logic regression')
     result = subprocess.run(['node', 'tests/js/discovery.test.cjs'], cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_company_profile_ui_preserves_constraints(tmp_path):
+    import shutil
+    import subprocess
+    from pathlib import Path
+    import pytest
+    if not shutil.which('node'):
+        pytest.skip('Node is required for browser logic regression')
+    html = tmp_path / 'dashboard.html'
+    html.write_text(dashboard_html(), encoding='utf-8')
+    result = subprocess.run(['node', 'tests/js/company.test.cjs', str(html)], cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr

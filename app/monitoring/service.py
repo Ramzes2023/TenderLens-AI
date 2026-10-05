@@ -201,19 +201,15 @@ class TenderMonitorService:
         profile = await self.profile_for_owner(owner_user_id)
         return await self.fetch_matches_for_profile(profile)
 
-    async def fetch_matches_from_catalog(
+    async def fetch_matches_from_catalog_for_profile(
         self,
         catalog: "SourceCatalog",
-        owner_user_id: int | None = None,
+        profile: CompanyProfile | None,
     ) -> tuple[
         list[MonitorMatch],
         "MultiSourceFetchReport",
     ]:
-        """Fetch and pre-filter enabled global procurement sources."""
-
-        profile = await self.profile_for_owner(
-            owner_user_id
-        )
+        """Fetch global sources and pre-filter against an explicit profile."""
 
         search_terms = (
             tuple(profile.monitoring_keywords)
@@ -239,6 +235,25 @@ class TenderMonitorService:
                 matches.append(match)
 
         return matches, report
+
+    async def fetch_matches_from_catalog(
+        self,
+        catalog: "SourceCatalog",
+        owner_user_id: int | None = None,
+    ) -> tuple[
+        list[MonitorMatch],
+        "MultiSourceFetchReport",
+    ]:
+        """Fetch global sources using the resolved owner profile."""
+
+        profile = await self.profile_for_owner(
+            owner_user_id
+        )
+
+        return await self.fetch_matches_from_catalog_for_profile(
+            catalog,
+            profile,
+        )
 
     async def scan_new_from_catalog(
         self,

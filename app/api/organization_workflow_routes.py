@@ -23,6 +23,7 @@ from app.scoring.models import ScoringResult
 from .schemas import (
     MonitorNoticeResponse,
     MonitorStatusResponse,
+    TenderDiscoveryResponse,
 )
 from .security import (
     current_account,
@@ -80,6 +81,38 @@ def _monitoring_service(request: Request):
     return service
 
 
+def _discovery_service(request: Request):
+    service = getattr(
+        request.app.state.runtime,
+        "tender_discovery_service",
+        None,
+    )
+
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Tender discovery is unavailable.",
+        )
+
+    return service
+
+
+def _source_catalog(request: Request):
+    catalog = getattr(
+        request.app.state.runtime,
+        "source_catalog",
+        None,
+    )
+
+    if catalog is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Procurement source catalog is unavailable.",
+        )
+
+    return catalog
+
+
 async def _active_company(
     request: Request,
     account,
@@ -122,6 +155,85 @@ def _notice_response(match):
         deadline=notice.deadline,
         region=notice.region,
         reasons=list(match.reasons),
+    )
+
+
+@router.post(
+    "/discover/tenders",
+    response_model=TenderDiscoveryResponse,
+)
+async def organization_discover_tenders(
+    organization_id: int,
+    request: Request,
+    response: Response,
+):
+    """Search enabled procurement sources for the active company."""
+
+    require_same_origin_browser_request(
+        request
+    )
+
+    account = await _account(
+        request
+    )
+
+    workspace = await _active_company(
+        request,
+        account,
+        organization_id,
+    )
+
+    if workspace is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Create an organization company profile "
+                "before discovering tenders."
+            ),
+        )
+
+    discovery = _discovery_service(
+        request
+    )
+
+    catalog = _source_catalog(
+        request
+    )
+
+    try:
+        matches, report = (
+            await discovery.fetch_matches_from_catalog_for_profile(
+                catalog,
+                workspace.profile,
+            )
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Global procurement discovery failed.",
+        ) from None
+
+    response.headers[
+        "Cache-Control"
+    ] = "no-store"
+
+    return TenderDiscoveryResponse(
+        items=[
+            _notice_response(match)
+            for match in matches
+        ],
+        attempted_sources=list(
+            report.attempted_sources
+        ),
+        successful_sources=list(
+            report.successful_sources
+        ),
+        failed_sources=[
+            failure.source
+            for failure in report.failures
+        ],
+        partial_failure=report.partial_failure,
+        total_failure=report.total_failure,
     )
 
 

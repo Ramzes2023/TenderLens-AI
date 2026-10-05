@@ -31,6 +31,7 @@ class ApiRuntime:
     tender_repository: "TenderRepository | Any | None" = None
     rag_service: "RagService | Any | None" = None
     monitoring_service: "TenderMonitorService | Any | None" = None
+    tender_discovery_service: "TenderMonitorService | Any | None" = None
     source_catalog: "SourceCatalog | Any | None" = None
     component_errors: dict[str, str] = field(default_factory=dict)
 
@@ -44,6 +45,7 @@ class ApiRuntime:
             "organizations": "ready" if self.organization_service is not None else "unavailable",
             "rag": "ready" if self.rag_service is not None else "unavailable",
             "monitoring": "ready" if self.monitoring_service is not None else "unavailable",
+            "discovery": "ready" if self.tender_discovery_service is not None else "unavailable",
             "sources": "ready" if self.source_catalog is not None else "unavailable",
         }
 
@@ -159,41 +161,49 @@ def build_runtime() -> ApiRuntime:
             )
         )
 
+        db_path = (
+            runtime.tender_repository.path
+            if runtime.tender_repository is not None
+            else load_database_settings().path
+        )
+
+        repository = MonitoringRepository(
+            db_path
+        )
+        repository.initialize()
+
+        runtime.tender_discovery_service = TenderMonitorService(
+            monitor_settings,
+            eis_registration.source,
+            repository,
+            runtime.company_profile,
+            profile_resolver=(
+                runtime.company_service.profile_for_owner
+                if runtime.company_service
+                else None
+            ),
+            scope_resolver=(
+                runtime.company_service.scope_for_owner
+                if runtime.company_service
+                else None
+            ),
+        )
+
+        # Background subscription monitoring remains EIS-only.
         if eis_registration.enabled:
-            db_path = (
-                runtime.tender_repository.path
-                if runtime.tender_repository is not None
-                else load_database_settings().path
-            )
-
-            repository = MonitoringRepository(db_path)
-            repository.initialize()
-
-            # Background monitoring remains on EIS until the
-            # global discovery path receives its own scheduling/cache layer.
-            source = eis_registration.source
-
-            runtime.monitoring_service = TenderMonitorService(
-                monitor_settings,
-                source,
-                repository,
-                runtime.company_profile,
-                profile_resolver=(
-                    runtime.company_service.profile_for_owner
-                    if runtime.company_service
-                    else None
-                ),
-                scope_resolver=(
-                    runtime.company_service.scope_for_owner
-                    if runtime.company_service
-                    else None
-                ),
+            runtime.monitoring_service = (
+                runtime.tender_discovery_service
             )
         else:
             runtime.component_errors["monitoring"] = (
                 "EIS monitoring source not configured"
             )
     except Exception:
-        runtime.component_errors["monitoring"] = "Monitoring unavailable"
+        runtime.component_errors["discovery"] = (
+            "Tender discovery unavailable"
+        )
+        runtime.component_errors["monitoring"] = (
+            "Monitoring unavailable"
+        )
 
     return runtime

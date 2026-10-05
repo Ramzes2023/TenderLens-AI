@@ -94,6 +94,15 @@ class MonitorNoticeResponse(BaseModel):
     reasons: list[str]
 
 
+class TenderDiscoveryResponse(BaseModel):
+    items: list[MonitorNoticeResponse]
+    attempted_sources: list[str]
+    successful_sources: list[str]
+    failed_sources: list[str]
+    partial_failure: bool
+    total_failure: bool
+
+
 class PdfAnalysisResponse(BaseModel):
     duplicate: bool
     record_id: int

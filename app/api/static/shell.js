@@ -10,3 +10,13 @@
  $('navToggle').onclick=()=>{$('navToggle').setAttribute('aria-expanded',String($('appNav').classList.toggle('open')));};
  window.addEventListener('hashchange',navigate);navigate();
 })();
+/* Workspace lifecycle: drop stale results before organization/company transitions. */
+(function(){
+ const $=id=>document.getElementById(id);
+ state.uiEpoch=0;state.companies=[];state.activeCompanyId=null;state.activeCompanyName='Loading workspace…';
+ function publish(){window.dispatchEvent(new Event('workspace-context'));}
+ function invalidate(){state.uiEpoch++;state.activeCompanyId=null;state.hasActiveCompany=false;state.companies=[];state.activeCompanyName='Loading workspace…';for(const id of ['companies','tenders','scanResults'])$(id).replaceChildren();$('monitorCompany').textContent='Loading…';$('monitorDetails').textContent='';$('onboarding').hidden=true;publish();}
+ for(const name of ['selectOrganization','activateCompany','refreshAll']){const original=window[name];window[name]=async function(...args){invalidate();$('appNotice').textContent='';try{return await original(...args);}catch{$('appNotice').textContent='Workspace could not be loaded. Refresh or choose a workspace again.';}finally{publish();}};}
+ window.addEventListener('workspace-context',()=>{$('activeCompanyLabel').textContent=state.activeCompanyName;const loaded=state.activeCompanyName!=='Loading workspace…';$('onboarding').hidden=!loaded||Boolean(state.activeCompanyId);$('onboardingStart').disabled=!canWriteWorkspace();});
+ window.addEventListener('unhandledrejection',e=>{$('appNotice').textContent='This action could not be completed. Refresh the workspace and retry.';e.preventDefault();});
+})();

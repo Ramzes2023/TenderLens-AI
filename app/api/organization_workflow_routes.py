@@ -164,6 +164,8 @@ def _discovery_item(
         deadline=notice.deadline,
         region=notice.region,
         reasons=list(match.reasons),
+        published_at=notice.published_at,
+        summary=notice.summary,
         analysis_stage="metadata_preview",
         metadata_analysis=metadata_analysis,
         preliminary_scoring=score_tender(

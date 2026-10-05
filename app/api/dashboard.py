@@ -232,8 +232,8 @@ def _dashboard_html() -> str:
 <script>
 const state={{accountId:null,ownerId:null,hasActiveCompany:false}};
 const esc=v=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
-async function read(r){{if(r.status===401){{location.replace('/login');throw new Error('Authentication required')}}if(!r.ok){{let d=`${{r.status}} ${{r.statusText}}`;try{{const j=await r.json();if(j.detail)d=typeof j.detail==='string'?j.detail:JSON.stringify(j.detail)}}catch(_){{}}throw new Error(d)}}return r.status===204?null:r.json()}}
-async function api(path,opt={{}}){{const h=new Headers(opt.headers||{{}});if(opt.body&&!(opt.body instanceof FormData))h.set('Content-Type','application/json');return read(await fetch(path,{{...opt,headers:h,credentials:'same-origin',cache:'no-store'}}))}}
+async function read(r){{if(r.status===401){{location.replace('/login');throw new Error('Authentication required')}}if(!r.ok){{throw new Error(r.status===403?'Access denied for this workspace.':r.status===409?'The workspace changed or this name already exists. Refresh and try again.':r.status===422?'Check the form values and required fields.':'Service unavailable. Please retry.')}}return r.status===204?null:r.json()}}
+async function api(path,opt={{}}){{const epoch=state.uiEpoch||0;const h=new Headers(opt.headers||{{}});if(opt.body&&!(opt.body instanceof FormData))h.set('Content-Type','application/json');let r;try{{r=await fetch(path,{{...opt,headers:h,credentials:'same-origin',cache:'no-store'}})}}catch{{throw new Error('Network unavailable. Please retry.')}}const data=await read(r);if(epoch!==(state.uiEpoch||0))throw new Error('Workspace changed. Refresh to continue.');return data}}
 async function loadAccount(){{const a=await api('/api/v1/auth/me');state.accountId=a.id;state.ownerId=a.owner_user_id;document.getElementById('email').textContent=a.email;renderTelegram(a)}}
 function owner(){{if(!Number.isInteger(state.ownerId))throw new Error('Account owner unavailable');return state.ownerId}}
 function listValue(id){{return document.getElementById(id).value.split(/[,;\\n]+/).map(v=>v.trim()).filter(Boolean)}}
@@ -248,6 +248,11 @@ async function loadCompanies(){{
     :`/api/v1/companies?owner_user_id=${{owner()}}`;
 
   const items=await api(path);
+  state.companies=items;
+  const active=items.find(item=>item.is_active);
+  state.activeCompanyId=active?.id??null;
+  state.activeCompanyName=active?.name||'No active company';
+  window.dispatchEvent(new Event('workspace-context'));
 
   document.getElementById(
     'companyCount'

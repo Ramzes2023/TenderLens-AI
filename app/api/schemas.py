@@ -95,6 +95,8 @@ class MonitorNoticeResponse(BaseModel):
 
 
 class TenderDiscoveryItem(MonitorNoticeResponse):
+    published_at: str | None = None
+    summary: str | None = None
     analysis_stage: str = "metadata_preview"
     metadata_analysis: TenderAnalysis
     preliminary_scoring: ScoringResult

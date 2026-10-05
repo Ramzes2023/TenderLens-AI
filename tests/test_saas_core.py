@@ -35,3 +35,14 @@ def test_public_assets_and_private_dashboard():
         for path in ['/assets/saas.css', '/assets/shell.js']:
             assert client.get(path).status_code == 200
         assert client.get('/assets/../config.py').status_code == 404
+
+
+def test_discovery_browser_contracts():
+    import shutil
+    import subprocess
+    from pathlib import Path
+    import pytest
+    if not shutil.which('node'):
+        pytest.skip('Node is required for browser logic regression')
+    result = subprocess.run(['node', 'tests/js/discovery.test.cjs'], cwd=Path(__file__).resolve().parents[1], capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr

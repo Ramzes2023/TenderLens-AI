@@ -189,11 +189,13 @@ def main() -> int:
     try:
         monitor_settings = load_monitoring_settings()
         source_catalog = build_source_catalog(monitor_settings)
-        enabled_sources = source_catalog.registry.registrations(
-            enabled_only=True
+        eis_registration = (
+            source_catalog.registry.get(
+                "eis"
+            )
         )
 
-        if enabled_sources:
+        if eis_registration.enabled:
             if tender_repository is None:
                 from app.database import load_database_settings
                 db_path = load_database_settings().path
@@ -203,9 +205,9 @@ def main() -> int:
             monitor_repository = MonitoringRepository(db_path)
             monitor_repository.initialize()
 
-            # EIS remains the monitoring adapter until global searchable
-            # connectors are enabled in the following source phases.
-            source = source_catalog.registry.get("eis").source
+            # Background monitoring remains on EIS until the global
+            # discovery path receives its own scheduling/cache layer.
+            source = eis_registration.source
 
             monitoring_service = TenderMonitorService(
                 monitor_settings,

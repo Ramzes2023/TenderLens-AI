@@ -153,11 +153,13 @@ def build_runtime() -> ApiRuntime:
         if monitor_settings is None or runtime.source_catalog is None:
             raise RuntimeError("Source catalog unavailable")
 
-        enabled_sources = runtime.source_catalog.registry.registrations(
-            enabled_only=True
+        eis_registration = (
+            runtime.source_catalog.registry.get(
+                "eis"
+            )
         )
 
-        if enabled_sources:
+        if eis_registration.enabled:
             db_path = (
                 runtime.tender_repository.path
                 if runtime.tender_repository is not None
@@ -167,9 +169,9 @@ def build_runtime() -> ApiRuntime:
             repository = MonitoringRepository(db_path)
             repository.initialize()
 
-            # Keep EIS profile-search compatibility while source construction
-            # is centralized in the catalog.
-            source = runtime.source_catalog.registry.get("eis").source
+            # Background monitoring remains on EIS until the
+            # global discovery path receives its own scheduling/cache layer.
+            source = eis_registration.source
 
             runtime.monitoring_service = TenderMonitorService(
                 monitor_settings,
@@ -189,7 +191,7 @@ def build_runtime() -> ApiRuntime:
             )
         else:
             runtime.component_errors["monitoring"] = (
-                "No procurement source configured"
+                "EIS monitoring source not configured"
             )
     except Exception:
         runtime.component_errors["monitoring"] = "Monitoring unavailable"

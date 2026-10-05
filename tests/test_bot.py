@@ -119,6 +119,64 @@ class RoutingTests(unittest.IsolatedAsyncioTestCase):
 
 
 class LifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_global_discovery_service_is_injected_without_background_monitoring(self):
+        bot = MagicMock()
+        bot.get_me = AsyncMock()
+        bot.session.close = AsyncMock()
+
+        dispatcher = MagicMock()
+        dispatcher.resolve_used_update_types.return_value = [
+            "message"
+        ]
+        dispatcher.start_polling = AsyncMock()
+
+        discovery_service = MagicMock()
+        source_catalog = MagicMock()
+
+        with (
+            patch(
+                "app.bot.main.Bot",
+                return_value=bot,
+            ),
+            patch(
+                "app.bot.main.create_dispatcher",
+                return_value=dispatcher,
+            ),
+        ):
+            await run_bot(
+                Settings(TOKEN),
+                monitoring_service=None,
+                source_catalog=source_catalog,
+                tender_discovery_service=discovery_service,
+            )
+
+        dispatcher.__setitem__.assert_any_call(
+            "source_catalog",
+            source_catalog,
+        )
+
+        dispatcher.__setitem__.assert_any_call(
+            "tender_discovery_service",
+            discovery_service,
+        )
+
+        monitoring_injections = [
+            call
+            for call
+            in dispatcher.__setitem__.call_args_list
+            if call.args
+            and call.args[0]
+            == "monitoring_service"
+        ]
+
+        self.assertEqual(
+            monitoring_injections,
+            [],
+        )
+
+        dispatcher.start_polling.assert_awaited_once()
+        bot.session.close.assert_awaited_once()
+
     async def test_direct_and_proxy_bot_construction(self):
         for proxy in (None, "http://localhost:8080"):
             with self.subTest(proxy_enabled=bool(proxy)):

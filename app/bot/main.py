@@ -51,7 +51,7 @@ def create_dispatcher() -> Dispatcher:
 async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: int = 20000,
                   company_profile=None, tender_repository=None, rag_service=None,
                   monitoring_service=None, company_service=None, auth_service=None,
-                  source_catalog=None) -> None:
+                  source_catalog=None, tender_discovery_service=None) -> None:
     if settings.proxy_url:
         session = AiohttpSession(proxy=settings.proxy_url)
         try:
@@ -80,6 +80,8 @@ async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: in
             dispatcher["auth_service"] = auth_service
         if source_catalog is not None:
             dispatcher["source_catalog"] = source_catalog
+        if tender_discovery_service is not None:
+            dispatcher["tender_discovery_service"] = tender_discovery_service
         await bot.get_me()  # Validate credentials before announcing successful startup.
         monitor_task = None
         monitor_stop = None
@@ -188,6 +190,7 @@ def main() -> int:
     from app.sources import SourceRegistryError, build_source_catalog
 
     monitoring_service = None
+    tender_discovery_service = None
     source_catalog = None
 
     try:
@@ -199,40 +202,48 @@ def main() -> int:
             )
         )
 
+        if tender_repository is None:
+            from app.database import load_database_settings
+            db_path = load_database_settings().path
+        else:
+            db_path = tender_repository.path
+
+        monitor_repository = MonitoringRepository(
+            db_path
+        )
+        monitor_repository.initialize()
+
+        # Manual global discovery always has its own service
+        # for profile resolution and source-scoped deduplication.
+        # Its legacy single-source member is not used by /tenders
+        # when SourceCatalog is present.
+        tender_discovery_service = TenderMonitorService(
+            monitor_settings,
+            eis_registration.source,
+            monitor_repository,
+            company_profile,
+            profile_resolver=(
+                company_service.profile_for_owner
+                if company_service is not None
+                else None
+            ),
+            scope_resolver=(
+                company_service.scope_for_owner
+                if company_service is not None
+                else None
+            ),
+        )
+
+        # Background monitoring intentionally remains EIS-only.
         if eis_registration.enabled:
-            if tender_repository is None:
-                from app.database import load_database_settings
-                db_path = load_database_settings().path
-            else:
-                db_path = tender_repository.path
-
-            monitor_repository = MonitoringRepository(db_path)
-            monitor_repository.initialize()
-
-            # Background monitoring remains on EIS until the global
-            # discovery path receives its own scheduling/cache layer.
-            source = eis_registration.source
-
-            monitoring_service = TenderMonitorService(
-                monitor_settings,
-                source,
-                monitor_repository,
-                company_profile,
-                profile_resolver=(
-                    company_service.profile_for_owner
-                    if company_service is not None
-                    else None
-                ),
-                scope_resolver=(
-                    company_service.scope_for_owner
-                    if company_service is not None
-                    else None
-                ),
+            monitoring_service = (
+                tender_discovery_service
             )
 
         elif monitor_settings.enabled:
             logger.warning(
-                "?????????????? ???????, ?? ???????? ?????????? ???."
+                "Background monitoring is enabled, "
+                "but the EIS source is not configured."
             )
 
     except (
@@ -248,7 +259,8 @@ def main() -> int:
         asyncio.run(run_bot(
             settings, provider, max_chars, company_profile, tender_repository,
             rag_service, monitoring_service, company_service, auth_service,
-            source_catalog=source_catalog
+            source_catalog=source_catalog,
+            tender_discovery_service=tender_discovery_service
         ))
     except KeyboardInterrupt:
         logger.info("Бот остановлен пользователем.")

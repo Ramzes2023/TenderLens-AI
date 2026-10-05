@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 def _money(value: float | None, currency: str | None) -> str:
     if value is None:
-        return "не указана в RSS"
+        return "не указана источником"
     amount = f"{value:,.2f}".replace(",", " ")
     return f"{amount} {currency or ''}".strip()
 
@@ -46,7 +46,7 @@ def format_match(match, *, index: int | None = None) -> str:
 async def _service_or_message(message: Message, monitoring_service: TenderMonitorService | None):
     if monitoring_service is None:
         await message.answer(
-            "Мониторинг источников не настроен. Проверьте EIS_RSS_URLS / EIS_PROFILE_FEEDS_ENABLED и перезапустите бота."
+            "Сервис поиска или мониторинга закупок сейчас недоступен. Проверьте конфигурацию VALYQON и локальную БД."
         )
         return None
     return monitoring_service
@@ -56,10 +56,19 @@ async def tenders_handler(
     message: Message,
     monitoring_service: TenderMonitorService | None = None,
     source_catalog: SourceCatalog | None = None,
+    tender_discovery_service: TenderMonitorService | None = None,
 ) -> None:
+    if source_catalog is not None:
+        service_candidate = (
+            tender_discovery_service
+            or monitoring_service
+        )
+    else:
+        service_candidate = monitoring_service
+
     service = await _service_or_message(
         message,
-        monitoring_service,
+        service_candidate,
     )
 
     if (

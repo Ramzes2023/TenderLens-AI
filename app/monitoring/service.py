@@ -28,25 +28,153 @@ def _contains(text: str, phrase: str) -> bool:
     return phrase.casefold().strip() in text.casefold()
 
 
-def _term_match(text: str, phrase: str) -> bool:
-    """Conservative token-prefix match for RSS pre-filtering.
 
-    EIS morphology can return inflected Russian forms (e.g. ``профиль`` /
-    ``профиля``), so an exact substring alone is too brittle for discovery.
+
+
+def _term_match(
+    text: str,
+    term: str,
+) -> bool:
     """
-    if _contains(text, phrase):
-        return True
-    hay = re.findall(r"[0-9a-zа-яё]+", text.casefold())
-    needles = re.findall(r"[0-9a-zа-яё]+", phrase.casefold())
-    needles = [item for item in needles if len(item) >= 4]
-    if not needles:
+    Unicode word / phrase matcher.
+
+    Latin words stay exact:
+        gold != golden
+        gold != goldhofer
+
+    Russian words use conservative inflection stems:
+        ?????? == ???????
+        ??????? == ????????
+        ?????????? == ???????????
+        ???????????? == ????????????
+    """
+    import re
+
+    suffixes = (
+        "\u0438\u044f\u043c\u0438",
+        "\u044f\u043c\u0438",
+        "\u0430\u043c\u0438",
+        "\u043e\u0433\u043e",
+        "\u0435\u043c\u0443",
+        "\u043e\u043c\u0443",
+        "\u044b\u043c\u0438",
+        "\u0438\u043c\u0438",
+        "\u0438\u044f\u0445",
+        "\u0430\u0445",
+        "\u044f\u0445",
+        "\u043e\u0432",
+        "\u0435\u0432",
+        "\u0435\u0439",
+        "\u0430\u043c",
+        "\u044f\u043c",
+        "\u043e\u043c",
+        "\u0435\u043c",
+        "\u043e\u0439",
+        "\u0438\u0439",
+        "\u044b\u0439",
+        "\u0430\u044f",
+        "\u044f\u044f",
+        "\u043e\u0435",
+        "\u0435\u0435",
+        "\u044b\u0435",
+        "\u0438\u0435",
+        "\u0438\u044f",
+        "\u044b\u0445",
+        "\u0438\u0445",
+        "\u0443\u044e",
+        "\u044e\u044e",
+        "\u0430",
+        "\u044f",
+        "\u044b",
+        "\u0438",
+        "\u0435",
+        "\u043e",
+        "\u0443",
+        "\u044e",
+    )
+
+    def normalize_token(
+        token: str,
+    ) -> str:
+        value = (
+            token.casefold()
+            .replace(
+                "\u0451",
+                "\u0435",
+            )
+        )
+
+        is_russian = (
+            bool(value)
+            and all(
+                0x0430
+                <= ord(char)
+                <= 0x044F
+                for char in value
+            )
+        )
+
+        if not is_russian:
+            return value
+
+        for suffix in suffixes:
+            if (
+                value.endswith(suffix)
+                and (
+                    len(value)
+                    - len(suffix)
+                ) >= 4
+            ):
+                return value[
+                    :-len(suffix)
+                ]
+
+        return value
+
+    haystack = [
+        normalize_token(token)
+        for token in re.findall(
+            r"[^\W_]+",
+            text or "",
+            flags=re.UNICODE,
+        )
+    ]
+
+    needle = [
+        normalize_token(token)
+        for token in re.findall(
+            r"[^\W_]+",
+            term or "",
+            flags=re.UNICODE,
+        )
+    ]
+
+    if not needle:
         return False
-    for needle in needles:
-        prefix_len = min(6, len(needle))
-        prefix = needle[:prefix_len]
-        if not any(token.startswith(prefix) for token in hay):
-            return False
-    return True
+
+    width = len(needle)
+
+    if width > len(haystack):
+        return False
+
+    for index in range(
+        len(haystack)
+        - width
+        + 1
+    ):
+        if (
+            haystack[
+                index:
+                index + width
+            ]
+            == needle
+        ):
+            return True
+
+    return False
+
+
+
 
 
 def prefilter_notice(notice: TenderNotice, profile: CompanyProfile | None) -> MonitorMatch | None:

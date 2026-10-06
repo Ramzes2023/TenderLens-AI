@@ -9,3 +9,276 @@ body.saas{--accent:#2859c5;--line:#dce4ee;--panel2:#f0f4fa;background:var(--prem
 @media(min-width:1700px){.saas .shell{padding-inline:52px}.overview-metrics article{padding:26px}}@media(max-width:1200px){.product-topbar{gap:16px}.command-trigger{min-width:170px}.command-trigger kbd{display:none}.saas .shell{padding-inline:24px}.overview-welcome{flex-wrap:wrap}.overview-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:900px){.product-topbar{flex-wrap:wrap;padding-block:20px}.product-topbar>.toolbar{margin-left:auto}.notification-link{display:none}}@media(max-width:760px){.saas .app-nav{display:none;top:56px;width:250px}.saas .app-nav.open{display:flex}.saas .shell{margin-left:0;padding:64px 16px 20px}.saas .nav-toggle{background:#0d1b33;color:#fff;border:0;min-width:76px;min-height:40px}.product-topbar{margin-bottom:16px;gap:14px}.saas .product-topbar #pageHeading{font-size:22px}.command-trigger{order:3;width:100%}.product-topbar>.toolbar{margin-left:0}.saas .workspace-context{grid-template-columns:1fr;padding:16px;gap:14px}.overview-welcome{padding:10px 0 18px}.overview-welcome h2{font-size:27px}.overview-metrics{gap:10px}.overview-metrics article{padding:16px}.overview-metrics strong{font-size:24px}.discovery-prompt{align-items:flex-start;flex-direction:column}.saas .future-state{padding:26px!important}.account-menu>div{right:0;width:min(270px,85vw)}.saas button{min-height:42px}.saas input,.saas select{min-height:42px}.sidebar-context{padding-bottom:20px}}
 
 .product-subtitle{margin:5px 0 0;color:#71839b;font-size:10px;line-height:1.4}
+
+
+/* VALYQON OVERVIEW V2 */
+
+body.saas .workspace-context{
+  display:grid;
+  grid-template-columns:
+    minmax(280px,1.25fr)
+    minmax(220px,.9fr);
+  align-items:end;
+  gap:24px;
+  margin-bottom:24px;
+  padding:15px 20px;
+  border-radius:14px;
+}
+
+body.saas .workspace-context select{
+  min-height:42px;
+}
+
+body.saas .workspace-context .fine{
+  margin-bottom:4px;
+  font-size:11px;
+  letter-spacing:.02em;
+}
+
+body.saas .overview-welcome{
+  margin-bottom:20px;
+  padding:14px 0 10px;
+}
+
+body.saas .overview-welcome h2{
+  margin:4px 0 8px;
+  font-size:31px;
+  line-height:1.12;
+  letter-spacing:-.025em;
+}
+
+body.saas .overview-welcome p{
+  margin:0;
+  max-width:700px;
+}
+
+body.saas .overview-welcome .primary,
+body.saas .overview-welcome .secondary{
+  min-height:44px;
+}
+
+body.saas .overview-metrics{
+  gap:14px;
+  margin-bottom:16px;
+}
+
+body.saas .overview-metrics article{
+  min-height:132px;
+  padding:18px 20px;
+  border-radius:14px;
+}
+
+body.saas .overview-metrics article strong{
+  font-size:30px;
+  line-height:1.1;
+}
+
+body.saas .overview-review-panel{
+  margin-top:0;
+  margin-bottom:18px;
+  padding:20px 24px;
+  border-radius:14px;
+}
+
+body.saas .overview-onboarding-v2{
+  margin-top:0;
+  padding:28px 30px;
+  border-radius:16px;
+  background:
+    linear-gradient(
+      135deg,
+      #f4f8ff 0%,
+      #eef5ff 55%,
+      #f8fbff 100%
+    );
+}
+
+body.saas
+.overview-onboarding-v2
+h2,
+body.saas
+.overview-onboarding-v2
+h3{
+  max-width:760px;
+  margin-bottom:10px;
+}
+
+body.saas
+.overview-setup-steps{
+  display:grid;
+  grid-template-columns:
+    repeat(3,minmax(0,1fr));
+  gap:12px;
+  margin:22px 0 20px;
+}
+
+body.saas
+.overview-setup-steps article{
+  min-height:124px;
+  padding:16px;
+  border:1px solid #dbe6f5;
+  border-radius:12px;
+  background:
+    rgba(255,255,255,.78);
+}
+
+body.saas
+.overview-step-index{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:28px;
+  height:28px;
+  margin-bottom:12px;
+  border-radius:8px;
+  background:#e7efff;
+  color:#255ac7;
+  font-size:11px;
+  font-weight:800;
+}
+
+body.saas
+.overview-setup-steps strong{
+  display:block;
+  margin-bottom:6px;
+  color:#132b4d;
+  font-size:14px;
+}
+
+body.saas
+.overview-setup-steps p{
+  margin:0;
+  color:#60718a;
+  font-size:12px;
+  line-height:1.5;
+}
+
+body.saas
+.overview-secondary-grid{
+  display:grid;
+  grid-template-columns:
+    repeat(2,minmax(0,1fr));
+  gap:16px;
+  max-width:none;
+}
+
+body.saas
+.overview-compact-card{
+  min-height:142px;
+  margin:0;
+  padding:22px 24px;
+  border-radius:14px;
+}
+
+body.saas.overview-no-company
+.overview-metrics,
+body.saas.overview-no-company
+.overview-review-panel{
+  display:none !important;
+}
+
+body.saas.overview-no-company
+.overview-welcome{
+  padding-top:8px;
+  padding-bottom:4px;
+  margin-bottom:16px;
+}
+
+body.saas.overview-no-company
+.overview-onboarding-v2{
+  margin-top:8px;
+}
+
+@media(max-width:1050px){
+  body.saas
+  .workspace-context{
+    grid-template-columns:1fr;
+    gap:12px;
+  }
+
+  body.saas
+  .overview-setup-steps{
+    grid-template-columns:1fr;
+  }
+
+  body.saas
+  .overview-setup-steps article{
+    min-height:auto;
+  }
+}
+
+@media(max-width:720px){
+  body.saas
+  .workspace-context{
+    padding:14px;
+  }
+
+  body.saas
+  .overview-welcome h2{
+    font-size:27px;
+  }
+
+  body.saas
+  .overview-secondary-grid{
+    grid-template-columns:1fr;
+  }
+
+  body.saas
+  .overview-onboarding-v2{
+    padding:22px 18px;
+  }
+}
+/* VALYQON OVERVIEW V2 FINAL POLISH */
+
+body.saas .workspace-context{
+  margin-bottom:18px;
+  padding:12px 18px;
+}
+
+body.saas.overview-no-company
+.overview-compact-card{
+  display:none !important;
+}
+
+body.saas.overview-no-company
+.overview-onboarding-v2 button{
+  display:none !important;
+}
+
+body.saas.overview-no-company
+.overview-onboarding-v2{
+  padding:24px 28px 26px;
+}
+
+body.saas.overview-no-company
+.overview-setup-steps{
+  gap:10px;
+  margin:18px 0 0;
+}
+
+body.saas.overview-no-company
+.overview-setup-steps article{
+  min-height:108px;
+  padding:14px 16px;
+}
+
+body.saas.overview-no-company
+.overview-step-index{
+  width:26px;
+  height:26px;
+  margin-bottom:10px;
+}
+
+body.saas.overview-no-company
+.overview-secondary-grid:has(
+  > .overview-compact-card
+){
+  display:none !important;
+}
+
+@media(max-width:720px){
+  body.saas.overview-no-company
+  .overview-onboarding-v2{
+    padding:20px 16px;
+  }
+}

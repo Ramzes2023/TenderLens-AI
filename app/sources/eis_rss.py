@@ -74,12 +74,56 @@ def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1].lower()
 
 
-def _clean(value: str | None) -> str:
-    if not value:
+
+def _clean(
+    value: str | None,
+) -> str:
+    """
+    Normalize EIS text without breaking words around
+    inline search-highlight tags.
+
+    <b>Gold</b>hofer -> Goldhofer
+    <b>Gold</b>en Eagle -> Golden Eagle
+    """
+    import html
+    import re
+
+    if value is None:
         return ""
-    value = html.unescape(value)
-    value = _TAG_RE.sub(" ", value)
-    return _WS_RE.sub(" ", value).strip()
+
+    text = html.unescape(
+        str(value)
+    )
+
+    # Structural HTML should create spacing.
+    text = re.sub(
+        r"(?is)<\s*br\s*/?\s*>",
+        " ",
+        text,
+    )
+
+    text = re.sub(
+        (
+            r"(?is)</\s*"
+            r"(?:p|div|li|tr|td|h[1-6])"
+            r"\s*>"
+        ),
+        " ",
+        text,
+    )
+
+    # Inline formatting/search-highlight tags must
+    # disappear without inserting spaces.
+    text = re.sub(
+        r"(?is)<[^>]+>",
+        "",
+        text,
+    )
+
+    return " ".join(
+        text.split()
+    )
+
 
 
 def _child_text(element: ET.Element, names: set[str]) -> str:
@@ -128,6 +172,106 @@ def _stable_id(guid: str, link: str, title: str, published: str) -> str:
     return hashlib.sha256(basis.encode("utf-8", errors="replace")).hexdigest()
 
 
+# VALYQON EIS BUSINESS SUMMARY V1
+def _extract_eis_labeled_field(
+    text: str | None,
+    label: str,
+    stop_labels: tuple[str, ...],
+) -> str | None:
+    """Extract one business field from the verbose EIS RSS description."""
+
+    cleaned = _clean(text or "")
+
+    if not cleaned:
+        return None
+
+    folded = cleaned.lower()
+    wanted = label.lower()
+
+    start = folded.find(wanted)
+
+    if start < 0:
+        return None
+
+    start += len(wanted)
+    end = len(cleaned)
+
+    for stop_label in stop_labels:
+        position = folded.find(
+            stop_label.lower(),
+            start,
+        )
+
+        if position >= 0:
+            end = min(
+                end,
+                position,
+            )
+
+    value = _clean(
+        cleaned[start:end]
+    ).strip(" :-")
+
+    return value or None
+
+
+def _eis_business_summary(
+    description: str | None,
+) -> str | None:
+    """Return procurement content without EIS search-form metadata."""
+
+    cleaned = _clean(
+        description or ""
+    )
+
+    if not cleaned:
+        return None
+
+    procurement_object = (
+        _extract_eis_labeled_field(
+            cleaned,
+            "\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 "
+            "\u043e\u0431\u044a\u0435\u043a\u0442\u0430 "
+            "\u0437\u0430\u043a\u0443\u043f\u043a\u0438:",
+            (
+                "\u0420\u0430\u0437\u043c\u0435\u0449\u0435\u043d\u0438\u0435 "
+                "\u0432\u044b\u043f\u043e\u043b\u043d\u044f\u0435\u0442\u0441\u044f "
+                "\u043f\u043e:",
+                "\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 "
+                "\u0417\u0430\u043a\u0430\u0437\u0447\u0438\u043a\u0430:",
+                "\u041d\u0430\u0447\u0430\u043b\u044c\u043d\u0430\u044f "
+                "\u0446\u0435\u043d\u0430 "
+                "\u043a\u043e\u043d\u0442\u0440\u0430\u043a\u0442\u0430:",
+                "\u0412\u0430\u043b\u044e\u0442\u0430:",
+                "\u0420\u0430\u0437\u043c\u0435\u0449\u0435\u043d\u043e:",
+                "\u041e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u043e:",
+            ),
+        )
+    )
+
+    if procurement_object:
+        return procurement_object[:4000]
+
+    result_marker = (
+        "\u041d\u0430\u0439\u0434\u0435\u043d\u043d\u044b\u0439 "
+        "\u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442:"
+    )
+
+    position = cleaned.lower().find(
+        result_marker.lower()
+    )
+
+    if position >= 0:
+        cleaned = _clean(
+            cleaned[
+                position
+                + len(result_marker):
+            ]
+        )
+
+    return cleaned[:4000] or None
+
+
 def parse_eis_feed(payload: bytes, *, source_name: str = "eis") -> list[TenderNotice]:
     try:
         root = ET.fromstring(payload)
@@ -153,12 +297,34 @@ def parse_eis_feed(payload: bytes, *, source_name: str = "eis") -> list[TenderNo
             url=link[:2000],
             published_at=published,
             tender_number=tender_number,
-            customer=_extract(_CUSTOMER_RE, combined),
+            customer=(
+                _extract_eis_labeled_field(
+                    description,
+                    "\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 "
+                    "\u0417\u0430\u043a\u0430\u0437\u0447\u0438\u043a\u0430:",
+                    (
+                        "\u041d\u0430\u0447\u0430\u043b\u044c\u043d\u0430\u044f "
+                        "\u0446\u0435\u043d\u0430 "
+                        "\u043a\u043e\u043d\u0442\u0440\u0430\u043a\u0442\u0430:",
+                        "\u0412\u0430\u043b\u044e\u0442\u0430:",
+                        "\u0420\u0430\u0437\u043c\u0435\u0449\u0435\u043d\u043e:",
+                        "\u041e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u043e:",
+                        "\u042d\u0442\u0430\u043f "
+                        "\u0440\u0430\u0437\u043c\u0435\u0449\u0435\u043d\u0438\u044f:",
+                        "\u0418\u0434\u0435\u043d\u0442\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u043e\u043d\u043d\u044b\u0439 "
+                        "\u043a\u043e\u0434:",
+                    ),
+                )
+                or _extract(
+                    _CUSTOMER_RE,
+                    combined,
+                )
+            ),
             initial_price=_parse_money(combined),
             currency="RUB" if re.search(r"(?:₽|руб(?:\.|лей|ля)?)", combined, re.I) else None,
             deadline=_extract(_DEADLINE_RE, combined),
             region=_extract(_REGION_RE, combined),
-            summary=description[:4000] or None,
+            summary=_eis_business_summary(description),
         ))
     return notices
 

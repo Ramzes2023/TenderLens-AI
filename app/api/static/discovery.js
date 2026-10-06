@@ -21,6 +21,32 @@ function card(item,index){return `<article class="tender-card"><span class="chip
 const list=values=>values?.length?'<ul>'+values.map(v=>`<li>${escape(v)}</li>`).join('')+'</ul>':'<p>Not provided in metadata.</p>';
 function detail(item){const score=item.preliminary_scoring||{}, a=item.metadata_analysis||{},url=safeUrl(item.url);return `<section><h3>Overview</h3><dl>${[['Source',item.source],['Buyer',item.customer],['Tender number',item.tender_number],['Region',item.region],['Deadline',item.deadline],['Published',item.published_at],['Value',item.initial_price==null?null:`${item.initial_price} ${item.currency||''}`]].map(([k,v])=>`<dt>${k}</dt><dd>${escape(v??'Not provided')}</dd>`).join('')}</dl><p>${escape(item.summary||a.procurement_object||'No summary supplied.')}</p></section><div class="detail-grid"><section><h3>Company Match</h3>${matchHtml(item)}${(score.criteria||[]).map(c=>`<div class="criterion"><strong>${escape(c.label||c.code)}</strong><p>Status: ${escape(c.status==='not_scored'?'Missing data — not scored':c.status)}</p><p>Points: ${escape(c.earned_points??'—')} / ${escape(c.weight??'—')}</p><p>${escape(c.explanation)}</p>${list(c.evidence)}</div>`).join('')}<h4>Missing information</h4>${list(score.missing_information)}</section><section><h3>Requirements</h3>${list(a.participant_requirements)}${list(a.technical_requirements)}<h3>Documents</h3><p>Documents not imported yet.</p><h4>Document requirements in metadata</h4>${list(a.required_documents)}<h3>Risks</h3>${list(score.document_risks)}${list(score.stop_factors)}<h3>AI Analysis</h3><p>${item.full_ai_analyzed?'Consult the stored document analysis through the supported document workflow.':'Full AI analysis has not been run for this tender yet.'}</p><button disabled>Analyze Tender — document import required</button><h3>Actions</h3>${url?`<a href="${escape(url)}" target="_blank" rel="noopener noreferrer">Open official source</a>`:'<p>No safe source link available.</p>'}</section></div>`;}
 function sourceMessage(report){if(report.total_failure)return 'Sources could not be reached. Please retry discovery.';if(report.partial_failure)return 'Results are available, but some procurement sources could not be reached.';return report.items?.length?'Discovery complete.':'No tenders found. Review company search keywords or try again later.';}
+/* VALYQON DISCOVERY RANKING V1 */
+function rankedItems(values){
+ const rows=Array.isArray(values)?[...values]:[];
+ return rows.sort((a,b)=>{
+  const as=Number(a?.preliminary_scoring?.fit_score);
+  const bs=Number(b?.preliminary_scoring?.fit_score);
+  const ac=Number(a?.preliminary_scoring?.completeness_percent);
+  const bc=Number(b?.preliminary_scoring?.completeness_percent);
+  const aScore=Number.isFinite(as)?as:-1;
+  const bScore=Number.isFinite(bs)?bs:-1;
+  const aComplete=Number.isFinite(ac)?ac:-1;
+  const bComplete=Number.isFinite(bc)?bc:-1;
+  return (bScore-aScore)||(bComplete-aComplete);
+ });
+}
+function sourceMix(values){
+ const counts=new Map();
+ for(const item of values||[]){
+  const key=String(item?.source||'unknown');
+  counts.set(key,(counts.get(key)||0)+1);
+ }
+ return [...counts.entries()]
+  .map(([source,count])=>`${source}: ${count}`)
+  .join(', ');
+}
+
 const publicApi={matches,card,detail,safeUrl,sourceMessage,percent};
 if(typeof module!=='undefined'&&module.exports)module.exports=publicApi;
 root.ValyqonDiscovery=publicApi;
@@ -33,7 +59,7 @@ function filters(){return Object.fromEntries(['keyword','source','buyer','curren
 function render(){const f=filters();$('filterValue').disabled=!f.currency;const visible=items.map((item,i)=>({item,i})).filter(({item})=>matches(item,f));$('discoveryResults').innerHTML=visible.map(({item,i})=>card(item,i)).join('');if(report&&!report.total_failure){$('discoveryMessage').textContent=sourceMessage(report)+` Showing ${visible.length} of ${items.length} fetched results.`;if(items.length&&!visible.length)$('discoveryMessage').textContent+=' No results match these local filters.';}}
 function options(id,values){const n=$(id),old=n.value;n.replaceChildren(new Option('All fetched values',''));[...new Set(values.filter(Boolean))].sort().forEach(v=>n.add(new Option(v,v)));n.value=[...n.options].some(o=>o.value===old)?old:'';}
 async function discover(){if($('discoverButton').disabled)return;const ticket=++serial,scope=identity(),org=state.organizationId;controller=new AbortController();items=[];report=null;if($('discoveredCount'))$('discoveredCount').textContent='Not run';if($('scoredCount'))$('scoredCount').textContent='Not run';$('discoveryResults').replaceChildren();$('sourceHealth').textContent='';$('discoveryMessage').textContent='Searching configured sources…';update();
-try{const r=await fetch(`/api/v1/organizations/${org}/discover/tenders`,{method:'POST',credentials:'same-origin',cache:'no-store',signal:controller.signal});if(ticket!==serial||scope!==identity())return;if(r.status===401){location.replace('/login');return;}if(!r.ok){$('discoveryMessage').textContent=r.status===403?'You do not have access to this organization.':r.status===409?'Create and activate an organization company first.':'Discovery is unavailable. Please retry.';return;}const data=await r.json();if(ticket!==serial||scope!==identity())return;report=data;if(typeof CustomEvent!=='undefined')window.dispatchEvent(new CustomEvent('discovery-report',{detail:data}));items=data.total_failure?[]:(data.items||[]);if($('discoveredCount'))$('discoveredCount').textContent=data.total_failure?'Unavailable':String(items.length);if($('scoredCount'))$('scoredCount').textContent=data.total_failure?'Unavailable':String(items.filter(i=>i.preliminary_scoring?.fit_score!=null).length);options('filterSource',items.map(i=>i.source));options('filterCurrency',items.map(i=>i.currency));$('sourceHealth').textContent=`Attempted: ${(data.attempted_sources||[]).join(', ')||'none'} · Reached: ${(data.successful_sources||[]).join(', ')||'none'} · Unavailable: ${(data.failed_sources||[]).join(', ')||'none'}`;$('discoveryMessage').textContent=sourceMessage(data);render();}
+try{const r=await fetch(`/api/v1/organizations/${org}/discover/tenders`,{method:'POST',credentials:'same-origin',cache:'no-store',signal:controller.signal});if(ticket!==serial||scope!==identity())return;if(r.status===401){location.replace('/login');return;}if(!r.ok){$('discoveryMessage').textContent=r.status===403?'You do not have access to this organization.':r.status===409?'Create and activate an organization company first.':'Discovery is unavailable. Please retry.';return;}const data=await r.json();if(ticket!==serial||scope!==identity())return;report=data;if(typeof CustomEvent!=='undefined')window.dispatchEvent(new CustomEvent('discovery-report',{detail:data}));items=data.total_failure?[]:rankedItems(data.items||[]);if($('discoveredCount'))$('discoveredCount').textContent=data.total_failure?'Unavailable':String(items.length);if($('scoredCount'))$('scoredCount').textContent=data.total_failure?'Unavailable':String(items.filter(i=>i.preliminary_scoring?.fit_score!=null).length);options('filterSource',items.map(i=>i.source));options('filterCurrency',items.map(i=>i.currency));$('sourceHealth').textContent=`Attempted: ${(data.attempted_sources||[]).join(', ')||'none'} · Reached: ${(data.successful_sources||[]).join(', ')||'none'} · Unavailable: ${(data.failed_sources||[]).join(', ')||'none'}`;const mix=sourceMix(items);if(mix){$('sourceHealth').textContent+=` \u00b7 Results: ${mix}`;}$('discoveryMessage').textContent=sourceMessage(data);render();}
 catch(e){if(e.name!=='AbortError'&&ticket===serial)$('discoveryMessage').textContent='Network unavailable. Please retry discovery.';}
 finally{if(ticket===serial){controller=null;update();}}}
 $('discoverButton').onclick=discover;

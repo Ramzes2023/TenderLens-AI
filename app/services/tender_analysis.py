@@ -93,6 +93,9 @@ def analysis_from_notice(
         delivery_region=text_or_none(
             notice.region
         ),
+        procurement_object=text_or_none(
+            notice.summary
+        ),
     )
 
 

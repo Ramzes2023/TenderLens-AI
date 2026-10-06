@@ -178,11 +178,16 @@ class MultiSourceFetcher:
             *(run_one(item) for item in selected)
         )
 
+        # VALYQON BALANCED SOURCE MERGE V1
+        #
+        # Keep every successful source represented instead of allowing
+        # the first source in registry order to fill a downstream cap.
         merged: list[TenderNotice] = []
         failures: list[SourceFailure] = []
         successful: list[str] = []
         statuses: list[SourceRunStatus] = []
         seen_notice_ids: set[tuple[str, str]] = set()
+        source_notice_lists: list[list[TenderNotice]] = []
 
         for source_key, notices, failure, status in results:
             statuses.append(status)
@@ -192,13 +197,32 @@ class MultiSourceFetcher:
                 continue
 
             successful.append(source_key)
+            unique_notices: list[TenderNotice] = []
 
             for notice in notices or ():
                 if notice.identity in seen_notice_ids:
                     continue
 
                 seen_notice_ids.add(notice.identity)
-                merged.append(notice)
+                unique_notices.append(notice)
+
+            source_notice_lists.append(unique_notices)
+
+        max_source_results = max(
+            (
+                len(source_notices)
+                for source_notices
+                in source_notice_lists
+            ),
+            default=0,
+        )
+
+        for index in range(max_source_results):
+            for source_notices in source_notice_lists:
+                if index < len(source_notices):
+                    merged.append(
+                        source_notices[index]
+                    )
 
         return MultiSourceFetchReport(
             notices=tuple(merged),

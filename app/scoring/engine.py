@@ -62,124 +62,416 @@ def _criterion(code: str, label: str, status: str, explanation: str,
 
 def _category(analysis: TenderAnalysis, profile: CompanyProfile) -> CriterionResult:
     if not profile.product_keywords:
-        return _criterion("category", "Направление", "not_scored",
-                          "В профиле компании не заданы товарные направления.")
-    source = "\n".join(filter(None, [analysis.title, analysis.procurement_object, *analysis.technical_requirements]))
+        return _criterion(
+            "category",
+            "Product relevance",
+            "not_scored",
+            "No product categories are configured in the company profile.",
+        )
+
+    source = "\n".join(
+        filter(
+            None,
+            [
+                analysis.title,
+                analysis.procurement_object,
+                *analysis.technical_requirements,
+            ],
+        )
+    )
+
     if not source.strip():
-        return _criterion("category", "Направление", "not_scored",
-                          "В извлечённых данных недостаточно информации о предмете закупки.")
-    matched = [keyword for keyword in profile.product_keywords if _has_phrase(source, keyword)]
+        return _criterion(
+            "category",
+            "Product relevance",
+            "not_scored",
+            "The extracted tender data does not contain enough information about the procurement subject.",
+        )
+
+    matched = [
+        keyword
+        for keyword in profile.product_keywords
+        if _has_phrase(source, keyword)
+    ]
+
     if matched:
-        return _criterion("category", "Направление", "matched",
-                          "Предмет закупки совпадает с направлениями профиля.", matched[:10], 1.0)
-    return _criterion("category", "Направление", "failed",
-                      "Совпадений с товарными направлениями профиля не найдено.", [], 0.0)
+        return _criterion(
+            "category",
+            "Product relevance",
+            "matched",
+            "The procurement subject matches the company profile.",
+            matched[:10],
+            1.0,
+        )
+
+    return _criterion(
+        "category",
+        "Product relevance",
+        "failed",
+        "No product-category match was found for the company profile.",
+        [],
+        0.0,
+    )
 
 
 def _region(analysis: TenderAnalysis, profile: CompanyProfile) -> CriterionResult:
     if not profile.allowed_regions:
-        return _criterion("region", "Регион", "not_scored",
-                          "В профиле компании не задано ограничение по регионам.")
-    location = " ".join(filter(None, [analysis.delivery_region, analysis.delivery_address]))
+        return _criterion(
+            "region",
+            "Region",
+            "not_scored",
+            "No regional restrictions are configured in the company profile.",
+        )
+
+    location = " ".join(
+        filter(
+            None,
+            [
+                analysis.delivery_region,
+                analysis.delivery_address,
+            ],
+        )
+    )
+
     if not location:
-        return _criterion("region", "Регион", "not_scored",
-                          "Регион или адрес поставки не извлечён из документа.")
-    matched = [region for region in profile.allowed_regions if _has_phrase(location, region)]
+        return _criterion(
+            "region",
+            "Region",
+            "not_scored",
+            "The delivery region or address was not extracted from the tender data.",
+        )
+
+    matched = [
+        region
+        for region in profile.allowed_regions
+        if _has_phrase(location, region)
+    ]
+
     if matched:
-        return _criterion("region", "Регион", "matched",
-                          "Место поставки входит в разрешённые регионы.", matched[:10], 1.0)
-    return _criterion("region", "Регион", "failed",
-                      "Место поставки не совпадает с разрешёнными регионами профиля.", [location], 0.0)
+        return _criterion(
+            "region",
+            "Region",
+            "matched",
+            "The delivery location is within the company profile regions.",
+            matched[:10],
+            1.0,
+        )
+
+    return _criterion(
+        "region",
+        "Region",
+        "failed",
+        "The delivery location does not match the company profile regions.",
+        [location],
+        0.0,
+    )
 
 
-def _budget(analysis: TenderAnalysis, profile: CompanyProfile) -> tuple[CriterionResult, list[str]]:
+def _budget(
+    analysis: TenderAnalysis,
+    profile: CompanyProfile,
+) -> tuple[CriterionResult, list[str]]:
     stops: list[str] = []
-    if profile.max_contract_value is None and profile.min_contract_value is None:
-        return (_criterion("budget", "Бюджет", "not_scored",
-                           "В профиле компании не задан диапазон стоимости контракта."), stops)
-    if analysis.initial_price is None:
-        return (_criterion("budget", "Бюджет", "not_scored",
-                           "НМЦК не извлечена из документа."), stops)
 
-    tender_currency = _currency_code(analysis.currency)
-    accepted = {_currency_code(value) for value in profile.accepted_currencies}
+    if (
+        profile.max_contract_value is None
+        and profile.min_contract_value is None
+    ):
+        return (
+            _criterion(
+                "budget",
+                "Budget",
+                "not_scored",
+                "No contract value range is configured in the company profile.",
+            ),
+            stops,
+        )
+
+    if analysis.initial_price is None:
+        return (
+            _criterion(
+                "budget",
+                "Budget",
+                "not_scored",
+                "The contract value was not extracted from the tender data.",
+            ),
+            stops,
+        )
+
+    tender_currency = _currency_code(
+        analysis.currency
+    )
+
+    accepted = {
+        _currency_code(value)
+        for value in profile.accepted_currencies
+    }
+
     if accepted and tender_currency is None:
-        return (_criterion("budget", "Бюджет", "not_scored",
-                           "Валюта закупки не извлечена, поэтому лимит бюджета не сравнивается."), stops)
-    if accepted and tender_currency not in accepted:
-        message = f"Валюта закупки {tender_currency} не входит в разрешённые валюты профиля."
+        return (
+            _criterion(
+                "budget",
+                "Budget",
+                "not_scored",
+                "The tender currency was not extracted, so the budget limit cannot be evaluated.",
+            ),
+            stops,
+        )
+
+    if (
+        accepted
+        and tender_currency not in accepted
+    ):
+        message = (
+            f"Tender currency {tender_currency} "
+            "is not included in the company profile currencies."
+        )
+
         if profile.hard_stop_on_currency:
             stops.append(message)
-        return _criterion("budget", "Бюджет", "failed", message, [str(tender_currency)], 0.0), stops
 
-    if (profile.min_contract_value is not None
-            and analysis.initial_price < profile.min_contract_value):
-        message = (f"НМЦК {analysis.initial_price:,.2f} ниже минимального интересующего размера "
-                   f"{profile.min_contract_value:,.2f}.").replace(",", " ")
+        return (
+            _criterion(
+                "budget",
+                "Budget",
+                "failed",
+                message,
+                [str(tender_currency)],
+                0.0,
+            ),
+            stops,
+        )
+
+    if (
+        profile.min_contract_value is not None
+        and analysis.initial_price
+        < profile.min_contract_value
+    ):
+        message = (
+            f"Contract value {analysis.initial_price:,.2f} "
+            "is below the minimum profile value "
+            f"{profile.min_contract_value:,.2f}."
+        ).replace(",", " ")
+
         if profile.hard_stop_on_budget:
             stops.append(message)
-        return _criterion("budget", "Бюджет", "failed", message, [], 0.0), stops
 
-    if (profile.max_contract_value is None
-            or analysis.initial_price <= profile.max_contract_value):
+        return (
+            _criterion(
+                "budget",
+                "Budget",
+                "failed",
+                message,
+                [],
+                0.0,
+            ),
+            stops,
+        )
+
+    if (
+        profile.max_contract_value is None
+        or analysis.initial_price
+        <= profile.max_contract_value
+    ):
         if profile.max_contract_value is None:
-            explanation = (f"НМЦК {analysis.initial_price:,.2f} соответствует минимальному порогу профиля.").replace(",", " ")
+            explanation = (
+                f"Contract value {analysis.initial_price:,.2f} "
+                "meets the minimum profile threshold."
+            ).replace(",", " ")
         else:
-            explanation = (f"НМЦК {analysis.initial_price:,.2f} не превышает лимит профиля "
-                           f"{profile.max_contract_value:,.2f}.").replace(",", " ")
-        return _criterion("budget", "Бюджет", "matched", explanation, [], 1.0), stops
+            explanation = (
+                f"Contract value {analysis.initial_price:,.2f} "
+                "does not exceed the profile limit "
+                f"{profile.max_contract_value:,.2f}."
+            ).replace(",", " ")
 
-    message = (f"НМЦК {analysis.initial_price:,.2f} превышает лимит профиля "
-               f"{profile.max_contract_value:,.2f}.").replace(",", " ")
+        return (
+            _criterion(
+                "budget",
+                "Budget",
+                "matched",
+                explanation,
+                [],
+                1.0,
+            ),
+            stops,
+        )
+
+    message = (
+        f"Contract value {analysis.initial_price:,.2f} "
+        "exceeds the profile limit "
+        f"{profile.max_contract_value:,.2f}."
+    ).replace(",", " ")
+
     if profile.hard_stop_on_budget:
         stops.append(message)
-    return _criterion("budget", "Бюджет", "failed", message, [], 0.0), stops
+
+    return (
+        _criterion(
+            "budget",
+            "Budget",
+            "failed",
+            message,
+            [],
+            0.0,
+        ),
+        stops,
+    )
 
 
-def _security(code: str, label: str, actual: float | None, maximum: float | None,
-              hard_stop: bool) -> tuple[CriterionResult, list[str]]:
+def _security(
+    code: str,
+    label: str,
+    actual: float | None,
+    maximum: float | None,
+    hard_stop: bool,
+) -> tuple[CriterionResult, list[str]]:
     stops: list[str] = []
+
     if maximum is None:
-        return _criterion(code, label, "not_scored", "В профиле компании не задан допустимый порог."), stops
+        return (
+            _criterion(
+                code,
+                label,
+                "not_scored",
+                "No allowed threshold is configured in the company profile.",
+            ),
+            stops,
+        )
+
     if actual is None:
-        return _criterion(code, label, "not_scored", "Процент обеспечения не извлечён из документа."), stops
+        return (
+            _criterion(
+                code,
+                label,
+                "not_scored",
+                "The security percentage was not extracted from the tender data.",
+            ),
+            stops,
+        )
+
     if actual <= maximum:
-        return _criterion(code, label, "matched",
-                          f"{actual:g}% не превышает допустимый порог {maximum:g}%.", [], 1.0), stops
-    message = f"{actual:g}% превышает допустимый порог {maximum:g}%."
+        return (
+            _criterion(
+                code,
+                label,
+                "matched",
+                (
+                    f"{actual:g}% does not exceed "
+                    f"the allowed threshold of {maximum:g}%."
+                ),
+                [],
+                1.0,
+            ),
+            stops,
+        )
+
+    message = (
+        f"{actual:g}% exceeds "
+        f"the allowed threshold of {maximum:g}%."
+    )
+
     if hard_stop:
-        stops.append(f"{label}: {message}")
-    return _criterion(code, label, "failed", message, [], 0.0), stops
+        stops.append(
+            f"{label}: {message}"
+        )
+
+    return (
+        _criterion(
+            code,
+            label,
+            "failed",
+            message,
+            [],
+            0.0,
+        ),
+        stops,
+    )
 
 
-def _documents(analysis: TenderAnalysis, profile: CompanyProfile) -> CriterionResult:
+def _documents(
+    analysis: TenderAnalysis,
+    profile: CompanyProfile,
+) -> CriterionResult:
     required = analysis.required_documents
+
     if not required:
-        return _criterion("documents", "Документы", "not_scored",
-                          "В извлечённых данных нет списка требуемых документов.")
+        return _criterion(
+            "documents",
+            "Documents",
+            "not_scored",
+            "No list of required documents was found in the extracted tender data.",
+        )
+
     if not profile.available_document_keywords:
-        return _criterion("documents", "Документы", "not_scored",
-                          "В профиле компании не перечислены доступные документы/сертификаты.")
+        return _criterion(
+            "documents",
+            "Documents",
+            "not_scored",
+            "No available documents or certificates are configured in the company profile.",
+        )
 
     matched_docs: list[str] = []
     missing_docs: list[str] = []
+
     for requirement in required:
-        if any(_has_phrase(requirement, keyword) or _has_phrase(keyword, requirement)
-               for keyword in profile.available_document_keywords):
-            matched_docs.append(requirement)
+        if any(
+            _has_phrase(
+                requirement,
+                keyword,
+            )
+            or _has_phrase(
+                keyword,
+                requirement,
+            )
+            for keyword
+            in profile.available_document_keywords
+        ):
+            matched_docs.append(
+                requirement
+            )
         else:
-            missing_docs.append(requirement)
-    ratio = len(matched_docs) / len(required)
+            missing_docs.append(
+                requirement
+            )
+
+    ratio = (
+        len(matched_docs)
+        / len(required)
+    )
+
     if ratio == 1:
         status = "matched"
     elif ratio == 0:
         status = "failed"
     else:
         status = "partial"
-    explanation = f"По ключевым словам покрыто {len(matched_docs)} из {len(required)} требуемых документов."
-    evidence = (["Есть: " + item for item in matched_docs[:8]] +
-                ["Не подтверждено: " + item for item in missing_docs[:8]])
-    return _criterion("documents", "Документы", status, explanation, evidence, ratio)
+
+    explanation = (
+        "Keyword matching confirms "
+        f"{len(matched_docs)} of {len(required)} "
+        "required documents."
+    )
+
+    evidence = (
+        [
+            "Available: " + item
+            for item in matched_docs[:8]
+        ]
+        + [
+            "Not confirmed: " + item
+            for item in missing_docs[:8]
+        ]
+    )
+
+    return _criterion(
+        "documents",
+        "Documents",
+        status,
+        explanation,
+        evidence,
+        ratio,
+    )
 
 
 def _completeness(analysis: TenderAnalysis) -> int:
@@ -214,14 +506,14 @@ def score_tender(analysis: TenderAnalysis, profile: CompanyProfile) -> ScoringRe
     stop_factors.extend(stops)
 
     bid, stops = _security(
-        "bid_security", "Обеспечение заявки", analysis.bid_security_percent,
+        "bid_security", "Bid security", analysis.bid_security_percent,
         profile.max_bid_security_percent, profile.hard_stop_on_bid_security,
     )
     criteria.append(bid)
     stop_factors.extend(stops)
 
     contract, stops = _security(
-        "contract_security", "Обеспечение контракта", analysis.contract_security_percent,
+        "contract_security", "Contract security", analysis.contract_security_percent,
         profile.max_contract_security_percent, profile.hard_stop_on_contract_security,
     )
     criteria.append(contract)

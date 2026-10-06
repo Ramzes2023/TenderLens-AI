@@ -78,5 +78,5 @@ $('discoveryResults').onclick=e=>{const save=e.target.closest('[data-save]');if(
 $('detailBody').onclick=e=>{const save=e.target.closest('[data-save]');if(save){saveItem(Number(save.dataset.save),save);return;}const remove=e.target.closest('[data-remove]');if(remove){removeItem(Number(remove.dataset.remove),remove);}};
 $('closeDetail').onclick=()=>{detailIndex=null;$('tenderDetail').close();};
 $('tenderDetail').addEventListener('close',()=>{detailIndex=null;});
-window.addEventListener('workspace-context',()=>{if(context!==identity()){context=identity();reset();}else update();});update();
+window.addEventListener('workspace-context',()=>{if(context!==identity()){context=identity();reset();}else update();if((location.hash.slice(1)||'overview')==='discover')loadShortlist();});update();
 })(typeof globalThis!=='undefined'?globalThis:this);

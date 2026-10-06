@@ -1,6 +1,7 @@
 """Extend the existing authenticated dashboard without duplicating its services."""
 
 from .discovery_ui import DISCOVERY_HTML
+from .saved_ui import SAVED_HTML
 from .support_ui import SUPPORT_HTML
 
 
@@ -425,7 +426,10 @@ def shell_html(html: str) -> str:
 
     context = context.replace(
         '<section\n  id="futurePage"',
-        SUPPORT_HTML + '\n<section\n  id="futurePage"',
+        SAVED_HTML
+        + "\n"
+        + SUPPORT_HTML
+        + '\n<section\n  id="futurePage"',
         1,
     )
 
@@ -558,9 +562,11 @@ def shell_html(html: str) -> str:
 
     html = html.replace(
         "</body>",
-        '<script src="/assets/shell.js?v=phase24-precheckpoint-20261006"></script>'
-        '<script src="/assets/premium.js?v=phase24-precheckpoint-20261006"></script>''<script src="/assets/support.js"></script>'
-        '<script src="/assets/discovery.js?v=phase24-shortlist-ui-v1-20261006"></script>'
+        '<script src="/assets/shell.js?v=phase24-saved-ui-v1-20261006"></script>'
+        '<script src="/assets/premium.js?v=phase24-precheckpoint-20261006"></script>'
+        '<script src="/assets/support.js"></script>'
+        '<script src="/assets/discovery.js?v=phase24-saved-sync-v1-20261006"></script>'
+        '<script src="/assets/saved.js?v=phase24-saved-ui-v1-20261006"></script>'
         "</body>",
     )
 

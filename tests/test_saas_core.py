@@ -32,7 +32,7 @@ def test_public_assets_and_private_dashboard():
         assert response.headers['cache-control'] == 'no-store'
         assert 'VALYQON AI' in response.text
         assert client.get('/dashboard', follow_redirects=False).status_code == 303
-        for path in ['/assets/saas.css', '/assets/shell.js']:
+        for path in ['/assets/saas.css', '/assets/shell.js', '/assets/saved.js']:
             assert client.get(path).status_code == 200
         assert client.get('/assets/../config.py').status_code == 404
 

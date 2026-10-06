@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel
@@ -51,6 +52,27 @@ class SavedOpportunityResponse(BaseModel):
     opportunity: TenderDiscoveryItem
     created_at: str
     updated_at: str
+
+
+class DiscoveryHistorySummaryResponse(BaseModel):
+    id: int
+    organization_id: int
+    company_id: int
+    created_by_account_id: int
+    result_count: int
+    scored_count: int
+    attempted_sources: list[str]
+    successful_sources: list[str]
+    failed_sources: list[str]
+    partial_failure: bool
+    total_failure: bool
+    created_at: str
+
+
+class DiscoveryHistoryDetailResponse(
+    DiscoveryHistorySummaryResponse
+):
+    discovery: TenderDiscoveryResponse
 
 
 async def _account(request: Request):
@@ -143,6 +165,165 @@ def _saved_opportunity_response(
         opportunity=opportunity,
         created_at=record.created_at,
         updated_at=record.updated_at,
+    )
+
+
+def _discovery_history_repository(
+    request: Request,
+):
+    repository = getattr(
+        request.app.state.runtime,
+        "tender_repository",
+        None,
+    )
+
+    if repository is None:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
+            detail=(
+                "Discovery history storage "
+                "is unavailable."
+            ),
+        )
+
+    return repository
+
+
+def _discovery_history_data_error(
+    error: Exception,
+):
+    if isinstance(
+        error,
+        DatabaseAuthorizationError,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Discovery history access denied."
+            ),
+        ) from None
+
+    raise HTTPException(
+        status_code=(
+            status.HTTP_503_SERVICE_UNAVAILABLE
+        ),
+        detail=(
+            "Discovery history storage "
+            "is unavailable."
+        ),
+    ) from None
+
+
+def _history_source_list(
+    raw: str,
+) -> list[str]:
+    try:
+        values = json.loads(raw)
+
+        if (
+            not isinstance(
+                values,
+                list,
+            )
+            or not all(
+                isinstance(
+                    item,
+                    str,
+                )
+                for item in values
+            )
+        ):
+            raise ValueError
+
+        return values
+    except Exception:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
+            detail=(
+                "Discovery history data "
+                "is unavailable."
+            ),
+        ) from None
+
+
+def _discovery_history_summary(
+    record,
+):
+    return DiscoveryHistorySummaryResponse(
+        id=record.id,
+        organization_id=(
+            record.organization_id
+        ),
+        company_id=record.company_id,
+        created_by_account_id=(
+            record.created_by_account_id
+        ),
+        result_count=record.result_count,
+        scored_count=record.scored_count,
+        attempted_sources=(
+            _history_source_list(
+                record.attempted_sources_json
+            )
+        ),
+        successful_sources=(
+            _history_source_list(
+                record.successful_sources_json
+            )
+        ),
+        failed_sources=(
+            _history_source_list(
+                record.failed_sources_json
+            )
+        ),
+        partial_failure=(
+            record.partial_failure
+        ),
+        total_failure=(
+            record.total_failure
+        ),
+        created_at=record.created_at,
+    )
+
+
+def _discovery_history_detail(
+    record,
+):
+    summary = (
+        _discovery_history_summary(
+            record
+        )
+    )
+
+    try:
+        discovery = (
+            TenderDiscoveryResponse
+            .model_validate_json(
+                record.snapshot_json
+            )
+            .model_copy(
+                update={
+                    "history_id": record.id,
+                }
+            )
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
+            detail=(
+                "Discovery history snapshot "
+                "is unavailable."
+            ),
+        ) from None
+
+    return DiscoveryHistoryDetailResponse(
+        **summary.model_dump(),
+        discovery=discovery,
     )
 
 
@@ -731,6 +912,150 @@ async def remove_saved_opportunity(
     )
 
 
+@router.get(
+    "/discovery/history",
+    response_model=list[
+        DiscoveryHistorySummaryResponse
+    ],
+)
+async def list_discovery_history(
+    organization_id: int,
+    request: Request,
+    response: Response,
+    limit: int = 50,
+):
+    account = await _account(
+        request
+    )
+
+    workspace = await _active_company(
+        request,
+        account,
+        organization_id,
+    )
+
+    if workspace is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Create and activate an "
+                "organization company before "
+                "using discovery history."
+            ),
+        )
+
+    repository = (
+        _discovery_history_repository(
+            request
+        )
+    )
+
+    try:
+        records = await asyncio.to_thread(
+            repository
+            .list_discovery_search_history_for_organization,
+            account.id,
+            organization_id,
+            workspace.id,
+            limit,
+        )
+    except DatabaseError as error:
+        _discovery_history_data_error(
+            error
+        )
+
+    response.headers[
+        "Cache-Control"
+    ] = "no-store"
+
+    return [
+        _discovery_history_summary(
+            record
+        )
+        for record in records
+    ]
+
+
+@router.get(
+    "/discovery/history/{history_id}",
+    response_model=(
+        DiscoveryHistoryDetailResponse
+    ),
+)
+async def get_discovery_history(
+    organization_id: int,
+    history_id: int,
+    request: Request,
+    response: Response,
+):
+    if history_id <= 0:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_422_UNPROCESSABLE_ENTITY
+            ),
+            detail=(
+                "history_id must be positive."
+            ),
+        )
+
+    account = await _account(
+        request
+    )
+
+    workspace = await _active_company(
+        request,
+        account,
+        organization_id,
+    )
+
+    if workspace is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Create and activate an "
+                "organization company before "
+                "using discovery history."
+            ),
+        )
+
+    repository = (
+        _discovery_history_repository(
+            request
+        )
+    )
+
+    try:
+        record = await asyncio.to_thread(
+            repository
+            .get_discovery_search_history_for_organization,
+            account.id,
+            organization_id,
+            workspace.id,
+            history_id,
+        )
+    except DatabaseError as error:
+        _discovery_history_data_error(
+            error
+        )
+
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "Discovery history entry "
+                "not found."
+            ),
+        )
+
+    response.headers[
+        "Cache-Control"
+    ] = "no-store"
+
+    return _discovery_history_detail(
+        record
+    )
+
+
 @router.post(
     "/discover/tenders",
     response_model=TenderDiscoveryResponse,
@@ -790,26 +1115,120 @@ async def organization_discover_tenders(
         "Cache-Control"
     ] = "no-store"
 
-    return TenderDiscoveryResponse(
-        items=[
-            _discovery_item(
-                match,
-                workspace.profile,
+    discovery_response = (
+        TenderDiscoveryResponse(
+            items=[
+                _discovery_item(
+                    match,
+                    workspace.profile,
+                )
+                for match in matches
+            ],
+            attempted_sources=list(
+                report.attempted_sources
+            ),
+            successful_sources=list(
+                report.successful_sources
+            ),
+            failed_sources=[
+                failure.source
+                for failure
+                in report.failures
+            ],
+            partial_failure=(
+                report.partial_failure
+            ),
+            total_failure=(
+                report.total_failure
+            ),
+        )
+    )
+
+    history_record = None
+
+    repository = getattr(
+        request.app.state.runtime,
+        "tender_repository",
+        None,
+    )
+
+    if repository is not None:
+        try:
+            history_record = (
+                await asyncio.to_thread(
+                    repository
+                    .record_discovery_search_for_organization,
+                    account_id=account.id,
+                    organization_id=organization_id,
+                    company_id=workspace.id,
+                    result_count=len(
+                        discovery_response.items
+                    ),
+                    scored_count=sum(
+                        1
+                        for item
+                        in discovery_response.items
+                        if (
+                            item
+                            .preliminary_scoring
+                            .fit_score
+                            is not None
+                        )
+                    ),
+                    attempted_sources_json=(
+                        json.dumps(
+                            discovery_response
+                            .attempted_sources,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        )
+                    ),
+                    successful_sources_json=(
+                        json.dumps(
+                            discovery_response
+                            .successful_sources,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        )
+                    ),
+                    failed_sources_json=(
+                        json.dumps(
+                            discovery_response
+                            .failed_sources,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        )
+                    ),
+                    partial_failure=(
+                        discovery_response
+                        .partial_failure
+                    ),
+                    total_failure=(
+                        discovery_response
+                        .total_failure
+                    ),
+                    snapshot_json=(
+                        discovery_response
+                        .model_dump_json()
+                    ),
+                )
             )
-            for match in matches
-        ],
-        attempted_sources=list(
-            report.attempted_sources
-        ),
-        successful_sources=list(
-            report.successful_sources
-        ),
-        failed_sources=[
-            failure.source
-            for failure in report.failures
-        ],
-        partial_failure=report.partial_failure,
-        total_failure=report.total_failure,
+        except DatabaseError:
+            # A successful connector run must
+            # still reach the user even if
+            # history persistence is temporarily
+            # unavailable.
+            history_record = None
+
+    return discovery_response.model_copy(
+        update={
+            "history_id": (
+                history_record.id
+                if history_record
+                is not None
+                else None
+            ),
+        }
     )
 
 

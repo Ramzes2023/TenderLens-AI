@@ -16,7 +16,7 @@ def test_landing_session_cta_and_no_fabricated_metrics():
 
 def test_shell_navigation_and_accessibility():
     html = dashboard_html()
-    for name in ['Overview', 'Discover', 'Companies', 'Team', 'Billing', 'Saved']:
+    for name in ['Overview', 'Discover', 'Search History', 'Companies', 'Team', 'Billing', 'Saved']:
         assert name in html
     assert 'aria-controls="appNav"' in html
     assert 'Skip to content' in html
@@ -32,7 +32,7 @@ def test_public_assets_and_private_dashboard():
         assert response.headers['cache-control'] == 'no-store'
         assert 'VALYQON AI' in response.text
         assert client.get('/dashboard', follow_redirects=False).status_code == 303
-        for path in ['/assets/saas.css', '/assets/shell.js', '/assets/saved.js']:
+        for path in ['/assets/saas.css', '/assets/shell.js', '/assets/saved.js', '/assets/history.js']:
             assert client.get(path).status_code == 200
         assert client.get('/assets/../config.py').status_code == 404
 

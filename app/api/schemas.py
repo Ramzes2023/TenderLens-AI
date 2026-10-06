@@ -110,6 +110,7 @@ class TenderDiscoveryResponse(BaseModel):
     failed_sources: list[str]
     partial_failure: bool
     total_failure: bool
+    history_id: int | None = None
 
 
 class PdfAnalysisResponse(BaseModel):

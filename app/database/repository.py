@@ -54,6 +54,23 @@ class SavedOpportunity:
     updated_at: str
 
 
+@dataclass(frozen=True)
+class DiscoverySearchHistory:
+    id: int
+    organization_id: int
+    company_id: int
+    created_by_account_id: int
+    result_count: int
+    scored_count: int
+    attempted_sources_json: str
+    successful_sources_json: str
+    failed_sources_json: str
+    partial_failure: bool
+    total_failure: bool
+    snapshot_json: str
+    created_at: str
+
+
 class TenderRepository:
     def __init__(self, path: Path):
         self.path = Path(path)
@@ -119,6 +136,35 @@ class TenderRepository:
                             updated_at DESC,
                             id DESC
                         );
+
+                        CREATE TABLE IF NOT EXISTS discovery_search_history (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            organization_id INTEGER NOT NULL,
+                            company_id INTEGER NOT NULL,
+                            created_by_account_id INTEGER NOT NULL,
+                            result_count INTEGER NOT NULL
+                                CHECK(result_count >= 0),
+                            scored_count INTEGER NOT NULL
+                                CHECK(scored_count >= 0),
+                            attempted_sources_json TEXT NOT NULL,
+                            successful_sources_json TEXT NOT NULL,
+                            failed_sources_json TEXT NOT NULL,
+                            partial_failure INTEGER NOT NULL
+                                CHECK(partial_failure IN (0,1)),
+                            total_failure INTEGER NOT NULL
+                                CHECK(total_failure IN (0,1)),
+                            snapshot_json TEXT NOT NULL,
+                            created_at TEXT NOT NULL
+                        );
+
+                        CREATE INDEX IF NOT EXISTS
+                        idx_discovery_search_history_scope
+                        ON discovery_search_history(
+                            organization_id,
+                            company_id,
+                            created_at DESC,
+                            id DESC
+                        );
                         """
                     )
                     current = conn.execute(
@@ -161,6 +207,55 @@ class TenderRepository:
             )
         except Exception:
             raise DatabaseError("Сохранённая запись тендера повреждена.") from None
+
+    @staticmethod
+    def _deserialize_discovery_search_history(
+        row: sqlite3.Row,
+    ) -> DiscoverySearchHistory:
+        try:
+            return DiscoverySearchHistory(
+                id=int(row["id"]),
+                organization_id=int(
+                    row["organization_id"]
+                ),
+                company_id=int(
+                    row["company_id"]
+                ),
+                created_by_account_id=int(
+                    row["created_by_account_id"]
+                ),
+                result_count=int(
+                    row["result_count"]
+                ),
+                scored_count=int(
+                    row["scored_count"]
+                ),
+                attempted_sources_json=str(
+                    row["attempted_sources_json"]
+                ),
+                successful_sources_json=str(
+                    row["successful_sources_json"]
+                ),
+                failed_sources_json=str(
+                    row["failed_sources_json"]
+                ),
+                partial_failure=bool(
+                    row["partial_failure"]
+                ),
+                total_failure=bool(
+                    row["total_failure"]
+                ),
+                snapshot_json=str(
+                    row["snapshot_json"]
+                ),
+                created_at=str(
+                    row["created_at"]
+                ),
+            )
+        except Exception:
+            raise DatabaseError(
+                "Stored discovery history is corrupted."
+            ) from None
 
     @staticmethod
     def _require_org_role(
@@ -744,6 +839,288 @@ class TenderRepository:
         ):
             raise DatabaseError(
                 "Could not remove saved opportunity."
+            ) from None
+
+    def record_discovery_search_for_organization(
+        self,
+        *,
+        account_id: int,
+        organization_id: int,
+        company_id: int,
+        result_count: int,
+        scored_count: int,
+        attempted_sources_json: str,
+        successful_sources_json: str,
+        failed_sources_json: str,
+        partial_failure: bool,
+        total_failure: bool,
+        snapshot_json: str,
+    ) -> DiscoverySearchHistory:
+        safe_result_count = int(
+            result_count
+        )
+
+        safe_scored_count = int(
+            scored_count
+        )
+
+        if (
+            safe_result_count < 0
+            or safe_scored_count < 0
+            or safe_scored_count
+            > safe_result_count
+        ):
+            raise DatabaseError(
+                "Discovery history counts are invalid."
+            )
+
+        required_json = (
+            attempted_sources_json,
+            successful_sources_json,
+            failed_sources_json,
+            snapshot_json,
+        )
+
+        if any(
+            not str(value).strip()
+            for value in required_json
+        ):
+            raise DatabaseError(
+                "Discovery history snapshot is empty."
+            )
+
+        now = datetime.now(
+            timezone.utc
+        ).isoformat(
+            timespec="seconds"
+        )
+
+        try:
+            with closing(
+                self._connect()
+            ) as conn:
+                with conn:
+                    conn.execute(
+                        "BEGIN IMMEDIATE"
+                    )
+
+                    self._require_org_role(
+                        conn,
+                        account_id,
+                        organization_id,
+                    )
+
+                    self._require_company_scope(
+                        conn,
+                        organization_id,
+                        company_id,
+                    )
+
+                    cursor = conn.execute(
+                        """INSERT INTO discovery_search_history(
+                            organization_id,
+                            company_id,
+                            created_by_account_id,
+                            result_count,
+                            scored_count,
+                            attempted_sources_json,
+                            successful_sources_json,
+                            failed_sources_json,
+                            partial_failure,
+                            total_failure,
+                            snapshot_json,
+                            created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            int(organization_id),
+                            int(company_id),
+                            int(account_id),
+                            safe_result_count,
+                            safe_scored_count,
+                            str(
+                                attempted_sources_json
+                            ),
+                            str(
+                                successful_sources_json
+                            ),
+                            str(
+                                failed_sources_json
+                            ),
+                            int(
+                                bool(
+                                    partial_failure
+                                )
+                            ),
+                            int(
+                                bool(
+                                    total_failure
+                                )
+                            ),
+                            str(snapshot_json),
+                            now,
+                        ),
+                    )
+
+                    row = conn.execute(
+                        """SELECT *
+                           FROM discovery_search_history
+                           WHERE id=?""",
+                        (
+                            int(
+                                cursor.lastrowid
+                            ),
+                        ),
+                    ).fetchone()
+
+            if row is None:
+                raise DatabaseError(
+                    "Could not record discovery history."
+                )
+
+            return (
+                self
+                ._deserialize_discovery_search_history(
+                    row
+                )
+            )
+
+        except DatabaseAuthorizationError:
+            raise
+
+        except DatabaseError:
+            raise
+
+        except (
+            sqlite3.Error,
+            ValueError,
+            TypeError,
+        ):
+            raise DatabaseError(
+                "Could not record discovery history."
+            ) from None
+
+    def list_discovery_search_history_for_organization(
+        self,
+        account_id: int,
+        organization_id: int,
+        company_id: int,
+        limit: int = 50,
+    ) -> list[DiscoverySearchHistory]:
+        safe_limit = max(
+            1,
+            min(
+                int(limit),
+                100,
+            ),
+        )
+
+        try:
+            with closing(
+                self._connect()
+            ) as conn:
+                self._require_org_role(
+                    conn,
+                    account_id,
+                    organization_id,
+                )
+
+                self._require_company_scope(
+                    conn,
+                    organization_id,
+                    company_id,
+                )
+
+                rows = conn.execute(
+                    """SELECT *
+                       FROM discovery_search_history
+                       WHERE organization_id=?
+                         AND company_id=?
+                       ORDER BY
+                         created_at DESC,
+                         id DESC
+                       LIMIT ?""",
+                    (
+                        int(organization_id),
+                        int(company_id),
+                        safe_limit,
+                    ),
+                ).fetchall()
+
+            return [
+                self
+                ._deserialize_discovery_search_history(
+                    row
+                )
+                for row in rows
+            ]
+
+        except DatabaseAuthorizationError:
+            raise
+
+        except (
+            sqlite3.Error,
+            ValueError,
+            TypeError,
+        ):
+            raise DatabaseError(
+                "Could not read discovery history."
+            ) from None
+
+    def get_discovery_search_history_for_organization(
+        self,
+        account_id: int,
+        organization_id: int,
+        company_id: int,
+        history_id: int,
+    ) -> DiscoverySearchHistory | None:
+        try:
+            with closing(
+                self._connect()
+            ) as conn:
+                self._require_org_role(
+                    conn,
+                    account_id,
+                    organization_id,
+                )
+
+                self._require_company_scope(
+                    conn,
+                    organization_id,
+                    company_id,
+                )
+
+                row = conn.execute(
+                    """SELECT *
+                       FROM discovery_search_history
+                       WHERE id=?
+                         AND organization_id=?
+                         AND company_id=?""",
+                    (
+                        int(history_id),
+                        int(organization_id),
+                        int(company_id),
+                    ),
+                ).fetchone()
+
+            return (
+                self
+                ._deserialize_discovery_search_history(
+                    row
+                )
+                if row is not None
+                else None
+            )
+
+        except DatabaseAuthorizationError:
+            raise
+
+        except (
+            sqlite3.Error,
+            ValueError,
+            TypeError,
+        ):
+            raise DatabaseError(
+                "Could not read discovery history."
             ) from None
 
     def find_by_hash(self, owner_user_id: int, pdf_sha256: str) -> StoredTender | None:

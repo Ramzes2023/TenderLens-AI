@@ -560,7 +560,7 @@ def shell_html(html: str) -> str:
         "</body>",
         '<script src="/assets/shell.js?v=phase24-precheckpoint-20261006"></script>'
         '<script src="/assets/premium.js?v=phase24-precheckpoint-20261006"></script>''<script src="/assets/support.js"></script>'
-        '<script src="/assets/discovery.js?v=phase24-precheckpoint-20261006"></script>'
+        '<script src="/assets/discovery.js?v=phase24-shortlist-ui-v1-20261006"></script>'
         "</body>",
     )
 

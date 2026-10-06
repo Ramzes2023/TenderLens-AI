@@ -120,9 +120,11 @@ async function loadOrganizations(){
   const previous=state.organizationId;
 
   select.innerHTML=items.map(item=>{
+    const duplicate=items.some(other=>other.id!==item.id && other.name===item.name);
+    const name=duplicate?`${item.name} · #${item.id}`:item.name;
     const label=item.personal
-      ?`${item.name} ? PERSONAL`
-      :item.name;
+      ?`${name} · PERSONAL`
+      :name;
 
     return `<option value="${item.id}">${esc(label)}</option>`;
   }).join('');

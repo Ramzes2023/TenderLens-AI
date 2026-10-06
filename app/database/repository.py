@@ -42,6 +42,18 @@ class StoredTender:
     updated_at: str
 
 
+@dataclass(frozen=True)
+class SavedOpportunity:
+    id: int
+    organization_id: int
+    company_id: int
+    source: str
+    external_id: str
+    snapshot_json: str
+    created_at: str
+    updated_at: str
+
+
 class TenderRepository:
     def __init__(self, path: Path):
         self.path = Path(path)
@@ -82,6 +94,31 @@ class TenderRepository:
 
                         CREATE INDEX IF NOT EXISTS idx_tenders_owner_created
                         ON tenders(owner_user_id, created_at DESC);
+
+                        CREATE TABLE IF NOT EXISTS saved_opportunities (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            organization_id INTEGER NOT NULL,
+                            company_id INTEGER NOT NULL,
+                            source TEXT NOT NULL,
+                            external_id TEXT NOT NULL,
+                            snapshot_json TEXT NOT NULL,
+                            created_at TEXT NOT NULL,
+                            updated_at TEXT NOT NULL,
+                            UNIQUE(
+                                organization_id,
+                                company_id,
+                                source,
+                                external_id
+                            )
+                        );
+
+                        CREATE INDEX IF NOT EXISTS idx_saved_opportunities_scope
+                        ON saved_opportunities(
+                            organization_id,
+                            company_id,
+                            updated_at DESC,
+                            id DESC
+                        );
                         """
                     )
                     current = conn.execute(
@@ -393,6 +430,320 @@ class TenderRepository:
         except sqlite3.Error:
             raise DatabaseError(
                 "Could not save organization tender."
+            ) from None
+
+    @staticmethod
+    def _deserialize_saved_opportunity(
+        row: sqlite3.Row,
+    ) -> SavedOpportunity:
+        try:
+            return SavedOpportunity(
+                id=int(row["id"]),
+                organization_id=int(
+                    row["organization_id"]
+                ),
+                company_id=int(
+                    row["company_id"]
+                ),
+                source=str(row["source"]),
+                external_id=str(
+                    row["external_id"]
+                ),
+                snapshot_json=str(
+                    row["snapshot_json"]
+                ),
+                created_at=str(
+                    row["created_at"]
+                ),
+                updated_at=str(
+                    row["updated_at"]
+                ),
+            )
+        except Exception:
+            raise DatabaseError(
+                "Saved opportunity record is corrupted."
+            ) from None
+
+    @staticmethod
+    def _require_company_scope(
+        conn: sqlite3.Connection,
+        organization_id: int,
+        company_id: int,
+    ) -> None:
+        row = conn.execute(
+            """SELECT id
+               FROM company_workspaces
+               WHERE organization_id=?
+                 AND id=?""",
+            (
+                int(organization_id),
+                int(company_id),
+            ),
+        ).fetchone()
+
+        if row is None:
+            raise DatabaseAuthorizationError(
+                "Company shortlist access denied."
+            )
+
+    def save_opportunity_for_organization(
+        self,
+        *,
+        account_id: int,
+        organization_id: int,
+        company_id: int,
+        source: str,
+        external_id: str,
+        snapshot_json: str,
+    ) -> SavedOpportunity:
+        clean_source = " ".join(
+            str(source).split()
+        )[:100]
+
+        clean_external_id = " ".join(
+            str(external_id).split()
+        )[:500]
+
+        if (
+            not clean_source
+            or not clean_external_id
+        ):
+            raise DatabaseError(
+                "Saved opportunity identity is invalid."
+            )
+
+        if not str(snapshot_json).strip():
+            raise DatabaseError(
+                "Saved opportunity snapshot is empty."
+            )
+
+        now = datetime.now(
+            timezone.utc
+        ).isoformat(
+            timespec="seconds"
+        )
+
+        try:
+            with closing(
+                self._connect()
+            ) as conn:
+                with conn:
+                    conn.execute(
+                        "BEGIN IMMEDIATE"
+                    )
+
+                    self._require_org_role(
+                        conn,
+                        account_id,
+                        organization_id,
+                        {
+                            "owner",
+                            "admin",
+                            "member",
+                        },
+                    )
+
+                    self._require_company_scope(
+                        conn,
+                        organization_id,
+                        company_id,
+                    )
+
+                    conn.execute(
+                        """INSERT INTO saved_opportunities(
+                            organization_id,
+                            company_id,
+                            source,
+                            external_id,
+                            snapshot_json,
+                            created_at,
+                            updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(
+                            organization_id,
+                            company_id,
+                            source,
+                            external_id
+                        )
+                        DO UPDATE SET
+                            snapshot_json=excluded.snapshot_json,
+                            updated_at=excluded.updated_at""",
+                        (
+                            int(organization_id),
+                            int(company_id),
+                            clean_source,
+                            clean_external_id,
+                            str(snapshot_json),
+                            now,
+                            now,
+                        ),
+                    )
+
+                    row = conn.execute(
+                        """SELECT *
+                           FROM saved_opportunities
+                           WHERE organization_id=?
+                             AND company_id=?
+                             AND source=?
+                             AND external_id=?""",
+                        (
+                            int(organization_id),
+                            int(company_id),
+                            clean_source,
+                            clean_external_id,
+                        ),
+                    ).fetchone()
+
+            if row is None:
+                raise DatabaseError(
+                    "Could not save opportunity."
+                )
+
+            return (
+                self._deserialize_saved_opportunity(
+                    row
+                )
+            )
+
+        except DatabaseAuthorizationError:
+            raise
+
+        except DatabaseError:
+            raise
+
+        except sqlite3.Error:
+            raise DatabaseError(
+                "Could not save opportunity."
+            ) from None
+
+    def list_saved_opportunities_for_organization(
+        self,
+        account_id: int,
+        organization_id: int,
+        company_id: int,
+        limit: int = 100,
+    ) -> list[SavedOpportunity]:
+        safe_limit = max(
+            1,
+            min(
+                int(limit),
+                200,
+            ),
+        )
+
+        try:
+            with closing(
+                self._connect()
+            ) as conn:
+                self._require_org_role(
+                    conn,
+                    account_id,
+                    organization_id,
+                )
+
+                self._require_company_scope(
+                    conn,
+                    organization_id,
+                    company_id,
+                )
+
+                rows = conn.execute(
+                    """SELECT *
+                       FROM saved_opportunities
+                       WHERE organization_id=?
+                         AND company_id=?
+                       ORDER BY
+                         updated_at DESC,
+                         id DESC
+                       LIMIT ?""",
+                    (
+                        int(organization_id),
+                        int(company_id),
+                        safe_limit,
+                    ),
+                ).fetchall()
+
+            return [
+                self._deserialize_saved_opportunity(
+                    row
+                )
+                for row in rows
+            ]
+
+        except DatabaseAuthorizationError:
+            raise
+
+        except (
+            sqlite3.Error,
+            ValueError,
+            TypeError,
+        ):
+            raise DatabaseError(
+                "Could not read saved opportunities."
+            ) from None
+
+    def delete_saved_opportunity_for_organization(
+        self,
+        *,
+        account_id: int,
+        organization_id: int,
+        company_id: int,
+        saved_id: int,
+    ) -> bool:
+        try:
+            with closing(
+                self._connect()
+            ) as conn:
+                with conn:
+                    conn.execute(
+                        "BEGIN IMMEDIATE"
+                    )
+
+                    self._require_org_role(
+                        conn,
+                        account_id,
+                        organization_id,
+                        {
+                            "owner",
+                            "admin",
+                            "member",
+                        },
+                    )
+
+                    self._require_company_scope(
+                        conn,
+                        organization_id,
+                        company_id,
+                    )
+
+                    cursor = conn.execute(
+                        """DELETE FROM saved_opportunities
+                           WHERE id=?
+                             AND organization_id=?
+                             AND company_id=?""",
+                        (
+                            int(saved_id),
+                            int(organization_id),
+                            int(company_id),
+                        ),
+                    )
+
+                    removed = (
+                        cursor.rowcount == 1
+                    )
+
+            return removed
+
+        except DatabaseAuthorizationError:
+            raise
+
+        except (
+            sqlite3.Error,
+            ValueError,
+            TypeError,
+        ):
+            raise DatabaseError(
+                "Could not remove saved opportunity."
             ) from None
 
     def find_by_hash(self, owner_user_id: int, pdf_sha256: str) -> StoredTender | None:

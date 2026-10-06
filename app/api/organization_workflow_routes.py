@@ -5,10 +5,15 @@ from __future__ import annotations
 import asyncio
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
+from pydantic import BaseModel
 
 from app.companies import (
     CompanyAuthorizationError,
     CompanyRepositoryError,
+)
+from app.database import (
+    DatabaseAuthorizationError,
+    DatabaseError,
 )
 from app.models.tender import TenderAnalysis
 from app.tenancy import organization_owner_id
@@ -39,6 +44,15 @@ router = APIRouter(
 )
 
 
+class SavedOpportunityResponse(BaseModel):
+    id: int
+    organization_id: int
+    company_id: int
+    opportunity: TenderDiscoveryItem
+    created_at: str
+    updated_at: str
+
+
 async def _account(request: Request):
     account = await current_account(request)
 
@@ -49,6 +63,87 @@ async def _account(request: Request):
         )
 
     return account
+
+
+def _shortlist_repository(
+    request: Request,
+):
+    repository = getattr(
+        request.app.state.runtime,
+        "tender_repository",
+        None,
+    )
+
+    if repository is None:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
+            detail=(
+                "Saved opportunity storage "
+                "is unavailable."
+            ),
+        )
+
+    return repository
+
+
+def _shortlist_data_error(
+    error: Exception,
+):
+    if isinstance(
+        error,
+        DatabaseAuthorizationError,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Saved opportunity access denied."
+            ),
+        ) from None
+
+    raise HTTPException(
+        status_code=(
+            status.HTTP_503_SERVICE_UNAVAILABLE
+        ),
+        detail=(
+            "Saved opportunity storage "
+            "is unavailable."
+        ),
+    ) from None
+
+
+def _saved_opportunity_response(
+    record,
+):
+    try:
+        opportunity = (
+            TenderDiscoveryItem
+            .model_validate_json(
+                record.snapshot_json
+            )
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
+            detail=(
+                "Saved opportunity data "
+                "is unavailable."
+            ),
+        ) from None
+
+    return SavedOpportunityResponse(
+        id=record.id,
+        organization_id=(
+            record.organization_id
+        ),
+        company_id=record.company_id,
+        opportunity=opportunity,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
 
 
 def _company_service(request: Request):
@@ -426,6 +521,213 @@ def _notice_response(match):
         deadline=notice.deadline,
         region=notice.region,
         reasons=list(match.reasons),
+    )
+
+
+@router.get(
+    "/shortlist",
+    response_model=list[
+        SavedOpportunityResponse
+    ],
+)
+async def list_saved_opportunities(
+    organization_id: int,
+    request: Request,
+    response: Response,
+):
+    account = await _account(
+        request
+    )
+
+    workspace = await _active_company(
+        request,
+        account,
+        organization_id,
+    )
+
+    if workspace is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Create and activate an "
+                "organization company before "
+                "using the shortlist."
+            ),
+        )
+
+    repository = _shortlist_repository(
+        request
+    )
+
+    try:
+        records = await asyncio.to_thread(
+            repository
+            .list_saved_opportunities_for_organization,
+            account.id,
+            organization_id,
+            workspace.id,
+            200,
+        )
+    except DatabaseError as error:
+        _shortlist_data_error(
+            error
+        )
+
+    response.headers[
+        "Cache-Control"
+    ] = "no-store"
+
+    return [
+        _saved_opportunity_response(
+            record
+        )
+        for record in records
+    ]
+
+
+@router.post(
+    "/shortlist",
+    response_model=SavedOpportunityResponse,
+)
+async def save_discovered_opportunity(
+    organization_id: int,
+    payload: TenderDiscoveryItem,
+    request: Request,
+    response: Response,
+):
+    require_same_origin_browser_request(
+        request
+    )
+
+    account = await _account(
+        request
+    )
+
+    workspace = await _active_company(
+        request,
+        account,
+        organization_id,
+    )
+
+    if workspace is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Create and activate an "
+                "organization company before "
+                "saving opportunities."
+            ),
+        )
+
+    repository = _shortlist_repository(
+        request
+    )
+
+    try:
+        record = await asyncio.to_thread(
+            repository
+            .save_opportunity_for_organization,
+            account_id=account.id,
+            organization_id=organization_id,
+            company_id=workspace.id,
+            source=payload.source,
+            external_id=payload.external_id,
+            snapshot_json=(
+                payload.model_dump_json()
+            ),
+        )
+    except DatabaseError as error:
+        _shortlist_data_error(
+            error
+        )
+
+    response.headers[
+        "Cache-Control"
+    ] = "no-store"
+
+    return _saved_opportunity_response(
+        record
+    )
+
+
+@router.delete(
+    "/shortlist/{saved_id}",
+    status_code=(
+        status.HTTP_204_NO_CONTENT
+    ),
+)
+async def remove_saved_opportunity(
+    organization_id: int,
+    saved_id: int,
+    request: Request,
+):
+    require_same_origin_browser_request(
+        request
+    )
+
+    if saved_id <= 0:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_422_UNPROCESSABLE_ENTITY
+            ),
+            detail=(
+                "saved_id must be positive."
+            ),
+        )
+
+    account = await _account(
+        request
+    )
+
+    workspace = await _active_company(
+        request,
+        account,
+        organization_id,
+    )
+
+    if workspace is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Create and activate an "
+                "organization company before "
+                "using the shortlist."
+            ),
+        )
+
+    repository = _shortlist_repository(
+        request
+    )
+
+    try:
+        removed = await asyncio.to_thread(
+            repository
+            .delete_saved_opportunity_for_organization,
+            account_id=account.id,
+            organization_id=organization_id,
+            company_id=workspace.id,
+            saved_id=saved_id,
+        )
+    except DatabaseError as error:
+        _shortlist_data_error(
+            error
+        )
+
+    if not removed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "Saved opportunity not found."
+            ),
+        )
+
+    return Response(
+        status_code=(
+            status.HTTP_204_NO_CONTENT
+        ),
+        headers={
+            "Cache-Control": "no-store",
+        },
     )
 
 

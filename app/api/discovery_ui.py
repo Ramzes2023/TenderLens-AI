@@ -8,7 +8,7 @@ DISCOVERY_HTML = '''<section id="discoveryWorkspace" class="p" data-page="discov
 <div><label for="filterSource">Country / source</label><select id="filterSource"><option value="">All fetched sources</option></select></div>
 <div><label for="filterBuyer">Buyer</label><input id="filterBuyer" type="search"></div>
 <div><label for="filterCurrency">Currency</label><select id="filterCurrency"><option value="">All currencies</option></select></div>
-<div><label for="filterValue">Minimum value (selected currency)</label><input id="filterValue" type="number" min="0" disabled><span class="fine">Select a currency to compare amounts.</span></div>
+<div><label for="filterValue">Minimum value (selected currency)</label><input id="filterValue" type="number" min="0" disabled><span class="fine">Values use normalized currency codes. No FX conversion is performed.</span></div>
 <div><label for="filterFit">Minimum preliminary fit %</label><input id="filterFit" type="number" min="0" max="100"></div>
 <div><label for="filterDeadline">Deadline on or before</label><input id="filterDeadline" type="date"></div>
 <div><label for="filterPublished">Published on or after</label><input id="filterPublished" type="date"></div>

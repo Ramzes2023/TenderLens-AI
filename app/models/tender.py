@@ -1,6 +1,8 @@
 """Strict factual extraction schema."""
 from typing import Annotated
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.currency import normalize_currency_code
 
 Text = Annotated[str, Field(max_length=3000)]
 Items = Annotated[list[Text], Field(max_length=50)]
@@ -31,3 +33,23 @@ class TenderAnalysis(BaseModel):
     risks: Items = Field(default_factory=list)
     important_conditions: Items = Field(default_factory=list)
     missing_information: Items = Field(default_factory=list)
+
+
+    @field_validator(
+        "currency",
+        mode="before",
+    )
+    @classmethod
+    def normalize_currency(
+        cls,
+        value,
+    ):
+        if (
+            value is None
+            or isinstance(value, str)
+        ):
+            return normalize_currency_code(
+                value
+            )
+
+        return value

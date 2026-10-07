@@ -1,7 +1,9 @@
 """Deterministic company-profile scoring models."""
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.currency import normalize_currency_code
 
 Text = Annotated[str, Field(min_length=1, max_length=500)]
 KeywordList = Annotated[list[Text], Field(max_length=100)]
@@ -36,6 +38,55 @@ class CompanyProfile(BaseModel):
     hard_stop_on_currency: bool = True
     hard_stop_on_bid_security: bool = False
     hard_stop_on_contract_security: bool = False
+
+    @field_validator(
+        "accepted_currencies",
+        mode="before",
+    )
+    @classmethod
+    def normalize_accepted_currency_codes(
+        cls,
+        value,
+    ):
+        if not isinstance(
+            value,
+            (list, tuple),
+        ):
+            return value
+
+        result = []
+        seen = set()
+
+        for item in value:
+            if not isinstance(
+                item,
+                str,
+            ):
+                result.append(item)
+                continue
+
+            normalized = (
+                normalize_currency_code(
+                    item
+                )
+            )
+
+            candidate = (
+                normalized
+                if normalized is not None
+                else item
+            )
+
+            key = candidate.casefold()
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+            result.append(candidate)
+
+        return result
+
 
     @model_validator(mode="after")
     def validate_budget_range(self):

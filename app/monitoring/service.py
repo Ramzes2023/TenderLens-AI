@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
+from app.currency import normalize_currency_code
 from app.scoring.models import CompanyProfile
 from app.sources.base import TenderSource
 from app.sources.models import TenderNotice
@@ -195,43 +196,58 @@ def prefilter_notice(notice: TenderNotice, profile: CompanyProfile | None) -> Mo
             return None
         reasons.append("Направление: " + ", ".join(matched[:5]))
 
-    currency = (
-        notice.currency or ""
-    ).strip()
+    currency = normalize_currency_code(
+        notice.currency
+    )
 
     accepted_currencies = {
-        item.strip().casefold()
+        normalized
         for item in profile.accepted_currencies
-        if item.strip()
+        if (
+            normalized
+            := normalize_currency_code(
+                item
+            )
+        )
     }
 
     budget_comparable = (
         notice.initial_price is not None
-        and bool(currency)
+        and currency is not None
         and len(accepted_currencies) == 1
-        and currency.casefold()
-        in accepted_currencies
+        and currency in accepted_currencies
     )
 
     if (
         notice.initial_price is not None
-        and currency
+        and currency is not None
         and accepted_currencies
-        and currency.casefold()
-        not in accepted_currencies
+        and currency not in accepted_currencies
     ):
         reasons.append(
-            "Валюта отличается от валюты бюджета профиля; "
-            "суммы напрямую не сравнивались."
+            "\u0412\u0430\u043b\u044e\u0442\u0430 "
+            "\u043e\u0442\u043b\u0438\u0447\u0430\u0435\u0442\u0441\u044f "
+            "\u043e\u0442 \u0432\u0430\u043b\u044e\u0442\u044b "
+            "\u0431\u044e\u0434\u0436\u0435\u0442\u0430 "
+            "\u043f\u0440\u043e\u0444\u0438\u043b\u044f; "
+            "\u0441\u0443\u043c\u043c\u044b "
+            "\u043d\u0430\u043f\u0440\u044f\u043c\u0443\u044e "
+            "\u043d\u0435 "
+            "\u0441\u0440\u0430\u0432\u043d\u0438\u0432\u0430\u043b\u0438\u0441\u044c."
         )
 
     if (
         notice.initial_price is not None
-        and not currency
+        and currency is None
     ):
         reasons.append(
-            "Стоимость известна без валюты; "
-            "бюджет напрямую не сравнивался."
+            "\u0421\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c "
+            "\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u0430 "
+            "\u0431\u0435\u0437 \u0432\u0430\u043b\u044e\u0442\u044b; "
+            "\u0431\u044e\u0434\u0436\u0435\u0442 "
+            "\u043d\u0430\u043f\u0440\u044f\u043c\u0443\u044e "
+            "\u043d\u0435 "
+            "\u0441\u0440\u0430\u0432\u043d\u0438\u0432\u0430\u043b\u0441\u044f."
         )
 
     if budget_comparable:

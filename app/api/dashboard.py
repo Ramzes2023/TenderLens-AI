@@ -200,7 +200,7 @@ def _dashboard_html() -> str:
         </div>
         <div class="f12"><label for="searchKeywords">Search keywords</label><textarea id="searchKeywords" placeholder="Optional: leave empty to use products / services"></textarea></div>
         <div class="f6"><label for="countries">Target countries</label><input id="countries" placeholder="Germany, Canada"><div class="help">Comma-separated supported markets.</div></div>
-        <div class="f6"><label for="currencies">Accepted currencies</label><input id="currencies" value="RUB" placeholder="EUR, USD, RUB"><div class="help">No currency conversion is performed. Budget limits use the notice currency.</div></div>
+        <div class="f6"><label for="currencies">Accepted currencies</label><input id="currencies" value="RUB" placeholder="EUR, USD, RUB"><div class="help">Currency labels are normalized to standard currency codes. No FX conversion is performed; budget limits are compared only within the same currency.</div></div>
         <div class="f12"><label for="documentsAvailable">Available certificates / document keywords</label><input id="documentsAvailable" placeholder="ISO 9001, supplier registration"></div>
         <div class="f12">
           <label for="excludedKeywords">Excluded keywords</label>

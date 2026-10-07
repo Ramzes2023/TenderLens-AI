@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.currency import normalize_currency_code
 
 from app.models.tender import TenderAnalysis
 from app.scoring.models import CompanyProfile, ScoringResult
@@ -32,6 +34,25 @@ class TenderListItem(BaseModel):
     fit_score: float | None
     created_at: str
     updated_at: str
+
+    @field_validator(
+        "currency",
+        mode="before",
+    )
+    @classmethod
+    def normalize_currency(
+        cls,
+        value,
+    ):
+        if (
+            value is None
+            or isinstance(value, str)
+        ):
+            return normalize_currency_code(
+                value
+            )
+
+        return value
 
 
 class TenderDetail(BaseModel):
@@ -92,6 +113,25 @@ class MonitorNoticeResponse(BaseModel):
     deadline: str | None = None
     region: str | None = None
     reasons: list[str]
+
+    @field_validator(
+        "currency",
+        mode="before",
+    )
+    @classmethod
+    def normalize_currency(
+        cls,
+        value,
+    ):
+        if (
+            value is None
+            or isinstance(value, str)
+        ):
+            return normalize_currency_code(
+                value
+            )
+
+        return value
 
 
 class TenderDiscoveryItem(MonitorNoticeResponse):

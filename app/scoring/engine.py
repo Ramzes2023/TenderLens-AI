@@ -5,6 +5,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
+from app.currency import normalize_currency_code
 from app.models.tender import TenderAnalysis
 
 from .models import CompanyProfile, CriterionResult, ScoringResult
@@ -30,19 +31,6 @@ def _norm(value: str) -> str:
 def _has_phrase(haystack: str, needle: str) -> bool:
     n = _norm(needle)
     return bool(n) and n in _norm(haystack)
-
-
-def _currency_code(value: str | None) -> str | None:
-    if not value:
-        return None
-    norm = _norm(value)
-    if "rub" in norm or "руб" in norm or "российск" in norm:
-        return "RUB"
-    if "eur" in norm or "евро" in norm:
-        return "EUR"
-    if "usd" in norm or "доллар" in norm:
-        return "USD"
-    return value.strip().upper()
 
 
 def _criterion(code: str, label: str, status: str, explanation: str,
@@ -198,12 +186,12 @@ def _budget(
             stops,
         )
 
-    tender_currency = _currency_code(
+    tender_currency = normalize_currency_code(
         analysis.currency
     )
 
     accepted = {
-        _currency_code(value)
+        normalize_currency_code(value)
         for value in profile.accepted_currencies
     }
 

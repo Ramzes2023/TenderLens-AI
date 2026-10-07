@@ -713,3 +713,17 @@ async def analyze_pdf_endpoint(
         rag_indexed_chunks=rag_chunks,
         warnings=warnings,
     )
+
+
+@router.get("/forgot-password", response_class=HTMLResponse, include_in_schema=False)
+async def forgot_password_page():
+    from .auth_pages import forgot_password_html
+    return HTMLResponse(forgot_password_html(), headers={"Cache-Control": "no-store"})
+
+
+@router.get("/reset-password", response_class=HTMLResponse, include_in_schema=False)
+async def reset_password_page():
+    from .auth_pages import reset_password_html
+    return HTMLResponse(reset_password_html(), headers={
+        "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
+    })

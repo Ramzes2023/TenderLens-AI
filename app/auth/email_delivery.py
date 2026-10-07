@@ -33,6 +33,12 @@ class EmailSender(Protocol):
         ...
 
 
+    def send_password_reset(
+        self, *, recipient: str, reset_url: str, expires_at: str,
+    ) -> None:
+        ...
+
+
 def _bool_env(
     name: str,
     default: bool,
@@ -262,6 +268,41 @@ class SMTPEmailSender:
             raise EmailDeliveryError(
                 "Verification email delivery failed."
             ) from None
+
+
+    def send_password_reset(
+        self, *, recipient: str, reset_url: str, expires_at: str,
+    ) -> None:
+        message = EmailMessage()
+        message["Subject"] = "Reset your VALYQON AI password"
+        message["From"] = self.from_address
+        message["To"] = recipient
+        message.set_content(
+            "Reset your VALYQON AI password.\n\n"
+            f"{reset_url}\n\n"
+            f"This password reset link expires at {expires_at}.\n"
+            "If you did not request this change, you can ignore this email."
+        )
+        try:
+            if self.ssl_enabled:
+                with smtplib.SMTP_SSL(
+                    self.host, self.port, timeout=self.timeout_seconds,
+                    context=ssl.create_default_context(),
+                ) as client:
+                    if self.username:
+                        client.login(self.username, self.password)
+                    client.send_message(message)
+                return
+            with smtplib.SMTP(self.host, self.port, timeout=self.timeout_seconds) as client:
+                client.ehlo()
+                if self.starttls:
+                    client.starttls(context=ssl.create_default_context())
+                    client.ehlo()
+                if self.username:
+                    client.login(self.username, self.password)
+                client.send_message(message)
+        except (OSError, smtplib.SMTPException):
+            raise EmailDeliveryError("Password reset email delivery failed.") from None
 
 
 def load_email_sender_from_env():

@@ -13,12 +13,16 @@ from .service import (
     EmailVerificationRateLimited,
     InvalidCredentials,
     RegistrationError,
+    PasswordResetError,
+    PasswordResetInvalid,
+    PasswordResetRateLimited,
     TelegramLinkError,
     TelegramLinkUnavailable,
     normalize_email,
 )
 
 __all__ = [
+    "PasswordResetError", "PasswordResetInvalid", "PasswordResetRateLimited",
     "AuthAccount", "AuthSession", "AuthRepository", "AuthRepositoryError",
     "WEB_OWNER_OFFSET", "AuthService", "AuthError", "InvalidCredentials",
     "RegistrationError", "EmailNotVerified", "EmailVerificationError", "EmailVerificationInvalid",

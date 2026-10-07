@@ -90,6 +90,19 @@ class AuthRepository:
                         CREATE INDEX IF NOT EXISTS idx_auth_telegram_links_account
                         ON auth_telegram_links(account_id, expires_at);
 
+                        CREATE TABLE IF NOT EXISTS auth_password_resets (
+                            token_hash TEXT PRIMARY KEY,
+                            account_id INTEGER NOT NULL,
+                            expires_at TEXT NOT NULL,
+                            consumed_at TEXT,
+                            created_at TEXT NOT NULL,
+                            FOREIGN KEY(account_id) REFERENCES auth_accounts(id) ON DELETE CASCADE
+                        );
+                        CREATE INDEX IF NOT EXISTS idx_auth_password_resets_account
+                        ON auth_password_resets(account_id, created_at);
+                        CREATE INDEX IF NOT EXISTS idx_auth_password_resets_expires
+                        ON auth_password_resets(expires_at);
+
                         CREATE TABLE IF NOT EXISTS auth_email_verifications (
                             token_hash TEXT PRIMARY KEY,
                             account_id INTEGER NOT NULL,
@@ -809,3 +822,89 @@ class AuthRepository:
             return int(cursor.rowcount)
         except sqlite3.Error:
             raise AuthRepositoryError("Could not clean expired sessions.") from None
+
+    def create_password_reset(
+        self, *, account_id: int, token_hash: str, expires_at: str,
+        cooldown_after: str | None = None,
+    ) -> bool:
+        """Serialize cooldown checks and rotation; persist only a token hash."""
+        now = self._now()
+        try:
+            with closing(self._connect()) as conn:
+                with conn:
+                    conn.execute("BEGIN IMMEDIATE")
+                    account = conn.execute(
+                        "SELECT id FROM auth_accounts WHERE id=? AND is_active=1",
+                        (account_id,),
+                    ).fetchone()
+                    if account is None:
+                        return False
+                    if cooldown_after is not None:
+                        recent = conn.execute(
+                            "SELECT 1 FROM auth_password_resets WHERE account_id=? AND created_at>? LIMIT 1",
+                            (account_id, cooldown_after),
+                        ).fetchone()
+                        if recent is not None:
+                            return False
+                    conn.execute(
+                        "UPDATE auth_password_resets SET consumed_at=? WHERE account_id=? AND consumed_at IS NULL",
+                        (now, account_id),
+                    )
+                    conn.execute(
+                        "INSERT INTO auth_password_resets VALUES (?, ?, ?, NULL, ?)",
+                        (token_hash, account_id, expires_at, now),
+                    )
+            return True
+        except sqlite3.Error:
+            raise AuthRepositoryError("Could not create password reset ticket.") from None
+
+    def consume_password_reset(
+        self, *, token_hash: str, password_hash: str, now: str,
+    ) -> AuthAccount | None:
+        """Change the password and revoke every session in one transaction."""
+        try:
+            with closing(self._connect()) as conn:
+                with conn:
+                    conn.execute("BEGIN IMMEDIATE")
+                    ticket = conn.execute(
+                        """SELECT r.account_id FROM auth_password_resets r
+                        JOIN auth_accounts a ON a.id=r.account_id
+                        WHERE r.token_hash=? AND r.consumed_at IS NULL
+                        AND r.expires_at>? AND a.is_active=1""",
+                        (token_hash, now),
+                    ).fetchone()
+                    if ticket is None:
+                        return None
+                    claimed = conn.execute(
+                        """UPDATE auth_password_resets SET consumed_at=?
+                        WHERE token_hash=? AND consumed_at IS NULL AND expires_at>?""",
+                        (now, token_hash, now),
+                    )
+                    if claimed.rowcount != 1:
+                        return None
+                    account_id = int(ticket["account_id"])
+                    conn.execute(
+                        "UPDATE auth_accounts SET password_hash=?, updated_at=? WHERE id=?",
+                        (password_hash, now, account_id),
+                    )
+                    conn.execute("DELETE FROM auth_sessions WHERE account_id=?", (account_id,))
+                    conn.execute(
+                        "UPDATE auth_password_resets SET consumed_at=? WHERE account_id=? AND consumed_at IS NULL",
+                        (now, account_id),
+                    )
+                    row = conn.execute("SELECT * FROM auth_accounts WHERE id=?", (account_id,)).fetchone()
+            return self._account(row)
+        except sqlite3.Error:
+            raise AuthRepositoryError("Could not reset password.") from None
+
+    def delete_password_reset(self, *, token_hash: str) -> None:
+        # Keep the request timestamp so failed delivery cannot bypass cooldown.
+        try:
+            with closing(self._connect()) as conn:
+                with conn:
+                    conn.execute(
+                        "UPDATE auth_password_resets SET consumed_at=? WHERE token_hash=? AND consumed_at IS NULL",
+                        (self._now(), token_hash),
+                    )
+        except sqlite3.Error:
+            raise AuthRepositoryError("Could not revoke password reset ticket.") from None

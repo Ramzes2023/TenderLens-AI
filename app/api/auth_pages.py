@@ -98,6 +98,7 @@ def _page(
         </div>
         <button id="submit" type="submit">{escape(button)}</button>
       </form>
+      {'' if register else '<p class="switch"><a href="/forgot-password">Forgot password?</a></p>'}
       <p class="switch">{escape(switch_text)} <a href="{switch_href}">{escape(switch_label)}</a></p>
       <div class="version">VALYQON AI v{version}</div>
     </section>
@@ -586,7 +587,82 @@ def verify_email_html(
 </html>"""
 
 
+def _password_reset_page(*, reset: bool) -> str:
+    # Reuse the established auth layout, typography and premium stylesheet.
+    page = _page("register" if reset else "login")
+    title = "Reset your password" if reset else "Forgot password?"
+    page = page.replace("Create your account" if reset else "Welcome back", title)
+    page = page.replace("Start your VALYQON AI workspace." if reset else
+                        "Sign in to your procurement intelligence workspace.",
+                        "Choose a new password for your account." if reset else
+                        "Enter your email to request a password reset link.")
+    page = page.replace('<meta name="robots" content="noindex,nofollow">',
+                        '<meta name="robots" content="noindex,nofollow">\n'
+                        '  <meta name="referrer" content="no-referrer">')
+    form_start = page.index('      <form id="auth">')
+    form_end = page.index('      <div class="version">', form_start)
+    fields = '''<div class="field"><label for="email">Email</label>
+      <input id="email" type="email" maxlength="254" autocomplete="email" required placeholder="you@company.com"></div>'''
+    if reset:
+        fields = '''<div class="field"><label for="password">New password</label>
+          <input id="password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required>
+          <div class="hint">Use at least 12 characters.</div></div>
+          <div class="field"><label for="confirmPassword">Confirm password</label>
+          <input id="confirmPassword" type="password" minlength="12" maxlength="128" autocomplete="new-password" required></div>'''
+    button = "Reset password" if reset else "Send reset link"
+    page = page[:form_start] + f'''      <form id="auth">{fields}
+        <button id="submit" type="submit">{button}</button></form>
+      <p class="switch"><a href="/login">Back to sign in</a></p>
+''' + page[form_end:]
+    script_start = page.index('  <script>')
+    script_end = page.index('  </script>', script_start) + len('  </script>')
+    script = '''  <script>
+    const resetMode=RESET_MODE;
+    const token=new URLSearchParams(window.location.search).get('token')||'';
+    if(resetMode) history.replaceState({},'', '/reset-password');
+    const form=document.getElementById('auth'),msg=document.getElementById('msg'),btn=document.getElementById('submit');
+    msg.setAttribute('role','status');
+    function message(text){msg.textContent=text;msg.style.display='block';}
+    if(resetMode&&!token){message('Password reset link is invalid or expired. Request a new link.');btn.disabled=true;}
+    form.addEventListener('submit',async event=>{
+      event.preventDefault();
+      const payload=resetMode?{token,password:document.getElementById('password').value}:{email:document.getElementById('email').value.trim()};
+      if(resetMode&&payload.password!==document.getElementById('confirmPassword').value){message('Passwords must match.');return;}
+      btn.disabled=true;
+      let completed=false;
+      try{
+        const response=await fetch('/api/v1/auth/'+(resetMode?'reset-password':'forgot-password'),{
+          method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(payload)
+        });
+        if(!response.ok){
+          let data={};try{data=await response.json();}catch(_error){}
+          throw new Error(typeof data.detail==='string'?data.detail:'Password reset is temporarily unavailable.');
+        }
+        if(resetMode){
+          completed=true;
+          message('Password reset complete. Returning to sign in...');
+          setTimeout(()=>window.location.replace('/login'),500);
+        }else{
+          message('If an eligible account exists for this email, a password reset link has been sent.');
+        }
+      }catch(error){message(error instanceof TypeError?'Connection unavailable. Please try again.':error.message);}
+      finally{if(!completed)btn.disabled=false;}
+    });
+  </script>'''.replace('RESET_MODE', 'true' if reset else 'false')
+    return page[:script_start] + script + page[script_end:]
+
+
+def forgot_password_html() -> str:
+    return _password_reset_page(reset=False)
+
+
+def reset_password_html() -> str:
+    return _password_reset_page(reset=True)
+
+
 __all__ = [
+    "forgot_password_html",
+    "reset_password_html",
     "login_html",
     "register_html",
     "verify_email_html",

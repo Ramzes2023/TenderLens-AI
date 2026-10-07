@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.auth import (
@@ -14,6 +16,8 @@ from app.auth import (
     EmailVerificationInvalid,
     InvalidCredentials,
     RegistrationError,
+    PasswordResetError,
+    PasswordResetInvalid,
     TelegramLinkError,
     TelegramLinkUnavailable,
 )
@@ -60,6 +64,21 @@ class RegistrationResponse(BaseModel):
     verification_required: bool = True
     verification_sent: bool
     verification_expires_at: str | None
+
+
+class ResetPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: str = Field(min_length=1, max_length=256)
+    password: str = Field(min_length=1, max_length=128)
+
+
+class ForgotPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(min_length=3, max_length=254)
+
+
+class PasswordResetAcceptedResponse(BaseModel):
+    accepted: bool = True
 
 
 class ResendVerificationResponse(BaseModel):
@@ -565,5 +584,85 @@ async def me(request: Request, response: Response) -> AccountResponse:
     response.headers["Cache-Control"] = "no-store"
     return _account_response(account)
 
+
+class _PasswordResetRoute(APIRoute):
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+
+        async def protected(request: Request):
+            require_same_origin_browser_request(request)
+            try:
+                return await handler(request)
+            except RequestValidationError:
+                # Pydantic's default errors include raw input (tokens/passwords).
+                raise HTTPException(
+                    status_code=422,
+                    detail="Password reset request is invalid.",
+                ) from None
+
+        return protected
+
+
+password_reset_router = APIRouter(route_class=_PasswordResetRoute)
+
+
+@password_reset_router.post(
+    "/forgot-password", status_code=status.HTTP_202_ACCEPTED,
+    response_model=PasswordResetAcceptedResponse,
+)
+async def forgot_password(
+    payload: ForgotPasswordRequest, request: Request, response: Response,
+) -> PasswordResetAcceptedResponse:
+    from urllib.parse import urlencode
+    from app.auth.email_delivery import normalize_public_base_url
+
+    require_same_origin_browser_request(request)
+    service = _service(request)
+    sender = _email_sender(request)
+    if sender is None:
+        raise HTTPException(status_code=503, detail="Password reset is temporarily unavailable.")
+    try:
+        base = normalize_public_base_url(sender.public_base_url)
+        prepared = await asyncio.to_thread(service.request_password_reset, payload.email)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Password reset is temporarily unavailable.") from None
+    if prepared is not None:
+        account, token, expires_at = prepared
+        try:
+            await asyncio.to_thread(
+                sender.send_password_reset, recipient=account.email,
+                reset_url=f"{base}/reset-password?{urlencode({'token': token})}",
+                expires_at=expires_at,
+            )
+        except Exception:
+            try:
+                await asyncio.to_thread(service.revoke_password_reset, token)
+            except PasswordResetError:
+                pass
+    response.headers["Cache-Control"] = "no-store"
+    return PasswordResetAcceptedResponse(accepted=True)
+
+
+@password_reset_router.post("/reset-password")
+async def reset_password(
+    payload: ResetPasswordRequest, request: Request, response: Response,
+) -> dict[str, bool]:
+    require_same_origin_browser_request(request)
+    service = _service(request)
+    try:
+        await asyncio.to_thread(service.reset_password, payload.token, payload.password)
+    except PasswordResetInvalid as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="Password reset is temporarily unavailable.") from None
+    response.delete_cookie(
+        key=SESSION_COOKIE, path="/", httponly=True,
+        secure=request.url.scheme == "https", samesite="lax",
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return {"reset": True}
+
+
+router.include_router(password_reset_router)
 
 __all__ = ["router", "SESSION_COOKIE"]

@@ -260,7 +260,100 @@ def _dashboard_html() -> str:
       <div id="companies"><div class="empty">Loading…</div></div>
     </article>
     <article class="p s7"><h2>Recent analyzed documents <button onclick="loadTenders()">Reload</button></h2><div id="tenders"><div class="empty">Loading…</div></div></article>
-    <article class="p s12"><h2>Live EIS scan <button id="scanButton" class="primary" onclick="scanEis()">Scan now</button></h2><div id="scanResults"><div class="empty">Run a scan to see new matching notices.</div></div></article>
+    <article id="monitoringCenter"
+             class="p s12"
+             data-page="monitoring">
+      <h2>
+        <span>Monitoring center</span>
+        <span class="toolbar">
+          <button type="button"
+                  onclick="loadMonitoring()">
+            Refresh status
+          </button>
+          <button id="scanButton"
+                  class="primary"
+                  type="button"
+                  onclick="scanEis()">
+            Scan for new matches
+          </button>
+        </span>
+      </h2>
+
+      <p class="muted">
+        Live EIS scan for the active company profile.
+        A manual scan returns only matching notices that have not already
+        been seen in this monitoring scope. Previously seen notices are
+        intentionally suppressed by deduplication.
+      </p>
+
+      <div class="form-grid"
+           style="margin-top:16px">
+
+        <div class="f4">
+          <label>Active company</label>
+          <div id="monitoringCompany"
+               class="title">
+            Loading...
+          </div>
+        </div>
+
+        <div class="f4">
+          <label>Monitoring mode</label>
+          <div id="monitoringMode"
+               class="title">
+            Loading...
+          </div>
+        </div>
+
+        <div class="f4">
+          <label>Configured feeds</label>
+          <div id="monitoringFeeds"
+               class="title">
+            Loading...
+          </div>
+        </div>
+
+        <div class="f4">
+          <label>Background monitoring</label>
+          <div id="monitoringBackground"
+               class="title">
+            Loading...
+          </div>
+        </div>
+
+        <div class="f4">
+          <label>Notifications</label>
+          <div id="monitoringNotifications"
+               class="title">
+            Loading...
+          </div>
+        </div>
+
+        <div class="f4">
+          <label>Access</label>
+          <div id="monitoringAccess"
+               class="title">
+            Loading...
+          </div>
+        </div>
+      </div>
+
+      <div id="monitoringExplanation"
+           class="help"
+           style="margin-top:14px">
+        Loading monitoring status...
+      </div>
+
+      <div id="monitoringScanSummary"
+           style="margin-top:16px"></div>
+
+      <div id="scanResults"
+           style="margin-top:14px">
+        <div class="empty">
+          Run a scan to see new matching notices.
+        </div>
+      </div>
+    </article>
   </section>
 
   <footer>VALYQON AI v{version} · authenticated web workspace</footer>
@@ -970,12 +1063,63 @@ async function activateCompany(id){{
     loadMonitoring()
   ]);
 }}
+function monitoringContextKey(){{
+  return [
+    state.organizationId??'personal',
+    state.activeCompanyId??'none',
+    state.ownerId??'none'
+  ].join(':');
+}}
+
+function monitoringModeLabel(mode){{
+  if(mode==='company-profile'){{
+    return 'Company profile';
+  }}
+
+  if(mode==='static'){{
+    return 'Static feed';
+  }}
+
+  if(mode==='no-company'){{
+    return 'No active company';
+  }}
+
+  return mode||'Unknown';
+}}
+
+function monitoringIntervalLabel(seconds){{
+  const value=Number(seconds);
+
+  if(
+    !Number.isFinite(value)
+    ||value<=0
+  ){{
+    return 'Not configured';
+  }}
+
+  if(value%3600===0){{
+    const hours=value/3600;
+
+    return `${{hours}} hour${{hours===1?'':'s'}}`;
+  }}
+
+  if(value%60===0){{
+    const minutes=value/60;
+
+    return `${{minutes}} min`;
+  }}
+
+  return `${{value}} sec`;
+}}
+
 async function loadMonitoring(){{
   const path=usingSharedOrganization()
     ?`${{organizationBase()}}/monitoring/status`
     :`/api/v1/monitoring/status?owner_user_id=${{owner()}}`;
 
   const data=await api(path);
+
+  state.monitoringStatus=data;
 
   state.hasActiveCompany=Boolean(
     data.active_company
@@ -991,11 +1135,96 @@ async function loadMonitoring(){{
     'monitorDetails'
   ).textContent=
     state.hasActiveCompany
-      ?`${{data.subscription_enabled?'Notifications ON':'Notifications OFF'}} ? ${{data.feed_mode}} ? ${{data.rss_feeds}} feed(s)`
+      ?`${{monitoringModeLabel(data.feed_mode)}} ? ${{data.rss_feeds}} feed(s)`
       :'Create a company profile to start monitoring.';
+
+  const companyRoot=document.getElementById(
+    'monitoringCompany'
+  );
+
+  const modeRoot=document.getElementById(
+    'monitoringMode'
+  );
+
+  const feedsRoot=document.getElementById(
+    'monitoringFeeds'
+  );
+
+  const backgroundRoot=document.getElementById(
+    'monitoringBackground'
+  );
+
+  const notificationsRoot=document.getElementById(
+    'monitoringNotifications'
+  );
+
+  const accessRoot=document.getElementById(
+    'monitoringAccess'
+  );
+
+  const explanationRoot=document.getElementById(
+    'monitoringExplanation'
+  );
+
+  if(companyRoot){{
+    companyRoot.textContent=
+      data.active_company
+      ||'No active company';
+  }}
+
+  if(modeRoot){{
+    modeRoot.textContent=
+      monitoringModeLabel(
+        data.feed_mode
+      );
+  }}
+
+  if(feedsRoot){{
+    feedsRoot.textContent=
+      state.hasActiveCompany
+        ?`${{data.rss_feeds}} configured`
+        :'0 configured';
+  }}
+
+  if(backgroundRoot){{
+    backgroundRoot.textContent=
+      data.background_enabled
+        ?`Enabled ? every ${{monitoringIntervalLabel(data.interval_seconds)}}`
+        :'Manual scans only';
+  }}
+
+  if(notificationsRoot){{
+    notificationsRoot.textContent=
+      data.subscription_enabled
+        ?'Enabled'
+        :'Not enabled';
+  }}
+
+  if(accessRoot){{
+    accessRoot.textContent=
+      canWriteWorkspace()
+        ?'Can run scans'
+        :'Read-only viewer';
+  }}
+
+  if(explanationRoot){{
+    if(!state.hasActiveCompany){{
+      explanationRoot.textContent=
+        'Create and activate a company profile before running Monitoring.';
+
+    }}else if(!canWriteWorkspace()){{
+      explanationRoot.textContent=
+        'You can inspect Monitoring status, but the Viewer role cannot start a scan.';
+
+    }}else{{
+      explanationRoot.textContent=
+        'Scan for new matches checks the configured EIS monitoring feed for the active company. Only matching notices not already recorded in this monitoring scope are returned.';
+    }}
+  }}
 
   updateWorkspaceControls();
 }}
+
 async function loadTenders(){{
   const path=usingSharedOrganization()
     ?`${{organizationBase()}}/tenders?limit=20`
@@ -1037,23 +1266,39 @@ async function scanEis(){{
     'scanResults'
   );
 
+  const summary=document.getElementById(
+    'monitoringScanSummary'
+  );
+
+  const context=
+    monitoringContextKey();
+
+  const epoch=
+    state.uiEpoch||0;
+
   try{{
     if(!canWriteWorkspace()){{
-      root.innerHTML=
-        '<div class="error">Viewer role is read-only.</div>';
+      summary.innerHTML=
+        '<div class="error">Viewer role is read-only. Monitoring status remains available.</div>';
 
       return;
     }}
 
     if(!state.hasActiveCompany){{
-      root.innerHTML=
-        '<div class="empty">Create a company profile before running monitoring.</div>';
+      summary.innerHTML=
+        '<div class="error">Create and activate a company profile before running Monitoring.</div>';
 
       return;
     }}
 
     button.disabled=true;
-    button.textContent='Scanning?';
+    button.textContent='Scanning...';
+
+    summary.innerHTML=
+      '<div class="empty">Checking the monitoring feed for new matching notices...</div>';
+
+    root.innerHTML=
+      '<div class="empty">Scan in progress...</div>';
 
     const items=usingSharedOrganization()
       ?await api(
@@ -1072,36 +1317,122 @@ async function scanEis(){{
           }}
         );
 
-    root.innerHTML=items.length
-      ?items.map(item=>
-          `<div class="row">
-            <div class="title">
-              ${{esc(item.title||'EIS notice')}}
-            </div>
+    if(
+      context!==monitoringContextKey()
+      ||epoch!==(state.uiEpoch||0)
+    ){{
+      return;
+    }}
 
-            <div class="sub">
-              ${{esc((item.reasons||[]).join(' ? '))}}
-              ?
-              <a href="${{esc(item.url)}}"
-                 target="_blank"
-                 rel="noopener noreferrer">
-                Open notice
-              </a>
+    const scannedAt=
+      new Intl.DateTimeFormat(
+        undefined,
+        {{
+          hour:'2-digit',
+          minute:'2-digit',
+          second:'2-digit'
+        }}
+      ).format(
+        new Date()
+      );
+
+    if(items.length){{
+      summary.innerHTML=
+        `<div class="success">${{items.length}} new matching notice${{items.length===1?'':'s'}} found ? ${{esc(scannedAt)}}. These notices are now recorded as seen for this monitoring scope.</div>`;
+
+      root.innerHTML=
+        items.map(item=>{{
+          const value=
+            item.initial_price==null
+              ?'Value not provided'
+              :`${{item.initial_price}} ${{item.currency||''}}`;
+
+          const metadata=[
+            item.source,
+            item.customer,
+            item.tender_number,
+            item.deadline,
+            value
+          ]
+            .filter(Boolean)
+            .map(esc)
+            .join(' ? ');
+
+          const reasons=
+            (item.reasons||[])
+              .map(reason=>esc(reason))
+              .join(' ? ');
+
+          return `
+            <div class="row">
+              <div class="head">
+                <div>
+                  <div class="title">
+                    ${{esc(item.title||'EIS notice')}}
+                  </div>
+
+                  <div class="sub">
+                    ${{metadata||'Tender metadata unavailable'}}
+                  </div>
+                </div>
+
+                <span class="chip">
+                  New
+                </span>
+              </div>
+
+              <div class="sub"
+                   style="margin-top:8px">
+                ${{reasons||'Matched the active company monitoring profile.'}}
+              </div>
+
+              <div class="toolbar"
+                   style="margin-top:10px">
+                <a href="${{esc(item.url)}}"
+                   target="_blank"
+                   rel="noopener noreferrer">
+                  Open notice
+                </a>
+              </div>
             </div>
-          </div>`
-        ).join('')
-      :'<div class="empty">No new matching notices.</div>';
+          `;
+        }}).join('');
+
+    }}else{{
+      summary.innerHTML=
+        `<div class="success">Scan completed ? ${{esc(scannedAt)}}. No new matching notices were found.</div>`;
+
+      root.innerHTML=
+        '<div class="empty">No new matching notices. Previously seen matches are intentionally suppressed by Monitoring deduplication.</div>';
+    }}
 
   }}catch(e){{
-    root.innerHTML=
+    if(
+      context!==monitoringContextKey()
+      ||epoch!==(state.uiEpoch||0)
+    ){{
+      return;
+    }}
+
+    summary.innerHTML=
       `<div class="error">${{esc(e.message||e)}}</div>`;
 
-  }}finally{{
-    button.textContent='Scan now';
+    root.innerHTML=
+      '<div class="empty">The scan did not complete. No result state was updated in this view.</div>';
 
-    updateWorkspaceControls();
+  }}finally{{
+    if(
+      context===monitoringContextKey()
+      &&epoch===(state.uiEpoch||0)
+    ){{
+      button.textContent=
+        'Scan for new matches';
+
+      updateWorkspaceControls();
+    }}
   }}
 }}
+
 async function refreshAll(){{
   await loadAccount();
   await loadOrganizations();

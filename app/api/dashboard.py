@@ -215,6 +215,38 @@ def _dashboard_html() -> str:
           <input id="maxContract" type="number" min="1" step="1" placeholder="50000000">
         </div>
       </div>
+
+      <div id="companyPdfAssistant"
+           class="hidden"
+           style="margin-top:18px;padding:16px;border:1px solid var(--line);border-radius:12px">
+        <h3 style="margin-top:0">Build search profile from company PDF</h3>
+
+        <p class="help">
+          Upload a company brochure, catalog, capability statement or product sheet.
+          VALYQON will propose discovery fields only. Budget limits, currencies,
+          exclusions, hard-stop rules and company identity are preserved.
+        </p>
+
+        <div class="toolbar">
+          <input id="companyPdfFile"
+                 type="file"
+                 accept=".pdf,application/pdf">
+
+          <button id="companyPdfAnalyzeButton"
+                  type="button"
+                  onclick="previewCompanyProfilePdf()">
+            Analyze PDF
+          </button>
+        </div>
+
+        <div class="help">
+          PDF only ? maximum 10 MiB ? scanned image-only PDFs require OCR and are not supported yet.
+        </div>
+
+        <div id="companyPdfStatus"></div>
+        <div id="companyPdfPreview"></div>
+      </div>
+
       <div id="companyFormError"></div>
       <div class="actions">
         <button onclick="hideCompanyForm()">Cancel</button>
@@ -243,8 +275,80 @@ function owner(){{if(!Number.isInteger(state.ownerId))throw new Error('Account o
 function listValue(id){{return document.getElementById(id).value.split(/[,;\\n]+/).map(v=>v.trim()).filter(Boolean)}}
 function optionalMoney(id){{const raw=document.getElementById(id).value.trim();if(!raw)return null;const value=Number(raw);if(!Number.isFinite(value)||value<0)throw new Error('Contract values must be valid positive numbers.');return value}}
 function showCompanyForm(){{if(!canWriteWorkspace())return;resetCompanyForm();document.getElementById('companyCreator').classList.remove('hidden');document.getElementById('companyName').focus()}}
-function hideCompanyForm(){{document.getElementById('companyCreator').classList.add('hidden');document.getElementById('companyFormError').innerHTML=''}}
-function resetCompanyForm(){{['companyName','industry','regions','keywords','searchKeywords','countries','documentsAvailable','excludedKeywords','minContract','maxContract'].forEach(id=>document.getElementById(id).value='');document.getElementById('businessMode').value='sell';document.getElementById('currencies').value='RUB';state.editCompanyId=null;state.editProfile=null;document.getElementById('companyFormTitle').textContent='Create company';document.getElementById('createCompanyButton').textContent='Create & activate'}}
+function resetCompanyPdfAssistant(){{
+  state.companyPdfPreview=null;
+
+  const root=document.getElementById(
+    'companyPdfAssistant'
+  );
+
+  const input=document.getElementById(
+    'companyPdfFile'
+  );
+
+  const statusRoot=document.getElementById(
+    'companyPdfStatus'
+  );
+
+  const previewRoot=document.getElementById(
+    'companyPdfPreview'
+  );
+
+  if(root)root.classList.add('hidden');
+  if(input)input.value='';
+  if(statusRoot)statusRoot.innerHTML='';
+  if(previewRoot)previewRoot.innerHTML='';
+}}
+
+function hideCompanyForm(){{
+  document.getElementById(
+    'companyCreator'
+  ).classList.add('hidden');
+
+  document.getElementById(
+    'companyFormError'
+  ).innerHTML='';
+
+  resetCompanyPdfAssistant();
+}}
+
+function resetCompanyForm(){{
+  [
+    'companyName',
+    'industry',
+    'regions',
+    'keywords',
+    'searchKeywords',
+    'countries',
+    'documentsAvailable',
+    'excludedKeywords',
+    'minContract',
+    'maxContract'
+  ].forEach(
+    id=>document.getElementById(id).value=''
+  );
+
+  document.getElementById(
+    'businessMode'
+  ).value='sell';
+
+  document.getElementById(
+    'currencies'
+  ).value='RUB';
+
+  state.editCompanyId=null;
+  state.editProfile=null;
+
+  resetCompanyPdfAssistant();
+
+  document.getElementById(
+    'companyFormTitle'
+  ).textContent='Create company';
+
+  document.getElementById(
+    'createCompanyButton'
+  ).textContent='Create & activate';
+}}
 async function loadHealth(){{const d=await (await fetch('/health',{{cache:'no-store'}})).json();document.getElementById('healthVersion').textContent='v'+d.version;const b=document.getElementById('healthBadge');b.textContent=d.status;b.className='chip '+(d.status==='ok'?'good':'warn');document.getElementById('components').innerHTML=Object.entries(d.components||{{}}).map(([k,v])=>`<span class="chip ${{v==='ready'?'good':'warn'}}">${{esc(k)}}: ${{esc(v)}}</span>`).join('')}}
 async function loadCompanies(){{
   const path=usingSharedOrganization()
@@ -321,8 +425,363 @@ function editCompany(id){{
   const p=item.profile;
   const fields={{companyName:item.name,businessMode:p.business_mode,industry:p.industry,regions:(p.allowed_regions||[]).join(', '),keywords:(p.product_keywords||[]).join(', '),searchKeywords:(p.search_keywords||[]).join(', '),countries:(p.allowed_countries||[]).join(', '),currencies:(p.accepted_currencies||[]).join(', '),documentsAvailable:(p.available_document_keywords||[]).join(', '),excludedKeywords:(p.excluded_keywords||[]).join(', '),minContract:p.min_contract_value,maxContract:p.max_contract_value}};
   Object.entries(fields).forEach(([key,value])=>document.getElementById(key).value=value??'');
-  document.getElementById('companyFormTitle').textContent='Edit company profile';document.getElementById('createCompanyButton').textContent='Save profile';
+  document.getElementById(
+    'companyFormTitle'
+  ).textContent='Edit company profile';
+
+  document.getElementById(
+    'createCompanyButton'
+  ).textContent='Save profile';
+
+  document.getElementById(
+    'companyPdfAssistant'
+  ).classList.remove('hidden');
 }}
+
+function companyProfileDisplay(value){{
+  if(Array.isArray(value)){{
+    return value.length
+      ?value.join(', ')
+      :'?';
+  }}
+
+  if(
+    value===null
+    ||value===undefined
+    ||value===''
+  ){{
+    return '?';
+  }}
+
+  return String(value);
+}}
+
+function companyProfilePdfDiff(
+  current,
+  suggested
+){{
+  const fields=[
+    ['industry','Industry'],
+    ['product_keywords','Products & services'],
+    ['search_keywords','Search keywords'],
+    ['allowed_regions','Target regions'],
+    ['allowed_countries','Target countries'],
+    ['available_document_keywords','Certificates / documents']
+  ];
+
+  const changed=fields.filter(
+    ([key])=>JSON.stringify(
+      current?.[key]??null
+    )!==JSON.stringify(
+      suggested?.[key]??null
+    )
+  );
+
+  if(!changed.length){{
+    return '<div class="empty" style="margin-top:12px">AI found no supported profile changes in this PDF.</div>';
+  }}
+
+  const rows=changed.map(
+    ([key,label])=>`
+      <div class="row">
+        <div class="head">
+          <div style="width:100%">
+            <div class="title">${{esc(label)}}</div>
+            <div class="sub">
+              <b>Current:</b> ${{esc(companyProfileDisplay(current?.[key]))}}
+              <br>
+              <b>Suggested:</b> ${{esc(companyProfileDisplay(suggested?.[key]))}}
+            </div>
+          </div>
+        </div>
+      </div>`
+  ).join('');
+
+  return `
+    <div style="margin-top:14px">
+      <div class="success">
+        AI draft ready. Review the differences before applying.
+      </div>
+
+      ${{rows}}
+
+      <div class="help" style="margin-top:10px">
+        Protected settings such as currencies, budget limits, exclusions,
+        security limits and hard-stop rules are not generated by AI.
+      </div>
+
+      <div class="actions" style="margin-top:12px">
+        <button type="button"
+                onclick="discardCompanyPdfPreview()">
+          Discard
+        </button>
+
+        <button id="companyPdfApplyButton"
+                type="button"
+                class="primary"
+                onclick="applyCompanyPdfProfile()">
+          Apply AI profile
+        </button>
+      </div>
+    </div>`;
+}}
+
+function discardCompanyPdfPreview(){{
+  state.companyPdfPreview=null;
+
+  document.getElementById(
+    'companyPdfPreview'
+  ).innerHTML='';
+
+  document.getElementById(
+    'companyPdfStatus'
+  ).innerHTML='';
+
+  const input=document.getElementById(
+    'companyPdfFile'
+  );
+
+  if(input)input.value='';
+}}
+
+async function previewCompanyProfilePdf(){{
+  const statusRoot=document.getElementById(
+    'companyPdfStatus'
+  );
+
+  const previewRoot=document.getElementById(
+    'companyPdfPreview'
+  );
+
+  const button=document.getElementById(
+    'companyPdfAnalyzeButton'
+  );
+
+  statusRoot.innerHTML='';
+  previewRoot.innerHTML='';
+  state.companyPdfPreview=null;
+
+  try{{
+    if(
+      !usingSharedOrganization()
+      ||!canWriteWorkspace()
+      ||!state.editCompanyId
+    ){{
+      throw new Error(
+        'Open an existing shared company profile first.'
+      );
+    }}
+
+    const input=document.getElementById(
+      'companyPdfFile'
+    );
+
+    const file=input.files?.[0];
+
+    if(!file){{
+      throw new Error(
+        'Choose a company PDF first.'
+      );
+    }}
+
+    const lowerName=(
+      file.name||''
+    ).toLowerCase();
+
+    if(
+      file.type!=='application/pdf'
+      &&!lowerName.endsWith('.pdf')
+    ){{
+      throw new Error(
+        'Only PDF files are supported.'
+      );
+    }}
+
+    if(file.size>10*1024*1024){{
+      throw new Error(
+        'PDF exceeds the 10 MiB limit.'
+      );
+    }}
+
+    const form=new FormData();
+    form.append(
+      'file',
+      file
+    );
+
+    button.disabled=true;
+    button.textContent='Analyzing?';
+
+    statusRoot.innerHTML=
+      '<div class="empty" style="margin-top:12px">Extracting PDF text and building an AI search-profile draft?</div>';
+
+    const companyId=state.editCompanyId;
+
+    const preview=await api(
+      `${{organizationBase()}}/companies/${{companyId}}/profile-from-pdf/preview`,
+      {{
+        method:'POST',
+        body:form
+      }}
+    );
+
+    if(
+      companyId!==state.editCompanyId
+    ){{
+      throw new Error(
+        'The edited company changed. Generate the preview again.'
+      );
+    }}
+
+    state.companyPdfPreview=preview;
+
+    const warning=(
+      preview.warnings||[]
+    ).map(
+      value=>`<div class="error" style="margin-top:10px">${{esc(value)}}</div>`
+    ).join('');
+
+    statusRoot.innerHTML=`
+      <div class="success" style="margin-top:12px">
+        Analyzed ${{esc(preview.source_filename)}} ?
+        ${{esc(preview.pages??'?')}} page(s) ?
+        ${{esc(preview.characters)}} extracted characters.
+      </div>
+      ${{warning}}
+    `;
+
+    previewRoot.innerHTML=
+      companyProfilePdfDiff(
+        preview.current_profile,
+        preview.suggested_profile
+      );
+
+  }}catch(e){{
+    statusRoot.innerHTML=
+      `<div class="error" style="margin-top:12px">${{esc(e.message||e)}}</div>`;
+
+  }}finally{{
+    button.disabled=false;
+    button.textContent='Analyze PDF';
+  }}
+}}
+
+async function applyCompanyPdfProfile(){{
+  const preview=state.companyPdfPreview;
+
+  const statusRoot=document.getElementById(
+    'companyPdfStatus'
+  );
+
+  const previewRoot=document.getElementById(
+    'companyPdfPreview'
+  );
+
+  const button=document.getElementById(
+    'companyPdfApplyButton'
+  );
+
+  try{{
+    if(
+      !usingSharedOrganization()
+      ||!canWriteWorkspace()
+      ||!state.editCompanyId
+      ||!preview
+    ){{
+      throw new Error(
+        'Generate and review an AI profile preview first.'
+      );
+    }}
+
+    if(button){{
+      button.disabled=true;
+      button.textContent='Applying?';
+    }}
+
+    const companyId=state.editCompanyId;
+
+    const latest=await api(
+      `${{organizationBase()}}/companies/${{companyId}}`
+    );
+
+    if(
+      JSON.stringify(latest.profile)
+      !==JSON.stringify(
+        preview.current_profile
+      )
+    ){{
+      state.companyPdfPreview=null;
+
+      previewRoot.innerHTML='';
+
+      throw new Error(
+        'The company profile changed after this AI preview was generated. Analyze the PDF again before applying.'
+      );
+    }}
+
+    const updated=await api(
+      `${{organizationBase()}}/companies/${{companyId}}`,
+      {{
+        method:'PATCH',
+        body:JSON.stringify({{
+          profile:preview.suggested_profile
+        }})
+      }}
+    );
+
+    state.editProfile=updated.profile;
+    state.companyPdfPreview=null;
+
+    const p=updated.profile;
+
+    const fields={{
+      companyName:updated.name,
+      businessMode:p.business_mode,
+      industry:p.industry,
+      regions:(p.allowed_regions||[]).join(', '),
+      keywords:(p.product_keywords||[]).join(', '),
+      searchKeywords:(p.search_keywords||[]).join(', '),
+      countries:(p.allowed_countries||[]).join(', '),
+      currencies:(p.accepted_currencies||[]).join(', '),
+      documentsAvailable:(p.available_document_keywords||[]).join(', '),
+      excludedKeywords:(p.excluded_keywords||[]).join(', '),
+      minContract:p.min_contract_value,
+      maxContract:p.max_contract_value
+    }};
+
+    Object.entries(
+      fields
+    ).forEach(
+      ([key,value])=>
+        document.getElementById(key).value=
+          value??''
+    );
+
+    previewRoot.innerHTML='';
+
+    statusRoot.innerHTML=
+      '<div class="success" style="margin-top:12px">AI search profile applied. Protected company constraints were preserved.</div>';
+
+    const input=document.getElementById(
+      'companyPdfFile'
+    );
+
+    if(input)input.value='';
+
+    await loadCompanies();
+
+  }}catch(e){{
+    statusRoot.innerHTML=
+      `<div class="error" style="margin-top:12px">${{esc(e.message||e)}}</div>`;
+
+  }}finally{{
+    if(button){{
+      button.disabled=false;
+      button.textContent='Apply AI profile';
+    }}
+  }}
+}}
+
 async function createCompany(){{
   const errorRoot=document.getElementById(
     'companyFormError'

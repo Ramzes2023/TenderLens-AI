@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import asyncio
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    File,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.companies import (
@@ -12,7 +20,17 @@ from app.companies import (
     CompanyNotFoundError,
     CompanyRepositoryError,
 )
+from app.llm.base import LLMError
+from app.organizations import OrganizationError
+from app.parsers.pdf import MAX_BYTES
 from app.scoring.models import CompanyProfile
+from app.services.company_profile_analysis import (
+    CompanySearchProfileDraft,
+    ProfileDraftError,
+    analyze_company_search_profile,
+    merge_company_profile_draft,
+)
+from app.services.pdf import summarize_pdf
 
 from .security import current_account, require_same_origin_browser_request
 
@@ -47,6 +65,18 @@ class OrganizationCompanyResponse(BaseModel):
     updated_at: str
 
 
+class CompanyProfilePdfPreviewResponse(BaseModel):
+    company_id: int
+    source_filename: str
+    pages: int | None
+    characters: int
+    analysis_truncated: bool
+    draft: CompanySearchProfileDraft
+    current_profile: CompanyProfile
+    suggested_profile: CompanyProfile
+    warnings: list[str] = Field(default_factory=list)
+
+
 async def _account(request: Request):
     account = await current_account(request)
     if account is None:
@@ -69,6 +99,50 @@ def _service(request: Request):
             detail="Company workspaces are unavailable.",
         )
     return service
+
+
+def _organization_service(request: Request):
+    service = getattr(
+        request.app.state.runtime,
+        "organization_service",
+        None,
+    )
+
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Organization service is unavailable.",
+        )
+
+    return service
+
+
+async def _require_profile_generation_access(
+    request: Request,
+    account,
+    organization_id: int,
+):
+    service = _organization_service(
+        request
+    )
+
+    try:
+        await asyncio.to_thread(
+            service.require_membership,
+            account,
+            organization_id,
+            {
+                "owner",
+                "admin",
+                "member",
+            },
+        )
+
+    except OrganizationError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Company profile generation access denied.",
+        ) from None
 
 
 def _response(workspace):
@@ -307,6 +381,214 @@ async def update_company(
 
     response.headers["Cache-Control"] = "no-store"
     return _response(company)
+
+
+@router.post(
+    "/{company_id}/profile-from-pdf/preview",
+    response_model=CompanyProfilePdfPreviewResponse,
+)
+async def preview_company_profile_from_pdf(
+    organization_id: int,
+    company_id: int,
+    request: Request,
+    response: Response,
+    file: UploadFile = File(...),
+):
+    require_same_origin_browser_request(
+        request
+    )
+
+    if (
+        organization_id <= 0
+        or company_id <= 0
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                "organization_id and company_id must be positive."
+            ),
+        )
+
+    account = await _account(
+        request
+    )
+
+    await _require_profile_generation_access(
+        request,
+        account,
+        organization_id,
+    )
+
+    service = _service(
+        request
+    )
+
+    try:
+        company = await asyncio.to_thread(
+            service.get_for_organization,
+            account.id,
+            organization_id,
+            company_id,
+        )
+
+    except CompanyRepositoryError as error:
+        _company_error(
+            error
+        )
+
+    if company is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found.",
+        )
+
+    name = (
+        file.filename
+        or "company-profile.pdf"
+    )[:200]
+
+    content_type = (
+        file.content_type
+        or ""
+    ).lower()
+
+    if (
+        content_type != "application/pdf"
+        and not name.lower().endswith(".pdf")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Only PDF files are supported.",
+        )
+
+    data = await file.read(
+        MAX_BYTES + 1
+    )
+
+    if len(data) > MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="PDF exceeds 10 MiB limit.",
+        )
+
+    runtime = request.app.state.runtime
+
+    if runtime.provider is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="LLM is unavailable.",
+        )
+
+    summary = await summarize_pdf(
+        data
+    )
+
+    if summary.status != "ok":
+        messages = {
+            "no_text":
+                "PDF has no extractable text; OCR is not enabled.",
+            "encrypted":
+                "PDF is password protected.",
+            "invalid":
+                "Invalid or damaged PDF.",
+            "too_large":
+                "PDF exceeds 10 MiB limit.",
+            "too_many_pages":
+                "PDF exceeds 200 page limit.",
+            "too_much_text":
+                "PDF exceeds extracted text limit.",
+            "timeout":
+                "PDF parsing timed out.",
+        }
+
+        code = (
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+            if summary.status == "too_large"
+            else status.HTTP_422_UNPROCESSABLE_ENTITY
+        )
+
+        raise HTTPException(
+            status_code=code,
+            detail=messages.get(
+                summary.status,
+                "PDF parsing failed.",
+            ),
+        )
+
+    try:
+        result = await analyze_company_search_profile(
+            summary.text,
+            runtime.provider,
+            runtime.tender_max_chars,
+        )
+
+    except ProfileDraftError as error:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(error),
+        ) from None
+
+    except LLMError:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="LLM request failed.",
+        ) from None
+
+    # Re-check authorization and reload after the
+    # potentially expensive PDF/LLM operation.
+    await _require_profile_generation_access(
+        request,
+        account,
+        organization_id,
+    )
+
+    try:
+        current = await asyncio.to_thread(
+            service.get_for_organization,
+            account.id,
+            organization_id,
+            company_id,
+        )
+
+    except CompanyRepositoryError as error:
+        _company_error(
+            error
+        )
+
+    if current is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found.",
+        )
+
+    suggested = (
+        merge_company_profile_draft(
+            current.profile,
+            result.draft,
+        )
+    )
+
+    warnings = []
+
+    if result.truncated:
+        warnings.append(
+            "Only the bounded beginning of the extracted "
+            "document text was sent for AI analysis."
+        )
+
+    response.headers["Cache-Control"] = "no-store"
+
+    return CompanyProfilePdfPreviewResponse(
+        company_id=current.id,
+        source_filename=name,
+        pages=summary.pages,
+        characters=summary.characters,
+        analysis_truncated=result.truncated,
+        draft=result.draft,
+        current_profile=current.profile,
+        suggested_profile=suggested,
+        warnings=warnings,
+    )
 
 
 @router.delete(

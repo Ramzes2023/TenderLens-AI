@@ -30,6 +30,7 @@ from app.scoring.models import ScoringResult
 from .schemas import (
     MonitorNoticeResponse,
     MonitorStatusResponse,
+    SourceHealthItem,
     TenderDiscoveryItem,
     TenderDiscoveryResponse,
 )
@@ -73,6 +74,15 @@ class DiscoveryHistoryDetailResponse(
     DiscoveryHistorySummaryResponse
 ):
     discovery: TenderDiscoveryResponse
+
+
+class SourceHealthResponse(BaseModel):
+    organization_id: int
+    company_id: int
+    company_name: str
+    history_id: int | None = None
+    last_checked: str | None = None
+    sources: list[SourceHealthItem]
 
 
 async def _account(request: Request):
@@ -325,6 +335,323 @@ def _discovery_history_detail(
         **summary.model_dump(),
         discovery=discovery,
     )
+
+
+def _catalog_source_metadata(
+    catalog,
+):
+    registry = getattr(
+        catalog,
+        "registry",
+        None,
+    )
+
+    if registry is None:
+        return ()
+
+    metadata = getattr(
+        registry,
+        "metadata",
+        None,
+    )
+
+    if not callable(metadata):
+        return ()
+
+    try:
+        return tuple(
+            metadata()
+        )
+    except Exception:
+        return ()
+
+
+def _source_health_items(
+    catalog,
+    *,
+    report=None,
+    previous=None,
+    legacy_attempted=(),
+    legacy_successful=(),
+    legacy_failed=(),
+):
+    metadata_values = (
+        _catalog_source_metadata(
+            catalog
+        )
+    )
+
+    run_statuses = tuple(
+        getattr(
+            report,
+            "statuses",
+            (),
+        )
+        or ()
+    )
+
+    run_by_source = {
+        str(item.source):
+        item
+        for item in run_statuses
+    }
+
+    previous_values = list(
+        previous
+        or []
+    )
+
+    previous_by_source = {
+        str(item.source):
+        item
+        for item in previous_values
+    }
+
+    attempted = {
+        str(item)
+        for item in legacy_attempted
+    }
+
+    successful = {
+        str(item)
+        for item in legacy_successful
+    }
+
+    failed = {
+        str(item)
+        for item in legacy_failed
+    }
+
+    results: list[
+        SourceHealthItem
+    ] = []
+
+    seen: set[str] = set()
+
+    for metadata in metadata_values:
+        key = str(
+            metadata.key
+        )
+
+        seen.add(key)
+
+        capabilities = getattr(
+            metadata,
+            "capabilities",
+            None,
+        )
+
+        auth_required = bool(
+            getattr(
+                capabilities,
+                "authentication_required",
+                False,
+            )
+        )
+
+        transport = getattr(
+            metadata.transport,
+            "value",
+            str(metadata.transport),
+        )
+
+        state = "not_checked"
+        notice_count = None
+        duration_ms = None
+        error_type = None
+        message = None
+
+        if not bool(
+            metadata.enabled
+        ):
+            state = "disabled"
+
+            message = (
+                "Source requires configuration "
+                "before it can be checked."
+                if auth_required
+                else
+                "Source is disabled in configuration."
+            )
+
+        elif key in run_by_source:
+            run_status = (
+                run_by_source[key]
+            )
+
+            raw_state = getattr(
+                run_status.state,
+                "value",
+                str(run_status.state),
+            )
+
+            state = (
+                "healthy"
+                if raw_state == "ok"
+                else "failed"
+            )
+
+            notice_count = int(
+                run_status.notice_count
+            )
+
+            duration_ms = int(
+                run_status.duration_ms
+            )
+
+            error_type = (
+                run_status.error_type
+            )
+
+            message = (
+                run_status.message
+            )
+
+        elif key in previous_by_source:
+            prior = (
+                previous_by_source[key]
+            )
+
+            if prior.state in {
+                "healthy",
+                "failed",
+            }:
+                state = prior.state
+                notice_count = (
+                    prior.notice_count
+                )
+                duration_ms = (
+                    prior.duration_ms
+                )
+                error_type = (
+                    prior.error_type
+                )
+                message = (
+                    prior.message
+                )
+
+        elif key in successful:
+            state = "healthy"
+
+        elif key in failed:
+            state = "failed"
+            message = (
+                "Detailed source telemetry "
+                "was not recorded for this "
+                "historical Discovery run."
+            )
+
+        elif key in attempted:
+            state = "not_checked"
+
+        results.append(
+            SourceHealthItem(
+                source=key,
+                display_name=str(
+                    metadata.display_name
+                ),
+                transport=str(
+                    transport
+                ),
+                jurisdictions=[
+                    str(value)
+                    for value
+                    in metadata.jurisdictions
+                ],
+                languages=[
+                    str(value)
+                    for value
+                    in metadata.languages
+                ],
+                homepage_url=(
+                    metadata.homepage_url
+                ),
+                official=bool(
+                    metadata.official
+                ),
+                enabled=bool(
+                    metadata.enabled
+                ),
+                authentication_required=(
+                    auth_required
+                ),
+                state=state,
+                notice_count=(
+                    notice_count
+                ),
+                duration_ms=(
+                    duration_ms
+                ),
+                error_type=(
+                    error_type
+                ),
+                message=message,
+            )
+        )
+
+    # Test adapters and future connectors may return
+    # telemetry before they have public catalog metadata.
+    for run_status in run_statuses:
+        key = str(
+            run_status.source
+        )
+
+        if key in seen:
+            continue
+
+        raw_state = getattr(
+            run_status.state,
+            "value",
+            str(run_status.state),
+        )
+
+        results.append(
+            SourceHealthItem(
+                source=key,
+                display_name=key,
+                transport="unknown",
+                jurisdictions=[],
+                languages=[],
+                homepage_url=None,
+                official=False,
+                enabled=True,
+                authentication_required=False,
+                state=(
+                    "healthy"
+                    if raw_state == "ok"
+                    else "failed"
+                ),
+                notice_count=int(
+                    run_status.notice_count
+                ),
+                duration_ms=int(
+                    run_status.duration_ms
+                ),
+                error_type=(
+                    run_status.error_type
+                ),
+                message=(
+                    run_status.message
+                ),
+            )
+        )
+
+        seen.add(key)
+
+    # Keep a historical source visible even if a future
+    # catalog version no longer contains that connector.
+    for prior in previous_values:
+        key = str(
+            prior.source
+        )
+
+        if key in seen:
+            continue
+
+        results.append(prior)
+        seen.add(key)
+
+    return results
 
 
 def _company_service(request: Request):
@@ -1056,6 +1383,149 @@ async def get_discovery_history(
     )
 
 
+@router.get(
+    "/discovery/source-health",
+    response_model=SourceHealthResponse,
+)
+async def get_discovery_source_health(
+    organization_id: int,
+    request: Request,
+    response: Response,
+):
+    """
+    Return the most recently recorded source health
+    for the active company.
+
+    This endpoint never probes procurement sources.
+    """
+
+    account = await _account(
+        request
+    )
+
+    workspace = await _active_company(
+        request,
+        account,
+        organization_id,
+    )
+
+    if workspace is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Create and activate an "
+                "organization company before "
+                "using Source Health."
+            ),
+        )
+
+    catalog = _source_catalog(
+        request
+    )
+
+    repository = (
+        _discovery_history_repository(
+            request
+        )
+    )
+
+    try:
+        records = await asyncio.to_thread(
+            repository
+            .list_discovery_search_history_for_organization,
+            account.id,
+            organization_id,
+            workspace.id,
+            1,
+        )
+    except DatabaseError as error:
+        _discovery_history_data_error(
+            error
+        )
+
+    history_id = None
+    last_checked = None
+    source_items = (
+        _source_health_items(
+            catalog
+        )
+    )
+
+    if records:
+        record = records[0]
+
+        history_id = record.id
+        last_checked = (
+            record.created_at
+        )
+
+        snapshot = None
+
+        try:
+            snapshot = (
+                TenderDiscoveryResponse
+                .model_validate_json(
+                    record.snapshot_json
+                )
+            )
+        except Exception:
+            snapshot = None
+
+        if (
+            snapshot is not None
+            and snapshot.source_statuses
+        ):
+            source_items = (
+                _source_health_items(
+                    catalog,
+                    previous=(
+                        snapshot
+                        .source_statuses
+                    ),
+                )
+            )
+
+        else:
+            source_items = (
+                _source_health_items(
+                    catalog,
+                    legacy_attempted=(
+                        _history_source_list(
+                            record
+                            .attempted_sources_json
+                        )
+                    ),
+                    legacy_successful=(
+                        _history_source_list(
+                            record
+                            .successful_sources_json
+                        )
+                    ),
+                    legacy_failed=(
+                        _history_source_list(
+                            record
+                            .failed_sources_json
+                        )
+                    ),
+                )
+            )
+
+    response.headers[
+        "Cache-Control"
+    ] = "no-store"
+
+    return SourceHealthResponse(
+        organization_id=(
+            organization_id
+        ),
+        company_id=workspace.id,
+        company_name=workspace.name,
+        history_id=history_id,
+        last_checked=last_checked,
+        sources=source_items,
+    )
+
+
 @router.post(
     "/discover/tenders",
     response_model=TenderDiscoveryResponse,
@@ -1124,6 +1594,12 @@ async def organization_discover_tenders(
                 )
                 for match in matches
             ],
+            source_statuses=(
+                _source_health_items(
+                    catalog,
+                    report=report,
+                )
+            ),
             attempted_sources=list(
                 report.attempted_sources
             ),

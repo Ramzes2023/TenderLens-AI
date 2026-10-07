@@ -1,7 +1,7 @@
 """HTTP request/response schemas for Phase 10."""
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -103,8 +103,39 @@ class TenderDiscoveryItem(MonitorNoticeResponse):
     full_ai_analyzed: bool = False
 
 
+class SourceHealthItem(BaseModel):
+    source: str
+    display_name: str
+    transport: str
+    jurisdictions: list[str] = Field(
+        default_factory=list
+    )
+    languages: list[str] = Field(
+        default_factory=list
+    )
+    homepage_url: str | None = None
+    official: bool
+    enabled: bool
+    authentication_required: bool
+    state: Literal[
+        "healthy",
+        "failed",
+        "disabled",
+        "not_checked",
+    ]
+    notice_count: int | None = None
+    duration_ms: int | None = None
+    error_type: str | None = None
+    message: str | None = None
+
+
 class TenderDiscoveryResponse(BaseModel):
     items: list[TenderDiscoveryItem]
+    source_statuses: list[
+        SourceHealthItem
+    ] = Field(
+        default_factory=list
+    )
     attempted_sources: list[str]
     successful_sources: list[str]
     failed_sources: list[str]

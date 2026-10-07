@@ -3,6 +3,7 @@
 from .discovery_ui import DISCOVERY_HTML
 from .history_ui import HISTORY_HTML
 from .saved_ui import SAVED_HTML
+from .source_health_ui import SOURCE_HEALTH_HTML
 from .support_ui import SUPPORT_HTML
 
 
@@ -13,6 +14,7 @@ PAGES = [
     "Recommended",
     "Saved",
     "Monitoring",
+    "Source Health",
     "AI Analysis",
     "Documents",
     "Companies",
@@ -35,6 +37,7 @@ def shell_html(html: str) -> str:
         ],
         "Intelligence": [
             "Monitoring",
+            "Source Health",
             "AI Analysis",
             "Documents",
             "Notifications",
@@ -433,6 +436,8 @@ def shell_html(html: str) -> str:
         + "\n"
         + SAVED_HTML
         + "\n"
+        + SOURCE_HEALTH_HTML
+        + "\n"
         + SUPPORT_HTML
         + '\n<section\n  id="futurePage"',
         1,
@@ -573,6 +578,7 @@ def shell_html(html: str) -> str:
         '<script src="/assets/discovery.js?v=phase24-saved-sync-v1-20261006"></script>'
         '<script src="/assets/history.js?v=phase24-search-history-v2-20261006"></script>'
         '<script src="/assets/saved.js?v=phase24-saved-ui-v1-20261006"></script>'
+        '<script src="/assets/source_health.js?v=phase24-source-health-v1-20261006"></script>'
         "</body>",
     )
 

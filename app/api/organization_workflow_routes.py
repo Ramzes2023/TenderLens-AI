@@ -366,6 +366,12 @@ def _catalog_source_metadata(
         return ()
 
 
+_SOURCE_HEALTH_FAILURE_MESSAGE = (
+    "Source could not be reached during "
+    "the latest Discovery."
+)
+
+
 def _source_health_items(
     catalog,
     *,
@@ -504,7 +510,9 @@ def _source_health_items(
             )
 
             message = (
-                run_status.message
+                _SOURCE_HEALTH_FAILURE_MESSAGE
+                if state == "failed"
+                else None
             )
 
         elif key in previous_by_source:
@@ -527,7 +535,9 @@ def _source_health_items(
                     prior.error_type
                 )
                 message = (
-                    prior.message
+                    _SOURCE_HEALTH_FAILURE_MESSAGE
+                    if state == "failed"
+                    else None
                 )
 
         elif key in successful:
@@ -631,7 +641,9 @@ def _source_health_items(
                     run_status.error_type
                 ),
                 message=(
-                    run_status.message
+                    _SOURCE_HEALTH_FAILURE_MESSAGE
+                    if raw_state != "ok"
+                    else None
                 ),
             )
         )

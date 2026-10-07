@@ -486,3 +486,157 @@ def test_source_health_is_company_scoped(
 
     assert ted.calls == 0
     assert sam.calls == 0
+
+
+def _source_health_test_registry():
+    source = NeverFetchSource(
+        "ted"
+    )
+
+    return SourceRegistry(
+        [
+            SourceRegistration(
+                key="ted",
+                display_name=(
+                    "Tenders Electronic Daily"
+                ),
+                source=source,
+                transport=(
+                    SourceTransport.API
+                ),
+                jurisdictions=(
+                    "EU",
+                ),
+                languages=(
+                    "en",
+                ),
+                homepage_url=(
+                    "https://ted.europa.eu/"
+                ),
+                official=True,
+                enabled=True,
+            )
+        ]
+    )
+
+
+def test_source_health_sanitizes_raw_failure_message():
+    from app.api.organization_workflow_routes import (
+        _source_health_items,
+    )
+    from app.sources.multi import (
+        SourceRunState,
+        SourceRunStatus,
+    )
+
+    secret = (
+        "token=super-secret "
+        "internal-host.example"
+    )
+
+    report = SimpleNamespace(
+        statuses=(
+            SourceRunStatus(
+                source="ted",
+                state=(
+                    SourceRunState.FAILED
+                ),
+                notice_count=0,
+                duration_ms=321,
+                error_type="TimeoutError",
+                message=secret,
+            ),
+        )
+    )
+
+    catalog = SimpleNamespace(
+        registry=(
+            _source_health_test_registry()
+        )
+    )
+
+    items = _source_health_items(
+        catalog,
+        report=report,
+    )
+
+    assert len(items) == 1
+
+    item = items[0]
+
+    assert item.state == "failed"
+
+    assert item.error_type == (
+        "TimeoutError"
+    )
+
+    assert item.message == (
+        "Source could not be reached during "
+        "the latest Discovery."
+    )
+
+    payload = item.model_dump_json()
+
+    assert secret not in payload
+
+    assert "super-secret" not in payload
+
+    assert "internal-host.example" not in payload
+
+
+def test_source_health_sanitizes_raw_historical_message():
+    from app.api.organization_workflow_routes import (
+        _source_health_items,
+    )
+
+    secret = (
+        "password=old-secret "
+        "10.0.0.15"
+    )
+
+    previous = [
+        SourceHealthItem(
+            source="ted",
+            display_name="TED",
+            transport="api",
+            jurisdictions=["EU"],
+            languages=["en"],
+            homepage_url=(
+                "https://ted.europa.eu/"
+            ),
+            official=True,
+            enabled=True,
+            authentication_required=False,
+            state="failed",
+            notice_count=0,
+            duration_ms=100,
+            error_type="ConnectionError",
+            message=secret,
+        )
+    ]
+
+    catalog = SimpleNamespace(
+        registry=(
+            _source_health_test_registry()
+        )
+    )
+
+    items = _source_health_items(
+        catalog,
+        previous=previous,
+    )
+
+    item = items[0]
+
+    assert item.state == "failed"
+
+    assert item.message == (
+        "Source could not be reached during "
+        "the latest Discovery."
+    )
+
+    payload = item.model_dump_json()
+
+    assert secret not in payload
+    assert "old-secret" not in payload
+    assert "10.0.0.15" not in payload

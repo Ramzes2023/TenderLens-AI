@@ -7,6 +7,9 @@ import math
 import secrets
 import time
 from collections import OrderedDict
+from dataclasses import dataclass
+from hashlib import sha256
+from types import MappingProxyType
 from threading import Lock
 from urllib.parse import urlsplit
 
@@ -62,70 +65,122 @@ def require_same_origin_browser_request(request: Request) -> None:
         )
 
 
-class LoginRateLimiter:
-    """Small bounded in-memory limiter keyed by client + normalized email."""
+# Policies are process-local: multiple workers each enforce their own budgets.
 
-    def __init__(
-        self,
-        *,
-        max_failures: int = 5,
-        window_seconds: int = 300,
-        max_entries: int = 4096,
-        clock=None,
-    ):
-        self.max_failures = max(2, int(max_failures))
-        self.window_seconds = max(1, int(window_seconds))
-        self.max_entries = max(16, int(max_entries))
+
+@dataclass(frozen=True)
+class AuthRatePolicy:
+    client_limit: int
+    identifier_limit: int
+    window_seconds: int = 300
+
+
+AUTH_RATE_POLICIES = MappingProxyType({
+    "login": AuthRatePolicy(60, 5),
+    "register": AuthRatePolicy(30, 10, 900),
+    "forgot-password": AuthRatePolicy(30, 6, 900),
+    "resend-verification": AuthRatePolicy(30, 6, 900),
+    "verify-email": AuthRatePolicy(60, 10),
+    "reset-password": AuthRatePolicy(60, 10),
+    "telegram-link": AuthRatePolicy(30, 10),
+})
+
+
+class AuthRateLimiter:
+    """Atomic sliding-window admission with bounded, hash-only identifier state.
+
+    Full storage fails closed until an entry expires; live buckets are never
+    evicted, so identifier churn cannot erase an existing abuse budget.
+    Denied requests do not extend windows. Cleanup runs on every operation.
+    """
+
+    def __init__(self, *, policies=None, max_entries=4096, clock=None):
+        self.policies = MappingProxyType(dict(
+            AUTH_RATE_POLICIES if policies is None else policies
+        ))
+        if max_entries < 2 or any(
+            min(p.client_limit, p.identifier_limit, p.window_seconds) < 1
+            for p in self.policies.values()
+        ):
+            raise ValueError("Invalid authentication rate limit configuration")
+        self.max_entries = int(max_entries)
         self._clock = clock or time.monotonic
-        self._events: OrderedDict[str, list[float]] = OrderedDict()
+        self._events: OrderedDict[tuple[str, str, str], list[float]] = OrderedDict()
         self._lock = Lock()
 
     @staticmethod
-    def key(request: Request, email: str) -> str:
-        host = getattr(getattr(request, "client", None), "host", None) or "unknown"
-        normalized = (email or "").strip().lower()[:254]
-        return f"{host}\0{normalized}"
+    def fingerprint(value: str) -> str:
+        return sha256(value.encode("utf-8")).hexdigest()
 
-    def _prune_locked(self, key: str, now: float) -> list[float]:
-        events = self._events.get(key)
-        if events is None:
-            return []
-        cutoff = now - self.window_seconds
-        events[:] = [stamp for stamp in events if stamp > cutoff]
-        if not events:
-            self._events.pop(key, None)
-            return []
-        self._events.move_to_end(key)
-        return events
+    def keys(self, route, client, identifier, *, email=False):
+        if email:
+            identifier = identifier.strip().lower()
+        return (
+            (route, "client", self.fingerprint(client)),
+            (route, "identifier", self.fingerprint(identifier)),
+        )
 
-    def _retry_after_locked(self, events: list[float], now: float) -> int | None:
-        if len(events) < self.max_failures:
-            return None
-        remaining = self.window_seconds - (now - events[0])
-        return max(1, int(math.ceil(remaining)))
-
-    def retry_after(self, key: str) -> int | None:
-        now = float(self._clock())
-        with self._lock:
-            events = self._prune_locked(key, now)
-            return self._retry_after_locked(events, now)
-
-    def record_failure(self, key: str) -> int | None:
-        now = float(self._clock())
-        with self._lock:
-            events = self._prune_locked(key, now)
+    def _cleanup_locked(self, now):
+        for key in list(self._events):
+            cutoff = now - self.policies[key[0]].window_seconds
+            events = self._events[key]
+            events[:] = [stamp for stamp in events if stamp > cutoff]
             if not events:
-                if len(self._events) >= self.max_entries:
-                    self._events.popitem(last=False)
-                events = []
-                self._events[key] = events
-            events.append(now)
-            self._events.move_to_end(key)
-            return self._retry_after_locked(events, now)
+                del self._events[key]
 
-    def reset(self, key: str) -> None:
+    def _retry_locked(self, key, limit, now):
+        events = self._events.get(key, [])
+        if len(events) < limit:
+            return None
+        return max(1, math.ceil(
+            events[0] + self.policies[key[0]].window_seconds - now
+        ))
+
+    def consume(self, route, client, identifier, *, email=False):
+        keys = self.keys(route, client, identifier, email=email)
+        policy = self.policies[route]
+        with self._lock:
+            now = float(self._clock())
+            self._cleanup_locked(now)
+            retries = [self._retry_locked(key, limit, now) for key, limit in zip(
+                keys, (policy.client_limit, policy.identifier_limit)
+            )]
+            missing = sum(key not in self._events for key in keys)
+            if len(self._events) + missing > self.max_entries:
+                # Earliest expiry that can free capacity; generic public response.
+                retries.append(max(1, math.ceil(min(
+                    events[-1] + self.policies[key[0]].window_seconds
+                    for key, events in self._events.items()
+                ) - now)))
+            if any(retries):
+                return max(retry for retry in retries if retry is not None)
+            for key in keys:
+                self._events.setdefault(key, []).append(now)
+            return None
+
+    def identifier_retry_after(self, route, client, identifier, *, email=False):
+        key = self.keys(route, client, identifier, email=email)[1]
+        with self._lock:
+            now = float(self._clock())
+            self._cleanup_locked(now)
+            return self._retry_locked(key, self.policies[route].identifier_limit, now)
+
+    def login_succeeded(self, client, email):
+        # Relax only this email; successful credentials cannot clear IP pressure.
+        key = self.keys("login", client, email, email=True)[1]
         with self._lock:
             self._events.pop(key, None)
+
+
+class LoginRateLimiter(AuthRateLimiter):
+    """Compatibility constructor for the former login-only limiter."""
+
+    def __init__(self, *, max_failures=5, window_seconds=300,
+                 max_entries=4096, clock=None):
+        policies = dict(AUTH_RATE_POLICIES)
+        policies["login"] = AuthRatePolicy(60, max(2, int(max_failures)),
+                                           max(1, int(window_seconds)))
+        super().__init__(policies=policies, max_entries=max_entries, clock=clock)
 
 
 async def require_api_key(request: Request, supplied_key: str | None = None) -> None:
@@ -200,6 +255,9 @@ async def resolve_owner(request: Request, requested_owner_user_id: int | None) -
 __all__ = [
     "SESSION_COOKIE",
     "LoginRateLimiter",
+    "AuthRateLimiter",
+    "AuthRatePolicy",
+    "AUTH_RATE_POLICIES",
     "api_key_header",
     "current_account",
     "require_api_key",

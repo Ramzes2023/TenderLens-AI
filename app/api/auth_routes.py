@@ -24,7 +24,7 @@ from app.auth import (
 
 from .security import (
     SESSION_COOKIE,
-    LoginRateLimiter,
+    AuthRateLimiter,
     require_same_origin_browser_request,
 )
 
@@ -203,20 +203,30 @@ def _set_session_cookie(request: Request, response: Response, token: str, sessio
     response.headers["Cache-Control"] = "no-store"
 
 
-def _limiter(request: Request) -> LoginRateLimiter:
-    limiter = getattr(request.app.state, "login_rate_limiter", None)
-    if limiter is None:
-        limiter = LoginRateLimiter()
-        request.app.state.login_rate_limiter = limiter
-    return limiter
+def _limiter(request: Request) -> AuthRateLimiter:
+    return request.app.state.login_rate_limiter
+
+
+def _client_identity(request: Request) -> str:
+    # Proxy headers are not identity evidence. Trust only the ASGI peer.
+    return getattr(request.client, "host", None) or "unknown"
 
 
 def _rate_limited(retry_after: int) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-        detail="Too many login attempts. Try again later.",
-        headers={"Retry-After": str(max(1, int(retry_after)))},
+        detail="Too many attempts. Please try again later.",
+        headers={"Retry-After": str(max(1, int(retry_after))),
+                 "Cache-Control": "no-store"},
     )
+
+
+def _limit(request: Request, route: str, identifier: str, *, email=False):
+    retry = _limiter(request).consume(
+        route, _client_identity(request), identifier, email=email,
+    )
+    if retry is not None:
+        raise _rate_limited(retry)
 
 
 @router.post(
@@ -233,6 +243,7 @@ async def register(
         request
     )
 
+    _limit(request, "register", payload.email, email=True)
     service = _service(
         request
     )
@@ -315,12 +326,9 @@ async def register(
 @router.post("/login", response_model=AccountResponse)
 async def login(payload: LoginRequest, request: Request, response: Response) -> AccountResponse:
     require_same_origin_browser_request(request)
+    _limit(request, "login", payload.email, email=True)
     service = _service(request)
     limiter = _limiter(request)
-    key = limiter.key(request, payload.email)
-    retry_after = limiter.retry_after(key)
-    if retry_after is not None:
-        raise _rate_limited(retry_after)
 
     try:
         account = await asyncio.to_thread(
@@ -330,14 +338,15 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
         )
 
     except EmailNotVerified:
-        limiter.reset(key)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Email verification required.",
         ) from None
 
     except InvalidCredentials:
-        retry_after = limiter.record_failure(key)
+        retry_after = limiter.identifier_retry_after(
+            "login", _client_identity(request), payload.email, email=True,
+        )
         if retry_after is not None:
             raise _rate_limited(retry_after)
         raise HTTPException(
@@ -350,7 +359,7 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
             detail="Authentication storage is unavailable.",
         ) from None
 
-    limiter.reset(key)
+    limiter.login_succeeded(_client_identity(request), payload.email)
     try:
         token = await asyncio.to_thread(service.create_session, account)
     except Exception:
@@ -376,6 +385,7 @@ async def verify_email(
         request
     )
 
+    _limit(request, "verify-email", payload.token, email=False)
     service = _service(
         request
     )
@@ -437,6 +447,7 @@ async def resend_verification(
         request
     )
 
+    _limit(request, "resend-verification", payload.email, email=True)
     service = _service(
         request
     )
@@ -540,6 +551,8 @@ async def create_telegram_link(
             detail="Authentication required.",
         )
 
+    _limit(request, "telegram-link", str(account.id))
+
     try:
         token, expires_at = await asyncio.to_thread(
             service.create_telegram_link,
@@ -617,6 +630,7 @@ async def forgot_password(
     from app.auth.email_delivery import normalize_public_base_url
 
     require_same_origin_browser_request(request)
+    _limit(request, "forgot-password", payload.email, email=True)
     service = _service(request)
     sender = _email_sender(request)
     if sender is None:
@@ -648,6 +662,7 @@ async def reset_password(
     payload: ResetPasswordRequest, request: Request, response: Response,
 ) -> dict[str, bool]:
     require_same_origin_browser_request(request)
+    _limit(request, "reset-password", payload.token, email=False)
     service = _service(request)
     try:
         await asyncio.to_thread(service.reset_password, payload.token, payload.password)

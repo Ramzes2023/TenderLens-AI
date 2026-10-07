@@ -575,9 +575,9 @@ def shell_html(html: str) -> str:
         '<script src="/assets/shell.js?v=phase24-saved-ui-v1-20261006"></script>'
         '<script src="/assets/premium.js?v=phase24-precheckpoint-20261006"></script>'
         '<script src="/assets/support.js"></script>'
-        '<script src="/assets/discovery.js?v=phase24-saved-sync-v1-20261006"></script>'
+        '<script src="/assets/discovery.js?v=phase24l-full-ai-v1-20261007"></script>'
         '<script src="/assets/history.js?v=phase24-search-history-v2-20261006"></script>'
-        '<script src="/assets/saved.js?v=phase24-saved-ui-v1-20261006"></script>'
+        '<script src="/assets/saved.js?v=phase24l-full-ai-v1-20261007"></script>'
         '<script src="/assets/source_health.js?v=phase24-source-health-v1-20261006"></script>'
         "</body>",
     )

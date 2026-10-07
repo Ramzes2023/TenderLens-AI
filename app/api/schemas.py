@@ -142,6 +142,20 @@ class TenderDiscoveryItem(MonitorNoticeResponse):
     preliminary_scoring: ScoringResult
     full_ai_analyzed: bool = False
 
+    # Optional authoritative-document analysis.
+    # Discovery remains metadata-only until a user explicitly
+    # uploads tender documentation through the supported PDF
+    # workflow.
+    full_analysis: TenderAnalysis | None = None
+    full_scoring: ScoringResult | None = None
+    full_analysis_record_id: PositiveId | None = None
+    full_analysis_pdf_sha256: Hash64 | None = None
+    full_analysis_source_filename: str | None = None
+    full_analysis_truncated: bool | None = None
+    full_analysis_warnings: list[str] = Field(
+        default_factory=list
+    )
+
 
 class SourceHealthItem(BaseModel):
     source: str

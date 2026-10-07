@@ -58,6 +58,23 @@ function render(){
   : 'No saved opportunities for this company yet. Use Discover to add opportunities to the shortlist.';
 }
 
+function renderSavedDetail(index){
+ const record=records[index];
+
+ if(
+  !record?.opportunity
+  ||!renderer
+ )return;
+
+ $('savedDetailBody').innerHTML=
+  renderer.detail(
+   record.opportunity,
+   record,
+   index,
+   canWriteWorkspace()
+  );
+}
+
 function openDetail(index){
  const record=records[index];
 
@@ -66,15 +83,351 @@ function openDetail(index){
  $('savedDetailTitle').textContent=
   record.opportunity.title||'Saved opportunity';
 
- $('savedDetailBody').innerHTML=
-  renderer.detail(
-   record.opportunity,
-   record,
-   index
-  );
+ renderSavedDetail(index);
 
  if(!$('savedDetail').open){
   $('savedDetail').showModal();
+ }
+}
+
+function opportunityKey(item){
+ return JSON.stringify([
+  String(item?.source||''),
+  String(item?.external_id||'')
+ ]);
+}
+
+function savedRequestStillCurrent(
+ index,
+ scope,
+ ticket,
+ savedId,
+ expectedOpportunity
+){
+ const current=records[index];
+
+ return (
+  scope===identity()
+  &&ticket===serial
+  &&Number(current?.id)===savedId
+  &&opportunityKey(
+   current?.opportunity
+  )===expectedOpportunity
+ );
+}
+
+async function analyzeSavedTenderPdf(
+ index,
+ button
+){
+ const record=records[index];
+ const savedId=Number(record?.id);
+
+ if(
+  !record?.opportunity
+  ||!Number.isInteger(savedId)
+  ||!ready()
+  ||!canWriteWorkspace()
+  ||!renderer
+  ||typeof renderer.applyFullAiResult!=='function'
+ ){
+  return;
+ }
+
+ const input=$(
+  `fullAiFile-${index}`
+ );
+
+ const statusNode=$(
+  `fullAiStatus-${index}`
+ );
+
+ const file=input?.files?.[0];
+
+ if(!file){
+  if(statusNode){
+   statusNode.textContent=
+    'Choose a tender PDF first.';
+  }
+
+  return;
+ }
+
+ const lowerName=String(
+  file.name||''
+ ).toLowerCase();
+
+ if(
+  file.type!=='application/pdf'
+  &&!lowerName.endsWith('.pdf')
+ ){
+  if(statusNode){
+   statusNode.textContent=
+    'Only PDF files are supported.';
+  }
+
+  return;
+ }
+
+ if(file.size>10*1024*1024){
+  if(statusNode){
+   statusNode.textContent=
+    'PDF exceeds the 10 MiB limit.';
+  }
+
+  return;
+ }
+
+ const scope=identity();
+ const ticket=serial;
+ const org=state.organizationId;
+
+ const expectedOpportunity=
+  opportunityKey(
+   record.opportunity
+  );
+
+ const form=new FormData();
+
+ form.append(
+  'file',
+  file
+ );
+
+ if(button){
+  button.disabled=true;
+  button.textContent='Analyzing...';
+ }
+
+ if(statusNode){
+  statusNode.textContent=
+   'Extracting tender document and running Full AI analysis...';
+ }
+
+ try{
+  const analysisResponse=
+   await fetch(
+    `/api/v1/organizations/${org}/analysis/pdf`,
+    {
+     method:'POST',
+     credentials:'same-origin',
+     cache:'no-store',
+     body:form
+    }
+   );
+
+  if(
+   !savedRequestStillCurrent(
+    index,
+    scope,
+    ticket,
+    savedId,
+    expectedOpportunity
+   )
+  ){
+   return;
+  }
+
+  if(analysisResponse.status===401){
+   location.replace('/login');
+   return;
+  }
+
+  if(analysisResponse.status===403){
+   if(statusNode){
+    statusNode.textContent=
+     'Your organization role cannot analyze tender documents.';
+   }
+   return;
+  }
+
+  if(analysisResponse.status===409){
+   if(statusNode){
+    statusNode.textContent=
+     'The active company changed. Reopen Saved Opportunities and try again.';
+   }
+   return;
+  }
+
+  if(analysisResponse.status===413){
+   if(statusNode){
+    statusNode.textContent=
+     'PDF exceeds the supported size or extraction limit.';
+   }
+   return;
+  }
+
+  if(analysisResponse.status===415){
+   if(statusNode){
+    statusNode.textContent=
+     'Only PDF files are supported.';
+   }
+   return;
+  }
+
+  if(analysisResponse.status===422){
+   if(statusNode){
+    statusNode.textContent=
+     'The PDF could not be analyzed. It may be scanned, encrypted, damaged, or contain no extractable text.';
+   }
+   return;
+  }
+
+  if(!analysisResponse.ok){
+   if(statusNode){
+    statusNode.textContent=
+     'Full AI document analysis is unavailable. Please retry.';
+   }
+   return;
+  }
+
+  const result=
+   await analysisResponse.json();
+
+  if(
+   !savedRequestStillCurrent(
+    index,
+    scope,
+    ticket,
+    savedId,
+    expectedOpportunity
+   )
+  ){
+   return;
+  }
+
+  const upgraded=
+   renderer.applyFullAiResult(
+    record.opportunity,
+    result
+   );
+
+  const saveResponse=
+   await fetch(
+    `/api/v1/organizations/${org}/shortlist`,
+    {
+     method:'POST',
+     credentials:'same-origin',
+     cache:'no-store',
+     headers:{
+      'Content-Type':'application/json'
+     },
+     body:JSON.stringify(
+      upgraded
+     )
+    }
+   );
+
+  if(
+   !savedRequestStillCurrent(
+    index,
+    scope,
+    ticket,
+    savedId,
+    expectedOpportunity
+   )
+  ){
+   return;
+  }
+
+  if(saveResponse.status===401){
+   location.replace('/login');
+   return;
+  }
+
+  if(saveResponse.status===403){
+   if(statusNode){
+    statusNode.textContent=
+     'The analysis was stored, but this Saved Opportunity can no longer be updated.';
+   }
+   return;
+  }
+
+  if(saveResponse.status===409){
+   if(statusNode){
+    statusNode.textContent=
+     'The active company changed before the Saved Opportunity could be refreshed.';
+   }
+   return;
+  }
+
+  if(!saveResponse.ok){
+   if(statusNode){
+    statusNode.textContent=
+     'The analysis was stored, but the Saved Opportunity snapshot could not be refreshed.';
+   }
+   return;
+  }
+
+  const updatedRecord=
+   await saveResponse.json();
+
+  if(
+   !savedRequestStillCurrent(
+    index,
+    scope,
+    ticket,
+    savedId,
+    expectedOpportunity
+   )
+  ){
+   return;
+  }
+
+  if(
+   Number(updatedRecord?.id)
+   !==savedId
+  ){
+   if(statusNode){
+    statusNode.textContent=
+     'The Saved Opportunity changed while analysis was running. Refresh Saved Opportunities.';
+   }
+   return;
+  }
+
+  records[index]=updatedRecord;
+
+  render();
+  renderSavedDetail(index);
+
+  const nextStatus=$(
+   `fullAiStatus-${index}`
+  );
+
+  if(nextStatus){
+   nextStatus.textContent=
+    result.duplicate
+     ?'Existing stored document analysis was reused. No additional AI call was required.'
+     :'Full AI analysis completed and the Saved Opportunity was refreshed.';
+  }
+
+ }catch(error){
+  if(
+   !savedRequestStillCurrent(
+    index,
+    scope,
+    ticket,
+    savedId,
+    expectedOpportunity
+   )
+  ){
+   return;
+  }
+
+  const currentStatus=$(
+   `fullAiStatus-${index}`
+  );
+
+  if(currentStatus){
+   currentStatus.textContent=
+    'Network unavailable. The Saved Opportunity was not changed.';
+  }
+
+ }finally{
+  if(button){
+   button.disabled=false;
+   button.textContent='Analyze tender PDF';
+  }
  }
 }
 
@@ -235,7 +588,21 @@ $('savedResults').onclick=event=>{
 };
 
 $('savedDetailBody').onclick=event=>{
- const remove=event.target.closest('[data-remove]');
+ const analyze=event.target.closest(
+  '[data-full-ai]'
+ );
+
+ if(analyze){
+  analyzeSavedTenderPdf(
+   Number(analyze.dataset.fullAi),
+   analyze
+  );
+  return;
+ }
+
+ const remove=event.target.closest(
+  '[data-remove]'
+ );
 
  if(!remove)return;
 

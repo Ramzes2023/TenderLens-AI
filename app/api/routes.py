@@ -21,7 +21,11 @@ from app.scoring.models import ScoringResult
 from app.services.pdf import summarize_pdf
 from app.services.tender_analysis import AnalysisError, analyze_tender
 
-from .auth_pages import login_html, register_html
+from .auth_pages import (
+    login_html,
+    register_html,
+    verify_email_html,
+)
 from .dashboard import dashboard_html
 from .invitation_page import invitation_page_html
 from .runtime import ApiRuntime
@@ -187,6 +191,71 @@ async def register_page(
 
     return HTMLResponse(
         register_html(target),
+        headers={
+            "Cache-Control":
+                "no-store",
+            "Referrer-Policy":
+                "no-referrer",
+        },
+    )
+
+
+@router.get(
+    "/verify-email",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+async def verify_email_page(
+    request: Request,
+    token: str | None = Query(
+        default=None,
+    ),
+    email: str | None = Query(
+        default=None,
+    ),
+    sent: str | None = Query(
+        default=None,
+    ),
+    next_path: str | None = Query(
+        default=None,
+        alias="next",
+    ),
+):
+    target = _safe_next_path(
+        next_path
+    )
+
+    account = await current_account(
+        request,
+        touch=False,
+    )
+
+    if (
+        account is not None
+        and account.email_verified
+    ):
+        return RedirectResponse(
+            target,
+            status_code=303,
+        )
+
+    sent_value = (
+        True
+        if sent == "1"
+        else (
+            False
+            if sent == "0"
+            else None
+        )
+    )
+
+    return HTMLResponse(
+        verify_email_html(
+            token=token,
+            email=email,
+            next_path=target,
+            sent=sent_value,
+        ),
         headers={
             "Cache-Control":
                 "no-store",

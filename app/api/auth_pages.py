@@ -105,14 +105,87 @@ def _page(
   <script>
     document.getElementById('togglePassword').addEventListener('click',()=>{{const input=document.getElementById('password'),toggle=document.getElementById('togglePassword');const show=input.type==='password';input.type=show?'text':'password';toggle.textContent=show?'Hide':'Show';toggle.setAttribute('aria-pressed',String(show));}});
     const form=document.getElementById('auth'),msg=document.getElementById('msg'),btn=document.getElementById('submit');
+    const registerMode={str(register).lower()};
     form.addEventListener('submit',async e=>{{
-      e.preventDefault(); msg.style.display='none'; btn.disabled=true;
+      e.preventDefault();
+      msg.style.display='none';
+      btn.disabled=true;
+
+      const email=
+        document.getElementById('email').value.trim();
+
       try {{
-        const r=await fetch('{endpoint}',{{method:'POST',headers:{{'Content-Type':'application/json'}},credentials:'same-origin',body:JSON.stringify({{email:document.getElementById('email').value.trim(),password:document.getElementById('password').value}})}});
-        if(!r.ok){{throw new Error(r.status===429?'Too many attempts. Please try again later.':'Unable to sign in or create this account. Check your details and try again.')}}
-        window.location.replace({next_path_json});
-      }} catch(err) {{ msg.textContent=err instanceof TypeError?'Connection unavailable. Please try again.':err.message||'Authentication unavailable. Please try again.'; msg.style.display='block'; }}
-      finally {{ btn.disabled=false; }}
+        const r=await fetch(
+          '{endpoint}',
+          {{
+            method:'POST',
+            headers:{{
+              'Content-Type':'application/json'
+            }},
+            credentials:'same-origin',
+            body:JSON.stringify({{
+              email,
+              password:
+                document.getElementById('password').value
+            }})
+          }}
+        );
+
+        let data={{}};
+
+        try {{
+          data=await r.json();
+        }} catch(_error) {{}}
+
+        if(!r.ok){{
+          if(
+            !registerMode
+            &&r.status===403
+            &&data.detail==='Email verification required.'
+          ){{
+            window.location.replace(
+              '/verify-email?email='
+              +encodeURIComponent(email)
+              +'&next='
+              +encodeURIComponent({next_path_json})
+            );
+            return;
+          }}
+
+          throw new Error(
+            r.status===429
+              ?'Too many attempts. Please try again later.'
+              :(data.detail||'Unable to sign in or create this account. Check your details and try again.')
+          );
+        }}
+
+        if(registerMode){{
+          window.location.replace(
+            '/verify-email?email='
+            +encodeURIComponent(data.email||email)
+            +'&next='
+            +encodeURIComponent({next_path_json})
+            +'&sent='
+            +(data.verification_sent?'1':'0')
+          );
+          return;
+        }}
+
+        window.location.replace(
+          {next_path_json}
+        );
+
+      }} catch(err) {{
+        msg.textContent=
+          err instanceof TypeError
+            ?'Connection unavailable. Please try again.'
+            :(err.message||'Authentication unavailable. Please try again.');
+
+        msg.style.display='block';
+
+      }} finally {{
+        btn.disabled=false;
+      }}
     }});
   </script>
 </body>
@@ -137,4 +210,384 @@ def register_html(
     )
 
 
-__all__ = ["login_html", "register_html"]
+
+
+def verify_email_html(
+    *,
+    token: str | None = None,
+    email: str | None = None,
+    next_path: str = "/dashboard",
+    sent: bool | None = None,
+) -> str:
+    token_json = (
+        json.dumps(token or "")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+    )
+
+    email_json = (
+        json.dumps(email or "")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+    )
+
+    next_json = (
+        json.dumps(next_path)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+    )
+
+    sent_json = (
+        "true"
+        if sent is True
+        else (
+            "false"
+            if sent is False
+            else "null"
+        )
+    )
+
+    version = escape(
+        __version__
+    )
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport"
+        content="width=device-width,initial-scale=1">
+  <meta name="robots"
+        content="noindex,nofollow">
+  <meta name="referrer"
+        content="no-referrer">
+  <title>Verify your email ? VALYQON AI</title>
+
+  <style>
+    :root {{
+      color-scheme:dark;
+      --bg:#07101f;
+      --panel:#0f1b31;
+      --line:#263a5d;
+      --text:#f4f7fb;
+      --muted:#9fb0cb;
+      --accent:#79a7ff;
+      --ok:#9fe3b1;
+    }}
+
+    * {{ box-sizing:border-box; }}
+
+    body {{
+      margin:0;
+      min-height:100vh;
+      display:grid;
+      place-items:center;
+      padding:24px;
+      font-family:Inter,system-ui,sans-serif;
+      background:
+        radial-gradient(
+          circle at 80% 10%,
+          rgba(70,120,235,.2),
+          transparent 28rem
+        ),
+        var(--bg);
+      color:var(--text);
+    }}
+
+    .card {{
+      width:min(620px,100%);
+      border:1px solid var(--line);
+      border-radius:24px;
+      padding:42px;
+      background:var(--panel);
+      box-shadow:0 28px 80px rgba(0,0,0,.35);
+    }}
+
+    .logo {{
+      font-weight:900;
+      margin-bottom:36px;
+    }}
+
+    h1 {{
+      font-size:2.1rem;
+      letter-spacing:-.035em;
+      margin:0 0 12px;
+    }}
+
+    p {{
+      color:var(--muted);
+      line-height:1.6;
+    }}
+
+    .status {{
+      margin:22px 0;
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:14px 16px;
+      color:var(--muted);
+    }}
+
+    .status.ok {{
+      color:var(--ok);
+    }}
+
+    input {{
+      width:100%;
+      padding:.85rem .9rem;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#091426;
+      color:var(--text);
+      font:inherit;
+      outline:none;
+      margin:8px 0 12px;
+    }}
+
+    button {{
+      width:100%;
+      padding:.9rem;
+      border:0;
+      border-radius:12px;
+      background:var(--accent);
+      color:#071020;
+      font:inherit;
+      font-weight:800;
+      cursor:pointer;
+    }}
+
+    button:disabled {{
+      opacity:.6;
+      cursor:wait;
+    }}
+
+    a {{
+      color:#aac7ff;
+      text-decoration:none;
+      font-weight:650;
+    }}
+
+    .version {{
+      text-align:center;
+      color:#7184a3;
+      font-size:.74rem;
+      margin-top:28px;
+    }}
+  </style>
+
+  <link rel="stylesheet"
+        href="/assets/premium.css">
+</head>
+
+<body class="auth-premium">
+  <main class="card">
+    <div class="logo">VALYQON AI</div>
+
+    <h1>Verify your email</h1>
+
+    <p>
+      Confirm your email address before entering your
+      procurement intelligence workspace.
+    </p>
+
+    <div id="status"
+         class="status">
+      Checking verification status...
+    </div>
+
+    <div id="resendBox">
+      <label for="verifyEmail">
+        Email
+      </label>
+
+      <input id="verifyEmail"
+             type="email"
+             maxlength="254"
+             autocomplete="email"
+             placeholder="you@company.com">
+
+      <button id="resend"
+              type="button">
+        Send verification email again
+      </button>
+    </div>
+
+    <p style="margin-top:20px">
+      <a href="/login">
+        Back to sign in
+      </a>
+    </p>
+
+    <div class="version">
+      VALYQON AI v{version}
+    </div>
+  </main>
+
+  <script>
+    const token={token_json};
+    const initialEmail={email_json};
+    const nextPath={next_json};
+    const initialSent={sent_json};
+
+    const statusNode=
+      document.getElementById('status');
+
+    const emailNode=
+      document.getElementById('verifyEmail');
+
+    const resendButton=
+      document.getElementById('resend');
+
+    emailNode.value=
+      initialEmail;
+
+    function statusMessage(
+      value,
+      ok=false
+    ){{
+      statusNode.textContent=value;
+      statusNode.classList.toggle(
+        'ok',
+        Boolean(ok)
+      );
+    }}
+
+    async function verify(){{
+      if(!token){{
+        if(initialSent===false){{
+          statusMessage(
+            'Your account was created, but the verification email could not be delivered. You can request another email below.'
+          );
+
+        }}else{{
+          statusMessage(
+            'Check your inbox for the VALYQON AI verification link.'
+          );
+        }}
+
+        return;
+      }}
+
+      statusMessage(
+        'Verifying your email...'
+      );
+
+      try {{
+        const response=await fetch(
+          '/api/v1/auth/verify-email',
+          {{
+            method:'POST',
+            headers:{{
+              'Content-Type':'application/json'
+            }},
+            credentials:'same-origin',
+            body:JSON.stringify({{
+              token
+            }})
+          }}
+        );
+
+        if(!response.ok){{
+          throw new Error(
+            response.status===422
+              ?'This verification link is invalid, expired, or already used.'
+              :'Email verification is temporarily unavailable.'
+          );
+        }}
+
+        history.replaceState(
+          {{}},
+          '',
+          '/verify-email'
+        );
+
+        statusMessage(
+          'Email verified. Opening your workspace...',
+          true
+        );
+
+        setTimeout(
+          ()=>window.location.replace(
+            nextPath
+          ),
+          500
+        );
+
+      }} catch(error) {{
+        statusMessage(
+          error instanceof TypeError
+            ?'Connection unavailable. Please try again.'
+            :(error.message||'Unable to verify email.')
+        );
+      }}
+    }}
+
+    resendButton.addEventListener(
+      'click',
+      async()=>{{
+        const email=
+          emailNode.value.trim();
+
+        if(!email){{
+          statusMessage(
+            'Enter your email address.'
+          );
+          return;
+        }}
+
+        resendButton.disabled=true;
+
+        try {{
+          const response=await fetch(
+            '/api/v1/auth/resend-verification',
+            {{
+              method:'POST',
+              headers:{{
+                'Content-Type':'application/json'
+              }},
+              credentials:'same-origin',
+              body:JSON.stringify({{
+                email
+              }})
+            }}
+          );
+
+          if(!response.ok){{
+            throw new Error(
+              response.status===503
+                ?'Email delivery is temporarily unavailable.'
+                :'Unable to request another verification email.'
+            );
+          }}
+
+          statusMessage(
+            'If an unverified account exists for this address and a resend is allowed, a new verification email has been sent.',
+            true
+          );
+
+        }} catch(error) {{
+          statusMessage(
+            error instanceof TypeError
+              ?'Connection unavailable. Please try again.'
+              :(error.message||'Unable to resend verification email.')
+          );
+
+        }} finally {{
+          resendButton.disabled=false;
+        }}
+      }}
+    );
+
+    verify();
+  </script>
+</body>
+</html>"""
+
+
+__all__ = [
+    "login_html",
+    "register_html",
+    "verify_email_html",
+]

@@ -28,6 +28,7 @@ class ApiRuntime:
     company_profile: "CompanyProfile | Any | None" = None
     company_service: "CompanyService | Any | None" = None
     auth_service: "AuthService | Any | None" = None
+    email_sender: "Any | None" = None
     organization_service: "OrganizationService | Any | None" = None
     tender_repository: "TenderRepository | Any | None" = None
     rag_service: "RagService | Any | None" = None
@@ -112,6 +113,25 @@ def build_runtime() -> ApiRuntime:
         runtime.auth_service = AuthService(auth_repository)
     except Exception:
         runtime.component_errors["auth"] = "Authentication unavailable"
+
+    try:
+        from app.auth.email_delivery import (
+            load_email_sender_from_env,
+        )
+
+        runtime.email_sender = (
+            load_email_sender_from_env()
+        )
+
+        if runtime.email_sender is None:
+            runtime.component_errors[
+                "email"
+            ] = "Email delivery not configured"
+
+    except Exception:
+        runtime.component_errors[
+            "email"
+        ] = "Email delivery unavailable"
 
     try:
         from app.support import SupportRepository

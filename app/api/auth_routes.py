@@ -9,6 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.auth import (
     AuthAccount,
+    EmailNotVerified,
+    EmailVerificationError,
+    EmailVerificationInvalid,
     InvalidCredentials,
     RegistrationError,
     TelegramLinkError,
@@ -36,11 +39,40 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
 
 
+class VerifyEmailRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: str = Field(
+        min_length=1,
+        max_length=256,
+    )
+
+
+class ResendVerificationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: str = Field(
+        min_length=3,
+        max_length=254,
+    )
+
+
+class RegistrationResponse(BaseModel):
+    email: str
+    verification_required: bool = True
+    verification_sent: bool
+    verification_expires_at: str | None
+
+
+class ResendVerificationResponse(BaseModel):
+    accepted: bool = True
+
+
 class AccountResponse(BaseModel):
     id: int
     email: str
     owner_user_id: int
     is_active: bool
+    email_verified: bool
+    email_verified_at: str | None
     created_at: str
     telegram_connected: bool
 
@@ -67,9 +99,72 @@ def _account_response(account: AuthAccount) -> AccountResponse:
         email=account.email,
         owner_user_id=account.owner_user_id,
         is_active=account.is_active,
+        email_verified=account.email_verified,
+        email_verified_at=account.email_verified_at,
         created_at=account.created_at,
         telegram_connected=0 < account.owner_user_id < WEB_OWNER_OFFSET,
     )
+
+
+def _email_sender(request: Request):
+    return getattr(
+        request.app.state.runtime,
+        "email_sender",
+        None,
+    )
+
+
+def _verification_url(
+    sender,
+    token: str,
+) -> str:
+    from urllib.parse import urlencode
+
+    base = (
+        str(sender.public_base_url)
+        .strip()
+        .rstrip("/")
+    )
+
+    query = urlencode(
+        {
+            "token": token,
+            "next": "/dashboard",
+        }
+    )
+
+    return (
+        f"{base}/verify-email?"
+        f"{query}"
+    )
+
+
+async def _send_verification(
+    sender,
+    *,
+    recipient: str,
+    token: str,
+    expires_at: str,
+) -> bool:
+    if sender is None:
+        return False
+
+    try:
+        await asyncio.to_thread(
+            sender.send_verification,
+            recipient=recipient,
+            verification_url=(
+                _verification_url(
+                    sender,
+                    token,
+                )
+            ),
+            expires_at=expires_at,
+        )
+        return True
+
+    except Exception:
+        return False
 
 
 def _session_token(request: Request) -> str | None:
@@ -105,26 +200,97 @@ def _rate_limited(retry_after: int) -> HTTPException:
     )
 
 
-@router.post("/register", response_model=AccountResponse, status_code=status.HTTP_201_CREATED)
-async def register(payload: RegisterRequest, request: Request, response: Response) -> AccountResponse:
-    require_same_origin_browser_request(request)
-    service = _service(request)
+@router.post(
+    "/register",
+    response_model=RegistrationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def register(
+    payload: RegisterRequest,
+    request: Request,
+    response: Response,
+) -> RegistrationResponse:
+    require_same_origin_browser_request(
+        request
+    )
+
+    service = _service(
+        request
+    )
+
+    sender = _email_sender(
+        request
+    )
+
+    if sender is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email verification delivery is not configured.",
+        )
+
     try:
-        account = await asyncio.to_thread(service.register, payload.email, payload.password)
-        token = await asyncio.to_thread(service.create_session, account)
+        account = await asyncio.to_thread(
+            service.register,
+            payload.email,
+            payload.password,
+        )
+
+        token, expires_at = (
+            await asyncio.to_thread(
+                service.issue_email_verification,
+                account,
+                enforce_cooldown=False,
+            )
+        )
+
     except RegistrationError as error:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(error),
         ) from None
+
+    except EmailVerificationError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email verification is temporarily unavailable.",
+        ) from None
+
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Authentication storage is unavailable.",
         ) from None
 
-    _set_session_cookie(request, response, token, service.session_days)
-    return _account_response(account)
+    sent = await _send_verification(
+        sender,
+        recipient=account.email,
+        token=token,
+        expires_at=expires_at,
+    )
+
+    if not sent:
+        try:
+            await asyncio.to_thread(
+                service.revoke_email_verification,
+                token,
+            )
+        except EmailVerificationError:
+            pass
+
+    response.headers[
+        "Cache-Control"
+    ] = "no-store"
+
+    return RegistrationResponse(
+        email=account.email,
+        verification_required=True,
+        verification_sent=sent,
+        verification_expires_at=(
+            expires_at
+            if sent
+            else None
+        ),
+    )
 
 
 @router.post("/login", response_model=AccountResponse)
@@ -138,7 +304,19 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
         raise _rate_limited(retry_after)
 
     try:
-        account = await asyncio.to_thread(service.authenticate, payload.email, payload.password)
+        account = await asyncio.to_thread(
+            service.authenticate,
+            payload.email,
+            payload.password,
+        )
+
+    except EmailNotVerified:
+        limiter.reset(key)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email verification required.",
+        ) from None
+
     except InvalidCredentials:
         retry_after = limiter.record_failure(key)
         if retry_after is not None:
@@ -164,6 +342,137 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
 
     _set_session_cookie(request, response, token, service.session_days)
     return _account_response(account)
+
+
+@router.post(
+    "/verify-email",
+    response_model=AccountResponse,
+)
+async def verify_email(
+    payload: VerifyEmailRequest,
+    request: Request,
+    response: Response,
+) -> AccountResponse:
+    require_same_origin_browser_request(
+        request
+    )
+
+    service = _service(
+        request
+    )
+
+    try:
+        account = await asyncio.to_thread(
+            service.verify_email,
+            payload.token,
+        )
+
+        session_token = (
+            await asyncio.to_thread(
+                service.create_session,
+                account,
+            )
+        )
+
+    except EmailVerificationInvalid:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Verification link is invalid or expired.",
+        ) from None
+
+    except EmailVerificationError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email verification is temporarily unavailable.",
+        ) from None
+
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication storage is unavailable.",
+        ) from None
+
+    _set_session_cookie(
+        request,
+        response,
+        session_token,
+        service.session_days,
+    )
+
+    return _account_response(
+        account
+    )
+
+
+@router.post(
+    "/resend-verification",
+    response_model=ResendVerificationResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def resend_verification(
+    payload: ResendVerificationRequest,
+    request: Request,
+    response: Response,
+) -> ResendVerificationResponse:
+    require_same_origin_browser_request(
+        request
+    )
+
+    service = _service(
+        request
+    )
+
+    sender = _email_sender(
+        request
+    )
+
+    if sender is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email verification delivery is unavailable.",
+        )
+
+    try:
+        prepared = await asyncio.to_thread(
+            service.request_email_verification,
+            payload.email,
+        )
+
+    except EmailVerificationError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email verification is temporarily unavailable.",
+        ) from None
+
+    if prepared is not None:
+        account, token, expires_at = (
+            prepared
+        )
+
+        sent = await _send_verification(
+            sender,
+            recipient=account.email,
+            token=token,
+            expires_at=expires_at,
+        )
+
+        if not sent:
+            try:
+                await asyncio.to_thread(
+                    service.revoke_email_verification,
+                    token,
+                )
+            except EmailVerificationError:
+                pass
+
+    response.headers[
+        "Cache-Control"
+    ] = "no-store"
+
+    # Deliberately enumeration-safe.
+    return ResendVerificationResponse(
+        accepted=True
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

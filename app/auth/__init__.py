@@ -6,6 +6,11 @@ from .repository import AuthRepository, AuthRepositoryError, WEB_OWNER_OFFSET
 from .service import (
     AuthError,
     AuthService,
+    EmailAlreadyVerified,
+    EmailNotVerified,
+    EmailVerificationError,
+    EmailVerificationInvalid,
+    EmailVerificationRateLimited,
     InvalidCredentials,
     RegistrationError,
     TelegramLinkError,
@@ -16,6 +21,8 @@ from .service import (
 __all__ = [
     "AuthAccount", "AuthSession", "AuthRepository", "AuthRepositoryError",
     "WEB_OWNER_OFFSET", "AuthService", "AuthError", "InvalidCredentials",
-    "RegistrationError", "TelegramLinkError", "TelegramLinkUnavailable", "PasswordPolicyError", "hash_password",
+    "RegistrationError", "EmailNotVerified", "EmailVerificationError", "EmailVerificationInvalid",
+    "EmailVerificationRateLimited", "EmailAlreadyVerified",
+    "TelegramLinkError", "TelegramLinkUnavailable", "PasswordPolicyError", "hash_password",
     "verify_password", "validate_password", "normalize_email",
 ]

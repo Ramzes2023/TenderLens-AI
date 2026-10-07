@@ -1,5 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlsplit
 
 from fastapi.testclient import TestClient
 
@@ -9,6 +10,71 @@ from app.api.main import create_app
 from app.api.runtime import ApiRuntime
 from app.auth import AuthRepository, AuthService
 from app.support import SupportRepository
+
+
+class RecordingEmailSender:
+    public_base_url = "http://testserver"
+
+    def __init__(self):
+        self.messages = []
+
+    def send_verification(
+        self,
+        *,
+        recipient,
+        verification_url,
+        expires_at,
+    ):
+        self.messages.append(
+            {
+                "recipient": recipient,
+                "verification_url":
+                    verification_url,
+                "expires_at":
+                    expires_at,
+            }
+        )
+
+
+def verify_latest(
+    client,
+    app,
+):
+    sender = (
+        app.state.runtime
+        .email_sender
+    )
+
+    assert sender.messages
+
+    url = sender.messages[
+        -1
+    ]["verification_url"]
+
+    token = parse_qs(
+        urlsplit(url).query
+    )["token"][0]
+
+    verified = client.post(
+        "/api/v1/auth/verify-email",
+        json={
+            "token": token,
+        },
+    )
+
+    assert (
+        verified.status_code
+        == 200
+    )
+
+    assert (
+        verified.json()[
+            "email_verified"
+        ]
+        is True
+    )
+
+    return verified.json()
 
 
 def make_client(tmp_path, provider=None):
@@ -25,6 +91,7 @@ def make_client(tmp_path, provider=None):
         auth_service=AuthService(
             auth_repo
         ),
+        email_sender=RecordingEmailSender(),
         support_repository=support_repo,
     )
 
@@ -70,6 +137,11 @@ def test_support_ticket_round_trip(tmp_path):
         )
 
         assert registered.status_code == 201
+
+        verify_latest(
+            client,
+            app,
+        )
 
         created = client.post(
             "/api/v1/support/tickets",
@@ -143,6 +215,11 @@ def test_support_owner_isolation(tmp_path):
             },
         ).status_code == 201
 
+        verify_latest(
+            first,
+            app,
+        )
+
         created = first.post(
             "/api/v1/support/tickets",
             json={
@@ -174,6 +251,11 @@ def test_support_owner_isolation(tmp_path):
                 "password": "SupportTest123!",
             },
         ).status_code == 201
+
+        verify_latest(
+            second,
+            app,
+        )
 
         listed = second.get(
             "/api/v1/support/tickets"
@@ -233,6 +315,11 @@ def test_live_support_assistant(tmp_path):
 
         assert registered.status_code == 201
 
+        verify_latest(
+            client,
+            app,
+        )
+
         response = client.post(
             "/api/v1/support/assistant",
             json={
@@ -272,6 +359,11 @@ def test_live_support_assistant_requires_llm(
                     "SupportTest123!",
             },
         ).status_code == 201
+
+        verify_latest(
+            client,
+            app,
+        )
 
         response = client.post(
             "/api/v1/support/assistant",

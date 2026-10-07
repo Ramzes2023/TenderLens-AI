@@ -49,9 +49,41 @@ class AuthRepositoryTests(unittest.TestCase):
         self.assertNotIn(password, stored)
 
     def test_login_and_session_round_trip(self):
-        account = self.service.register("user@example.com", "very secure password 123")
-        authenticated = self.service.authenticate("USER@example.com", "very secure password 123")
-        self.assertEqual(authenticated.id, account.id)
+        account = self.service.register(
+            "user@example.com",
+            "very secure password 123",
+        )
+
+        verification_token, _ = (
+            self.service
+            .issue_email_verification(
+                account,
+                enforce_cooldown=False,
+            )
+        )
+
+        verified = (
+            self.service
+            .verify_email(
+                verification_token
+            )
+        )
+
+        self.assertTrue(
+            verified.email_verified
+        )
+
+        authenticated = (
+            self.service.authenticate(
+                "USER@example.com",
+                "very secure password 123",
+            )
+        )
+
+        self.assertEqual(
+            authenticated.id,
+            account.id,
+        )
         token = self.service.create_session(authenticated)
         self.assertGreater(len(token), 20)
         resolved = self.service.account_for_token(token)

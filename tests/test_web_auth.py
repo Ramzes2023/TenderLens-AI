@@ -1,8 +1,31 @@
 import tempfile
 import unittest
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 from fastapi.testclient import TestClient
+
+
+class RecordingEmailSender:
+    public_base_url = "http://testserver"
+
+    def __init__(self):
+        self.messages = []
+
+    def send_verification(
+        self,
+        *,
+        recipient,
+        verification_url,
+        expires_at,
+    ):
+        self.messages.append(
+            {
+                "recipient": recipient,
+                "verification_url": verification_url,
+                "expires_at": expires_at,
+            }
+        )
 
 from app.api.auth_pages import login_html, register_html
 from app.api.config import ApiSettings
@@ -32,11 +55,28 @@ class AuthPageRoutingTests(unittest.TestCase):
         repo = AuthRepository(Path(self.tmp.name) / "web-auth.db")
         repo.initialize()
         service = AuthService(repo)
-        runtime = ApiRuntime(auth_service=service)
+        self.sender = RecordingEmailSender()
+        runtime = ApiRuntime(
+            auth_service=service,
+            email_sender=self.sender,
+        )
         settings = ApiSettings(host="127.0.0.1", port=8000, reload=False, api_key="legacy")
         self.ctx = TestClient(create_app(runtime=runtime, settings=settings), follow_redirects=False)
         self.client = self.ctx.__enter__()
         self.addCleanup(self.ctx.__exit__, None, None, None)
+
+    def verify_latest(self):
+        url = self.sender.messages[-1][
+            "verification_url"
+        ]
+        token = parse_qs(
+            urlsplit(url).query
+        )["token"][0]
+
+        return self.client.post(
+            "/api/v1/auth/verify-email",
+            json={"token": token},
+        )
 
     def test_anonymous_landing_and_dashboard_redirect(self):
         root = self.client.get("/")
@@ -64,6 +104,20 @@ class AuthPageRoutingTests(unittest.TestCase):
             json={"email": "user@example.com", "password": "very secure password 123"},
         )
         self.assertEqual(registered.status_code, 201)
+
+        pending_dashboard = self.client.get(
+            "/dashboard"
+        )
+        self.assertEqual(
+            pending_dashboard.status_code,
+            303,
+        )
+
+        self.assertEqual(
+            self.verify_latest().status_code,
+            200,
+        )
+
         dashboard = self.client.get("/dashboard")
         self.assertEqual(dashboard.status_code, 200)
         self.assertIn("authenticated web workspace", dashboard.text)

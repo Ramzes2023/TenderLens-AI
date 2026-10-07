@@ -33,7 +33,20 @@ class AuthRepository:
 
     @staticmethod
     def _account(row: sqlite3.Row) -> AuthAccount:
-        return AuthAccount(id=int(row["id"]), email=str(row["email"]), owner_user_id=int(row["owner_user_id"]), is_active=bool(row["is_active"]), created_at=str(row["created_at"]), updated_at=str(row["updated_at"]))
+        return AuthAccount(
+            id=int(row["id"]),
+            email=str(row["email"]),
+            owner_user_id=int(row["owner_user_id"]),
+            is_active=bool(row["is_active"]),
+            email_verified=bool(row["email_verified"]),
+            email_verified_at=(
+                str(row["email_verified_at"])
+                if row["email_verified_at"] is not None
+                else None
+            ),
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
+        )
 
     @staticmethod
     def _session(row: sqlite3.Row) -> AuthSession:
@@ -76,7 +89,52 @@ class AuthRepository:
                         );
                         CREATE INDEX IF NOT EXISTS idx_auth_telegram_links_account
                         ON auth_telegram_links(account_id, expires_at);
+
+                        CREATE TABLE IF NOT EXISTS auth_email_verifications (
+                            token_hash TEXT PRIMARY KEY,
+                            account_id INTEGER NOT NULL,
+                            expires_at TEXT NOT NULL,
+                            consumed_at TEXT,
+                            created_at TEXT NOT NULL,
+                            FOREIGN KEY(account_id)
+                                REFERENCES auth_accounts(id)
+                                ON DELETE CASCADE
+                        );
+                        CREATE INDEX IF NOT EXISTS idx_auth_email_verifications_account
+                        ON auth_email_verifications(
+                            account_id,
+                            expires_at
+                        );
                     """)
+
+                    account_columns = {
+                        str(row["name"])
+                        for row in conn.execute(
+                            "PRAGMA table_info(auth_accounts)"
+                        ).fetchall()
+                    }
+
+                    # Existing accounts pre-date Phase 24N.
+                    # Grandfather them as verified so deployment
+                    # cannot unexpectedly lock out current users.
+                    if "email_verified" not in account_columns:
+                        conn.execute(
+                            """
+                            ALTER TABLE auth_accounts
+                            ADD COLUMN email_verified INTEGER
+                            NOT NULL DEFAULT 1
+                            CHECK(email_verified IN (0,1))
+                            """
+                        )
+
+                    if "email_verified_at" not in account_columns:
+                        conn.execute(
+                            """
+                            ALTER TABLE auth_accounts
+                            ADD COLUMN email_verified_at TEXT
+                            """
+                        )
+
                     conn.execute("BEGIN IMMEDIATE")
                     migrate(conn)
         except (OSError, sqlite3.Error):
@@ -87,7 +145,27 @@ class AuthRepository:
         try:
             with closing(self._connect()) as conn:
                 with conn:
-                    cursor = conn.execute("INSERT INTO auth_accounts(email,password_hash,owner_user_id,is_active,created_at,updated_at) VALUES (?, ?, NULL, 1, ?, ?)", (email, password_hash, now, now))
+                    cursor = conn.execute(
+                        """
+                        INSERT INTO auth_accounts(
+                            email,
+                            password_hash,
+                            owner_user_id,
+                            is_active,
+                            email_verified,
+                            email_verified_at,
+                            created_at,
+                            updated_at
+                        )
+                        VALUES (?, ?, NULL, 1, 0, NULL, ?, ?)
+                        """,
+                        (
+                            email,
+                            password_hash,
+                            now,
+                            now,
+                        ),
+                    )
                     account_id = int(cursor.lastrowid)
                     owner_user_id = WEB_OWNER_OFFSET + account_id
                     conn.execute("UPDATE auth_accounts SET owner_user_id=? WHERE id=?", (owner_user_id, account_id))
@@ -422,6 +500,268 @@ class AuthRepository:
                     )
         except sqlite3.Error:
             raise AuthRepositoryError("Could not release Telegram link ticket.") from None
+
+    def create_email_verification(
+        self,
+        *,
+        account_id: int,
+        token_hash: str,
+        expires_at: str,
+        cooldown_after: str | None = None,
+    ) -> bool:
+        """Store one active verification token without storing its raw value.
+
+        Returns False when the account is still inside the resend cooldown.
+        """
+        now = self._now()
+
+        try:
+            with closing(self._connect()) as conn:
+                with conn:
+                    conn.execute(
+                        "BEGIN IMMEDIATE"
+                    )
+
+                    account = conn.execute(
+                        """
+                        SELECT email_verified
+                        FROM auth_accounts
+                        WHERE id=?
+                        """,
+                        (
+                            int(account_id),
+                        ),
+                    ).fetchone()
+
+                    if account is None:
+                        raise AuthRepositoryError(
+                            "Account not found."
+                        )
+
+                    if bool(
+                        account["email_verified"]
+                    ):
+                        raise AuthRepositoryError(
+                            "Email is already verified."
+                        )
+
+                    conn.execute(
+                        """
+                        DELETE FROM auth_email_verifications
+                        WHERE expires_at<=?
+                        """,
+                        (
+                            now,
+                        ),
+                    )
+
+                    if cooldown_after is not None:
+                        latest = conn.execute(
+                            """
+                            SELECT created_at
+                            FROM auth_email_verifications
+                            WHERE account_id=?
+                            ORDER BY created_at DESC
+                            LIMIT 1
+                            """,
+                            (
+                                int(account_id),
+                            ),
+                        ).fetchone()
+
+                        if (
+                            latest is not None
+                            and str(
+                                latest["created_at"]
+                            ) > cooldown_after
+                        ):
+                            return False
+
+                    # Only one usable ticket per account.
+                    conn.execute(
+                        """
+                        DELETE FROM auth_email_verifications
+                        WHERE account_id=?
+                          AND consumed_at IS NULL
+                        """,
+                        (
+                            int(account_id),
+                        ),
+                    )
+
+                    conn.execute(
+                        """
+                        INSERT INTO auth_email_verifications(
+                            token_hash,
+                            account_id,
+                            expires_at,
+                            consumed_at,
+                            created_at
+                        )
+                        VALUES (?, ?, ?, NULL, ?)
+                        """,
+                        (
+                            token_hash,
+                            int(account_id),
+                            expires_at,
+                            now,
+                        ),
+                    )
+
+            return True
+
+        except AuthRepositoryError:
+            raise
+
+        except sqlite3.Error:
+            raise AuthRepositoryError(
+                "Could not create email verification ticket."
+            ) from None
+
+    def consume_email_verification(
+        self,
+        *,
+        token_hash: str,
+        now: str,
+    ) -> AuthAccount | None:
+        """Atomically consume a valid token and verify its account."""
+
+        try:
+            with closing(self._connect()) as conn:
+                with conn:
+                    conn.execute(
+                        "BEGIN IMMEDIATE"
+                    )
+
+                    ticket = conn.execute(
+                        """
+                        SELECT account_id
+                        FROM auth_email_verifications
+                        WHERE token_hash=?
+                          AND consumed_at IS NULL
+                          AND expires_at>?
+                        """,
+                        (
+                            token_hash,
+                            now,
+                        ),
+                    ).fetchone()
+
+                    if ticket is None:
+                        return None
+
+                    account_id = int(
+                        ticket["account_id"]
+                    )
+
+                    claimed = conn.execute(
+                        """
+                        UPDATE auth_email_verifications
+                        SET consumed_at=?
+                        WHERE token_hash=?
+                          AND consumed_at IS NULL
+                          AND expires_at>?
+                        """,
+                        (
+                            now,
+                            token_hash,
+                            now,
+                        ),
+                    )
+
+                    if claimed.rowcount != 1:
+                        return None
+
+                    conn.execute(
+                        """
+                        UPDATE auth_accounts
+                        SET
+                            email_verified=1,
+                            email_verified_at=
+                                COALESCE(
+                                    email_verified_at,
+                                    ?
+                                ),
+                            updated_at=?
+                        WHERE id=?
+                        """,
+                        (
+                            now,
+                            now,
+                            account_id,
+                        ),
+                    )
+
+                    row = conn.execute(
+                        """
+                        SELECT *
+                        FROM auth_accounts
+                        WHERE id=?
+                        """,
+                        (
+                            account_id,
+                        ),
+                    ).fetchone()
+
+            return (
+                self._account(row)
+                if row is not None
+                else None
+            )
+
+        except sqlite3.Error:
+            raise AuthRepositoryError(
+                "Could not verify email."
+            ) from None
+
+    def delete_email_verification(
+        self,
+        *,
+        token_hash: str,
+    ) -> None:
+        try:
+            with closing(
+                self._connect()
+            ) as conn:
+                with conn:
+                    conn.execute(
+                        """
+                        DELETE FROM auth_email_verifications
+                        WHERE token_hash=?
+                        """,
+                        (
+                            token_hash,
+                        ),
+                    )
+
+        except sqlite3.Error:
+            raise AuthRepositoryError(
+                "Could not revoke email verification ticket."
+            ) from None
+
+    def delete_expired_email_verifications(
+        self,
+        now: str,
+    ) -> int:
+        try:
+            with closing(self._connect()) as conn:
+                with conn:
+                    cursor = conn.execute(
+                        """
+                        DELETE FROM auth_email_verifications
+                        WHERE expires_at<=?
+                        """,
+                        (
+                            now,
+                        ),
+                    )
+
+            return int(cursor.rowcount)
+
+        except sqlite3.Error:
+            raise AuthRepositoryError(
+                "Could not clean expired email verification tickets."
+            ) from None
 
     def create_session(self, *, account_id: int, token_hash: str, expires_at: str) -> AuthSession:
         now = self._now()

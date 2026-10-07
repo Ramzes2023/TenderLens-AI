@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 from fastapi.testclient import TestClient
 from app.api.main import create_app
@@ -10,6 +11,30 @@ from app.api.dashboard import dashboard_html
 from app.auth import AuthRepository, AuthService
 
 
+class RecordingEmailSender:
+    public_base_url = "http://testserver"
+
+    def __init__(self):
+        self.messages = []
+
+    def send_verification(
+        self,
+        *,
+        recipient,
+        verification_url,
+        expires_at,
+    ):
+        self.messages.append(
+            {
+                "recipient": recipient,
+                "verification_url":
+                    verification_url,
+                "expires_at":
+                    expires_at,
+            }
+        )
+
+
 class TelegramDashboardTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
@@ -17,19 +42,88 @@ class TelegramDashboardTests(unittest.TestCase):
         repository = AuthRepository(Path(temp.name) / "test.db")
         repository.initialize()
         self.service = AuthService(repository)
+        self.email_sender = RecordingEmailSender()
+
         context = TestClient(create_app(
-            runtime=ApiRuntime(auth_service=self.service),
-            settings=ApiSettings(host="127.0.0.1", port=8000, reload=False),
+            runtime=ApiRuntime(
+                auth_service=self.service,
+                email_sender=self.email_sender,
+            ),
+            settings=ApiSettings(
+                host="127.0.0.1",
+                port=8000,
+                reload=False,
+            ),
         ))
         self.client = context.__enter__()
         self.addCleanup(context.__exit__, None, None, None)
 
     def register(self):
-        response = self.client.post("/api/v1/auth/register", json={
-            "email": "ui@example.com", "password": "test-password-strong-123"})
-        self.assertEqual(response.status_code, 201)
-        self.assertFalse(response.json()["telegram_connected"])
-        return response.json()
+        response = self.client.post(
+            "/api/v1/auth/register",
+            json={
+                "email":
+                    "ui@example.com",
+                "password":
+                    "test-password-strong-123",
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            201,
+        )
+
+        self.assertNotIn(
+            "tenderlens_session=",
+            response.headers.get(
+                "set-cookie",
+                "",
+            ),
+        )
+
+        self.assertTrue(
+            self.email_sender.messages
+        )
+
+        url = (
+            self.email_sender
+            .messages[-1][
+                "verification_url"
+            ]
+        )
+
+        token = parse_qs(
+            urlsplit(url).query
+        )["token"][0]
+
+        verified = self.client.post(
+            "/api/v1/auth/verify-email",
+            json={
+                "token": token,
+            },
+        )
+
+        self.assertEqual(
+            verified.status_code,
+            200,
+        )
+
+        account = verified.json()
+
+        self.assertTrue(
+            account[
+                "email_verified"
+            ]
+        )
+
+        self.assertFalse(
+            account[
+                "telegram_connected"
+            ]
+        )
+
+        return account
 
     def test_anonymous_cannot_link(self):
         self.assertEqual(self.client.post("/api/v1/auth/telegram-link").status_code, 401)

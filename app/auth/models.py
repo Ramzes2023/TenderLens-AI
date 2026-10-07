@@ -11,6 +11,8 @@ class AuthAccount:
     email: str
     owner_user_id: int
     is_active: bool
+    email_verified: bool
+    email_verified_at: str | None
     created_at: str
     updated_at: str
 

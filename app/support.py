@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from app.database.backend import database_for, StorageError, StorageIntegrityError
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -52,22 +53,12 @@ class SupportMessage:
 
 
 class SupportRepository:
-    def __init__(self, path: Path):
-        self.path = Path(path)
+    def __init__(self, path):
+        self.database = database_for(path)
+        self.path = self.database.settings.path
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(
-            self.path,
-            timeout=10,
-        )
-
-        conn.row_factory = sqlite3.Row
-
-        conn.execute(
-            "PRAGMA foreign_keys=ON"
-        )
-
-        return conn
+    def _connect(self):
+        return self.database.connect()
 
     @staticmethod
     def _now() -> str:
@@ -161,122 +152,9 @@ class SupportRepository:
 
     def initialize(self) -> None:
         try:
-            self.path.parent.mkdir(
-                parents=True,
-                exist_ok=True,
-            )
-
-            with closing(
-                self._connect()
-            ) as conn:
-
-                with conn:
-                    conn.executescript(
-                        """
-                        CREATE TABLE IF NOT EXISTS
-                        support_tickets (
-                            id INTEGER
-                                PRIMARY KEY
-                                AUTOINCREMENT,
-
-                            public_id TEXT
-                                UNIQUE,
-
-                            owner_user_id INTEGER
-                                NOT NULL,
-
-                            account_id INTEGER
-                                NOT NULL,
-
-                            first_name TEXT
-                                NOT NULL,
-
-                            last_name TEXT
-                                NOT NULL,
-
-                            email TEXT
-                                NOT NULL,
-
-                            category TEXT
-                                NOT NULL,
-
-                            subject TEXT
-                                NOT NULL,
-
-                            description TEXT
-                                NOT NULL,
-
-                            priority TEXT
-                                NOT NULL
-                                DEFAULT 'normal'
-                                CHECK(
-                                    priority IN (
-                                        'low',
-                                        'normal',
-                                        'high',
-                                        'urgent'
-                                    )
-                                ),
-
-                            status TEXT
-                                NOT NULL
-                                DEFAULT 'open'
-                                CHECK(
-                                    status IN (
-                                        'open',
-                                        'in_progress',
-                                        'resolved',
-                                        'closed'
-                                    )
-                                ),
-
-                            organization_id INTEGER,
-
-                            company_id INTEGER,
-
-                            page_path TEXT
-                                NOT NULL
-                                DEFAULT '',
-
-                            app_version TEXT
-                                NOT NULL
-                                DEFAULT '',
-
-                            browser TEXT
-                                NOT NULL
-                                DEFAULT '',
-
-                            created_at TEXT
-                                NOT NULL,
-
-                            updated_at TEXT
-                                NOT NULL
-                        );
-
-                        CREATE INDEX IF NOT EXISTS
-                        idx_support_owner
-                        ON support_tickets(
-                            owner_user_id,
-                            id DESC
-                        );
-
-                        CREATE INDEX IF NOT EXISTS
-                        idx_support_status
-                        ON support_tickets(
-                            status,
-                            id DESC
-                        );
-                        """
-                    )
-
-        except (
-            OSError,
-            sqlite3.Error,
-        ):
-            raise SupportRepositoryError(
-                "Could not initialize "
-                "support storage."
-            ) from None
+            self.database.migrate("support")
+        except (OSError, sqlite3.Error, StorageError, ValueError):
+            raise SupportRepositoryError("Could not initialize support storage.") from None
 
     def create_ticket(
         self,
@@ -416,7 +294,7 @@ class SupportRepository:
                 row
             )
 
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise SupportRepositoryError(
                 "Could not create "
                 "support ticket."
@@ -462,7 +340,7 @@ class SupportRepository:
                 for row in rows
             ]
 
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise SupportRepositoryError(
                 "Could not load "
                 "support tickets."
@@ -494,7 +372,7 @@ class SupportRepository:
                     ),
                 ).fetchone()
 
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise SupportRepositoryError(
                 "Could not load "
                 "support ticket."
@@ -537,58 +415,6 @@ class SupportRepository:
             ),
         )
 
-    @staticmethod
-    def _ensure_messages_schema(
-        conn: sqlite3.Connection,
-    ) -> None:
-
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS
-            support_ticket_messages (
-                id INTEGER
-                    PRIMARY KEY
-                    AUTOINCREMENT,
-
-                ticket_id INTEGER
-                    NOT NULL
-                    REFERENCES support_tickets(id)
-                    ON DELETE CASCADE,
-
-                author_type TEXT
-                    NOT NULL
-                    CHECK(
-                        author_type IN (
-                            'user',
-                            'support'
-                        )
-                    ),
-
-                author_account_id INTEGER,
-
-                author_email TEXT
-                    NOT NULL
-                    DEFAULT '',
-
-                body TEXT
-                    NOT NULL,
-
-                created_at TEXT
-                    NOT NULL
-            )
-            """
-        )
-
-        conn.execute(
-            """
-            CREATE INDEX IF NOT EXISTS
-            idx_support_messages_ticket
-            ON support_ticket_messages(
-                ticket_id,
-                id ASC
-            )
-            """
-        )
 
     def list_all_tickets_for_support(
         self,
@@ -657,7 +483,7 @@ class SupportRepository:
                 for row in rows
             ]
 
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise SupportRepositoryError(
                 "Could not load support tickets."
             ) from None
@@ -683,7 +509,7 @@ class SupportRepository:
                     ),
                 ).fetchone()
 
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise SupportRepositoryError(
                 "Could not load support ticket."
             ) from None
@@ -706,9 +532,6 @@ class SupportRepository:
                 self._connect()
             ) as conn:
 
-                self._ensure_messages_schema(
-                    conn
-                )
 
                 ticket = conn.execute(
                     """
@@ -748,7 +571,7 @@ class SupportRepository:
         except SupportTicketNotFound:
             raise
 
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise SupportRepositoryError(
                 "Could not load support messages."
             ) from None
@@ -767,9 +590,6 @@ class SupportRepository:
                 self._connect()
             ) as conn:
 
-                self._ensure_messages_schema(
-                    conn
-                )
 
                 rows = conn.execute(
                     """
@@ -788,7 +608,7 @@ class SupportRepository:
                 for row in rows
             ]
 
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise SupportRepositoryError(
                 "Could not load support messages."
             ) from None
@@ -818,9 +638,6 @@ class SupportRepository:
             ) as conn:
 
                 with conn:
-                    self._ensure_messages_schema(
-                        conn
-                    )
 
                     ticket = conn.execute(
                         """
@@ -914,7 +731,7 @@ class SupportRepository:
         except SupportTicketNotFound:
             raise
 
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise SupportRepositoryError(
                 "Could not save support message."
             ) from None
@@ -943,9 +760,6 @@ class SupportRepository:
             ) as conn:
 
                 with conn:
-                    self._ensure_messages_schema(
-                        conn
-                    )
 
                     ticket = conn.execute(
                         """
@@ -1025,7 +839,7 @@ class SupportRepository:
         except SupportTicketNotFound:
             raise
 
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise SupportRepositoryError(
                 "Could not save support reply."
             ) from None
@@ -1096,7 +910,7 @@ class SupportRepository:
         except SupportTicketNotFound:
             raise
 
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise SupportRepositoryError(
                 "Could not update support ticket."
             ) from None

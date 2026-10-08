@@ -36,11 +36,13 @@ class ApiRuntime:
     tender_discovery_service: "TenderMonitorService | Any | None" = None
     source_catalog: "SourceCatalog | Any | None" = None
     support_repository: "SupportRepository | Any | None" = None
+    database: "Any | None" = None
     component_errors: dict[str, str] = field(default_factory=dict)
 
     def component_status(self) -> dict[str, str]:
+        database = self.database or getattr(self.tender_repository, "database", None)
         return {
-            "database": "ready" if self.tender_repository is not None else "unavailable",
+            "database": "ready" if self.tender_repository is not None and (database is None or database.healthy()) else "unavailable",
             "llm": "ready" if self.provider is not None else "unavailable",
             "scoring": "ready" if (self.company_profile is not None or self.company_service is not None) else "unavailable",
             "companies": "ready" if self.company_service is not None else "unavailable",
@@ -53,9 +55,27 @@ class ApiRuntime:
             "support": "ready" if self.support_repository is not None else "unavailable",
         }
 
+    def close(self):
+        if self.database is not None:
+            self.database.close()
+
 
 def build_runtime() -> ApiRuntime:
     runtime = ApiRuntime()
+
+    from app.database import load_database_settings
+    from app.database.backend import Database, StorageError
+
+    # Fail closed for invalid configuration and failed PostgreSQL initialization.
+    # No component may reinterpret a PostgreSQL URL as a local SQLite path.
+    db_settings = load_database_settings()
+    runtime.database = Database(db_settings)
+    if runtime.database.backend == "postgresql":
+        try:
+            runtime.database.migrate()
+        except Exception:
+            runtime.close()
+            raise StorageError("VALYQON AI database startup failed.") from None
 
     try:
         from app.llm.config import load_settings as load_llm_settings
@@ -75,10 +95,9 @@ def build_runtime() -> ApiRuntime:
         runtime.component_errors["scoring"] = "Company profile unavailable"
 
     try:
-        from app.database import TenderRepository, load_database_settings
+        from app.database import TenderRepository
 
-        db_settings = load_database_settings()
-        repository = TenderRepository(db_settings.path)
+        repository = TenderRepository(runtime.database)
         repository.initialize()
         runtime.tender_repository = repository
     except Exception:
@@ -86,13 +105,8 @@ def build_runtime() -> ApiRuntime:
 
     try:
         from app.companies import CompanyRepository, CompanyService
-        from app.database import load_database_settings
 
-        db_path = (
-            runtime.tender_repository.path
-            if runtime.tender_repository is not None
-            else load_database_settings().path
-        )
+        db_path = runtime.database
         company_repository = CompanyRepository(db_path)
         company_repository.initialize()
         runtime.company_service = CompanyService(company_repository, fallback_profile=runtime.company_profile)
@@ -101,13 +115,8 @@ def build_runtime() -> ApiRuntime:
 
     try:
         from app.auth import AuthRepository, AuthService
-        from app.database import load_database_settings
 
-        db_path = (
-            runtime.tender_repository.path
-            if runtime.tender_repository is not None
-            else load_database_settings().path
-        )
+        db_path = runtime.database
         auth_repository = AuthRepository(db_path)
         auth_repository.initialize()
         runtime.auth_service = AuthService(auth_repository)
@@ -135,17 +144,8 @@ def build_runtime() -> ApiRuntime:
 
     try:
         from app.support import SupportRepository
-        from app.database import load_database_settings
 
-        db_path = (
-            runtime.auth_service.repository.path
-            if runtime.auth_service is not None
-            else (
-                runtime.tender_repository.path
-                if runtime.tender_repository is not None
-                else load_database_settings().path
-            )
-        )
+        db_path = runtime.database
 
         support_repository = SupportRepository(
             db_path
@@ -169,7 +169,7 @@ def build_runtime() -> ApiRuntime:
             raise RuntimeError("Authentication unavailable")
 
         organization_repository = OrganizationRepository(
-            runtime.auth_service.repository.path
+            runtime.database
         )
         organization_repository.initialize()
         runtime.organization_service = OrganizationService(
@@ -201,7 +201,6 @@ def build_runtime() -> ApiRuntime:
         runtime.component_errors["sources"] = "Source catalog unavailable"
 
     try:
-        from app.database import load_database_settings
         from app.monitoring import MonitoringRepository, TenderMonitorService
 
         if monitor_settings is None or runtime.source_catalog is None:
@@ -213,11 +212,7 @@ def build_runtime() -> ApiRuntime:
             )
         )
 
-        db_path = (
-            runtime.tender_repository.path
-            if runtime.tender_repository is not None
-            else load_database_settings().path
-        )
+        db_path = runtime.database
 
         repository = MonitoringRepository(
             db_path

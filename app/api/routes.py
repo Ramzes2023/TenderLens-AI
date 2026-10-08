@@ -297,7 +297,7 @@ async def dashboard(request: Request):
 @router.get("/health", response_model=HealthResponse, tags=["system"])
 async def health(request: Request) -> HealthResponse:
     runtime = _runtime(request)
-    components = runtime.component_status()
+    components = await asyncio.to_thread(runtime.component_status)
     critical = (components["database"], components["scoring"])
     overall = "ok" if all(value == "ready" for value in critical) else "degraded"
     return HealthResponse(

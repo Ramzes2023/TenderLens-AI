@@ -1,12 +1,13 @@
-"""Persistent local SQLite vector store for Phase 8.
+"""Backend-neutral legacy vector store (class name retained for compatibility).
 
-Vectors are stored as float32 BLOBs. Search is exact cosine/dot-product over the
+Vectors are stored as float32 BLOBs/bytea. Search is exact cosine/dot-product over the
 user/document slice. This keeps the MVP dependency-free and makes the storage
 backend replaceable by Qdrant later.
 """
 from __future__ import annotations
 
 import sqlite3
+from app.database.backend import database_for, StorageError, StorageIntegrityError
 from array import array
 from contextlib import closing
 from datetime import datetime, timezone
@@ -20,39 +21,19 @@ class RagStoreError(RuntimeError):
 
 
 class SQLiteVectorStore:
-    def __init__(self, path: Path, dimensions: int):
-        self.path = Path(path)
+    def __init__(self, path, dimensions: int):
+        self.database = database_for(path)
+        self.path = self.database.settings.path
         self.dimensions = dimensions
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, timeout=10)
-        conn.row_factory = sqlite3.Row
-        return conn
+    def _connect(self):
+        return self.database.connect()
 
     def initialize(self) -> None:
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            with closing(self._connect()) as conn:
-                with conn:
-                    conn.executescript(
-                        """
-                        CREATE TABLE IF NOT EXISTS rag_chunks (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            owner_user_id INTEGER NOT NULL,
-                            pdf_sha256 TEXT NOT NULL,
-                            chunk_index INTEGER NOT NULL,
-                            page_number INTEGER NOT NULL,
-                            chunk_text TEXT NOT NULL,
-                            vector_blob BLOB NOT NULL,
-                            created_at TEXT NOT NULL,
-                            UNIQUE(owner_user_id, pdf_sha256, chunk_index)
-                        );
-                        CREATE INDEX IF NOT EXISTS idx_rag_document
-                        ON rag_chunks(owner_user_id, pdf_sha256, chunk_index);
-                        """
-                    )
-        except (OSError, sqlite3.Error):
-            raise RagStoreError("Не удалось инициализировать локальный RAG-индекс.") from None
+            self.database.migrate("rag")
+        except (OSError, sqlite3.Error, StorageError, ValueError):
+            raise RagStoreError("Could not initialize rag storage.") from None
 
     def _encode(self, vector: tuple[float, ...]) -> bytes:
         if len(vector) != self.dimensions:
@@ -75,7 +56,7 @@ class SQLiteVectorStore:
                     (owner_user_id, pdf_sha256),
                 ).fetchone()
             return row is not None
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise RagStoreError("Не удалось прочитать RAG-индекс.") from None
 
     def replace_document(self, owner_user_id: int, pdf_sha256: str,
@@ -102,7 +83,7 @@ class SQLiteVectorStore:
                         ],
                     )
             return len(items)
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise RagStoreError("Не удалось сохранить RAG-индекс документа.") from None
 
     def search(self, owner_user_id: int, pdf_sha256: str, query_vector: tuple[float, ...],
@@ -117,7 +98,7 @@ class SQLiteVectorStore:
                     "FROM rag_chunks WHERE owner_user_id=? AND pdf_sha256=?",
                     (owner_user_id, pdf_sha256),
                 ).fetchall()
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise RagStoreError("Не удалось выполнить поиск по RAG-индексу.") from None
         scored: list[RetrievedChunk] = []
         for row in rows:

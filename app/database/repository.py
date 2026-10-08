@@ -1,11 +1,12 @@
-"""SQLite persistence for processed tenders.
+"""Backend-neutral persistence for processed tenders.
 
 The MVP stores metadata and structured results only: no PDF bytes and no extracted full text.
-Connections are short-lived so repository methods can safely be called via asyncio.to_thread().
+Repository operations own a connection lease and can run via asyncio.to_thread().
 """
 from __future__ import annotations
 
 import sqlite3
+from app.database.backend import database_for, StorageError, StorageIntegrityError
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -72,115 +73,18 @@ class DiscoverySearchHistory:
 
 
 class TenderRepository:
-    def __init__(self, path: Path):
-        self.path = Path(path)
+    def __init__(self, path):
+        self.database = database_for(path)
+        self.path = self.database.settings.path
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, timeout=10)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
-        return conn
+    def _connect(self):
+        return self.database.connect()
 
     def initialize(self) -> None:
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            with closing(self._connect()) as conn:
-                with conn:
-                    conn.executescript(
-                        """
-                        CREATE TABLE IF NOT EXISTS schema_meta (
-                            key TEXT PRIMARY KEY,
-                            value TEXT NOT NULL
-                        );
-
-                        CREATE TABLE IF NOT EXISTS tenders (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            owner_user_id INTEGER NOT NULL,
-                            chat_id INTEGER NOT NULL,
-                            pdf_sha256 TEXT NOT NULL,
-                            source_filename TEXT NOT NULL,
-                            pages INTEGER,
-                            characters INTEGER NOT NULL,
-                            analysis_json TEXT NOT NULL,
-                            scoring_json TEXT,
-                            analysis_truncated INTEGER NOT NULL DEFAULT 0 CHECK (analysis_truncated IN (0,1)),
-                            created_at TEXT NOT NULL,
-                            updated_at TEXT NOT NULL,
-                            UNIQUE(owner_user_id, pdf_sha256)
-                        );
-
-                        CREATE INDEX IF NOT EXISTS idx_tenders_owner_created
-                        ON tenders(owner_user_id, created_at DESC);
-
-                        CREATE TABLE IF NOT EXISTS saved_opportunities (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            organization_id INTEGER NOT NULL,
-                            company_id INTEGER NOT NULL,
-                            source TEXT NOT NULL,
-                            external_id TEXT NOT NULL,
-                            snapshot_json TEXT NOT NULL,
-                            created_at TEXT NOT NULL,
-                            updated_at TEXT NOT NULL,
-                            UNIQUE(
-                                organization_id,
-                                company_id,
-                                source,
-                                external_id
-                            )
-                        );
-
-                        CREATE INDEX IF NOT EXISTS idx_saved_opportunities_scope
-                        ON saved_opportunities(
-                            organization_id,
-                            company_id,
-                            updated_at DESC,
-                            id DESC
-                        );
-
-                        CREATE TABLE IF NOT EXISTS discovery_search_history (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            organization_id INTEGER NOT NULL,
-                            company_id INTEGER NOT NULL,
-                            created_by_account_id INTEGER NOT NULL,
-                            result_count INTEGER NOT NULL
-                                CHECK(result_count >= 0),
-                            scored_count INTEGER NOT NULL
-                                CHECK(scored_count >= 0),
-                            attempted_sources_json TEXT NOT NULL,
-                            successful_sources_json TEXT NOT NULL,
-                            failed_sources_json TEXT NOT NULL,
-                            partial_failure INTEGER NOT NULL
-                                CHECK(partial_failure IN (0,1)),
-                            total_failure INTEGER NOT NULL
-                                CHECK(total_failure IN (0,1)),
-                            snapshot_json TEXT NOT NULL,
-                            created_at TEXT NOT NULL
-                        );
-
-                        CREATE INDEX IF NOT EXISTS
-                        idx_discovery_search_history_scope
-                        ON discovery_search_history(
-                            organization_id,
-                            company_id,
-                            created_at DESC,
-                            id DESC
-                        );
-                        """
-                    )
-                    current = conn.execute(
-                        "SELECT value FROM schema_meta WHERE key='schema_version'"
-                    ).fetchone()
-                    if current is None:
-                        conn.execute(
-                            "INSERT INTO schema_meta(key, value) VALUES('schema_version', ?)",
-                            (str(SCHEMA_VERSION),),
-                        )
-                    elif int(current["value"]) != SCHEMA_VERSION:
-                        raise DatabaseError("Неподдерживаемая версия локальной базы данных.")
-        except (OSError, sqlite3.Error, ValueError) as error:
-            if isinstance(error, DatabaseError):
-                raise
-            raise DatabaseError("Не удалось инициализировать локальную базу данных.") from None
+            self.database.migrate("tenders")
+        except (OSError, sqlite3.Error, StorageError, ValueError):
+            raise DatabaseError("Could not initialize tenders storage.") from None
 
     @staticmethod
     def _deserialize(row: sqlite3.Row) -> StoredTender:
@@ -327,7 +231,7 @@ class TenderRepository:
 
         except DatabaseAuthorizationError:
             raise
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise DatabaseError(
                 "Could not read organization tender history."
             ) from None
@@ -368,7 +272,7 @@ class TenderRepository:
 
         except DatabaseAuthorizationError:
             raise
-        except (sqlite3.Error, ValueError, TypeError):
+        except (sqlite3.Error, StorageError, ValueError, TypeError):
             raise DatabaseError(
                 "Could not read organization tender history."
             ) from None
@@ -414,7 +318,7 @@ class TenderRepository:
 
         except DatabaseAuthorizationError:
             raise
-        except (sqlite3.Error, ValueError, TypeError):
+        except (sqlite3.Error, StorageError, ValueError, TypeError):
             raise DatabaseError(
                 "Could not read organization tender history."
             ) from None
@@ -522,7 +426,7 @@ class TenderRepository:
 
         except DatabaseAuthorizationError:
             raise
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise DatabaseError(
                 "Could not save organization tender."
             ) from None
@@ -706,7 +610,7 @@ class TenderRepository:
         except DatabaseError:
             raise
 
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise DatabaseError(
                 "Could not save opportunity."
             ) from None
@@ -770,6 +674,7 @@ class TenderRepository:
 
         except (
             sqlite3.Error,
+            StorageError,
             ValueError,
             TypeError,
         ):
@@ -834,6 +739,7 @@ class TenderRepository:
 
         except (
             sqlite3.Error,
+            StorageError,
             ValueError,
             TypeError,
         ):
@@ -992,6 +898,7 @@ class TenderRepository:
 
         except (
             sqlite3.Error,
+            StorageError,
             ValueError,
             TypeError,
         ):
@@ -1059,6 +966,7 @@ class TenderRepository:
 
         except (
             sqlite3.Error,
+            StorageError,
             ValueError,
             TypeError,
         ):
@@ -1116,6 +1024,7 @@ class TenderRepository:
 
         except (
             sqlite3.Error,
+            StorageError,
             ValueError,
             TypeError,
         ):
@@ -1131,7 +1040,7 @@ class TenderRepository:
                     (owner_user_id, pdf_sha256),
                 ).fetchone()
             return self._deserialize(row) if row else None
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise DatabaseError("Не удалось прочитать локальную базу данных.") from None
 
     def find_by_id(self, owner_user_id: int, tender_id: int) -> StoredTender | None:
@@ -1142,7 +1051,7 @@ class TenderRepository:
                     (owner_user_id, int(tender_id)),
                 ).fetchone()
             return self._deserialize(row) if row else None
-        except (sqlite3.Error, ValueError, TypeError):
+        except (sqlite3.Error, StorageError, ValueError, TypeError):
             raise DatabaseError("Не удалось прочитать локальную базу данных.") from None
 
     def save_success(
@@ -1202,7 +1111,7 @@ class TenderRepository:
             if row is None:
                 raise DatabaseError("Не удалось сохранить тендер.")
             return self._deserialize(row)
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise DatabaseError("Не удалось сохранить тендер в локальную базу данных.") from None
 
     def list_recent(self, owner_user_id: int, limit: int = 10) -> list[StoredTender]:
@@ -1215,5 +1124,5 @@ class TenderRepository:
                     (owner_user_id, limit),
                 ).fetchall()
             return [self._deserialize(row) for row in rows]
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise DatabaseError("Не удалось получить историю тендеров.") from None

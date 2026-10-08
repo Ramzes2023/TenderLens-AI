@@ -1,0 +1,17 @@
+# Operator-selected override; no PostgreSQL service or production deployment is created.
+# Use only after the Phase 24T cutover review. The existing compose files retain SQLite.
+services:
+  api:
+    environment:
+      DATABASE_URL: "${DATABASE_URL:?Set the external PostgreSQL URL securely}"
+      VALYQON_DATABASE_REQUIRE_POSTGRES: "true"
+      VALYQON_DB_POOL_MIN: "1"
+      VALYQON_DB_POOL_MAX: "10"
+      VALYQON_DB_POOL_TIMEOUT: "10"
+  bot:
+    environment:
+      DATABASE_URL: "${DATABASE_URL:?Set the external PostgreSQL URL securely}"
+      VALYQON_DATABASE_REQUIRE_POSTGRES: "true"
+      VALYQON_DB_POOL_MIN: "1"
+      VALYQON_DB_POOL_MAX: "5"
+      VALYQON_DB_POOL_TIMEOUT: "10"

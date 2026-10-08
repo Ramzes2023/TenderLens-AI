@@ -136,10 +136,20 @@ def main() -> int:
 
     from app.database import (DatabaseConfigurationError, DatabaseError,
                               TenderRepository, load_database_settings)
+    from app.database.backend import Database
+    database = None
+    try:
+        database = Database(load_database_settings())
+        if database.backend == "postgresql":
+            database.migrate()
+    except Exception:
+        if database is not None:
+            database.close()
+        logger.error("VALYQON AI database startup failed.")
+        return 2
     tender_repository = None
     try:
-        db_settings = load_database_settings()
-        tender_repository = TenderRepository(db_settings.path)
+        tender_repository = TenderRepository(database)
         tender_repository.initialize()
     except (DatabaseConfigurationError, DatabaseError):
         logger.warning("История тендеров отключена: проверьте DATABASE_URL и доступ к файлу БД.")
@@ -147,11 +157,7 @@ def main() -> int:
     from app.companies import CompanyRepository, CompanyRepositoryError, CompanyService
     company_service = None
     try:
-        if tender_repository is not None:
-            company_repository = CompanyRepository(tender_repository.path)
-        else:
-            from app.database import load_database_settings
-            company_repository = CompanyRepository(load_database_settings().path)
+        company_repository = CompanyRepository(database)
         company_repository.initialize()
         company_service = CompanyService(company_repository, fallback_profile=company_profile)
     except Exception as error:
@@ -160,12 +166,7 @@ def main() -> int:
     from app.auth import AuthRepository, AuthService
     auth_service = None
     try:
-        if tender_repository is not None:
-            auth_db_path = tender_repository.path
-        else:
-            from app.database import load_database_settings
-            auth_db_path = load_database_settings().path
-        auth_repository = AuthRepository(auth_db_path)
+        auth_repository = AuthRepository(database)
         auth_repository.initialize()
         auth_service = AuthService(auth_repository)
     except Exception as error:
@@ -202,11 +203,7 @@ def main() -> int:
             )
         )
 
-        if tender_repository is None:
-            from app.database import load_database_settings
-            db_path = load_database_settings().path
-        else:
-            db_path = tender_repository.path
+        db_path = database
 
         monitor_repository = MonitoringRepository(
             db_path
@@ -271,4 +268,6 @@ def main() -> int:
         # Never print exception payloads, which may contain credentials/request URLs.
         logger.error("Бот завершился с ошибкой (%s). Проверьте сеть и настройки Telegram.", type(error).__name__)
         return 1
+    finally:
+        database.close()
     return 0

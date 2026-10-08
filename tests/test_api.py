@@ -223,6 +223,7 @@ class ApiRuntimeBuildTests(unittest.TestCase):
         from unittest.mock import patch
 
         from app.api.runtime import build_runtime
+        from app.database.config import DatabaseSettings
 
         with tempfile.TemporaryDirectory() as directory:
             db_path = Path(directory) / "runtime.db"
@@ -234,7 +235,7 @@ class ApiRuntimeBuildTests(unittest.TestCase):
             with (
                 patch("app.llm.config.load_settings", side_effect=RuntimeError("disabled in test")),
                 patch("app.scoring.config.load_company_profile", return_value=profile),
-                patch("app.database.load_database_settings", return_value=SimpleNamespace(path=db_path)),
+                patch("app.database.load_database_settings", return_value=DatabaseSettings(url="", path=db_path)),
                 patch("app.rag.load_rag_settings", return_value=SimpleNamespace(enabled=False)),
                 patch("app.monitoring.load_monitoring_settings", return_value=SimpleNamespace(source_configured=False)),
             ):

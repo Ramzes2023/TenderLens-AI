@@ -1,4 +1,4 @@
-"""Local database configuration and repository exports."""
+"""Database configuration and repository exports."""
 from .config import DatabaseConfigurationError, DatabaseSettings, load_database_settings
 from .repository import (
     DatabaseAuthorizationError,

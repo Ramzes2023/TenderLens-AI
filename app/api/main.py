@@ -27,8 +27,14 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.api_settings = api_settings
-        app.state.runtime = runtime or build_runtime()
-        yield
+        owns_runtime = runtime is None
+        active_runtime = build_runtime() if owns_runtime else runtime
+        app.state.runtime = active_runtime
+        try:
+            yield
+        finally:
+            if owns_runtime:
+                active_runtime.close()
 
     app = FastAPI(
         title="VALYQON AI API",

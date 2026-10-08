@@ -49,6 +49,7 @@ function fullAiControl(item,index,enabled){
     id="fullAiFile-${index}"
     data-full-ai-file="${index}"
     type="file"
+    aria-label="Tender PDF for full AI analysis"
     accept=".pdf,application/pdf">
 
    <button

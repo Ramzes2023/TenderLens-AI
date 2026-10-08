@@ -1,0 +1,97 @@
+/* Phase 24Q: shared intrinsic sizing, then tablet and phone layouts.
+   Loaded after premium/support styles; desktop colors and navigation stay intact. */
+.saas .shell, .saas [data-page], .saas dialog, .auth-premium .card,
+.invitation-page .card, .landing { overflow-wrap:anywhere; }
+.saas :where(.grid, .form-grid, .filter-grid, .detail-grid, .workspace-context,
+  .overview-metrics, .toolbar, .head, .support-page) > *,
+.auth-premium :where(.card, .form, .password-control),
+.saas :where(article, section, label, input, select, textarea) { min-width:0; }
+.saas :where(input, select, textarea), .auth-premium input { max-width:100%; }
+.saas .grid, .saas .form-grid { grid-template-columns:repeat(12,minmax(0,1fr)); }
+.saas :where(button, .cta, .secondary) { max-width:100%; white-space:normal; }
+.saas .tender-card > button { margin:4px 8px 4px 0; }
+.saas .tender-meta > span { min-width:0; max-width:100%; }
+.saas :where(pre, code) { white-space:pre-wrap; overflow-wrap:anywhere; }
+.saas pre { max-width:100%; overflow:auto; }
+.saas input[type=file] { width:100%; overflow:hidden; }
+.saas input[type=file]::file-selector-button { max-width:100%; white-space:normal; }
+.saas dialog { max-width:calc(100% - 24px); max-height:calc(100vh - 24px);
+  max-height:calc(100dvh - 24px); overscroll-behavior:contain; }
+.saas dialog > .toolbar { position:sticky; top:-28px; z-index:1;
+  background:var(--panel); padding-block:8px; }
+.saas dialog > .toolbar h2 { flex:1 1 180px; margin-block:8px; }
+.saas .global-support-panel { max-height:calc(100vh - 94px);
+  max-height:calc(100dvh - 94px); overflow:auto; }
+.saas .support-ticket-subject { white-space:normal; }
+.auth-premium, .invitation-page { min-height:100vh; min-height:100svh; }
+.invitation-page :focus-visible { outline:3px solid #b7cff8; outline-offset:3px; }
+.invitation-page :where(button, .button) { min-height:44px; max-width:100%; }
+
+@media (max-width:1050px) {
+  /* Expanded navigation occupies document flow, never covers the workspace. */
+  body.saas .app-nav { display:none; position:static; width:100%;
+    padding:64px 20px 20px; max-height:80vh; max-height:80svh; overflow:auto; }
+  body.saas .app-nav.open { display:flex; }
+  body.saas .app-nav nav { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  body.saas .app-nav nav a { min-height:44px; font-size:14px; }
+  body.saas .nav-toggle { display:block; position:fixed; top:12px; left:16px;
+    z-index:20; min-height:44px; background:#0d1b33; color:#fff; }
+  body.saas .shell { margin-left:0; padding:64px 24px 80px; }
+  body.saas .app-nav.open + .shell { padding-top:16px; }
+  .saas .support-main-grid, .saas .support-conversation-grid { grid-template-columns:1fr; }
+  .saas .support-thread-list { max-height:280px; border-right:0; border-bottom:1px solid var(--line); }
+  .saas .support-thread-detail { max-height:none; }
+  .saas .support-ticket summary { grid-template-columns:minmax(0,1fr) auto; }
+  .saas .support-ticket-subject { grid-column:1/-1; grid-row:2; }
+}
+
+@media (max-width:760px) {
+  body.saas .shell { padding-inline:16px; }
+  body.saas .workspace-context { grid-template-columns:minmax(0,1fr); padding:16px; }
+  body.saas :where(.filter-grid, .detail-grid, .overview-secondary-grid,
+    .overview-setup-steps, .support-form-grid, .support-assistant-form) { grid-template-columns:minmax(0,1fr); }
+  .saas :where(.s4, .s5, .s6, .s7, .s12, .f4, .f6, .f12) { grid-column:span 12; }
+  .saas :where(.head, .p h2, .support-card-heading, .support-thread-ticket-header,
+    .support-thread-reply-footer, .support-operator-controls) { flex-wrap:wrap; }
+  .saas .head > :first-child { flex:1 1 180px; }
+  body.saas :where(button, .cta, .secondary, .account-menu summary) { min-height:44px; }
+  body.saas :where(input, select, textarea) { font-size:16px; min-height:44px; }
+  body.saas label { font-size:13px; }
+  .saas .tender-meta, .saas .fine, .saas .help { font-size:12px; line-height:1.5; }
+  .saas .tender-card { padding:16px; }
+  .saas .tender-card h3 { font-size:18px; line-height:1.4; }
+  .saas .actions > button { flex:1 1 140px; }
+  body.saas .overview-welcome h2 { font-size:26px; }
+  body.saas .overview-metrics article strong { font-size:26px; }
+  body.saas .overview-metrics article { padding:16px; min-height:0; }
+  .saas .discovery-prompt a { white-space:normal; }
+  .saas .product-topbar > .toolbar { width:100%; }
+  .saas .command-trigger { min-width:0; }
+  .saas .notification-link { display:inline-block; min-height:44px; padding-block:14px; }
+  .saas dialog, body.saas #commandPalette { padding:16px; }
+  .saas dialog > .toolbar { top:-16px; align-items:flex-start; }
+  .saas .global-support-panel-head button { width:44px; height:44px; flex-shrink:0; }
+  .saas .support-ticket-date { display:block; }
+  .saas .support-operator-controls select { min-width:0; }
+  .saas .support-conversation-grid { min-height:0; }
+  .saas .support-chat { min-height:0; max-height:40vh; max-height:40svh; }
+  .auth-premium, .invitation-page { padding:16px; }
+  .auth-premium .card, .invitation-page .card { min-width:0; }
+  .auth-premium .card:not(:has(.form)), .invitation-page .card { padding:24px 20px; }
+  .auth-premium .form { padding:28px 20px; }
+  .auth-premium h1, .invitation-page h1 { font-size:1.8rem; line-height:1.2; }
+  .auth-premium input, .auth-premium button { font-size:16px; min-height:44px; }
+  .auth-premium .password-toggle { top:1px; right:4px; min-height:44px; font-size:13px; }
+  .auth-premium .hint { font-size:13px; line-height:1.5; }
+  .landing.premium .landing-top .compact { display:inline-block; }
+  .landing.premium .hero h1 { font-size:clamp(2.4rem,10vw,3.6rem); }
+  .landing.premium .landing-top { gap:16px; }
+}
+
+@media (max-width:420px) {
+  body.saas .app-nav nav, body.saas .overview-metrics { grid-template-columns:minmax(0,1fr); }
+  .saas .toolbar { gap:8px; }
+  .saas .account-menu > div { width:min(270px,calc(100vw - 32px)); }
+  .saas .support-thread-detail { padding:16px; }
+  .saas .support-thread-item-meta { flex-wrap:wrap; }
+}

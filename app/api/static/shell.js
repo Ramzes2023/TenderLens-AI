@@ -7,8 +7,11 @@
  document.querySelectorAll('#existingWorkspace > article:not([data-page])').forEach(n=>n.dataset.page='overview');
  const future={recommended:'Personalized recommendations are coming later. Use Discover to inspect preliminary company fit.', 'ai-analysis':'Full document analysis is available through the existing PDF API and Telegram workflows. Automatic discovery-document import is not available.',notifications:'A notifications inbox is coming later. Configured personal Telegram alerts remain available.',billing:'Billing and paid plans are not available yet.'};
  function navigate(){const key=location.hash.slice(1)||'overview';const link=document.querySelector(`[data-nav="${CSS.escape(key)}"]`);const page=link?key:'overview';const workspaceContext=document.querySelector('.workspace-context');if(workspaceContext)workspaceContext.hidden=page==='support';document.querySelectorAll('[data-nav]').forEach(n=>n.setAttribute('aria-current',n.dataset.nav===page?'page':'false'));document.querySelectorAll('[data-page]').forEach(n=>n.hidden=n.dataset.page!==page);$('pageHeading').textContent=link?link.textContent:'Overview';$('futurePage').hidden=!future[page];$('futureTitle').textContent=link?.textContent||'';$('futureText').textContent=future[page]||'';$('appNav').classList.remove('open');$('navToggle').setAttribute('aria-expanded','false');}
- $('navToggle').onclick=()=>{$('navToggle').setAttribute('aria-expanded',String($('appNav').classList.toggle('open')));};
- window.addEventListener('hashchange',()=>{navigate();window.dispatchEvent(new Event('workspace-context'));$('pageHeading').focus();});window.addEventListener('keydown',e=>{if(e.key==='Escape'){$('appNav').classList.remove('open');$('navToggle').setAttribute('aria-expanded','false');}});navigate();
+ function closeNavigation(returnFocus=false){$('appNav').classList.remove('open');$('navToggle').setAttribute('aria-expanded','false');if(returnFocus)$('navToggle').focus();}
+ $('navToggle').onclick=()=>{const open=$('appNav').classList.toggle('open');$('navToggle').setAttribute('aria-expanded',String(open));if(open)$('appNav').querySelector('[aria-current="page"]')?.focus();};
+ window.addEventListener('hashchange',()=>{navigate();window.dispatchEvent(new Event('workspace-context'));$('pageHeading').focus();});window.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('appNav').classList.contains('open'))closeNavigation(true);});
+ $('appNav').addEventListener('click',e=>{if(e.target.closest('[data-nav]')){closeNavigation();$('pageHeading').focus();}});
+ window.matchMedia('(max-width:1050px)').addEventListener('change',()=>closeNavigation());navigate();
 })();
 /* Workspace lifecycle: drop stale results before organization/company transitions. */
 (function(){

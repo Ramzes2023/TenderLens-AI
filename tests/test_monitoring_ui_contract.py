@@ -269,11 +269,11 @@ def test_old_scan_results_are_cleared_on_workspace_switch():
     )
 
 
-def test_phase24m_shell_asset_cache_version():
+def test_responsive_shell_asset_cache_version():
     html = dashboard_html()
 
     assert (
         "/assets/shell.js?"
-        "v=phase24m-monitoring-v1-20261007"
+        "v=phase24q"
         in html
     )

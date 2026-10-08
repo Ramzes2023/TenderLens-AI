@@ -229,6 +229,7 @@ def _dashboard_html() -> str:
 
         <div class="toolbar">
           <input id="companyPdfFile"
+                 aria-label="Company profile PDF"
                  type="file"
                  accept=".pdf,application/pdf">
 

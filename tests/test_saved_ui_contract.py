@@ -137,12 +137,12 @@ def test_saved_full_ai_is_permission_and_scope_guarded():
     assert "opportunityKey(" in js
 
 
-def test_phase24l_assets_are_cache_busted():
+def test_pdf_workflow_assets_are_cache_busted():
     html = dashboard_html()
 
     assert (
         "/assets/discovery.js?"
-        "v=phase24l-full-ai-v1-20261007"
+        "v=phase24q"
         in html
     )
 

@@ -447,6 +447,7 @@ def shell_html(html: str) -> str:
         "</head>",
         '<link rel="stylesheet" href="/assets/saas.css">'
         '<link rel="stylesheet" href="/assets/premium.css?v=phase24-precheckpoint-20261006">''<link rel="stylesheet" href="/assets/support.css">'
+        '<link rel="stylesheet" href="/assets/responsive.css?v=phase24q">'
         "</head>",
     )
 
@@ -572,10 +573,10 @@ def shell_html(html: str) -> str:
 
     html = html.replace(
         "</body>",
-        '<script src="/assets/shell.js?v=phase24m-monitoring-v1-20261007"></script>'
+        '<script src="/assets/shell.js?v=phase24q"></script>'
         '<script src="/assets/premium.js?v=phase24-precheckpoint-20261006"></script>'
         '<script src="/assets/support.js"></script>'
-        '<script src="/assets/discovery.js?v=phase24l-full-ai-v1-20261007"></script>'
+        '<script src="/assets/discovery.js?v=phase24q"></script>'
         '<script src="/assets/history.js?v=phase24-search-history-v2-20261006"></script>'
         '<script src="/assets/saved.js?v=phase24l-full-ai-v1-20261007"></script>'
         '<script src="/assets/source_health.js?v=phase24-source-health-v1-20261006"></script>'

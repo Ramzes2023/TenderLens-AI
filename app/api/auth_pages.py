@@ -71,6 +71,7 @@ def _page(
     @media(max-width:760px) {{ .card {{ grid-template-columns:1fr; }} .hero {{ display:none; }} .form {{ padding:34px 24px; }} }}
   </style>
 <link rel="stylesheet" href="/assets/premium.css">
+<link rel="stylesheet" href="/assets/responsive.css?v=phase24q">
 </head>
 <body class="auth-premium">
   <main class="card">
@@ -380,6 +381,7 @@ def verify_email_html(
 
   <link rel="stylesheet"
         href="/assets/premium.css">
+  <link rel="stylesheet" href="/assets/responsive.css?v=phase24q">
 </head>
 
 <body class="auth-premium">

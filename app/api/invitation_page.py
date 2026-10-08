@@ -144,9 +144,10 @@ def invitation_page_html(
       margin-top:24px;
     }}
   </style>
+  <link rel="stylesheet" href="/assets/responsive.css?v=phase24q">
 </head>
 
-<body>
+<body class="invitation-page">
   <main class="card">
     <div class="label">
       VALYQON AI

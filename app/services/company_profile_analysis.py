@@ -1,6 +1,7 @@
 """Generate a bounded AI-assisted company search profile draft."""
 
 from __future__ import annotations
+from app.llm.cache import generate_operation, COMPANY_PROFILE
 
 import json
 from dataclasses import dataclass
@@ -209,8 +210,8 @@ async def analyze_company_search_profile(
         )
     )
 
-    response = await provider.generate(
-        prompt,
+    response = await generate_operation(
+        provider, COMPANY_PROFILE, prompt,
         max_tokens=2048,
     )
 

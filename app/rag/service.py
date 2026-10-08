@@ -1,5 +1,6 @@
 """Semantic RAG orchestration: PDF chunks -> GigaChat embeddings -> Qdrant -> grounded answer."""
 from __future__ import annotations
+from app.llm.cache import generate_operation, RAG_ANSWER
 
 import asyncio
 
@@ -158,5 +159,5 @@ class RagService:
             "Дай краткий ответ на русском языке. После фактов указывай страницу в формате [стр. N].\n\n"
             f"ВОПРОС:\n{question.strip()}\n\nФРАГМЕНТЫ:\n{context}"
         )
-        response = await provider.generate(prompt, max_tokens=700)
+        response = await generate_operation(provider, RAG_ANSWER, prompt, max_tokens=700)
         return RagAnswer(response.text.strip(), tuple(selected))

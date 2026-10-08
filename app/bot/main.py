@@ -118,10 +118,13 @@ def main() -> int:
     from app.llm.gateway import build_gateway
     from app.llm.base import LLMConfigurationError
     from app.services.tender_analysis import configured_max_chars, AnalysisError
+    from app.cache import build_cache
+    from app.llm.cache import compose_cached_ai
+    cache = build_cache()
     provider, max_chars = None, 20000
     try:
         max_chars = configured_max_chars()
-        provider = build_gateway()
+        provider = compose_cached_ai(build_gateway(), cache)
     except (LLMConfigurationError, AnalysisError):
         logger.warning("AI-анализ отключён: проверьте настройки LLM и лимит текста.")
 
@@ -143,6 +146,7 @@ def main() -> int:
     except Exception:
         if database is not None:
             database.close()
+        cache.close()
         logger.error("VALYQON AI database startup failed.")
         return 2
     tender_repository = None
@@ -267,5 +271,6 @@ def main() -> int:
         logger.error("Бот завершился с ошибкой (%s). Проверьте сеть и настройки Telegram.", type(error).__name__)
         return 1
     finally:
+        cache.close()
         database.close()
     return 0

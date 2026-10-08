@@ -1,4 +1,5 @@
 """Bounded factual extraction through the provider-neutral interface."""
+from app.llm.cache import generate_operation, TENDER_ANALYSIS
 import json
 import os
 import re
@@ -127,7 +128,7 @@ async def analyze_tender(text: str, provider: LLMProvider, max_chars: int = DEFA
         + json.dumps(TenderAnalysis.model_json_schema(), ensure_ascii=False)
         + "\nДокумент (JSON-строка):\n" + json.dumps(prepared.text, ensure_ascii=False)
     )
-    response = await provider.generate(prompt, max_tokens=4096)
+    response = await generate_operation(provider, TENDER_ANALYSIS, prompt, max_tokens=4096)
     if response.finish_reason == "length":
         raise AnalysisError("Ответ AI обрезан по длине. Попробуйте меньший документ.")
     try:

@@ -21,6 +21,9 @@ class GigaChatProvider:
     def __init__(self, settings: GigaChatSettings):
         self.settings = settings
 
+    def cache_identity(self):
+        return {'model': self.settings.model, 'adapter': 'gigachat-chat-v1'}
+
     async def generate(self, prompt: str, *, max_tokens: int = 512) -> LLMResponse:
         if not prompt.strip():
             raise ValueError("Промпт не должен быть пустым.")

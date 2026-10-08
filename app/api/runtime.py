@@ -98,7 +98,8 @@ def build_runtime() -> ApiRuntime:
         from app.services.tender_analysis import configured_max_chars
 
         runtime.tender_max_chars = configured_max_chars()
-        runtime.provider = build_gateway()
+        from app.llm.cache import compose_cached_ai
+        runtime.provider = compose_cached_ai(build_gateway(), runtime.cache)
     except Exception:
         runtime.component_errors["llm"] = "LLM configuration unavailable"
 

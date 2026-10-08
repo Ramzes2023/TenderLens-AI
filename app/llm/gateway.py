@@ -123,6 +123,10 @@ class AIGateway:
         self._loop_lock = threading.Lock()
         self._sleep = sleeper
 
+    def cache_identity(self):
+        identity = getattr(self._provider, 'cache_identity', None)
+        return identity() if callable(identity) else None
+
     async def generate(self, prompt: str, *, max_tokens: int = 512) -> LLMResponse:
         if (not isinstance(prompt, str) or not prompt.strip() or len(prompt) > self.MAX_PROMPT_CHARS
                 or type(max_tokens) is not int or not 1 <= max_tokens <= 4096):

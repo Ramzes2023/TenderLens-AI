@@ -115,15 +115,13 @@ def main() -> int:
         print(f"Ошибка конфигурации: {error}", file=sys.stderr)
         return 2
     configure_logging(settings)
-    from app.llm.config import load_settings as load_llm_settings
-    from app.llm.gigachat import GigaChatProvider
+    from app.llm.gateway import build_gateway
     from app.llm.base import LLMConfigurationError
     from app.services.tender_analysis import configured_max_chars, AnalysisError
     provider, max_chars = None, 20000
     try:
-        llm_settings = load_llm_settings()
         max_chars = configured_max_chars()
-        provider = GigaChatProvider(llm_settings)
+        provider = build_gateway()
     except (LLMConfigurationError, AnalysisError):
         logger.warning("AI-анализ отключён: проверьте настройки LLM и лимит текста.")
 

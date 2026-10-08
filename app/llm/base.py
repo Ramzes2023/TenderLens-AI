@@ -28,6 +28,23 @@ class LLMAPIError(LLMError):
     pass
 
 
+class LLMProviderUnavailable(LLMAPIError):
+    pass
+
+
+class LLMRateLimited(LLMProviderUnavailable):
+    pass
+
+
+class LLMInvalidRequest(LLMError):
+    pass
+
+
+class LLMInvalidResponse(LLMAPIError):
+    pass
+
+
 class LLMProvider(Protocol):
+    """Async, cancellation-cooperative text generation; returns no vendor objects."""
     async def generate(self, prompt: str, *, max_tokens: int = 512) -> LLMResponse:
         ...

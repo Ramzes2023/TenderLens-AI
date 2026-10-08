@@ -46,6 +46,7 @@ class ApiRuntime:
         return {
             "cache": self.cache.status() if self.cache is not None else "disabled",
             "database": "ready" if self.tender_repository is not None and (database is None or database.healthy()) else "unavailable",
+            # Local configured capability only; never probes provider reachability.
             "llm": "ready" if self.provider is not None else "unavailable",
             "scoring": "ready" if (self.company_profile is not None or self.company_service is not None) else "unavailable",
             "companies": "ready" if self.company_service is not None else "unavailable",
@@ -93,12 +94,11 @@ def build_runtime() -> ApiRuntime:
         raise
 
     try:
-        from app.llm.config import load_settings as load_llm_settings
-        from app.llm.gigachat import GigaChatProvider
+        from app.llm.gateway import build_gateway
         from app.services.tender_analysis import configured_max_chars
 
         runtime.tender_max_chars = configured_max_chars()
-        runtime.provider = GigaChatProvider(load_llm_settings())
+        runtime.provider = build_gateway()
     except Exception:
         runtime.component_errors["llm"] = "LLM configuration unavailable"
 

@@ -6,6 +6,7 @@ import sys
 from .base import LLMConfigurationError, LLMError
 from .config import load_settings
 from .gigachat import GigaChatProvider
+from .gateway import AIGateway, ProviderRegistry, load_gateway_settings
 
 HEALTH_PROMPT = "Ответь одним словом: работает"
 
@@ -17,7 +18,10 @@ def main() -> int:
         logging.getLogger(name).propagate = False
     try:
         settings = load_settings()
-        response = asyncio.run(GigaChatProvider(settings).generate(HEALTH_PROMPT, max_tokens=32))
+        registry = ProviderRegistry()
+        registry.register("gigachat", GigaChatProvider(settings))
+        gateway = AIGateway(registry, load_gateway_settings())
+        response = asyncio.run(gateway.generate(HEALTH_PROMPT, max_tokens=32))
         print(response.text.replace(settings.credentials, "[REDACTED]"))
         return 0
     except LLMConfigurationError as error:

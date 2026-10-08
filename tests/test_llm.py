@@ -8,12 +8,14 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import httpx
-from gigachat.exceptions import AuthenticationError, ServerError
+from gigachat.exceptions import AuthenticationError, ServerError, RateLimitError, BadRequestError
+from app.llm.base import LLMRateLimited, LLMProviderUnavailable
 from gigachat.models.chat_completions import ChatCompletionResponse
 
 from app.llm.base import LLMAPIError, LLMAuthenticationError, LLMConfigurationError, LLMNetworkError, LLMTimeoutError
 from app.llm.config import GigaChatSettings, load_settings
 from app.llm.gigachat import GigaChatProvider
+from app.llm.models import LLMResponse
 from app.llm.health import main
 
 SECRET = "synthetic-secret-not-real"
@@ -58,7 +60,7 @@ class ConfigurationTests(unittest.TestCase):
 
     def test_health_success(self):
         with patch("app.llm.health.load_settings", return_value=GigaChatSettings(SECRET, "test")), patch("app.llm.health.GigaChatProvider") as provider, redirect_stdout(io.StringIO()) as output:
-            provider.return_value.generate = AsyncMock(return_value=type("Result", (), {"text": "работает"})())
+            provider.return_value.generate = AsyncMock(return_value=LLMResponse("работает", "gigachat", "test"))
             self.assertEqual(main(), 0)
             self.assertEqual(output.getvalue().strip(), "работает")
 
@@ -95,7 +97,9 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
     async def test_safe_error_mapping(self):
         cases = [
             (AuthenticationError("https://example.invalid", 401, SECRET.encode(), None), LLMAuthenticationError),
-            (ServerError("https://example.invalid", 500, SECRET.encode(), None), LLMAPIError),
+            (ServerError("https://example.invalid", 500, SECRET.encode(), None), LLMProviderUnavailable),
+            (RateLimitError("https://user:password@example.invalid", 429, SECRET.encode(), {"Authorization": SECRET}), LLMRateLimited),
+            (BadRequestError("https://user:password@example.invalid", 400, SECRET.encode(), {"Authorization": SECRET}), LLMAPIError),
             (httpx.ConnectError(SECRET), LLMNetworkError),
             (httpx.ReadTimeout(SECRET), LLMTimeoutError),
             (ValueError(SECRET), LLMAPIError),

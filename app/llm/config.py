@@ -36,7 +36,7 @@ class GigaChatSettings:
 
 def load_settings(env_file: Path = ENV_FILE) -> GigaChatSettings:
     load_dotenv(env_file, override=False, encoding="utf-8-sig")
-    if os.environ.get("LLM_PROVIDER", "gigachat").strip() != "gigachat":
+    if os.environ.get("VALYQON_AI_PROVIDER", os.environ.get("LLM_PROVIDER", "gigachat")).strip() != "gigachat":
         raise LLMConfigurationError("Пока поддерживается только LLM_PROVIDER=gigachat.")
     try:
         timeout = float(os.environ.get("GIGACHAT_TIMEOUT", "30") or "30")

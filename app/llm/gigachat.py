@@ -4,11 +4,12 @@ import logging
 
 import httpx
 from gigachat import GigaChat
-from gigachat.exceptions import AuthenticationError, ForbiddenError, GigaChatException
+from gigachat.exceptions import AuthenticationError, ForbiddenError, GigaChatException, ServerError
 from gigachat.models.chat_completions import ChatCompletionRequest
 
 from .base import (
     LLMAPIError, LLMAuthenticationError, LLMNetworkError, LLMTimeoutError,
+    LLMProviderUnavailable, LLMRateLimited, LLMInvalidResponse,
 )
 from .config import GigaChatSettings
 from .models import LLMResponse
@@ -49,7 +50,7 @@ class GigaChatProvider:
                 for part in (message.content or []) if part.text
             ).strip()
             if not text:
-                raise LLMAPIError("GigaChat не вернул текстовый ответ.")
+                raise LLMInvalidResponse("GigaChat не вернул текстовый ответ.")
             usage = response.usage
             return LLMResponse(
                 text=text, provider="gigachat",
@@ -66,8 +67,13 @@ class GigaChatProvider:
             error = LLMNetworkError("GigaChat: ошибка сети или TLS; проверьте подключение и сертификаты.")
         except LLMAPIError as exc:
             error = exc
-        except GigaChatException:
-            error = LLMAPIError("GigaChat: ошибка API; проверьте доступность модели и квоту.")
+        except ServerError:
+            error = LLMProviderUnavailable("AI provider temporarily unavailable.")
+        except GigaChatException as exc:
+            if getattr(exc, "status_code", None) == 429:
+                error = LLMRateLimited("AI provider rate limited.")
+            else:
+                error = LLMAPIError("GigaChat: ошибка API; проверьте доступность модели и квоту.")
         except Exception:
             error = LLMAPIError("GigaChat: не удалось обработать запрос или ответ.")
         # Never log exception bodies, headers, prompts, settings or tracebacks.

@@ -28,13 +28,14 @@ class ExecutionContext:
 
 
 class Worker:
-    def __init__(self, repository, registry, *, stop_event=None, claim_lock=None):
+    def __init__(self, repository, registry, *, stop_event=None, claim_lock=None, job_types=None):
         self.repository = repository
         self.registry = registry
         self.settings = repository.settings
         self.worker_id = 'worker-' + uuid.uuid4().hex
         self.stop_event = stop_event if stop_event is not None else threading.Event()
         self.claim_lock = claim_lock if claim_lock is not None else threading.Lock()
+        self.job_types = job_types
 
     def run_once(self):
         # Admission occurs under this gate, before the database call. Shutdown
@@ -43,7 +44,8 @@ class Worker:
         with self.claim_lock:
             if self.stop_event.is_set():
                 return False
-            claim = self.repository.claim_next(self.worker_id)
+            claim = (self.repository.claim_next(self.worker_id) if self.job_types is None
+                     else self.repository.claim_next(self.worker_id, job_types=self.job_types))
         if claim is None:
             return False
         context = ExecutionContext(claim.job, self.stop_event)
@@ -136,7 +138,8 @@ class WorkerPool:
             self._started = True
             try:
                 for _ in range(self.worker_count):
-                    worker = Worker(self.repository, self.registry, stop_event=self._stop, claim_lock=self._claim_lock)
+                    worker = Worker(self.repository, self.registry, stop_event=self._stop, claim_lock=self._claim_lock,
+                                    job_types=self.registry.job_types)
                     thread = threading.Thread(target=worker.run, name=worker.worker_id, daemon=False)
                     self._threads.append(thread)
                     thread.start()
@@ -163,8 +166,9 @@ class WorkerPool:
 
 def main(argv=()):
     # Explicit opt-in preserves the safe no-handler invocation.
-    if list(argv) != ['--rag']:
-        print('VALYQON AI worker unavailable: no production job handlers selected; use --rag.')
+    flags = list(argv)
+    if not flags or len(set(flags)) != len(flags) or any(flag not in {'--rag', '--connectors'} for flag in flags):
+        print('VALYQON AI worker unavailable: no production job handlers selected; use --rag and/or --connectors.')
         return 2
     database = pool = None
     try:
@@ -172,22 +176,32 @@ def main(argv=()):
         from app.database.backend import Database
         from app.database.config import load_database_settings
         from app.jobs import HandlerRegistry, JobRepository, JobService, load_job_settings
-        from app.rag.config import load_rag_settings
-        from app.rag.service import RagService
-        from app.rag.ingestion import JOB_TYPE, RagIngestionHandler, RagIngestionService, load_ingestion_options
-
-        settings = load_rag_settings()
-        if not settings.enabled:
-            raise ValueError('RAG disabled.')
-        documents, batch = load_ingestion_options()
+        if '--rag' in flags:
+            from app.rag.config import load_rag_settings
+            from app.rag.service import RagService
+            from app.rag.ingestion import JOB_TYPE, RagIngestionHandler, RagIngestionService, load_ingestion_options
+            settings = load_rag_settings()
+            if not settings.enabled:
+                raise ValueError('RAG disabled.')
+            documents, batch = load_ingestion_options()
+            rag = RagService(settings)
         job_settings = load_job_settings()
-        rag = RagService(settings)
         database = Database(load_database_settings())
         repository = JobRepository(database, job_settings)
         repository.initialize()
-        service = RagIngestionService(JobService(repository), documents, settings)
         registry = HandlerRegistry()
-        registry.register(JOB_TYPE, RagIngestionHandler(service, rag, batch_size=batch))
+        if '--rag' in flags:
+            service = RagIngestionService(JobService(repository), documents, settings)
+            registry.register(JOB_TYPE, RagIngestionHandler(service, rag, batch_size=batch))
+        if '--connectors' in flags:
+            from app.monitoring.config import load_monitoring_settings
+            from app.sources.catalog import build_source_catalog
+            from app.sources.ingestion import JOB_TYPE as CONNECTOR_JOB_TYPE, ConnectorSyncHandler, load_max_records
+            from app.sources.opportunities import OpportunityRepository
+            catalog = build_source_catalog(load_monitoring_settings())
+            opportunities = OpportunityRepository(database)
+            opportunities.initialize()
+            registry.register(CONNECTOR_JOB_TYPE, ConnectorSyncHandler(catalog, opportunities, max_records=load_max_records()))
         pool = WorkerPool(repository, registry)
         shutdown = threading.Event()
         def request_shutdown(signum, frame):
@@ -198,7 +212,7 @@ def main(argv=()):
         shutdown.wait()
         return 0
     except Exception:
-        print('VALYQON AI RAG worker startup/runtime failed; verify configuration.')
+        print('VALYQON AI worker startup/runtime failed; verify configuration.')
         return 2
     finally:
         # Do not close storage under a still-running handler after bounded shutdown.

@@ -499,10 +499,11 @@ def test_postgres_sql_and_transaction_path(queue):
     sqls = [sql for sql, _ in calls]
     assert any('FOR UPDATE SKIP LOCKED' in sql and 'priority DESC' in sql for sql in sqls)
     assert any('FOR UPDATE SKIP LOCKED' in sql and 'lease_expires_at<=' in sql for sql in sqls)
-    assert not any('pg_advisory' in sql or 'BEGIN IMMEDIATE' in sql for sql in sqls)
+    assert not any('BEGIN IMMEDIATE' in sql for sql in sqls)
+    assert [params for sql, params in calls if 'pg_advisory' in sql] == [(240_003,)]
     assert '%s' in postgres_sql(POSTGRES_CLAIM_SQL)
     assert 'SKIP LOCKED' not in CLAIM_SQL
-    ddl = postgres_sql(MIGRATIONS[-1].sql, parameters=False)
+    ddl = postgres_sql(MIGRATIONS[8].sql, parameters=False)
     assert 'available_at BIGINT' in ddl and 'account_id BIGINT' in ddl
     assert 'WHERE id=%s' in postgres_sql('SELECT id FROM durable_jobs WHERE id=? FOR UPDATE')
     with pytest.raises(JobValueError):
@@ -521,7 +522,8 @@ def test_historical_migration_checksums_are_frozen():
         8: 'c1aaac0f56f491f25a6761103a95b2b0905b99becadd5843bd1601430661e48e',
     }
     assert {m.version: m.checksum for m in MIGRATIONS[:8]} == expected
-    assert MIGRATIONS[-1].version == 9 and MIGRATIONS[-1].domain == 'jobs'
+    assert MIGRATIONS[8].version == 9 and MIGRATIONS[8].domain == 'jobs'
+    assert MIGRATIONS[-1].version == 10 and MIGRATIONS[-1].domain == 'opportunities'
 
 
 def test_same_identity_separates_tenants(queue):

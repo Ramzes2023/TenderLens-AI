@@ -16,6 +16,8 @@ from urllib.parse import urlencode
 
 import httpx
 
+from .http import page_limit, source_client
+
 from .models import TenderNotice
 
 
@@ -353,14 +355,14 @@ class EisRssSource:
         merged: list[TenderNotice] = []
         seen: set[tuple[str, str]] = set()
         try:
-            async with httpx.AsyncClient(
+            async with source_client(
                 timeout=self.timeout,
                 follow_redirects=True,
                 verify=verify,
                 trust_env=True,
                 headers={"User-Agent": "TenderLensAI/0.9 (+RSS monitor)"},
             ) as client:
-                for url in self.urls:
+                for url in self.urls[:page_limit(len(self.urls))]:
                     response = await client.get(url)
                     response.raise_for_status()
                     payload = response.content

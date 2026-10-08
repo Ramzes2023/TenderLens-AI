@@ -166,13 +166,29 @@ class JobRepository:
         with self._transaction() as conn:
             return self._recover(conn, self._now(conn))
 
-    def claim_next(self, worker_id):
+    def claim_next(self, worker_id, *, job_types=None):
         if type(worker_id) is not str or not re.fullmatch(r'worker-[a-f0-9]{32}', worker_id):
             raise JobValueError('Invalid worker identity.')
         with self._transaction() as conn:
+            # Tiny admission transaction only. Serialize claims across processes
+            # so the single global connector lane is not defeated by SKIP LOCKED.
+            if self.database.backend == 'postgresql':
+                conn.execute('SELECT pg_advisory_xact_lock(?)', (240_003,))
             now = self._now(conn)
             self._recover(conn, now)
-            row = conn.execute(POSTGRES_CLAIM_SQL if self.database.backend == 'postgresql' else CLAIM_SQL, (now,)).fetchone()
+            sql = CLAIM_SQL
+            filters = " AND (job_type<>'connector.sync.v1' OR NOT EXISTS (SELECT 1 FROM durable_jobs active WHERE active.job_type='connector.sync.v1' AND active.state='running'))"
+            params = [now]
+            if job_types is not None:
+                types = tuple(job_type_name(item) for item in job_types)
+                if not types or len(types) > 100:
+                    raise JobValueError('Invalid claim handler selection.')
+                filters += ' AND job_type IN (' + ','.join('?' for _ in types) + ')'
+                params.extend(types)
+            sql = sql.replace(' ORDER BY', filters + ' ORDER BY')
+            if self.database.backend == 'postgresql':
+                sql += ' FOR UPDATE SKIP LOCKED'
+            row = conn.execute(sql, params).fetchone()
             if row is None:
                 return None
             now = self._now(conn)

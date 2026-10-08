@@ -19,10 +19,10 @@ TABLES = (
     "company_workspaces", "company_active", "auth_sessions", "auth_telegram_links",
     "auth_password_resets", "auth_email_verifications", "tenders", "saved_opportunities",
     "discovery_search_history", "monitor_subscriptions", "monitor_seen", "rag_chunks",
-    "support_tickets", "support_ticket_messages", "durable_jobs",
+    "support_tickets", "support_ticket_messages", "durable_jobs", "source_opportunities",
 )
 METADATA = {"schema_meta", "app_schema_migrations", "app_data_imports"}
-OPTIONAL = {"rag_chunks", "support_ticket_messages", "durable_jobs"}
+OPTIONAL = {"rag_chunks", "support_ticket_messages", "durable_jobs", "source_opportunities"}
 
 
 def validate_versions(conn, *, legacy=False):
@@ -58,6 +58,9 @@ def preflight_source(conn):
     if "durable_jobs" not in names and "app_schema_migrations" in names:
         if conn.execute("SELECT 1 FROM app_schema_migrations WHERE version=9").fetchone():
             raise StorageError("Source job schema is missing; upgrade a backed-up copy first.")
+    if "source_opportunities" not in names and "app_schema_migrations" in names:
+        if conn.execute("SELECT 1 FROM app_schema_migrations WHERE version=10").fetchone():
+            raise StorageError("Source opportunity schema is missing; upgrade a backed-up copy first.")
     if set(TABLES) - OPTIONAL - names:
         raise StorageError("Source schema is incomplete; upgrade a backed-up copy first.")
     if "app_data_imports" in names and conn.execute("SELECT 1 FROM app_data_imports LIMIT 1").fetchone():

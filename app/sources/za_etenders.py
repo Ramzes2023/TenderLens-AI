@@ -10,6 +10,8 @@ from typing import Any
 
 import httpx
 
+from .http import source_client
+
 from .eis_rss import SourceError
 from .models import TenderNotice
 
@@ -383,7 +385,7 @@ class ZaETendersSource:
         )
 
         try:
-            async with httpx.AsyncClient(
+            async with source_client(
                 timeout=self.timeout,
                 follow_redirects=True,
                 trust_env=True,

@@ -11,6 +11,8 @@ from urllib.parse import urlencode, urlsplit
 
 import httpx
 
+from .http import source_client
+
 from .eis_rss import SourceError
 from .models import TenderNotice
 
@@ -321,7 +323,7 @@ class CanadaBuysDatasetSource:
         limit = max(1, min(int(limit), 100))
 
         try:
-            async with httpx.AsyncClient(
+            async with source_client(
                 timeout=self.timeout,
                 follow_redirects=True,
                 trust_env=True,

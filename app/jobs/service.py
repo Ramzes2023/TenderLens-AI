@@ -23,6 +23,10 @@ class HandlerRegistry:
     def __len__(self):
         return len(self._handlers)
 
+    @property
+    def job_types(self):
+        return tuple(self._handlers)
+
 
 class JobService:
     def __init__(self, repository):

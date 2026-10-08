@@ -11,6 +11,8 @@ from urllib.parse import unquote, urljoin
 
 import httpx
 
+from .http import page_limit, source_client
+
 from .eis_rss import SourceError
 from .models import TenderNotice
 
@@ -485,7 +487,7 @@ class IndiaCpppSource:
         ] = set()
 
         try:
-            async with httpx.AsyncClient(
+            async with source_client(
                 timeout=self.timeout,
                 follow_redirects=True,
                 trust_env=True,
@@ -499,7 +501,7 @@ class IndiaCpppSource:
                 response.raise_for_status()
 
                 for _ in range(
-                    _MAX_PAGES
+                    page_limit(_MAX_PAGES)
                 ):
                     payload = (
                         response.content
@@ -577,6 +579,9 @@ class IndiaCpppSource:
                     )
 
                     if not next_url:
+                        break
+
+                    if _ + 1 >= page_limit(_MAX_PAGES):
                         break
 
                     response = (

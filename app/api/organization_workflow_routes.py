@@ -1546,6 +1546,7 @@ async def organization_discover_tenders(
     organization_id: int,
     request: Request,
     response: Response,
+    snapshots: bool = False,
 ):
     """Search enabled procurement sources for the active company."""
 
@@ -1579,6 +1580,16 @@ async def organization_discover_tenders(
     catalog = _source_catalog(
         request
     )
+
+    if snapshots:
+        # Explicit staged adoption; default live profile-aware discovery stays intact.
+        from app.sources.opportunities import OpportunityRepository
+        from app.sources.snapshots import snapshot_catalog
+        database = getattr(request.app.state.runtime, 'database', None)
+        if database is None:
+            raise HTTPException(status_code=503, detail='Connector snapshots unavailable.')
+        catalog = snapshot_catalog(catalog, OpportunityRepository(database))
+        response.headers['X-Valyqon-Discovery-Mode'] = 'snapshots'
 
     try:
         matches, report = (

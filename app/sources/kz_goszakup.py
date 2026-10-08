@@ -7,6 +7,8 @@ from urllib.parse import urljoin, urlparse
 
 import httpx
 
+from .http import page_limit, source_client
+
 from .eis_rss import SourceError
 from .models import TenderNotice
 
@@ -271,7 +273,7 @@ class KazakhstanGoszakupApiSource:
         page_count = 0
 
         try:
-            async with httpx.AsyncClient(
+            async with source_client(
                 timeout=self.timeout,
                 follow_redirects=True,
                 trust_env=True,
@@ -288,7 +290,9 @@ class KazakhstanGoszakupApiSource:
                             "repeated next_page URL."
                         )
 
-                    if page_count >= _MAX_PAGES:
+                    if page_count >= page_limit(_MAX_PAGES):
+                        if page_limit(_MAX_PAGES) < _MAX_PAGES:
+                            break
                         raise SourceError(
                             "Kazakhstan procurement API "
                             "exceeded the safe page limit."

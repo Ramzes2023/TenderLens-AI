@@ -19,7 +19,7 @@ Do not commit or share:
 
 - SQLite stores accounts/sessions, organizations/memberships/invitations, structured tender analysis, scoring metadata, hashes, timestamps and monitoring state.
 - Qdrant stores RAG chunk text, page/chunk metadata and embeddings.
-- Raw PDF bytes are not retained by the tender history pipeline.
+- Raw PDF bytes are not retained by the legacy tender history pipeline. Durable RAG ingestion retains bounded PDFs in the operator-controlled shared staging directory; see `docs/PHASE24S1F_RAG_PIPELINE_SCALE.md` for lifecycle and access policy.
 - FastEmbed model files are cached locally.
 
 Treat the whole `data/` directory / Docker named volume as application data that may contain sensitive tender text.

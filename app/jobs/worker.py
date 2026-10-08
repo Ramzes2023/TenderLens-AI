@@ -161,11 +161,52 @@ class WorkerPool:
         return ShutdownResult(remaining == 0, remaining)
 
 
-def main():
-    # No fake production handlers. Refuse before loading .env or opening a DB.
-    print('VALYQON AI worker unavailable: no production job handlers registered.')
-    return 2
+def main(argv=()):
+    # Explicit opt-in preserves the safe no-handler invocation.
+    if list(argv) != ['--rag']:
+        print('VALYQON AI worker unavailable: no production job handlers selected; use --rag.')
+        return 2
+    database = pool = None
+    try:
+        import signal
+        from app.database.backend import Database
+        from app.database.config import load_database_settings
+        from app.jobs import HandlerRegistry, JobRepository, JobService, load_job_settings
+        from app.rag.config import load_rag_settings
+        from app.rag.service import RagService
+        from app.rag.ingestion import JOB_TYPE, RagIngestionHandler, RagIngestionService, load_ingestion_options
+
+        settings = load_rag_settings()
+        if not settings.enabled:
+            raise ValueError('RAG disabled.')
+        documents, batch = load_ingestion_options()
+        job_settings = load_job_settings()
+        rag = RagService(settings)
+        database = Database(load_database_settings())
+        repository = JobRepository(database, job_settings)
+        repository.initialize()
+        service = RagIngestionService(JobService(repository), documents, settings)
+        registry = HandlerRegistry()
+        registry.register(JOB_TYPE, RagIngestionHandler(service, rag, batch_size=batch))
+        pool = WorkerPool(repository, registry)
+        shutdown = threading.Event()
+        def request_shutdown(signum, frame):
+            shutdown.set()
+        signal.signal(signal.SIGINT, request_shutdown)
+        signal.signal(signal.SIGTERM, request_shutdown)
+        pool.start()
+        shutdown.wait()
+        return 0
+    except Exception:
+        print('VALYQON AI RAG worker startup/runtime failed; verify configuration.')
+        return 2
+    finally:
+        # Do not close storage under a still-running handler after bounded shutdown.
+        stopped = pool.stop().completed if pool is not None else True
+        if database is not None and stopped:
+            database.close()
 
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    import sys
+    raise SystemExit(main(sys.argv[1:]))

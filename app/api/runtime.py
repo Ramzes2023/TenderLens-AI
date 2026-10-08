@@ -32,6 +32,7 @@ class ApiRuntime:
     organization_service: "OrganizationService | Any | None" = None
     tender_repository: "TenderRepository | Any | None" = None
     rag_service: "RagService | Any | None" = None
+    rag_ingestion_service: "Any | None" = None
     monitoring_service: "TenderMonitorService | Any | None" = None
     tender_discovery_service: "TenderMonitorService | Any | None" = None
     source_catalog: "SourceCatalog | Any | None" = None
@@ -204,6 +205,20 @@ def build_runtime() -> ApiRuntime:
             runtime.component_errors["rag"] = "RAG disabled"
     except Exception:
         runtime.component_errors["rag"] = "RAG unavailable"
+
+    try:
+        from app.jobs import JobRepository, JobService, load_job_settings
+        from app.rag.config import load_rag_settings
+        from app.rag.ingestion import RagIngestionService, load_ingestion_options
+
+        ingestion_settings = load_rag_settings()
+        if ingestion_settings.enabled:
+            documents, _ = load_ingestion_options()
+            jobs = JobRepository(runtime.database, load_job_settings())
+            jobs.initialize()
+            runtime.rag_ingestion_service = RagIngestionService(JobService(jobs), documents, ingestion_settings)
+    except Exception:
+        runtime.component_errors['rag_ingestion'] = 'RAG ingestion unavailable'
 
     monitor_settings = None
 

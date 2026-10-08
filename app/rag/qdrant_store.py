@@ -7,6 +7,10 @@ Qdrant service with minimal changes.
 from __future__ import annotations
 
 import uuid
+import hashlib
+import json
+import os
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -24,6 +28,10 @@ class QdrantStoreError(RuntimeError):
     pass
 
 
+class QdrantSchemaError(QdrantStoreError):
+    """Deterministic schema/dependency failure; do not retry."""
+
+
 class QdrantVectorStore:
     def __init__(self, path: Path, collection: str):
         self.path = Path(path)
@@ -31,19 +39,54 @@ class QdrantVectorStore:
 
     def _require_dependency(self) -> None:
         if QdrantClient is None or models is None:
-            raise QdrantStoreError("Не установлен qdrant-client. Выполните pip install -r requirements.txt.")
+            raise QdrantSchemaError("Qdrant dependency unavailable.")
 
     @contextmanager
     def _client(self) -> Iterator[object]:
         self._require_dependency()
         self.path.mkdir(parents=True, exist_ok=True)
-        client = QdrantClient(path=str(self.path))
-        try:
-            yield client
-        finally:
-            close = getattr(client, "close", None)
-            if callable(close):
-                close()
+        # Local Qdrant prohibits concurrent opens. Serialize API/worker operations
+        # across processes and threads; no lock is held during embeddings.
+        with self._local_lock():
+            client = QdrantClient(path=str(self.path))
+            try:
+                yield client
+            finally:
+                close = getattr(client, "close", None)
+                if callable(close):
+                    close()
+
+    @contextmanager
+    def _local_lock(self):
+        with open(self.path / '.valyqon.lock', 'a+b') as handle:
+            handle.seek(0, 2)
+            if handle.tell() == 0:
+                handle.write(b'0')
+                handle.flush()
+            deadline = time.monotonic() + 30
+            acquired = False
+            while not acquired:
+                handle.seek(0)
+                try:
+                    if os.name == 'nt':
+                        import msvcrt
+                        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    else:
+                        import fcntl
+                        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    acquired = True
+                except OSError:
+                    if time.monotonic() >= deadline:
+                        raise QdrantStoreError('Local vector storage busy.') from None
+                    time.sleep(.05)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                if os.name == 'nt':
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     def initialize(self) -> None:
         try:
@@ -78,9 +121,9 @@ class QdrantVectorStore:
         size = getattr(vectors, "size", None)
         if size is None and isinstance(vectors, dict) and vectors:
             # Named-vector configs are not used by VALYQON AI, but fail clearly.
-            raise QdrantStoreError("Qdrant collection использует несовместимую named-vector конфигурацию.")
-        if int(size) != dimensions:
-            raise QdrantStoreError(
+            raise QdrantSchemaError("Incompatible vector schema.")
+        if type(size) is not int or size != dimensions:
+            raise QdrantSchemaError(
                 "Размерность embeddings изменилась. Укажите новое RAG_QDRANT_COLLECTION и переиндексируйте PDF."
             )
 
@@ -148,6 +191,7 @@ class QdrantVectorStore:
         pdf_sha256: str,
         query_vector: tuple[float, ...],
         limit: int = 5,
+        *, ingestion_scope: str | None = None, pipeline_version: str | None = None,
     ) -> list[RetrievedChunk]:
         limit = max(1, min(int(limit), 10))
         try:
@@ -157,7 +201,8 @@ class QdrantVectorStore:
                 result = client.query_points(
                     collection_name=self.collection,
                     query=list(query_vector),
-                    query_filter=self._filter(owner_user_id, pdf_sha256),
+                    query_filter=(self._ingestion_filter(ingestion_scope, pdf_sha256, pipeline_version)
+                                  if ingestion_scope is not None else self._filter(owner_user_id, pdf_sha256)),
                     limit=limit,
                     with_payload=True,
                     with_vectors=False,
@@ -176,3 +221,36 @@ class QdrantVectorStore:
             raise
         except Exception:
             raise QdrantStoreError("Не удалось выполнить semantic search в Qdrant.") from None
+
+    @staticmethod
+    def _ingestion_filter(scope, digest, pipeline):
+        return models.Filter(must=[models.FieldCondition(key=key, match=models.MatchValue(value=value))
+                                  for key, value in [('ingestion_scope', scope), ('pdf_sha256', digest),
+                                                     ('pipeline_version', pipeline)]])
+
+    @staticmethod
+    def ingestion_point_id(scope, digest, pipeline, index):
+        identity = json.dumps([scope, digest, pipeline, index], separators=(',', ':'))
+        return str(uuid.UUID(bytes=hashlib.sha256(identity.encode()).digest()[:16]))
+
+    def upsert_ingestion(self, scope, digest, pipeline, reference, items):
+        if not items:
+            return 0
+        dimensions = len(items[0][1])
+        if not dimensions or any(len(vector) != dimensions for _, vector in items):
+            raise QdrantSchemaError('Invalid vector dimensions.')
+        try:
+            with self._client() as client:
+                self._ensure_collection(client, dimensions)
+                points = [models.PointStruct(
+                    id=self.ingestion_point_id(scope, digest, pipeline, chunk.chunk_index), vector=list(vector),
+                    payload={'ingestion_scope': scope, 'pdf_sha256': digest, 'pipeline_version': pipeline,
+                             'document_ref': reference, 'chunk_index': chunk.chunk_index,
+                             'page_number': chunk.page_number, 'chunk_text': chunk.text})
+                    for chunk, vector in items]
+                client.upsert(collection_name=self.collection, points=points, wait=True)
+            return len(items)
+        except QdrantStoreError:
+            raise
+        except Exception:
+            raise QdrantStoreError('Vector upsert unavailable.') from None

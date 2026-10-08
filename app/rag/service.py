@@ -118,7 +118,8 @@ class RagService:
             list(zip(chunks, vectors, strict=True)),
         )
 
-    def retrieve(self, owner_user_id: int, pdf_sha256: str, question: str) -> list[RetrievedChunk]:
+    def retrieve(self, owner_user_id: int, pdf_sha256: str, question: str, *,
+                 ingestion_scope=None, pipeline_version=None) -> list[RetrievedChunk]:
         question = question.strip()
         if not question:
             raise RagError("Вопрос не должен быть пустым.")
@@ -126,6 +127,9 @@ class RagService:
             vector = self.embedder.embed(question)
         except EmbeddingError as error:
             raise RagError(str(error)) from None
+        if ingestion_scope is not None:
+            return self.store.search(owner_user_id, pdf_sha256, vector, self.settings.top_k,
+                                     ingestion_scope=ingestion_scope, pipeline_version=pipeline_version)
         return self.store.search(owner_user_id, pdf_sha256, vector, self.settings.top_k)
 
     async def answer(
@@ -134,9 +138,11 @@ class RagService:
         pdf_sha256: str,
         question: str,
         provider: LLMProvider,
+        *, ingestion_scope=None, pipeline_version=None,
     ) -> RagAnswer:
         # Embedding can be CPU-heavy or network-bound; keep it off the aiogram event loop.
-        chunks = await asyncio.to_thread(self.retrieve, owner_user_id, pdf_sha256, question)
+        chunks = await asyncio.to_thread(self.retrieve, owner_user_id, pdf_sha256, question,
+                                        ingestion_scope=ingestion_scope, pipeline_version=pipeline_version)
         if not chunks:
             raise RagError("Для этого документа semantic RAG-индекс пока не найден.")
         selected: list[RetrievedChunk] = []

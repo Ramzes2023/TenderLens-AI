@@ -26,7 +26,8 @@ def _cut(text: str, start: int, target_end: int) -> int:
     return floor + best + 1 if best >= 0 else target_end
 
 
-def chunk_pages(page_texts: Sequence[str], chunk_size: int, overlap: int) -> list[DocumentChunk]:
+def chunk_pages(page_texts: Sequence[str], chunk_size: int, overlap: int, *,
+                max_chunks: int | None = None) -> list[DocumentChunk]:
     if chunk_size <= 0 or overlap < 0 or overlap >= chunk_size:
         raise ValueError("Некорректные параметры chunking.")
     chunks: list[DocumentChunk] = []
@@ -40,6 +41,8 @@ def chunk_pages(page_texts: Sequence[str], chunk_size: int, overlap: int) -> lis
             end = _cut(text, start, min(len(text), start + chunk_size))
             piece = text[start:end].strip()
             if piece:
+                if max_chunks is not None and len(chunks) >= max_chunks:
+                    raise ValueError('Document exceeds chunk limit.')
                 chunks.append(DocumentChunk(index, page_number, piece))
                 index += 1
             if end >= len(text):

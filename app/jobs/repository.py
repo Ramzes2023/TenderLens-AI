@@ -130,6 +130,12 @@ class JobRepository:
                 row = conn.execute('SELECT * FROM durable_jobs WHERE id=?', (job_id,)).fetchone()
             return decode_job(row)
 
+    def validate_scope(self, scope):
+        """Revalidate stored authorization parents before worker-side processing."""
+        self._scope_filter(scope)
+        with self._transaction() as conn:
+            self._validate_scope(conn, scope)
+
     def get(self, job_id, *, scope):
         clause, params = self._scope_filter(scope)
         conn = self.database.connect()

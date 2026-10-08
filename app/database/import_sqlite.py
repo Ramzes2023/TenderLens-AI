@@ -20,10 +20,10 @@ TABLES = (
     "auth_password_resets", "auth_email_verifications", "tenders", "saved_opportunities",
     "discovery_search_history", "monitor_subscriptions", "monitor_seen", "rag_chunks",
     "support_tickets", "support_ticket_messages", "durable_jobs", "source_opportunities",
-    "scoring_public_revisions", "scoring_snapshots", "scoring_candidates", "scoring_results",
+    "scoring_public_revisions", "scoring_snapshots", "scoring_candidates", "scoring_results", "quota_admissions",
 )
 METADATA = {"schema_meta", "app_schema_migrations", "app_data_imports"}
-OPTIONAL = {"rag_chunks", "support_ticket_messages", "durable_jobs", "source_opportunities", "scoring_public_revisions", "scoring_snapshots", "scoring_candidates", "scoring_results"}
+OPTIONAL = {"quota_admissions", "rag_chunks", "support_ticket_messages", "durable_jobs", "source_opportunities", "scoring_public_revisions", "scoring_snapshots", "scoring_candidates", "scoring_results"}
 
 
 def validate_versions(conn, *, legacy=False):
@@ -69,8 +69,10 @@ def preflight_source(conn):
         raise StorageError("Source schema is incomplete; upgrade a backed-up copy first.")
     if "app_data_imports" in names and conn.execute("SELECT 1 FROM app_data_imports LIMIT 1").fetchone():
         raise StorageError("Source has existing import history; explicit review required.")
-    # Canonical SQLite schema is built only in an isolated temporary fixture. The
-    # real source remains read-only, even when it predates the migration ledger.
+    if "app_schema_migrations" in names and conn.execute("SELECT 1 FROM app_schema_migrations WHERE version=12").fetchone():
+        if "quota_admissions" not in names:
+            raise StorageError("Source quota schema is missing; upgrade a backed-up copy first.")
+    # Canonical schema uses an isolated fixture; the source remains read-only.
     with tempfile.TemporaryDirectory(prefix="valyqon-schema-") as tmp:
         template = Database(DatabaseSettings("", Path(tmp) / "schema.sqlite"))
         try:
@@ -132,6 +134,14 @@ def transfer(source, destination, columns, counts):
         actual = destination.execute(f"SELECT COUNT(*) FROM {identifier(table)}").fetchone()[0]
         if actual != counts[table]:
             raise StorageError("Migration row-count mismatch; import rolled back.")
+    # Legacy sources predate the ledger. Backfill in the same import transaction;
+    # otherwise importing into an already migrated destination could bypass quotas.
+    if "quota_admissions" not in columns:
+        destination.execute("""INSERT INTO quota_admissions(job_id,tenant_key,admitted_at)
+            SELECT id, CASE WHEN organization_id IS NOT NULL
+                THEN 'organization:' || CAST(organization_id AS TEXT)
+                ELSE 'account:' || CAST(account_id AS TEXT) END, created_at
+            FROM durable_jobs WHERE account_id IS NOT NULL ON CONFLICT DO NOTHING""")
     for table in sorted(IDENTITY_TABLES):
         # setval is not transactional in PostgreSQL. A failed import can leave
         # harmless sequence gaps; explicit IDs/data/marker still roll back.

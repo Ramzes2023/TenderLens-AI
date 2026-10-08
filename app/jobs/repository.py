@@ -30,12 +30,16 @@ def retry_delay(attempt):
 
 
 class JobRepository:
-    def __init__(self, database, settings=None, *, clock=None):
+    def __init__(self, database, settings=None, *, clock=None, quotas=None):
         self.database = database
         self.settings = settings or JobSettings()
         if clock is not None and database.backend != 'sqlite':
             raise JobValueError('Clock injection is local-test only.')
         self.clock = clock or time.time
+        from app.quotas import load_quota_settings, QuotaSettings
+        self.quotas = load_quota_settings() if quotas is None else quotas
+        if not isinstance(self.quotas, QuotaSettings):
+            raise JobValueError("Invalid quota configuration.")
 
     def initialize(self):
         # Jobs reference all tenant parents; full ordered migration is intentional.
@@ -80,14 +84,16 @@ class JobRepository:
         return ' AND '.join(parts), params
 
     def _validate_scope(self, conn, scope):
-        if scope.account_id is not None and not conn.execute('SELECT 1 FROM auth_accounts WHERE id=?', (scope.account_id,)).fetchone():
+        # Keep authorization parents stable until this transaction commits.
+        proof_lock = ' FOR SHARE' if self.database.backend == 'postgresql' else ''
+        if scope.account_id is not None and not conn.execute('SELECT 1 FROM auth_accounts WHERE id=? AND is_active=1' + proof_lock, (scope.account_id,)).fetchone():
             raise JobValueError('Invalid stored job scope.')
         if scope.organization_id is not None and not conn.execute(
-                'SELECT 1 FROM organization_members WHERE organization_id=? AND account_id=?',
+                'SELECT 1 FROM organization_members WHERE organization_id=? AND account_id=?' + proof_lock,
                 (scope.organization_id, scope.account_id)).fetchone():
             raise JobValueError('Invalid stored job scope.')
         if scope.company_id is not None and not conn.execute(
-                'SELECT 1 FROM company_workspaces WHERE id=? AND organization_id=?',
+                'SELECT 1 FROM company_workspaces WHERE id=? AND organization_id=?' + proof_lock,
                 (scope.company_id, scope.organization_id)).fetchone():
             raise JobValueError('Invalid stored job scope.')
 
@@ -111,6 +117,8 @@ class JobRepository:
                 raise JobValueError('Invalid idempotency identity.') from None
         with self._transaction() as conn:
             self._validate_scope(conn, scope)
+            from app.quotas.admission import lock, admit
+            tenant_key = lock(conn, self.database.backend, self.quotas, scope, job_type)
             now = self._now(conn)
             job_id = str(uuid.uuid4())
             cursor = conn.execute('''INSERT INTO durable_jobs
@@ -127,6 +135,7 @@ class JobRepository:
                     # explicitly rather than receiving a non-existent/incorrect job.
                     raise JobValueError('Job identity changed concurrently; retry enqueue.')
             else:
+                admit(conn, self.quotas, tenant_key, job_id, now)
                 row = conn.execute('SELECT * FROM durable_jobs WHERE id=?', (job_id,)).fetchone()
             return decode_job(row)
 

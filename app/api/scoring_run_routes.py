@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.database.backend import StorageError
 from app.companies import CompanyAuthorizationError, CompanyRepositoryError
 from app.organizations import OrganizationError
+from app.quotas import QuotaExceeded
 from app.jobs.models import JobScope, JobValueError
 from app.scoring.runs import ScoringAccessError, ScoringInputError
 from .security import current_account, require_same_origin_browser_request
@@ -42,6 +43,8 @@ async def execute(request, response, organization_id, company_id, operation):
         if workspace is None:
             raise ScoringAccessError('Scoring access denied.')
         value = await asyncio.to_thread(operation, service, scope)
+    except QuotaExceeded as exc:
+        raise HTTPException(429, 'Tenant job quota exceeded.', headers={'Retry-After': str(exc.retry_after), 'Cache-Control': 'no-store'}) from None
     except (ScoringAccessError, CompanyAuthorizationError, OrganizationError):
         raise HTTPException(403, 'Scoring access denied.') from None
     except ScoringInputError:

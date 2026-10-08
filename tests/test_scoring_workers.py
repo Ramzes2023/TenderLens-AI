@@ -343,10 +343,10 @@ def test_api_auth_csrf_roles_and_isolation(system):
 
 
 def test_migration_11_and_postgresql_sql(system):
-    assert MIGRATIONS[-1].version == 11 and MIGRATIONS[-1].domain == 'scoring'
+    assert MIGRATIONS[10].version == 11 and MIGRATIONS[10].domain == 'scoring'
     assert MIGRATIONS[9].checksum == '95f679368a7c292f931d8b84e44ca3dec9a1c2970223f11b202337340962298b'
     assert MIGRATIONS[10].checksum == 'b4a93fcf29d7ef1a7a241e79599cb123fdcb40eed54f32e00ed46add4694547c'
-    compiled = postgres_sql(MIGRATIONS[-1].sql)
+    compiled = postgres_sql(MIGRATIONS[10].sql)
     assert 'BIGINT NOT NULL REFERENCES' in compiled and 'ON DELETE CASCADE' in compiled
     system.database.migrate()
     with closing(system.database.connect()) as conn:
@@ -435,3 +435,25 @@ def test_cli_explicit_modes(system, flags):
             assert registry.resolve('connector.sync.v1') is not None
     assert main([]) == 2
     assert main(['--scoring', '--scoring']) == 2
+
+
+def test_api_quota_denial_after_authorization(system):
+    from app.quotas import QuotaSettings, Limits
+    s = system
+    s.jobs.quotas = QuotaSettings(True, Limits(0, 0, 0))
+    runtime = ApiRuntime(auth_service=s.auth, scoring_run_service=s.service,
+                         company_service=CompanyService(s.companies), organization_service=OrganizationService(s.orgs))
+    app = create_app(runtime=runtime, settings=ApiSettings(host='127.0.0.1', port=8000, reload=False, api_key='fixture'))
+    path = f'/api/v1/organizations/{s.org.id}/companies/{s.company.id}/scoring/runs'
+    with TestClient(app) as client:
+        assert client.post(path, json={}).status_code == 401
+        client.cookies.set(SESSION_COOKIE, s.auth.create_session(s.accounts[4]))
+        assert client.post(path, json={}).status_code == 403
+        client.cookies.set(SESSION_COOKIE, s.auth.create_session(s.accounts[0]))
+        denied = client.post(path, json={})
+        assert denied.status_code == 429
+        assert int(denied.headers['Retry-After']) >= 1
+        assert denied.headers['Cache-Control'] == 'no-store'
+        assert denied.json() == {'detail': 'Tenant job quota exceeded.'}
+        with closing(s.database.connect()) as conn:
+            assert conn.execute('SELECT COUNT(*) FROM durable_jobs').fetchone()[0] == 0

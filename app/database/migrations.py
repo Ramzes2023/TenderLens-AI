@@ -25,7 +25,7 @@ class Migration:
 
 
 MIGRATIONS = tuple(Migration(i, domain) for i, domain in enumerate(
-    ("auth", "organizations", "companies", "tenders", "monitoring", "rag", "support", "operations", "jobs", "opportunities", "scoring"), 1
+    ("auth", "organizations", "companies", "tenders", "monitoring", "rag", "support", "operations", "jobs", "opportunities", "scoring", "quotas"), 1
 ))
 
 

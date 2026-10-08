@@ -30,6 +30,7 @@ from app.llm.base import LLMError
 from app.models.tender import TenderAnalysis
 from app.organizations import OrganizationError
 from app.parsers.pdf import MAX_BYTES
+from app.quotas import QuotaExceeded
 from app.jobs import JobScope, JobValueError
 from app.rag.documents import DocumentError
 from app.rag.ingestion import pipeline_identity, vector_scope
@@ -119,6 +120,8 @@ async def enqueue_rag_document(organization_id: int, request: Request, response:
         job = await asyncio.to_thread(service.stage_and_enqueue, data, scope=scope)
     except DocumentError:
         raise HTTPException(422, 'Invalid PDF staging request.') from None
+    except QuotaExceeded as exc:
+        raise HTTPException(429, 'Tenant job quota exceeded.', headers={'Retry-After': str(exc.retry_after), 'Cache-Control': 'no-store'}) from None
     except JobValueError:
         raise HTTPException(403, 'Ingestion scope unavailable.') from None
     except Exception:

@@ -436,3 +436,22 @@ def test_application_upload_status_ask_and_company_isolation(setup):
         client.cookies.clear()
         client.cookies.set(SESSION_COOKIE, auth.create_session(setup.auth_repo.find_account_by_id(setup.scope_b.account_id)))
         assert client.get(prefix + f'/jobs/{job_id}').status_code == 403
+
+
+def test_upload_quota_denial_does_not_enqueue(setup):
+    from app.quotas import QuotaSettings, Limits
+    setup.jobs.quotas = QuotaSettings(True, Limits(0, 0, 0))
+    auth = AuthService(setup.auth_repo)
+    runtime = ApiRuntime(auth_service=auth, organization_service=OrganizationService(setup.organizations),
+                         rag_ingestion_service=setup.service)
+    prefix = f'/api/v1/organizations/{setup.scope.organization_id}/rag'
+    with TestClient(create_app(runtime=runtime, settings=ApiSettings('127.0.0.1', 8000, False))) as client:
+        client.cookies.set(SESSION_COOKIE, auth.create_session(setup.account))
+        denied = client.post(prefix + '/documents', files={'file': ('fixture.pdf', pdf(), 'application/pdf')})
+        assert denied.status_code == 429, denied.text
+        assert denied.headers['Cache-Control'] == 'no-store'
+        assert int(denied.headers['Retry-After']) >= 1
+        client.cookies.clear()
+        assert client.post(prefix + '/documents', files={'file': ('fixture.pdf', pdf(), 'application/pdf')}).status_code == 401
+    with setup.database.connect() as conn:
+        assert conn.execute('SELECT COUNT(*) FROM durable_jobs').fetchone()[0] == 0

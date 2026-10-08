@@ -1,6 +1,7 @@
 """Load LLM settings separately from Telegram settings."""
 import math
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -11,6 +12,55 @@ from app.network import configure_http_environment
 from .base import LLMConfigurationError
 
 ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+
+
+def safe_model(value):
+    return type(value) is str and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,255}", value) is not None
+
+
+@dataclass(frozen=True)
+class GroqSettings:
+    api_key: str = field(repr=False)
+    model: str = "openai/gpt-oss-120b"
+    timeout: float = 30.0
+
+    def __post_init__(self):
+        if (type(self.api_key) is not str or not self.api_key.strip()
+                or any(c.isspace() or ord(c) < 33 or ord(c) > 126 for c in self.api_key)
+                or len(self.api_key) > 4096):
+            raise LLMConfigurationError("Invalid Groq credentials.")
+        if not safe_model(self.model):
+            raise LLMConfigurationError("Invalid Groq model.")
+        if (type(self.timeout) not in (int, float) or not 0 < self.timeout <= 300
+                or not math.isfinite(self.timeout)):
+            raise LLMConfigurationError("Invalid Groq timeout.")
+
+
+@dataclass(frozen=True)
+class FailoverSettings:
+    enabled: bool = False
+    provider: str = "groq"
+
+    def __post_init__(self):
+        if type(self.enabled) is not bool or self.provider != "groq":
+            raise LLMConfigurationError("Invalid AI fallback configuration.")
+
+
+def load_failover_settings():
+    value = os.environ.get("VALYQON_AI_FALLBACK_ENABLED", "false").strip().lower()
+    if value not in {"true", "false", "1", "0"}:
+        raise LLMConfigurationError("Invalid AI fallback configuration.")
+    return FailoverSettings(value in {"true", "1"},
+                            os.environ.get("VALYQON_AI_FALLBACK_PROVIDER", "groq").strip())
+
+
+def load_groq_settings():
+    try:
+        timeout = float(os.environ.get("GROQ_TIMEOUT", "30"))
+    except (ValueError, OverflowError):
+        raise LLMConfigurationError("Invalid Groq timeout.") from None
+    return GroqSettings(os.environ.get("GROQ_API_KEY", "").strip(),
+                        os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b"), timeout)
 
 
 @dataclass(frozen=True)

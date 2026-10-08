@@ -4,7 +4,7 @@ import math
 import os
 import re
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from inspect import iscoroutinefunction
 
 from dotenv import load_dotenv
@@ -127,6 +127,14 @@ class AIGateway:
         identity = getattr(self._provider, 'cache_identity', None)
         return identity() if callable(identity) else None
 
+    @property
+    def maximum_generation_seconds(self):
+        return self.settings.request_timeout_seconds
+
+    @property
+    def result_providers(self):
+        return frozenset((self.settings.provider,))
+
     async def generate(self, prompt: str, *, max_tokens: int = 512) -> LLMResponse:
         if (not isinstance(prompt, str) or not prompt.strip() or len(prompt) > self.MAX_PROMPT_CHARS
                 or type(max_tokens) is not int or not 1 <= max_tokens <= 4096):
@@ -178,13 +186,22 @@ class AIGateway:
 
 
 def build_gateway():
-    """Sole production composition: no dynamic imports or fallback providers."""
-    from .config import load_settings
+    """Sole API/bot composition; explicitly approved providers only."""
+    from .config import load_settings, load_failover_settings, load_groq_settings
     from .gigachat import GigaChatProvider
     settings = load_gateway_settings()
     registry = ProviderRegistry()
     # Reject unknown selection before even loading credentials.
     if settings.provider != "gigachat":
         raise LLMConfigurationError("AI provider is not registered.")
+    policy = load_failover_settings()
+    groq_settings = load_groq_settings() if policy.enabled else None
     registry.register("gigachat", GigaChatProvider(load_settings()))
-    return AIGateway(registry, settings)
+    primary = AIGateway(registry, settings)
+    if not policy.enabled:
+        return primary
+    from .groq import GroqProvider
+    from .failover import FailoverGateway
+    backup_registry = ProviderRegistry()
+    backup_registry.register("groq", GroqProvider(groq_settings))
+    return FailoverGateway(primary, AIGateway(backup_registry, replace(settings, provider="groq")))

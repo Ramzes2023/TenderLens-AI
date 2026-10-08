@@ -94,7 +94,7 @@ class CachedAI:
         self.required = required
         # Includes gateway semaphore wait and all retries, plus cleanup/network margin.
         self.lock_ttl = max(self.settings.lock_ttl_seconds,
-                            gateway.settings.request_timeout_seconds + 10)
+                            gateway.maximum_generation_seconds + 10)
 
     async def generate(self, prompt, *, max_tokens=512, operation=None, bypass=False):
         try:
@@ -129,7 +129,7 @@ class CachedAI:
             if (type(value) is not dict or set(value) != self.FIELDS or value["schema"] != 1
                     or type(value["schema"]) is not int
                     or type(value["provider"]) is not str
-                    or value["provider"] != self.gateway.settings.provider
+                    or value["provider"] not in self.gateway.result_providers
                     or len(value["provider"]) > 32
                     or any(v is not None and (type(v) is not int or not 0 <= v <= 1000000000)
                            for v in (value["input_tokens"], value["output_tokens"]))

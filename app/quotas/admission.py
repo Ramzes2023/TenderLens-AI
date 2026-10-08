@@ -1,4 +1,5 @@
 """Admission runs inside the authorized job insert transaction; Redis is not involved."""
+from app.observability import observe
 import hashlib
 import math
 from datetime import datetime, timezone, timedelta
@@ -29,6 +30,7 @@ def lock(conn, backend, settings, scope, job_type):
     return key
 
 
+@observe("quota.admit")
 def admit(conn, settings, key, job_id, now):
     if key is None:
         return

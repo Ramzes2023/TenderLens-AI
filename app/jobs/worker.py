@@ -5,6 +5,7 @@ import uuid
 from dataclasses import dataclass
 
 from .models import JobValueError
+from app.observability import correlation, telemetry
 
 
 class RetryableJobError(Exception):
@@ -38,6 +39,10 @@ class Worker:
         self.job_types = job_types
 
     def run_once(self):
+        with correlation():
+            return self._run_once()
+
+    def _run_once(self):
         # Admission occurs under this gate, before the database call. Shutdown
         # refuses subsequent admissions; an already admitted claim can finish.
         # Database transactions enforce cross-process claim correctness.
@@ -48,6 +53,7 @@ class Worker:
                      else self.repository.claim_next(self.worker_id, job_types=self.job_types))
         if claim is None:
             return False
+        started, outcome = time.monotonic(), "success"
         context = ExecutionContext(claim.job, self.stop_event)
         context.fenced_write = lambda write: self.repository.fenced_write(claim.job.id, claim.token, write)
         heartbeat_stop = threading.Event()
@@ -67,27 +73,38 @@ class Worker:
         try:
             handler = self.registry.resolve(claim.job.job_type)
             if handler is None:
+                outcome = "error"
                 self.repository.fail(claim.job.id, claim.token, code='unknown_type')
                 return True
             try:
                 result = handler(context, claim.job.payload)
             except RetryableJobError:
+                outcome = "retryable"
                 if not context.lease_lost.is_set():
                     self.repository.fail(claim.job.id, claim.token, retryable=True)
             except PermanentJobError:
+                outcome = "permanent"
                 if not context.lease_lost.is_set():
                     self.repository.fail(claim.job.id, claim.token, code='permanent_failure')
             except Exception:
+                outcome = "error"
                 if not context.lease_lost.is_set():
                     self.repository.fail(claim.job.id, claim.token, code='handler_error')
             else:
                 if not context.lease_lost.is_set():
                     try:
-                        self.repository.complete(claim.job.id, claim.token, result)
+                        if not self.repository.complete(claim.job.id, claim.token, result):
+                            outcome = "lease_lost"
                     except JobValueError:
+                        outcome = "error"
                         self.repository.fail(claim.job.id, claim.token, code='invalid_result')
             return True
+        except Exception:
+            outcome = "error"
+            raise
         finally:
+            telemetry.record("job.execute", "lease_lost" if context.lease_lost.is_set() else outcome,
+                             time.monotonic() - started)
             heartbeat_stop.set()
             heartbeat.join()
 

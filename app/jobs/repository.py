@@ -1,4 +1,5 @@
 ﻿"""Relational queue: explicit transactions and atomic lease fencing, no Redis dependency."""
+from app.observability import observe
 import hashlib
 import json
 import re
@@ -97,6 +98,7 @@ class JobRepository:
                 (scope.company_id, scope.organization_id)).fetchone():
             raise JobValueError('Invalid stored job scope.')
 
+    @observe("job.enqueue")
     def enqueue(self, job_type, payload, *, scope, priority=0, max_attempts=None, available_at=None, idempotency_key=None):
         job_type_name(job_type)
         self._scope_filter(scope)
@@ -175,6 +177,7 @@ class JobRepository:
         with self._transaction() as conn:
             return self._recover(conn, self._now(conn))
 
+    @observe("job.claim")
     def claim_next(self, worker_id, *, job_types=None):
         if type(worker_id) is not str or not re.fullmatch(r'worker-[a-f0-9]{32}', worker_id):
             raise JobValueError('Invalid worker identity.')
@@ -207,12 +210,14 @@ class JobRepository:
                 (now, now + int(self.settings.lease_seconds * 1000000), token_hash(token), worker_id, row['id']))
             return Claim(decode_job(conn.execute('SELECT * FROM durable_jobs WHERE id=?', (row['id'],)).fetchone()), token)
 
+    @observe("job.heartbeat")
     def heartbeat(self, job_id, token):
         with self._transaction() as conn:
             now = self._lease_now(conn, job_id)
             return conn.execute('UPDATE durable_jobs SET lease_expires_at=? WHERE ' + LEASE_CONDITION,
                 (now + int(self.settings.lease_seconds * 1000000), job_id, token_hash(token), now)).rowcount == 1
 
+    @observe("job.complete")
     def complete(self, job_id, token, result):
         encoded = encode_json(result, self.settings.max_result_bytes)
         with self._transaction() as conn:
@@ -239,6 +244,7 @@ class JobRepository:
                 raise LeaseLostError('Lease expired during materialization.')
             return True
 
+    @observe("job.fail")
     def fail(self, job_id, token, *, retryable=False, code='handler_error'):
         if type(code) is not str or code not in FAILURE_CODES or type(retryable) is not bool:
             raise JobValueError('Invalid safe failure policy.')

@@ -46,6 +46,9 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
         ),
         lifespan=lifespan,
     )
+    from app.observability import RequestDiagnostics, telemetry
+    app.state.telemetry = telemetry
+    app.add_middleware(RequestDiagnostics)
     app.mount("/assets", StaticFiles(directory=Path(__file__).parent / "static"), name="assets")
     app.state.login_rate_limiter = LoginRateLimiter()
     app.include_router(auth_router)

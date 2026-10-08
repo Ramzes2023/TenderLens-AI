@@ -1,5 +1,6 @@
 """Semantic RAG orchestration: PDF chunks -> GigaChat embeddings -> Qdrant -> grounded answer."""
 from __future__ import annotations
+from app.observability import observe
 from app.llm.cache import generate_operation, RAG_ANSWER
 
 import asyncio
@@ -99,6 +100,7 @@ class RagService:
             provider,
         )
 
+    @observe("rag.index")
     def index_pdf(self, owner_user_id: int, pdf_sha256: str, summary: PdfSummary) -> int:
         page_texts = tuple(summary.page_texts or ())
         if not page_texts and summary.text.strip():
@@ -118,6 +120,7 @@ class RagService:
             list(zip(chunks, vectors, strict=True)),
         )
 
+    @observe("rag.retrieve")
     def retrieve(self, owner_user_id: int, pdf_sha256: str, question: str, *,
                  ingestion_scope=None, pipeline_version=None) -> list[RetrievedChunk]:
         question = question.strip()
@@ -132,6 +135,7 @@ class RagService:
                                      ingestion_scope=ingestion_scope, pipeline_version=pipeline_version)
         return self.store.search(owner_user_id, pdf_sha256, vector, self.settings.top_k)
 
+    @observe("rag.answer")
     async def answer(
         self,
         owner_user_id: int,

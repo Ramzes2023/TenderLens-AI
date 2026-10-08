@@ -1,4 +1,5 @@
 """Explicit approved public-source ingestion on the durable queue."""
+from app.observability import observe
 import asyncio
 import json
 import os
@@ -107,6 +108,7 @@ class ConnectorSyncHandler:
             raise ValueError('Invalid connector record bound.')
         self.catalog, self.opportunities, self.max_records = catalog, opportunities, max_records
 
+    @observe("connector.sync")
     def __call__(self, context, payload):
         if context.job.scope != SYSTEM_SCOPE:
             raise PermanentJobError('Connector requires system scope.')

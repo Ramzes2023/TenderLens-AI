@@ -1,4 +1,5 @@
 """Process-local AI policy boundary. No external calls occur at construction."""
+from app.observability import observe, telemetry
 import asyncio
 import math
 import os
@@ -135,6 +136,7 @@ class AIGateway:
     def result_providers(self):
         return frozenset((self.settings.provider,))
 
+    @observe("ai.generate")
     async def generate(self, prompt: str, *, max_tokens: int = 512) -> LLMResponse:
         if (not isinstance(prompt, str) or not prompt.strip() or len(prompt) > self.MAX_PROMPT_CHARS
                 or type(max_tokens) is not int or not 1 <= max_tokens <= 4096):
@@ -151,6 +153,7 @@ class AIGateway:
                     failure = None
                     async with self._semaphore:
                         try:
+                            telemetry.record("ai.attempt")
                             result = await self._provider.generate(prompt, max_tokens=max_tokens)
                         except Exception as error:
                             failure = _safe_error(error)
@@ -168,6 +171,7 @@ class AIGateway:
                             or isinstance(failure, LLMTimeoutError)
                             or attempt == self.settings.max_attempts):
                         raise failure from None
+                    telemetry.record("ai.retry")
                     await self._sleep(min(self.settings.retry_max_seconds,
                                           self.settings.retry_base_seconds * 2 ** (attempt - 1)))
         except TimeoutError:

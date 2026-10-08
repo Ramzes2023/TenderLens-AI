@@ -98,7 +98,7 @@ class ApiTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["status"], "ok")
         self.assertEqual(body["version"], __version__)
-        self.assertEqual(body["service"], "TenderLens AI")
+        self.assertEqual(body["service"], "VALYQON AI")
         self.assertEqual(self.client.get("/openapi.json").json()["info"]["title"], "VALYQON AI API")
         self.assertNotIn("phase", body)
         self.assertEqual(body["components"]["database"], "ready")
@@ -110,6 +110,20 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.json()[0]["id"], self.record.id)
         other = self.client.get("/api/v1/tenders", params={"owner_user_id": 99})
         self.assertEqual(other.json(), [])
+
+    def test_document_storage_errors_do_not_expose_internal_details(self):
+        from unittest.mock import patch
+        from app.database import DatabaseError
+
+        repository = self.client.app.state.runtime.tender_repository
+        for method, url in (("list_recent", "/api/v1/tenders"),
+                            ("find_by_id", f"/api/v1/tenders/{self.record.id}")):
+            with patch.object(repository, method,
+                              side_effect=DatabaseError("SQL SECRET /internal/storage.db")):
+                response = self.client.get(url, params={"owner_user_id": 42})
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(response.json()["detail"],
+                             "Document storage is temporarily unavailable.")
 
     def test_detail_and_not_found(self):
         response = self.client.get(

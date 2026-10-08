@@ -91,10 +91,10 @@ function updateContext(){
 }
 
 function zeroMetrics(){
- $('sourceHealthyCount').textContent='0';
- $('sourceFailedCount').textContent='0';
- $('sourceDisabledCount').textContent='0';
- $('sourceUncheckedCount').textContent='0';
+ $('sourceHealthyCount').textContent='Not loaded';
+ $('sourceFailedCount').textContent='Not loaded';
+ $('sourceDisabledCount').textContent='Not loaded';
+ $('sourceUncheckedCount').textContent='Not loaded';
 }
 
 function clear(message){
@@ -102,7 +102,7 @@ function clear(message){
  zeroMetrics();
  $('sourceHealthResults').replaceChildren();
  $('sourceHealthLastChecked').textContent=
-  'No recorded Discovery check yet.';
+  'Source status has not been loaded for this workspace.';
  $('sourceHealthMessage').textContent=message;
 }
 
@@ -192,7 +192,6 @@ function render(payload){
        <p class="fine">
          <strong>Latest check:</strong>
          Source could not be reached during the latest Discovery.
-         ${source.error_type?` Error type: ${escape(source.error_type)}.`:''}
        </p>
       `
      : source.state==='disabled'
@@ -292,6 +291,7 @@ async function loadSourceHealth(){
 
  $('sourceHealthMessage').textContent=
   'Loading the latest recorded source status...';
+ zeroMetrics();
 
  try{
   const response=await fetch(
@@ -358,6 +358,7 @@ window.addEventListener(
    serial++;
    zeroMetrics();
    $('sourceHealthResults').replaceChildren();
+   $('sourceHealthLastChecked').textContent='Source status has not been loaded for this workspace.';
   }
 
   updateContext();

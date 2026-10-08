@@ -12,7 +12,7 @@ def test_saved_opportunities_is_real_workspace_page():
     assert 'id="savedWorkspace"' in html
     assert 'data-page="saved"' in html
     assert 'Saved opportunities' in html
-    assert '/assets/saved.js?v=phase24l-full-ai-v1-20261007' in html
+    assert '/assets/saved.js?v=phase24r' in html
     assert 'The Saved Opportunities page is coming next.' not in html
 
 
@@ -142,13 +142,13 @@ def test_pdf_workflow_assets_are_cache_busted():
 
     assert (
         "/assets/discovery.js?"
-        "v=phase24q"
+        "v=phase24r"
         in html
     )
 
     assert (
         "/assets/saved.js?"
-        "v=phase24l-full-ai-v1-20261007"
+        "v=phase24r"
         in html
     )
 

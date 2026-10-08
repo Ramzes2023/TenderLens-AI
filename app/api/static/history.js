@@ -79,7 +79,7 @@ function closeSnapshot(){
 
 function clearHistory(message){
  records=[];
- $('historyCount').textContent='0';
+ $('historyCount').textContent='Not loaded';
  $('historyRuns').replaceChildren();
  $('historyMessage').textContent=message;
  closeSnapshot();
@@ -171,6 +171,7 @@ async function loadHistory(){
 
  $('historyMessage').textContent=
   'Loading previous Discovery runs...';
+ $('historyCount').textContent='Not loaded';
 
  $('historyRuns').replaceChildren();
 
@@ -397,9 +398,7 @@ window.addEventListener(
    context=next;
    serial++;
    detailSerial++;
-   records=[];
-   snapshotItems=[];
-   closeSnapshot();
+   clearHistory('Open Search History to load previous Discovery runs.');
   }
 
   updateContext();

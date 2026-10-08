@@ -10,7 +10,7 @@ assert.equal(d.matches(item,{fit:'',value:'',deadline:'2026-12-01'}),false);
 assert.match(d.sourceMessage({partial_failure:true}),/some procurement sources/);
 const elements={},events={};
 function node(id){return elements[id]??={value:'',textContent:'',innerHTML:'',disabled:false,options:[],open:false,replaceChildren(...children){this.innerHTML='';this.options=children;},add(o){this.options.push(o)},addEventListener(){},querySelectorAll(){return []},showModal(){this.open=true},close(){this.open=false}};}
-let resolve,calls=[];const context={document:{getElementById:node},window:{addEventListener:(k,f)=>events[k]=f},state:{organizationId:11,activeCompanyId:2,activeCompanyName:'A',uiEpoch:0},usingSharedOrganization:()=>true,AbortController,URL,Option:function(text,value){this.text=text;this.value=value},location:{replace(){}},fetch:(url,opts)=>{calls.push({url,opts});return new Promise(r=>resolve=r);}};
+let resolve,calls=[];const context={document:{getElementById:node},window:{addEventListener:(k,f)=>events[k]=f},state:{organizationId:11,activeCompanyId:2,activeCompanyName:'A',uiEpoch:0},usingSharedOrganization:()=>true,canWriteWorkspace:()=>true,AbortController,URL,Option:function(text,value){this.text=text;this.value=value},location:{hash:"",replace(){}},fetch:(url,opts)=>{calls.push({url,opts});return new Promise(r=>resolve=r);}};
 vm.runInNewContext(fs.readFileSync('app/api/static/discovery.js','utf8'),context);
 (async()=>{
  const pending=node('discoverButton').onclick();assert.equal(calls[0].url,'/api/v1/organizations/11/discover/tenders');assert.equal(calls[0].opts.credentials,'same-origin');assert.equal(calls[0].opts.method,'POST');

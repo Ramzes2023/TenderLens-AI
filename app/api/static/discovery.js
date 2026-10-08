@@ -41,7 +41,7 @@ function fullAiControl(item,index,enabled){
 
    <p class="fine">
     Upload the authoritative tender PDF. VALYQON will use the existing
-    organization document-analysis pipeline and recalculate company fit.
+    document analysis workflow and recalculate company fit.
     Uploading a PDF does not submit a bid or change the tender source.
    </p>
 
@@ -144,7 +144,7 @@ function detail(item,savedRecord,index,fullAiEnabled){
  const shortlist=detailShortlistControl(
   index,
   savedRecord,
-  arguments.length>=3
+  arguments.length>=3&&fullAiEnabled!==false
  );
 
  const requirementsLabel=
@@ -212,7 +212,7 @@ function detail(item,savedRecord,index,fullAiEnabled){
           Status:
           ${escape(
            c.status==='not_scored'
-            ?'Missing data ? not scored'
+            ?'Missing data — not scored'
             :c.status
           )}
          </p>
@@ -274,6 +274,7 @@ function detail(item,savedRecord,index,fullAiEnabled){
     }
 
     ${shortlist}
+    <p data-shortlist-status role="status" aria-live="polite"></p>
    </section>
   </div>
  `;
@@ -323,7 +324,7 @@ const identity=()=>`${state.organizationId}:${state.activeCompanyId??''}:${state
 function reset(){if(typeof CustomEvent!=='undefined')window.dispatchEvent(new CustomEvent('discovery-report',{detail:null}));serial++;shortlistSerial++;controller?.abort();controller=null;items=[];report=null;savedByKey.clear();detailIndex=null;if($('discoveredCount'))$('discoveredCount').textContent='Not run';if($('scoredCount'))$('scoredCount').textContent='Not run';$('discoveryResults').replaceChildren();$('sourceHealth').textContent='';$('discoveryMessage').textContent='Run discovery to find opportunities.';if($('tenderDetail').open)$('tenderDetail').close();$('detailBody').replaceChildren();update();}
 function update(){const ready=usingSharedOrganization()&&Number.isInteger(state.activeCompanyId);$('discoverButton').disabled=!ready||Boolean(controller);$('discoverContext').textContent=!usingSharedOrganization()?'Select or create a shared organization in Team for global discovery.':ready?`Matching ${state.activeCompanyName}`:'Create and activate a company in Companies first.';}
 function filters(){return Object.fromEntries(['keyword','source','buyer','currency','value','fit','deadline','published'].map(k=>[k,$('filter'+k[0].toUpperCase()+k.slice(1)).value.trim()]));}
-function render(){const f=filters();$('filterValue').disabled=!f.currency;const visible=items.map((item,i)=>({item,i})).filter(({item})=>matches(item,f));$('discoveryResults').innerHTML=visible.map(({item,i})=>card(item,i,savedFor(item))).join('');if(report&&!report.total_failure){$('discoveryMessage').textContent=sourceMessage(report)+` Showing ${visible.length} of ${items.length} fetched results.`;if(items.length&&!visible.length)$('discoveryMessage').textContent+=' No results match these local filters.';}}
+function render(){const f=filters();$('filterValue').disabled=!f.currency;const visible=items.map((item,i)=>({item,i})).filter(({item})=>matches(item,f));$('discoveryResults').innerHTML=visible.map(({item,i})=>canWriteWorkspace()?card(item,i,savedFor(item)):card(item,i)).join('');if(report&&!report.total_failure){$('discoveryMessage').textContent=sourceMessage(report)+` Showing ${visible.length} of ${items.length} fetched results.`;if(items.length&&!visible.length)$('discoveryMessage').textContent+=' No results match these local filters.';}}
 function options(id,values){const n=$(id),old=n.value;n.replaceChildren(new Option('All fetched values',''));[...new Set(values.filter(Boolean))].sort().forEach(v=>n.add(new Option(v,v)));n.value=[...n.options].some(o=>o.value===old)?old:'';}
 function savedKey(item){return JSON.stringify([String(item?.source||''),String(item?.external_id||'')]);}
 function savedFor(item){return savedByKey.get(savedKey(item))||null;}
@@ -367,7 +368,12 @@ function openDetail(index){
  }
 }
 async function loadShortlist(){const scope=identity(),ticket=++shortlistSerial,org=state.organizationId;if(!usingSharedOrganization()||!Number.isInteger(state.activeCompanyId))return;try{const r=await fetch(`/api/v1/organizations/${org}/shortlist`,{credentials:'same-origin',cache:'no-store'});if(ticket!==shortlistSerial||scope!==identity())return;if(r.status===401){location.replace('/login');return;}if(!r.ok)return;const records=await r.json();if(ticket!==shortlistSerial||scope!==identity())return;savedByKey.clear();for(const record of (Array.isArray(records)?records:[])){if(record?.opportunity)savedByKey.set(savedKey(record.opportunity),record);}render();refreshDetail();}catch(e){}}
-async function saveItem(index,button){const item=items[index],scope=identity(),org=state.organizationId;if(!item||!usingSharedOrganization()||!Number.isInteger(state.activeCompanyId))return;if(button){button.disabled=true;button.textContent='Saving…';}try{const r=await fetch(`/api/v1/organizations/${org}/shortlist`,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify(item)});if(scope!==identity())return;if(r.status===401){location.replace('/login');return;}if(!r.ok){if(button){button.disabled=false;button.textContent='Save opportunity';}return;}const record=await r.json();if(scope!==identity())return;savedByKey.set(savedKey(item),record);render();refreshDetail();}catch(e){if(button&&scope===identity()){button.disabled=false;button.textContent='Save opportunity';}}}
+function shortlistMessage(message){
+ $('discoveryMessage').textContent=message;
+ const status=$('detailBody').querySelector('[data-shortlist-status]');
+ if(status)status.textContent=message;
+}
+async function saveItem(index,button){const item=items[index],scope=identity(),org=state.organizationId;if(!item||!usingSharedOrganization()||!Number.isInteger(state.activeCompanyId))return;if(button){button.disabled=true;button.textContent='Saving…';}try{const r=await fetch(`/api/v1/organizations/${org}/shortlist`,{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify(item)});if(scope!==identity())return;if(r.status===401){location.replace('/login');return;}if(!r.ok){if(button){button.disabled=false;button.textContent='Save opportunity';}shortlistMessage(r.status===403?'Your workspace role cannot save opportunities.':'The opportunity could not be saved. Please retry.');return;}const record=await r.json();if(scope!==identity())return;savedByKey.set(savedKey(item),record);render();refreshDetail();}catch(e){if(button&&scope===identity()){button.disabled=false;button.textContent='Save opportunity';shortlistMessage('Network unavailable. The opportunity could not be saved. Please retry.');}}}
 async function syncFullAiSavedSnapshot(
  item,
  scope,
@@ -503,7 +509,7 @@ async function analyzeTenderPdf(
 
  if(button){
   button.disabled=true;
-  button.textContent='Analyzing?';
+  button.textContent='Analyzing...';
  }
 
  if(statusNode){
@@ -664,7 +670,7 @@ async function analyzeTenderPdf(
  }
 }
 
-async function removeItem(index,button){const item=items[index],scope=identity(),org=state.organizationId;if(!item)return;const record=savedFor(item);if(!record||!Number.isInteger(Number(record.id)))return;if(button){button.disabled=true;button.textContent='Removing…';}try{const r=await fetch(`/api/v1/organizations/${org}/shortlist/${record.id}`,{method:'DELETE',credentials:'same-origin',cache:'no-store'});if(scope!==identity())return;if(r.status===401){location.replace('/login');return;}if(!r.ok&&r.status!==404){if(button){button.disabled=false;button.textContent='Remove from saved';}return;}savedByKey.delete(savedKey(item));render();refreshDetail();}catch(e){if(button&&scope===identity()){button.disabled=false;button.textContent='Remove from saved';}}}
+async function removeItem(index,button){const item=items[index],scope=identity(),org=state.organizationId;if(!item)return;const record=savedFor(item);if(!record||!Number.isInteger(Number(record.id)))return;if(button){button.disabled=true;button.textContent='Removing…';}try{const r=await fetch(`/api/v1/organizations/${org}/shortlist/${record.id}`,{method:'DELETE',credentials:'same-origin',cache:'no-store'});if(scope!==identity())return;if(r.status===401){location.replace('/login');return;}if(!r.ok&&r.status!==404){if(button){button.disabled=false;button.textContent='Remove from saved';}shortlistMessage(r.status===403?'Your workspace role cannot remove saved opportunities.':'The opportunity could not be removed. Please retry.');return;}savedByKey.delete(savedKey(item));render();refreshDetail();}catch(e){if(button&&scope===identity()){button.disabled=false;button.textContent='Remove from saved';shortlistMessage('Network unavailable. The opportunity could not be removed. Please retry.');}}}
 async function discover(){if($('discoverButton').disabled)return;const ticket=++serial,scope=identity(),org=state.organizationId;controller=new AbortController();items=[];report=null;if($('discoveredCount'))$('discoveredCount').textContent='Not run';if($('scoredCount'))$('scoredCount').textContent='Not run';$('discoveryResults').replaceChildren();$('sourceHealth').textContent='';$('discoveryMessage').textContent='Searching configured sources…';update();
 try{const r=await fetch(`/api/v1/organizations/${org}/discover/tenders`,{method:'POST',credentials:'same-origin',cache:'no-store',signal:controller.signal});if(ticket!==serial||scope!==identity())return;if(r.status===401){location.replace('/login');return;}if(!r.ok){$('discoveryMessage').textContent=r.status===403?'You do not have access to this organization.':r.status===409?'Create and activate an organization company first.':'Discovery is unavailable. Please retry.';return;}const data=await r.json();if(ticket!==serial||scope!==identity())return;report=data;if(typeof CustomEvent!=='undefined')window.dispatchEvent(new CustomEvent('discovery-report',{detail:data}));items=data.total_failure?[]:rankedItems(data.items||[]);if($('discoveredCount'))$('discoveredCount').textContent=data.total_failure?'Unavailable':String(items.length);if($('scoredCount'))$('scoredCount').textContent=data.total_failure?'Unavailable':String(items.filter(i=>i.preliminary_scoring?.fit_score!=null).length);options('filterSource',items.map(i=>i.source));options('filterCurrency',items.map(i=>i.currency));$('sourceHealth').textContent=`Attempted: ${(data.attempted_sources||[]).join(', ')||'none'} · Reached: ${(data.successful_sources||[]).join(', ')||'none'} · Unavailable: ${(data.failed_sources||[]).join(', ')||'none'}`;const mix=sourceMix(items);if(mix){$('sourceHealth').textContent+=` \u00b7 Results: ${mix}`;}$('discoveryMessage').textContent=sourceMessage(data);render();loadShortlist();}
 catch(e){if(e.name!=='AbortError'&&ticket===serial)$('discoveryMessage').textContent='Network unavailable. Please retry discovery.';}

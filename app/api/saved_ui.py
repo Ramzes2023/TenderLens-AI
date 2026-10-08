@@ -41,7 +41,7 @@ SAVED_HTML = """
         id="savedCount"
         class="metric"
       >
-        0
+        Not loaded
       </strong>
 
       <span>

@@ -302,7 +302,7 @@ async def health(request: Request) -> HealthResponse:
     overall = "ok" if all(value == "ready" for value in critical) else "degraded"
     return HealthResponse(
         status=overall,
-        service="TenderLens AI",
+        service="VALYQON AI",
         version=__version__,
         components=components,
     )
@@ -385,7 +385,7 @@ async def list_tenders(
     try:
         records = await asyncio.to_thread(repository.list_recent, owner_user_id, limit)
     except DatabaseError as error:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from None
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Document storage is temporarily unavailable.") from None
     return [_list_item(record) for record in records]
 
 
@@ -409,7 +409,7 @@ async def get_tender(
     try:
         record = await asyncio.to_thread(repository.find_by_id, owner_user_id, tender_id)
     except DatabaseError as error:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from None
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Document storage is temporarily unavailable.") from None
     if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Tender not found.")
     return _detail(record)
@@ -618,7 +618,7 @@ async def analyze_pdf_endpoint(
     try:
         existing = await asyncio.to_thread(runtime.tender_repository.find_by_hash, owner_user_id, digest)
     except DatabaseError as error:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from None
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Document storage is temporarily unavailable.") from None
     if existing is not None:
         duplicate_scoring = existing.scoring
         if runtime.company_service is not None:
@@ -698,7 +698,7 @@ async def analyze_pdf_endpoint(
             analysis_truncated=result.truncated,
         )
     except DatabaseError as error:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from None
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Document storage is temporarily unavailable.") from None
 
     return PdfAnalysisResponse(
         duplicate=False,

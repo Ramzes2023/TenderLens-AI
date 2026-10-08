@@ -453,7 +453,7 @@
 
       addChatMessage(
         "assistant",
-        fallback
+        "AI assistant unavailable. General product guidance: " + fallback
       );
 
     } finally {
@@ -527,10 +527,9 @@
 
       if (!response.ok) {
         const detail =
-          body &&
-          typeof body.detail === "string"
-            ? body.detail
-            : "Support request could not be saved.";
+          response.status === 422
+            ? "Check all required fields and describe the issue, then retry."
+            : "Support request could not be saved. Please retry.";
 
         throw new Error(detail);
       }
@@ -916,7 +915,9 @@
           headers,
           credentials: "same-origin",
         }
-      );
+      ).catch(() => {
+        throw new Error("Connection unavailable. Please retry.");
+      });
 
     let payload = null;
 
@@ -937,19 +938,13 @@
     }
 
     if (!response.ok) {
-      const message =
-        payload
-        && typeof payload
-          === "object"
-        && payload.detail
-          ? String(
-              payload.detail
-            )
-          : (
-              "Request failed ("
-              + response.status
-              + ")."
-            );
+      const message = response.status === 401
+        ? "Please sign in again to continue."
+        : response.status === 403
+          ? "You do not have access to this support conversation."
+          : response.status === 422
+            ? "Check the reply and required fields, then retry."
+            : "Support is temporarily unavailable. Please retry.";
 
       const error =
         new Error(message);
@@ -1444,8 +1439,7 @@
 
         } catch (error) {
           status.textContent =
-            error.message
-            || "Could not send.";
+            "The reply could not be sent. Please retry.";
         } finally {
           button.disabled = false;
         }

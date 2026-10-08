@@ -41,7 +41,7 @@ HISTORY_HTML = """
         id="historyCount"
         class="metric"
       >
-        0
+        Not loaded
       </strong>
 
       <span>

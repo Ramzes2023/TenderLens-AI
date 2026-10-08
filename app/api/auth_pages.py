@@ -157,7 +157,7 @@ def _page(
           throw new Error(
             r.status===429
               ?'Too many attempts. Please try again later.'
-              :(data.detail||'Unable to sign in or create this account. Check your details and try again.')
+              :(['Enter a valid email address.','Password must contain at least 12 characters.','Password must contain at most 128 characters.'].includes(data.detail)?data.detail:'Unable to sign in or create this account. Check your details and try again.')
           );
         }}
 
@@ -638,7 +638,7 @@ def _password_reset_page(*, reset: bool) -> str:
         });
         if(!response.ok){
           let data={};try{data=await response.json();}catch(_error){}
-          throw new Error(typeof data.detail==='string'?data.detail:'Password reset is temporarily unavailable.');
+          throw new Error(response.status===422?'Check your email or password. If you are resetting a password, request a new link if this one has expired.':response.status===429?'Too many attempts. Please try again later.':'Password reset is temporarily unavailable.');
         }
         if(resetMode){
           completed=true;

@@ -66,7 +66,7 @@ SUPPORT_HTML = r"""
       <small>Assistant</small>
       <strong>AI assistant</strong>
       <span>
-        Live VALYQON AI guidance
+        Product guidance when available
       </span>
     </article>
   </section>

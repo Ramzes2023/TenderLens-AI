@@ -32,7 +32,7 @@ def test_search_history_is_real_workspace_page():
 
     assert (
         "/assets/history.js?"
-        "v=phase24-search-history-v2-20261006"
+        "v=phase24r"
         in html
     )
 

@@ -33,7 +33,7 @@ def invitation_page_html(
         content="noindex,nofollow">
 
   <title>
-    Organization invitation ? VALYQON AI
+    Organization invitation | VALYQON AI
   </title>
 
   <style>
@@ -158,7 +158,7 @@ def invitation_page_html(
     </h1>
 
     <p id="intro">
-      Checking invitation?
+      Checking invitation...
     </p>
 
     <div id="details"
@@ -250,19 +250,11 @@ const returnPath=
   `/invite/${{encodedToken}}`;
 
 async function responseDetail(response){{
-  let detail=`${{response.status}} ${{response.statusText}}`;
-
-  try{{
-    const data=await response.json();
-
-    if(data.detail){{
-      detail=typeof data.detail==='string'
-        ?data.detail
-        :JSON.stringify(data.detail);
-    }}
-  }}catch(_){{}}
-
-  return detail;
+  return response.status===403
+    ?'Sign in with the invited email address to continue.'
+    :response.status===404||response.status===410||response.status===422
+      ?'This invitation is invalid, expired, or no longer available. Ask your workspace administrator for a new link.'
+      :'The invitation could not be processed. Please retry.';
 }}
 
 function showAuth(){{
@@ -347,7 +339,7 @@ async function loadInvitation(){{
       'msg error';
 
     message.textContent=
-      e.message||String(e);
+      e instanceof TypeError?'Connection unavailable. Please retry.':e.message||'The invitation could not be processed. Please retry.';
   }}
 }}
 
@@ -364,7 +356,7 @@ async function acceptInvitation(){{
 
   try{{
     button.disabled=true;
-    button.textContent='Accepting?';
+    button.textContent='Accepting...';
 
     const response=await fetch(
       acceptPath,
@@ -395,7 +387,7 @@ async function acceptInvitation(){{
       'msg success';
 
     message.textContent=
-      'Invitation accepted. Opening your dashboard?';
+      'Invitation accepted. Opening your dashboard...';
 
     setTimeout(
       ()=>location.replace(
@@ -409,7 +401,7 @@ async function acceptInvitation(){{
       'msg error';
 
     message.textContent=
-      e.message||String(e);
+      e instanceof TypeError?'Connection unavailable. Please retry.':e.message||'The invitation could not be processed. Please retry.';
 
   }}finally{{
     button.disabled=false;

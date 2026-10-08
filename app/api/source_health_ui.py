@@ -10,7 +10,7 @@ SOURCE_HEALTH_HTML = """
   <div class="toolbar">
     <div>
       <span class="eyebrow">
-        CONNECTOR OBSERVABILITY
+        SOURCE AVAILABILITY
       </span>
 
       <h2>
@@ -42,7 +42,7 @@ SOURCE_HEALTH_HTML = """
         id="sourceHealthyCount"
         class="metric"
       >
-        0
+        Not loaded
       </strong>
       <span>Last recorded check</span>
     </article>
@@ -53,7 +53,7 @@ SOURCE_HEALTH_HTML = """
         id="sourceFailedCount"
         class="metric"
       >
-        0
+        Not loaded
       </strong>
       <span>Requires attention</span>
     </article>
@@ -64,7 +64,7 @@ SOURCE_HEALTH_HTML = """
         id="sourceDisabledCount"
         class="metric"
       >
-        0
+        Not loaded
       </strong>
       <span>Not configured or disabled</span>
     </article>
@@ -75,7 +75,7 @@ SOURCE_HEALTH_HTML = """
         id="sourceUncheckedCount"
         class="metric"
       >
-        0
+        Not loaded
       </strong>
       <span>No recorded probe yet</span>
     </article>
@@ -92,7 +92,7 @@ SOURCE_HEALTH_HTML = """
     id="sourceHealthLastChecked"
     class="fine"
   >
-    No recorded Discovery check yet.
+    Source status has not been loaded yet.
   </p>
 
   <p

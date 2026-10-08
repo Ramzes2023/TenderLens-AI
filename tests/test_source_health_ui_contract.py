@@ -37,7 +37,7 @@ def test_source_health_is_real_workspace():
 
     assert (
         "/assets/source_health.js?"
-        "v=phase24-source-health-v1-20261006"
+        "v=phase24r"
         in html
     )
 

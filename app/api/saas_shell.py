@@ -402,9 +402,9 @@ def shell_html(html: str) -> str:
   <h2 id="futureTitle"></h2>
 
   <p id="futureText">
-    Coming in the next phase.
     This feature is not available yet.
   </p>
+  <a id="futureNext" hidden></a>
 </section>
 '''
 
@@ -511,7 +511,7 @@ def shell_html(html: str) -> str:
       type="button"
       aria-label="Close support"
     >
-      ?
+      &times;
     </button>
   </div>
 
@@ -573,13 +573,13 @@ def shell_html(html: str) -> str:
 
     html = html.replace(
         "</body>",
-        '<script src="/assets/shell.js?v=phase24q"></script>'
+        '<script src="/assets/shell.js?v=phase24r"></script>'
         '<script src="/assets/premium.js?v=phase24-precheckpoint-20261006"></script>'
-        '<script src="/assets/support.js"></script>'
-        '<script src="/assets/discovery.js?v=phase24q"></script>'
-        '<script src="/assets/history.js?v=phase24-search-history-v2-20261006"></script>'
-        '<script src="/assets/saved.js?v=phase24l-full-ai-v1-20261007"></script>'
-        '<script src="/assets/source_health.js?v=phase24-source-health-v1-20261006"></script>'
+        '<script src="/assets/support.js?v=phase24r"></script>'
+        '<script src="/assets/discovery.js?v=phase24r"></script>'
+        '<script src="/assets/history.js?v=phase24r"></script>'
+        '<script src="/assets/saved.js?v=phase24r"></script>'
+        '<script src="/assets/source_health.js?v=phase24r"></script>'
         "</body>",
     )
 

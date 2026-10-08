@@ -69,11 +69,11 @@ def _dashboard_html() -> str:
         <div class="f6">
           <label for="organizationSelect">Organization to manage</label>
           <select id="organizationSelect" onchange="selectOrganization()">
-            <option>Loading?</option>
+            <option>Loading...</option>
           </select>
           <div class="help">
             This selector controls organization members and invitations.
-            Existing personal company and tender cards remain unchanged in this checkpoint.
+            Select a workspace before managing its companies or opportunities.
           </div>
         </div>
 
@@ -82,7 +82,7 @@ def _dashboard_html() -> str:
           <div class="toolbar">
             <input id="newOrganizationName"
                    maxlength="200"
-                   placeholder="Example: AluTrade Team">
+                   placeholder="Organization name">
             <button id="createOrganizationButton"
                     onclick="createOrganization()">
               Create organization
@@ -95,7 +95,7 @@ def _dashboard_html() -> str:
 
       <div style="margin-top:18px">
         <div class="title" id="selectedOrganizationName">
-          Loading?
+          Loading...
         </div>
         <div class="sub">
           Organization members and pending invitations
@@ -106,14 +106,14 @@ def _dashboard_html() -> str:
         <div class="f6">
           <h2>Members</h2>
           <div id="organizationMembers">
-            <div class="empty">Loading?</div>
+            <div class="empty">Loading...</div>
           </div>
         </div>
 
         <div class="f6">
           <h2>Pending invitations</h2>
           <div id="organizationInvitations">
-            <div class="empty">Loading?</div>
+            <div class="empty">Loading...</div>
           </div>
         </div>
       </div>
@@ -154,7 +154,7 @@ def _dashboard_html() -> str:
         <div id="inviteLinkRoot"
              class="hidden"
              style="margin-top:12px">
-          <label for="inviteLink">One-time invitation link</label>
+          <label for="inviteLink">Invitation link</label>
 
           <div class="toolbar">
             <input id="inviteLink"
@@ -174,7 +174,7 @@ def _dashboard_html() -> str:
       <div class="form-grid">
         <div class="f6">
           <label for="companyName">Company name *</label>
-          <input id="companyName" maxlength="200" placeholder="Example: AluTrade">
+          <input id="companyName" maxlength="200" placeholder="Company name">
         </div>
         <div class="f6">
           <label for="businessMode">Business mode</label>
@@ -195,7 +195,7 @@ def _dashboard_html() -> str:
         </div>
         <div class="f12">
           <label for="keywords">Products &amp; services *</label>
-          <textarea id="keywords" placeholder="aluminium profiles, aluminum structures, фасадный профиль"></textarea>
+          <textarea id="keywords" placeholder="aluminium profiles, aluminum structures, facade profiles"></textarea>
           <div class="help">Product keywords describe your capabilities. Search keywords below control discovery.</div>
         </div>
         <div class="f12"><label for="searchKeywords">Search keywords</label><textarea id="searchKeywords" placeholder="Optional: leave empty to use products / services"></textarea></div>
@@ -241,7 +241,7 @@ def _dashboard_html() -> str:
         </div>
 
         <div class="help">
-          PDF only ? maximum 10 MiB ? scanned image-only PDFs require OCR and are not supported yet.
+          PDF only; maximum 10 MiB; scanned image-only PDFs require OCR and are not supported yet.
         </div>
 
         <div id="companyPdfStatus"></div>
@@ -495,7 +495,7 @@ async function loadCompanies(){{
         <div>
           <div class="title">
             ${{esc(item.name)}}
-            ${{item.is_active?'<span class="active">? ACTIVE</span>':''}}
+            ${{item.is_active?'<span class="active">ACTIVE</span>':''}}
           </div>
 
           <div class="sub">
@@ -536,7 +536,7 @@ function companyProfileDisplay(value){{
   if(Array.isArray(value)){{
     return value.length
       ?value.join(', ')
-      :'?';
+      :'Not provided';
   }}
 
   if(
@@ -544,7 +544,7 @@ function companyProfileDisplay(value){{
     ||value===undefined
     ||value===''
   ){{
-    return '?';
+    return 'Not provided';
   }}
 
   return String(value);
@@ -704,10 +704,10 @@ async function previewCompanyProfilePdf(){{
     );
 
     button.disabled=true;
-    button.textContent='Analyzing?';
+    button.textContent='Analyzing...';
 
     statusRoot.innerHTML=
-      '<div class="empty" style="margin-top:12px">Extracting PDF text and building an AI search-profile draft?</div>';
+      '<div class="empty" style="margin-top:12px">Extracting PDF text and building an AI search-profile draft...</div>';
 
     const companyId=state.editCompanyId;
 
@@ -789,7 +789,7 @@ async function applyCompanyPdfProfile(){{
 
     if(button){{
       button.disabled=true;
-      button.textContent='Applying?';
+      button.textContent='Applying...';
     }}
 
     const companyId=state.editCompanyId;
@@ -937,7 +937,7 @@ async function createCompany(){{
     );
 
     button.disabled=true;
-    button.textContent='Creating?';
+    button.textContent='Saving...';
 
     const profile={{
       ...state.editProfile,
@@ -1136,7 +1136,7 @@ async function loadMonitoring(){{
     'monitorDetails'
   ).textContent=
     state.hasActiveCompany
-      ?`${{monitoringModeLabel(data.feed_mode)}} ? ${{data.rss_feeds}} feed(s)`
+      ?`${{monitoringModeLabel(data.feed_mode)}} | ${{data.rss_feeds}} feed(s)`
       :'Create a company profile to start monitoring.';
 
   const companyRoot=document.getElementById(
@@ -1190,7 +1190,7 @@ async function loadMonitoring(){{
   if(backgroundRoot){{
     backgroundRoot.textContent=
       data.background_enabled
-        ?`Enabled ? every ${{monitoringIntervalLabel(data.interval_seconds)}}`
+        ?`Enabled | every ${{monitoringIntervalLabel(data.interval_seconds)}}`
         :'Manual scans only';
   }}
 
@@ -1253,7 +1253,7 @@ async function loadTenders(){{
 
       <div class="sub">
         ${{esc(item.customer||'Customer not specified')}}
-        ? ${{item.fit_score??'No fit score'}}
+        | ${{item.fit_score??'No fit score'}}
       </div>
     </div>`
   ).join('');
@@ -1339,7 +1339,7 @@ async function scanEis(){{
 
     if(items.length){{
       summary.innerHTML=
-        `<div class="success">${{items.length}} new matching notice${{items.length===1?'':'s'}} found ? ${{esc(scannedAt)}}. These notices are now recorded as seen for this monitoring scope.</div>`;
+        `<div class="success">${{items.length}} new matching notice${{items.length===1?'':'s'}} found | ${{esc(scannedAt)}}. These notices are now recorded as seen for this monitoring scope.</div>`;
 
       root.innerHTML=
         items.map(item=>{{
@@ -1357,12 +1357,12 @@ async function scanEis(){{
           ]
             .filter(Boolean)
             .map(esc)
-            .join(' ? ');
+            .join(' | ');
 
           const reasons=
             (item.reasons||[])
               .map(reason=>esc(reason))
-              .join(' ? ');
+              .join(' | ');
 
           return `
             <div class="row">
@@ -1401,7 +1401,7 @@ async function scanEis(){{
 
     }}else{{
       summary.innerHTML=
-        `<div class="success">Scan completed ? ${{esc(scannedAt)}}. No new matching notices were found.</div>`;
+        `<div class="success">Scan completed | ${{esc(scannedAt)}}. No new matching notices were found.</div>`;
 
       root.innerHTML=
         '<div class="empty">No new matching notices. Previously seen matches are intentionally suppressed by Monitoring deduplication.</div>';

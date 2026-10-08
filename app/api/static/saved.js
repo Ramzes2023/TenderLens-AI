@@ -36,7 +36,7 @@ function updateContext(){
 
 function clearResults(message){
  records=[];
- $('savedCount').textContent='0';
+ $('savedCount').textContent='Not loaded';
  $('savedResults').replaceChildren();
  $('savedMessage').textContent=message;
 }
@@ -449,7 +449,8 @@ async function loadSaved(){
 
  const org=state.organizationId;
 
- $('savedMessage').textContent='Loading saved opportunities?';
+ $('savedMessage').textContent='Loading saved opportunities...';
+ $('savedCount').textContent='Not loaded';
  $('savedResults').replaceChildren();
 
  try{
@@ -505,6 +506,12 @@ async function loadSaved(){
  }
 }
 
+function removalMessage(message){
+ $('savedMessage').textContent=message;
+ const status=$('savedDetailBody').querySelector('[data-shortlist-status]');
+ if(status)status.textContent=message;
+}
+
 async function removeSaved(index,button){
  const record=records[index];
  const savedId=Number(record?.id);
@@ -522,7 +529,7 @@ async function removeSaved(index,button){
 
  if(button){
   button.disabled=true;
-  button.textContent='Removing?';
+  button.textContent='Removing...';
  }
 
  try{
@@ -548,8 +555,7 @@ async function removeSaved(index,button){
     button.textContent='Remove from saved';
    }
 
-   $('savedMessage').textContent=
-    'This opportunity could not be removed. Please retry.';
+   removalMessage('This opportunity could not be removed. Please retry.');
 
    return;
   }
@@ -569,8 +575,7 @@ async function removeSaved(index,button){
   }
 
   if(scope===identity()){
-   $('savedMessage').textContent=
-    'Network unavailable. The saved opportunity was not changed.';
+   removalMessage('Network unavailable. The saved opportunity was not changed.');
   }
  }
 }
@@ -624,7 +629,7 @@ window.addEventListener(
   if(context!==next){
    context=next;
    serial++;
-   records=[];
+   clearResults('Open Saved to load the active company shortlist.');
 
    if($('savedDetail').open){
     $('savedDetail').close();

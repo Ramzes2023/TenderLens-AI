@@ -18,7 +18,7 @@ class Links(HTMLParser):
 
 def test_marketing_preview_is_labeled_and_navigation_targets_exist():
     html = landing_html()
-    assert 'Example opportunity' in html and 'Not a live notice' in html
+    assert 'How discovery works' in html and 'No search has been run here' in html
     assert 'Credentials required' in html and 'Billing is not enabled' in html
     links = Links()
     links.feed(html)

@@ -10,6 +10,10 @@ class JobValueError(ValueError):
     pass
 
 
+class LeaseLostError(JobValueError):
+    """A lease expired during a transactional application write."""
+
+
 def encode_json(value, limit):
     seen = set()
     count = 0

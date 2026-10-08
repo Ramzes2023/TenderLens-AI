@@ -49,6 +49,7 @@ class Worker:
         if claim is None:
             return False
         context = ExecutionContext(claim.job, self.stop_event)
+        context.fenced_write = lambda write: self.repository.fenced_write(claim.job.id, claim.token, write)
         heartbeat_stop = threading.Event()
 
         def heartbeat_loop():
@@ -167,8 +168,8 @@ class WorkerPool:
 def main(argv=()):
     # Explicit opt-in preserves the safe no-handler invocation.
     flags = list(argv)
-    if not flags or len(set(flags)) != len(flags) or any(flag not in {'--rag', '--connectors'} for flag in flags):
-        print('VALYQON AI worker unavailable: no production job handlers selected; use --rag and/or --connectors.')
+    if not flags or len(set(flags)) != len(flags) or any(flag not in {'--rag', '--connectors', '--scoring'} for flag in flags):
+        print('VALYQON AI worker unavailable: no production job handlers selected; use --rag, --connectors and/or --scoring.')
         return 2
     database = pool = None
     try:
@@ -190,6 +191,9 @@ def main(argv=()):
         repository = JobRepository(database, job_settings)
         repository.initialize()
         registry = HandlerRegistry()
+        if '--scoring' in flags:
+            from app.scoring.runs import JOB_TYPE as SCORING_JOB_TYPE, ScoringRunService, ScoringRunHandler
+            registry.register(SCORING_JOB_TYPE, ScoringRunHandler(ScoringRunService(JobService(repository))))
         if '--rag' in flags:
             service = RagIngestionService(JobService(repository), documents, settings)
             registry.register(JOB_TYPE, RagIngestionHandler(service, rag, batch_size=batch))

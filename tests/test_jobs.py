@@ -523,7 +523,8 @@ def test_historical_migration_checksums_are_frozen():
     }
     assert {m.version: m.checksum for m in MIGRATIONS[:8]} == expected
     assert MIGRATIONS[8].version == 9 and MIGRATIONS[8].domain == 'jobs'
-    assert MIGRATIONS[-1].version == 10 and MIGRATIONS[-1].domain == 'opportunities'
+    assert MIGRATIONS[9].version == 10 and MIGRATIONS[9].domain == 'opportunities'
+    assert MIGRATIONS[-1].version == 11 and MIGRATIONS[-1].domain == 'scoring'
 
 
 def test_same_identity_separates_tenants(queue):

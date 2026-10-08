@@ -20,9 +20,10 @@ TABLES = (
     "auth_password_resets", "auth_email_verifications", "tenders", "saved_opportunities",
     "discovery_search_history", "monitor_subscriptions", "monitor_seen", "rag_chunks",
     "support_tickets", "support_ticket_messages", "durable_jobs", "source_opportunities",
+    "scoring_public_revisions", "scoring_snapshots", "scoring_candidates", "scoring_results",
 )
 METADATA = {"schema_meta", "app_schema_migrations", "app_data_imports"}
-OPTIONAL = {"rag_chunks", "support_ticket_messages", "durable_jobs", "source_opportunities"}
+OPTIONAL = {"rag_chunks", "support_ticket_messages", "durable_jobs", "source_opportunities", "scoring_public_revisions", "scoring_snapshots", "scoring_candidates", "scoring_results"}
 
 
 def validate_versions(conn, *, legacy=False):
@@ -61,6 +62,9 @@ def preflight_source(conn):
     if "source_opportunities" not in names and "app_schema_migrations" in names:
         if conn.execute("SELECT 1 FROM app_schema_migrations WHERE version=10").fetchone():
             raise StorageError("Source opportunity schema is missing; upgrade a backed-up copy first.")
+    if "app_schema_migrations" in names and conn.execute("SELECT 1 FROM app_schema_migrations WHERE version=11").fetchone():
+        if {"scoring_public_revisions", "scoring_snapshots", "scoring_candidates", "scoring_results"} - names:
+            raise StorageError("Source scoring schema is missing; upgrade a backed-up copy first.")
     if set(TABLES) - OPTIONAL - names:
         raise StorageError("Source schema is incomplete; upgrade a backed-up copy first.")
     if "app_data_imports" in names and conn.execute("SELECT 1 FROM app_data_imports LIMIT 1").fetchone():

@@ -8,7 +8,7 @@ import uuid
 from contextlib import contextmanager
 
 from .config import JobSettings
-from .models import Claim, JobScope, JobValueError, decode_job, encode_json, job_type_name
+from .models import Claim, JobScope, JobValueError, LeaseLostError, decode_job, encode_json, job_type_name
 
 CLAIM_SQL = """SELECT * FROM durable_jobs WHERE state='queued' AND available_at<=?
     AND attempt_count<max_attempts ORDER BY priority DESC,created_at,id LIMIT 1"""
@@ -211,6 +211,24 @@ class JobRepository:
             return conn.execute("""UPDATE durable_jobs SET state='succeeded',result_json=?,finished_at=?,failure_code=NULL,
                 lease_expires_at=NULL,lease_token_hash=NULL,worker_id=NULL WHERE """ + LEASE_CONDITION,
                 (encoded, now, job_id, token_hash(token), now)).rowcount == 1
+
+    def fenced_write(self, job_id, token, write):
+        """Materialize application rows under the current lease, without publishing success.
+
+        Callback is trusted registered application code, never job payload data.
+        Results remain private until complete() independently accepts this lease.
+        """
+        with self._transaction() as conn:
+            now = self._lease_now(conn, job_id)
+            if not conn.execute('SELECT 1 FROM durable_jobs WHERE ' + LEASE_CONDITION,
+                                (job_id, token_hash(token), now)).fetchone():
+                return False
+            write(conn, now)
+            # A bounded write may itself outlive its lease. Roll back in that case.
+            if self._now(conn) >= conn.execute('SELECT lease_expires_at FROM durable_jobs WHERE id=?',
+                                              (job_id,)).fetchone()[0]:
+                raise LeaseLostError('Lease expired during materialization.')
+            return True
 
     def fail(self, job_id, token, *, retryable=False, code='handler_error'):
         if type(code) is not str or code not in FAILURE_CODES or type(retryable) is not bool:

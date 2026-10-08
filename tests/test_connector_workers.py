@@ -378,8 +378,8 @@ def test_postgres_upsert_sql_and_migration_are_compatible():
     assert any('ON CONFLICT(source_id,external_id) DO NOTHING' in sql and '%s' in sql for sql in sqls)
     assert any('UPDATE source_opportunities' in sql for sql in sqls)
     assert raw.commit.call_count == 1
-    ddl = postgres_sql(MIGRATIONS[-1].sql, parameters=False)
-    assert 'PRIMARY KEY(source_id, external_id)' in ddl and MIGRATIONS[-1].version == 10
+    ddl = postgres_sql(MIGRATIONS[9].sql, parameters=False)
+    assert 'PRIMARY KEY(source_id, external_id)' in ddl and MIGRATIONS[9].version == 10
 
 
 @pytest.mark.parametrize('error', [httpx.ReadTimeout('synthetic credential body'), httpx.ConnectError('synthetic raw body')])

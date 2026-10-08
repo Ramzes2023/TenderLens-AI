@@ -33,6 +33,7 @@ class ApiRuntime:
     tender_repository: "TenderRepository | Any | None" = None
     rag_service: "RagService | Any | None" = None
     rag_ingestion_service: "Any | None" = None
+    scoring_run_service: "Any | None" = None
     monitoring_service: "TenderMonitorService | Any | None" = None
     tender_discovery_service: "TenderMonitorService | Any | None" = None
     source_catalog: "SourceCatalog | Any | None" = None
@@ -85,6 +86,15 @@ def build_runtime() -> ApiRuntime:
         except Exception:
             runtime.close()
             raise StorageError("VALYQON AI database startup failed.") from None
+
+    try:
+        from app.jobs import JobRepository, JobService, load_job_settings
+        from app.scoring.runs import ScoringRunService
+        scoring_jobs = JobRepository(runtime.database, load_job_settings())
+        scoring_jobs.initialize()
+        runtime.scoring_run_service = ScoringRunService(JobService(scoring_jobs))
+    except Exception:
+        runtime.component_errors['scoring_runs'] = 'Background scoring unavailable'
 
     try:
         from app.cache import build_cache

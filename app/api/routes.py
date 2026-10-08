@@ -299,7 +299,7 @@ async def health(request: Request) -> HealthResponse:
     runtime = _runtime(request)
     components = await asyncio.to_thread(runtime.component_status)
     critical = (components["database"], components["scoring"])
-    overall = "ok" if all(value == "ready" for value in critical) else "degraded"
+    overall = "ok" if all(value == "ready" for value in critical) and components.get("cache") != "unavailable" else "degraded"
     return HealthResponse(
         status=overall,
         service="VALYQON AI",

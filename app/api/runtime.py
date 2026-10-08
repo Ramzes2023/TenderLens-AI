@@ -37,11 +37,14 @@ class ApiRuntime:
     source_catalog: "SourceCatalog | Any | None" = None
     support_repository: "SupportRepository | Any | None" = None
     database: "Any | None" = None
+    cache: "Any | None" = None
+    owns_cache: bool = False
     component_errors: dict[str, str] = field(default_factory=dict)
 
     def component_status(self) -> dict[str, str]:
         database = self.database or getattr(self.tender_repository, "database", None)
         return {
+            "cache": self.cache.status() if self.cache is not None else "disabled",
             "database": "ready" if self.tender_repository is not None and (database is None or database.healthy()) else "unavailable",
             "llm": "ready" if self.provider is not None else "unavailable",
             "scoring": "ready" if (self.company_profile is not None or self.company_service is not None) else "unavailable",
@@ -56,8 +59,12 @@ class ApiRuntime:
         }
 
     def close(self):
-        if self.database is not None:
-            self.database.close()
+        try:
+            if self.cache is not None and self.owns_cache:
+                self.cache.close()
+        finally:
+            if self.database is not None:
+                self.database.close()
 
 
 def build_runtime() -> ApiRuntime:
@@ -76,6 +83,14 @@ def build_runtime() -> ApiRuntime:
         except Exception:
             runtime.close()
             raise StorageError("VALYQON AI database startup failed.") from None
+
+    try:
+        from app.cache import build_cache
+        runtime.cache = build_cache()
+        runtime.owns_cache = True
+    except Exception:
+        runtime.close()
+        raise
 
     try:
         from app.llm.config import load_settings as load_llm_settings

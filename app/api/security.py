@@ -185,9 +185,12 @@ class LoginRateLimiter(AuthRateLimiter):
 
 async def require_api_key(request: Request, supplied_key: str | None = None) -> None:
     configured = request.app.state.api_settings.api_key
-    if configured is None:
-        return
-    if supplied_key is None or not secrets.compare_digest(supplied_key, configured):
+    if (
+        not configured
+        or not configured.strip()
+        or supplied_key is None
+        or not secrets.compare_digest(supplied_key, configured)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API key.",
@@ -224,6 +227,9 @@ async def resolve_owner(request: Request, requested_owner_user_id: int | None) -
     account = await current_account(request, touch=False)
 
     if account is None:
+        # Authenticate independently of the route dependency: owner resolution
+        # must never become an anonymous access path.
+        await require_api_key(request, request.headers.get("X-API-Key"))
         if (
             requested_owner_user_id is not None
             and is_organization_owner_id(requested_owner_user_id)
@@ -233,7 +239,14 @@ async def resolve_owner(request: Request, requested_owner_user_id: int | None) -
                 detail="Reserved organization owner namespace.",
             )
 
-        return requested_owner_user_id
+        if requested_owner_user_id is not None:
+            # The legacy shared key has no credential-to-personal-owner scope.
+            # It may authenticate ownerless operations, but is not an identity.
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="API keys cannot access personal owner operations. Use a session.",
+            )
+        return None
 
     owner_user_id = int(account.owner_user_id)
 

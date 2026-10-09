@@ -11,6 +11,8 @@ import hashlib
 import json
 import os
 import time
+import threading
+import weakref
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -30,6 +32,18 @@ class QdrantStoreError(RuntimeError):
 
 class QdrantSchemaError(QdrantStoreError):
     """Deterministic schema/dependency failure; do not retry."""
+
+
+# Protect lock-file creation as well as Qdrant's lazy initialization in this
+# process. The OS lock below remains mandatory for independent processes.
+_path_locks_guard = threading.Lock()
+_path_locks: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
+
+
+def _path_lock(path: Path) -> threading.Lock:
+    key = os.path.normcase(str(path.resolve()))
+    with _path_locks_guard:
+        return _path_locks.setdefault(key, threading.Lock())
 
 
 class QdrantVectorStore:
@@ -58,12 +72,22 @@ class QdrantVectorStore:
 
     @contextmanager
     def _local_lock(self):
+        lock = _path_lock(self.path)
+        deadline = time.monotonic() + 30
+        if not lock.acquire(timeout=30):
+            raise QdrantStoreError('Local vector storage busy.')
+        try:
+            with self._process_lock(deadline):
+                yield
+        finally:
+            lock.release()
+
+    @contextmanager
+    def _process_lock(self, deadline: float):
         with open(self.path / '.valyqon.lock', 'a+b') as handle:
-            handle.seek(0, 2)
-            if handle.tell() == 0:
-                handle.write(b'0')
-                handle.flush()
-            deadline = time.monotonic() + 30
+            # Windows permits locking a byte beyond EOF. Initialize the byte
+            # only after acquisition, so a concurrent creator cannot write to
+            # an already locked region.
             acquired = False
             while not acquired:
                 handle.seek(0)
@@ -80,6 +104,10 @@ class QdrantVectorStore:
                         raise QdrantStoreError('Local vector storage busy.') from None
                     time.sleep(.05)
             try:
+                handle.seek(0, 2)
+                if handle.tell() == 0:
+                    handle.write(b'0')
+                    handle.flush()
                 yield
             finally:
                 handle.seek(0)

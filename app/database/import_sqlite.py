@@ -20,10 +20,10 @@ TABLES = (
     "auth_password_resets", "auth_email_verifications", "tenders", "saved_opportunities",
     "discovery_search_history", "monitor_subscriptions", "monitor_seen", "rag_chunks",
     "support_tickets", "support_ticket_messages", "durable_jobs", "source_opportunities",
-    "scoring_public_revisions", "scoring_snapshots", "scoring_candidates", "scoring_results", "quota_admissions",
+    "scoring_public_revisions", "scoring_snapshots", "scoring_candidates", "scoring_results", "quota_admissions", "synchronous_usage",
 )
 METADATA = {"schema_meta", "app_schema_migrations", "app_data_imports"}
-OPTIONAL = {"quota_admissions", "rag_chunks", "support_ticket_messages", "durable_jobs", "source_opportunities", "scoring_public_revisions", "scoring_snapshots", "scoring_candidates", "scoring_results"}
+OPTIONAL = {"synchronous_usage", "quota_admissions", "rag_chunks", "support_ticket_messages", "durable_jobs", "source_opportunities", "scoring_public_revisions", "scoring_snapshots", "scoring_candidates", "scoring_results"}
 
 
 def validate_versions(conn, *, legacy=False):
@@ -72,6 +72,9 @@ def preflight_source(conn):
     if "app_schema_migrations" in names and conn.execute("SELECT 1 FROM app_schema_migrations WHERE version=12").fetchone():
         if "quota_admissions" not in names:
             raise StorageError("Source quota schema is missing; upgrade a backed-up copy first.")
+    if "app_schema_migrations" in names and conn.execute("SELECT 1 FROM app_schema_migrations WHERE version=13").fetchone():
+        if "synchronous_usage" not in names:
+            raise StorageError("Source synchronous usage schema is missing; upgrade a backed-up copy first.")
     # Canonical schema uses an isolated fixture; the source remains read-only.
     with tempfile.TemporaryDirectory(prefix="valyqon-schema-") as tmp:
         template = Database(DatabaseSettings("", Path(tmp) / "schema.sqlite"))

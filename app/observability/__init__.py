@@ -12,7 +12,7 @@ import time
 import uuid
 
 OPERATIONS = frozenset({"api.request", "job.enqueue", "job.claim", "job.complete", "job.fail",
-    "job.heartbeat", "job.execute", "quota.admit", "ai.generate", "ai.attempt", "ai.retry",
+    "job.heartbeat", "job.execute", "quota.admit", "quota.sync_release", "ai.generate", "ai.attempt", "ai.retry",
     "rag.index", "rag.retrieve", "rag.answer", "connector.sync"})
 OUTCOMES = frozenset({"success", "error", "cancelled", "denied", "retryable", "permanent", "lease_lost", "empty", "timeout", "rate_limited", "authentication", "unavailable", "invalid"})
 _correlation = ContextVar("valyqon_correlation", default=None)

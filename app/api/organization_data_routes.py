@@ -31,6 +31,7 @@ from app.models.tender import TenderAnalysis
 from app.organizations import OrganizationError
 from app.parsers.pdf import MAX_BYTES
 from app.quotas import QuotaExceeded
+from app.quotas.synchronous import admitted_operation
 from app.jobs import JobScope, JobValueError
 from app.rag.documents import DocumentError, StorageQuotaExceeded
 from app.rag.ingestion import pipeline_identity, vector_scope
@@ -159,14 +160,15 @@ async def ask_ingested_document(organization_id: int, job_id: str, payload: Inge
         raise HTTPException(503, 'RAG answering unavailable.')
     if job.payload['pipeline_version'] != pipeline_identity(runtime.rag_service.settings):
         raise HTTPException(409, 'Document requires ingestion with the current pipeline.')
-    try:
-        answer = await runtime.rag_service.answer(0, job.payload['sha256'], payload.question, runtime.provider,
-                                                ingestion_scope=vector_scope(scope),
-                                                pipeline_version=job.payload['pipeline_version'])
-    except LLMError:
-        raise HTTPException(502, 'AI generation unavailable.') from None
-    except (RagError, QdrantStoreError):
-        raise HTTPException(503, 'RAG answering unavailable.') from None
+    async with admitted_operation(request, scope, 'rag'):
+        try:
+            answer = await runtime.rag_service.answer(0, job.payload['sha256'], payload.question, runtime.provider,
+                                                    ingestion_scope=vector_scope(scope),
+                                                    pipeline_version=job.payload['pipeline_version'])
+        except LLMError:
+            raise HTTPException(502, 'AI generation unavailable.') from None
+        except (RagError, QdrantStoreError):
+            raise HTTPException(503, 'RAG answering unavailable.') from None
     await _ingestion_scope(request, organization_id, company_id)
     response.headers['Cache-Control'] = 'no-store'
     return RagAskResponse(answer=answer.answer,
@@ -559,151 +561,152 @@ async def analyze_organization_pdf(
             detail="LLM is unavailable.",
         )
 
-    summary = await summarize_pdf(data)
+    async with admitted_operation(request, JobScope(account.id, organization_id, workspace.id), 'analysis'):
+        summary = await summarize_pdf(data)
 
-    if summary.status != "ok":
-        messages = {
-            "no_text":
-                "PDF has no extractable text; OCR is not enabled.",
-            "encrypted":
-                "PDF is password protected.",
-            "invalid":
-                "Invalid or damaged PDF.",
-            "too_large":
-                "PDF exceeds 10 MiB limit.",
-            "too_many_pages":
-                "PDF exceeds 200 page limit.",
-            "too_much_text":
-                "PDF exceeds extracted text limit.",
-            "timeout":
-                "PDF parsing timed out.",
-        }
+        if summary.status != "ok":
+            messages = {
+                "no_text":
+                    "PDF has no extractable text; OCR is not enabled.",
+                "encrypted":
+                    "PDF is password protected.",
+                "invalid":
+                    "Invalid or damaged PDF.",
+                "too_large":
+                    "PDF exceeds 10 MiB limit.",
+                "too_many_pages":
+                    "PDF exceeds 200 page limit.",
+                "too_much_text":
+                    "PDF exceeds extracted text limit.",
+                "timeout":
+                    "PDF parsing timed out.",
+            }
 
-        code = (
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
-            if summary.status == "too_large"
-            else status.HTTP_422_UNPROCESSABLE_ENTITY
+            code = (
+                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+                if summary.status == "too_large"
+                else status.HTTP_422_UNPROCESSABLE_ENTITY
+            )
+
+            raise HTTPException(
+                status_code=code,
+                detail=messages.get(
+                    summary.status,
+                    "PDF parsing failed.",
+                ),
+            )
+
+        try:
+            result = await analyze_tender(
+                summary.text,
+                runtime.provider,
+                runtime.tender_max_chars,
+            )
+        except AnalysisError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(error),
+            ) from None
+        except LLMError:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="LLM request failed.",
+            ) from None
+
+        # The active company may have changed during the expensive
+        # PDF/LLM operation, so resolve the shared context again.
+        workspace = await _active_company(
+            request,
+            account,
+            organization_id,
         )
 
-        raise HTTPException(
-            status_code=code,
-            detail=messages.get(
-                summary.status,
-                "PDF parsing failed.",
-            ),
+        if workspace is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Create an organization company profile "
+                    "before analyzing PDFs."
+                ),
+            )
+
+        scoring = score_tender(
+            result.analysis,
+            workspace.profile,
         )
 
-    try:
-        result = await analyze_tender(
-            summary.text,
-            runtime.provider,
-            runtime.tender_max_chars,
-        )
-    except AnalysisError as error:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(error),
-        ) from None
-    except LLMError:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="LLM request failed.",
-        ) from None
+        # Save FIRST. This method re-checks write membership inside
+        # BEGIN IMMEDIATE. Qdrant must not receive the PDF text when
+        # the final organization authorization fails.
+        try:
+            stored = await asyncio.to_thread(
+                repository.save_success_for_organization,
+                account_id=account.id,
+                organization_id=organization_id,
+                pdf_sha256=digest,
+                source_filename=name,
+                pages=summary.pages,
+                characters=summary.characters,
+                analysis=result.analysis,
+                scoring=scoring,
+                analysis_truncated=result.truncated,
+            )
+        except DatabaseError as error:
+            _data_error(error)
 
-    # The active company may have changed during the expensive
-    # PDF/LLM operation, so resolve the shared context again.
-    workspace = await _active_company(
-        request,
-        account,
-        organization_id,
-    )
+        warnings: list[str] = []
+        rag_chunks: int | None = None
 
-    if workspace is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Create an organization company profile "
-                "before analyzing PDFs."
-            ),
-        )
+        if runtime.rag_service is not None:
+            try:
+                rag_chunks = await asyncio.to_thread(
+                    runtime.rag_service.index_pdf_for_organization,
+                    organization_id,
+                    digest,
+                    summary,
+                )
+            except Exception:
+                warnings.append(
+                    "Organization RAG indexing failed; "
+                    "analysis was still completed."
+                )
 
-    scoring = score_tender(
-        result.analysis,
-        workspace.profile,
-    )
+        # RAG embedding/indexing can be relatively expensive.
+        # Re-check organization read authorization before returning
+        # potentially sensitive analysis to the caller.
+        try:
+            confirmed = await asyncio.to_thread(
+                repository.find_by_hash_for_organization,
+                account.id,
+                organization_id,
+                digest,
+            )
+        except DatabaseError as error:
+            _data_error(error)
 
-    # Save FIRST. This method re-checks write membership inside
-    # BEGIN IMMEDIATE. Qdrant must not receive the PDF text when
-    # the final organization authorization fails.
-    try:
-        stored = await asyncio.to_thread(
-            repository.save_success_for_organization,
-            account_id=account.id,
-            organization_id=organization_id,
+        if confirmed is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Tender document not found.",
+            )
+
+        response.headers[
+            "Cache-Control"
+        ] = "no-store"
+
+        return PdfAnalysisResponse(
+            duplicate=False,
+            record_id=stored.id,
             pdf_sha256=digest,
             source_filename=name,
             pages=summary.pages,
             characters=summary.characters,
+            analysis_truncated=result.truncated,
             analysis=result.analysis,
             scoring=scoring,
-            analysis_truncated=result.truncated,
+            rag_indexed_chunks=rag_chunks,
+            warnings=warnings,
         )
-    except DatabaseError as error:
-        _data_error(error)
-
-    warnings: list[str] = []
-    rag_chunks: int | None = None
-
-    if runtime.rag_service is not None:
-        try:
-            rag_chunks = await asyncio.to_thread(
-                runtime.rag_service.index_pdf_for_organization,
-                organization_id,
-                digest,
-                summary,
-            )
-        except Exception:
-            warnings.append(
-                "Organization RAG indexing failed; "
-                "analysis was still completed."
-            )
-
-    # RAG embedding/indexing can be relatively expensive.
-    # Re-check organization read authorization before returning
-    # potentially sensitive analysis to the caller.
-    try:
-        confirmed = await asyncio.to_thread(
-            repository.find_by_hash_for_organization,
-            account.id,
-            organization_id,
-            digest,
-        )
-    except DatabaseError as error:
-        _data_error(error)
-
-    if confirmed is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tender document not found.",
-        )
-
-    response.headers[
-        "Cache-Control"
-    ] = "no-store"
-
-    return PdfAnalysisResponse(
-        duplicate=False,
-        record_id=stored.id,
-        pdf_sha256=digest,
-        source_filename=name,
-        pages=summary.pages,
-        characters=summary.characters,
-        analysis_truncated=result.truncated,
-        analysis=result.analysis,
-        scoring=scoring,
-        rag_indexed_chunks=rag_chunks,
-        warnings=warnings,
-    )
 
 
 @router.post(
@@ -752,33 +755,34 @@ async def ask_organization_rag(
             detail="LLM is unavailable.",
         )
 
-    try:
-        answer = await runtime.rag_service.answer_for_organization(
-            organization_id,
-            digest,
-            payload.question,
-            runtime.provider,
-        )
-    except LLMError:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="LLM request failed.",
-        ) from None
-    except QdrantStoreError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="RAG storage is unavailable.",
-        ) from None
-    except RagError as error:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(error),
-        ) from None
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="RAG request failed.",
-        ) from None
+    async with admitted_operation(request, JobScope(account.id, organization_id), 'rag'):
+        try:
+            answer = await runtime.rag_service.answer_for_organization(
+                organization_id,
+                digest,
+                payload.question,
+                runtime.provider,
+            )
+        except LLMError:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="LLM request failed.",
+            ) from None
+        except QdrantStoreError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="RAG storage is unavailable.",
+            ) from None
+        except RagError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(error),
+            ) from None
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="RAG request failed.",
+            ) from None
 
     # Do not return potentially sensitive generated content if
     # membership was revoked during the external RAG/LLM call.

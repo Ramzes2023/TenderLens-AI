@@ -42,6 +42,7 @@ class ApiRuntime:
     cache: "Any | None" = None
     owns_cache: bool = False
     component_errors: dict[str, str] = field(default_factory=dict)
+    synchronous_usage: "Any | None" = None
 
     def component_status(self) -> dict[str, str]:
         database = self.database or getattr(self.tender_repository, "database", None)
@@ -86,6 +87,14 @@ def build_runtime() -> ApiRuntime:
         except Exception:
             runtime.close()
             raise StorageError("VALYQON AI database startup failed.") from None
+
+    from app.quotas.synchronous import SynchronousUsage
+    runtime.synchronous_usage = SynchronousUsage(runtime.database)
+    try:
+        runtime.synchronous_usage.initialize()
+    except Exception:
+        runtime.close()
+        raise StorageError("Usage admission startup failed.") from None
 
     try:
         from app.jobs import JobRepository, JobService, load_job_settings

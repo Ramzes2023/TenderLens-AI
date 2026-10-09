@@ -21,6 +21,8 @@ from app.companies import (
     CompanyRepositoryError,
 )
 from app.llm.base import LLMError
+from app.jobs import JobScope
+from app.quotas.synchronous import admitted_operation
 from app.organizations import OrganizationError
 from app.parsers.pdf import MAX_BYTES
 from app.scoring.models import CompanyProfile
@@ -479,60 +481,61 @@ async def preview_company_profile_from_pdf(
             detail="LLM is unavailable.",
         )
 
-    summary = await summarize_pdf(
-        data
-    )
-
-    if summary.status != "ok":
-        messages = {
-            "no_text":
-                "PDF has no extractable text; OCR is not enabled.",
-            "encrypted":
-                "PDF is password protected.",
-            "invalid":
-                "Invalid or damaged PDF.",
-            "too_large":
-                "PDF exceeds 10 MiB limit.",
-            "too_many_pages":
-                "PDF exceeds 200 page limit.",
-            "too_much_text":
-                "PDF exceeds extracted text limit.",
-            "timeout":
-                "PDF parsing timed out.",
-        }
-
-        code = (
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
-            if summary.status == "too_large"
-            else status.HTTP_422_UNPROCESSABLE_ENTITY
+    async with admitted_operation(request, JobScope(account.id, organization_id, company.id), 'analysis'):
+        summary = await summarize_pdf(
+            data
         )
 
-        raise HTTPException(
-            status_code=code,
-            detail=messages.get(
-                summary.status,
-                "PDF parsing failed.",
-            ),
-        )
+        if summary.status != "ok":
+            messages = {
+                "no_text":
+                    "PDF has no extractable text; OCR is not enabled.",
+                "encrypted":
+                    "PDF is password protected.",
+                "invalid":
+                    "Invalid or damaged PDF.",
+                "too_large":
+                    "PDF exceeds 10 MiB limit.",
+                "too_many_pages":
+                    "PDF exceeds 200 page limit.",
+                "too_much_text":
+                    "PDF exceeds extracted text limit.",
+                "timeout":
+                    "PDF parsing timed out.",
+            }
 
-    try:
-        result = await analyze_company_search_profile(
-            summary.text,
-            runtime.provider,
-            runtime.tender_max_chars,
-        )
+            code = (
+                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+                if summary.status == "too_large"
+                else status.HTTP_422_UNPROCESSABLE_ENTITY
+            )
 
-    except ProfileDraftError as error:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(error),
-        ) from None
+            raise HTTPException(
+                status_code=code,
+                detail=messages.get(
+                    summary.status,
+                    "PDF parsing failed.",
+                ),
+            )
 
-    except LLMError:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="LLM request failed.",
-        ) from None
+        try:
+            result = await analyze_company_search_profile(
+                summary.text,
+                runtime.provider,
+                runtime.tender_max_chars,
+            )
+
+        except ProfileDraftError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(error),
+            ) from None
+
+        except LLMError:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="LLM request failed.",
+            ) from None
 
     # Re-check authorization and reload after the
     # potentially expensive PDF/LLM operation.

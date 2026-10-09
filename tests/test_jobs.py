@@ -525,7 +525,8 @@ def test_historical_migration_checksums_are_frozen():
     assert MIGRATIONS[8].version == 9 and MIGRATIONS[8].domain == 'jobs'
     assert MIGRATIONS[9].version == 10 and MIGRATIONS[9].domain == 'opportunities'
     assert MIGRATIONS[10].version == 11 and MIGRATIONS[10].domain == 'scoring'
-    assert MIGRATIONS[-1].version == 12 and MIGRATIONS[-1].domain == 'quotas'
+    assert MIGRATIONS[11].version == 12 and MIGRATIONS[11].domain == 'quotas'
+    assert MIGRATIONS[-1].version == 13 and MIGRATIONS[-1].domain == 'synchronous_usage'
 
 
 def test_same_identity_separates_tenants(queue):

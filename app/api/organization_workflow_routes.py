@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from app.jobs import JobScope
+from app.quotas.synchronous import admitted_operation
+
 import asyncio
 import json
 
@@ -1362,18 +1365,19 @@ async def organization_discover_tenders(
         catalog = snapshot_catalog(catalog, OpportunityRepository(database))
         response.headers['X-Valyqon-Discovery-Mode'] = 'snapshots'
 
-    try:
-        matches, report = (
-            await discovery.fetch_matches_from_catalog_for_profile(
-                catalog,
-                workspace.profile,
+    async with admitted_operation(request, JobScope(account.id, organization_id, workspace.id), 'discovery'):
+        try:
+            matches, report = (
+                await discovery.fetch_matches_from_catalog_for_profile(
+                    catalog,
+                    workspace.profile,
+                )
             )
-        )
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Global procurement discovery failed.",
-        ) from None
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Global procurement discovery failed.",
+            ) from None
 
     response.headers[
         "Cache-Control"
@@ -1658,29 +1662,30 @@ async def organization_monitoring_scan(
         organization_id
     )
 
-    try:
-        matches = await monitoring.scan_new_for_organization(
-            account_id=account.id,
-            organization_id=organization_id,
-            owner_user_id=owner_user_id,
-            profile=workspace.profile,
-            company_scope=str(workspace.id),
-        )
-    except MonitoringAuthorizationError:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Organization monitoring access denied.",
-        ) from None
-    except MonitoringRepositoryError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Monitoring storage is unavailable.",
-        ) from None
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="EIS monitoring request failed.",
-        ) from None
+    async with admitted_operation(request, JobScope(account.id, organization_id, workspace.id), 'monitoring'):
+        try:
+            matches = await monitoring.scan_new_for_organization(
+                account_id=account.id,
+                organization_id=organization_id,
+                owner_user_id=owner_user_id,
+                profile=workspace.profile,
+                company_scope=str(workspace.id),
+            )
+        except MonitoringAuthorizationError:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Organization monitoring access denied.",
+            ) from None
+        except MonitoringRepositoryError:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Monitoring storage is unavailable.",
+            ) from None
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="EIS monitoring request failed.",
+            ) from None
 
     response.headers["Cache-Control"] = "no-store"
 

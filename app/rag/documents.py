@@ -14,6 +14,10 @@ from app.jobs.models import JobScope
 from app.parsers.pdf import MAX_BYTES
 
 
+class StorageQuotaExceeded(Exception):
+    """Tenant retained document capacity reached; operator retention is required."""
+
+
 class DocumentError(ValueError):
     pass
 
@@ -24,7 +28,10 @@ def document_reference(scope: JobScope, digest: str, pipeline: str) -> str:
 
 
 class RagDocumentStore:
-    def __init__(self, directory: Path):
+    def __init__(self, directory: Path, *, max_tenant_documents=1000):
+        if type(max_tenant_documents) is not int or not 1 <= max_tenant_documents <= 1000000:
+            raise DocumentError('Invalid tenant document limit.')
+        self.max_tenant_documents = max_tenant_documents
         directory = Path(directory).absolute()
         # Reject symlink/reparse-point components before resolving the root.
         for part in (directory, *directory.parents):
@@ -62,11 +69,16 @@ class RagDocumentStore:
         except OSError:
             raise DocumentError('Staged PDF unavailable.') from None
 
-    def stage(self, data: bytes, scope: JobScope, pipeline: str):
+    @staticmethod
+    def identity(data, scope, pipeline):
         if type(data) is not bytes or not data or len(data) > MAX_BYTES or b'%PDF-' not in data[:1024]:
             raise DocumentError('Invalid or oversized PDF.')
         digest = hashlib.sha256(data).hexdigest()
         reference = document_reference(scope, digest, pipeline)
+        return reference, digest
+
+    def stage(self, data: bytes, scope: JobScope, pipeline: str):
+        reference, digest = self.identity(data, scope, pipeline)
         path = self._path(reference)
         if path.exists():
             if hashlib.sha256(self.read(reference)).hexdigest() != digest:

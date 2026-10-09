@@ -449,9 +449,199 @@ def test_upload_quota_denial_does_not_enqueue(setup):
         client.cookies.set(SESSION_COOKIE, auth.create_session(setup.account))
         denied = client.post(prefix + '/documents', files={'file': ('fixture.pdf', pdf(), 'application/pdf')})
         assert denied.status_code == 429, denied.text
+        assert not list(setup.documents.directory.iterdir())
         assert denied.headers['Cache-Control'] == 'no-store'
         assert int(denied.headers['Retry-After']) >= 1
         client.cookies.clear()
         assert client.post(prefix + '/documents', files={'file': ('fixture.pdf', pdf(), 'application/pdf')}).status_code == 401
     with setup.database.connect() as conn:
         assert conn.execute('SELECT COUNT(*) FROM durable_jobs').fetchone()[0] == 0
+
+
+@pytest.mark.parametrize('same', [True, False])
+def test_concurrent_storage_admission(setup, same):
+    from concurrent.futures import ThreadPoolExecutor
+    from app.quotas import QuotaSettings, Limits, QuotaExceeded
+    setup.jobs.quotas = QuotaSettings(True, Limits(1, 1, 1))
+    data = [pdf(), pdf('different')]
+    barrier = threading.Barrier(2)
+    def upload(index):
+        barrier.wait(timeout=10)
+        try:
+            return enqueue(setup, data[0 if same else index])
+        except QuotaExceeded:
+            return None
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(upload, range(2)))
+    accepted = [job for job in results if job is not None]
+    assert len(accepted) == (2 if same else 1)
+    assert len({job.id for job in accepted}) == 1
+    assert len(list(setup.documents.directory.glob('*.pdf'))) == 1
+    assert not list(setup.documents.directory.glob('.stage-*'))
+
+
+def test_repeated_quota_rejections_never_stage(setup):
+    from app.quotas import QuotaSettings, Limits, QuotaExceeded
+    setup.jobs.quotas = QuotaSettings(True, Limits(0, 0, 0))
+    with patch.object(setup.documents, 'stage', side_effect=AssertionError('must not stage')):
+        for index in range(5):
+            with pytest.raises(QuotaExceeded):
+                enqueue(setup, pdf(str(index)))
+    assert not list(setup.documents.directory.iterdir())
+
+
+def test_staging_failure_rolls_back_admission_and_cleans(setup):
+    stage = setup.documents.stage
+    def fail(*args):
+        stage(*args)
+        raise OSError('synthetic staging failure')
+    with patch.object(setup.documents, 'stage', side_effect=fail):
+        with pytest.raises(OSError):
+            enqueue(setup)
+    assert not list(setup.documents.directory.iterdir())
+    with setup.database.connect() as conn:
+        assert conn.execute('SELECT COUNT(*) FROM durable_jobs').fetchone()[0] == 0
+        assert conn.execute('SELECT COUNT(*) FROM quota_admissions').fetchone()[0] == 0
+    assert enqueue(setup).state == 'queued'
+
+
+@pytest.mark.parametrize('state', ['queued', 'running', 'succeeded', 'failed', 'cancelled'])
+def test_failed_duplicate_never_deletes_retained_document(setup, state):
+    data = pdf()
+    job = enqueue(setup, data)
+    if state == 'running':
+        assert setup.jobs.claim_next('worker-' + uuid.uuid4().hex).job.id == job.id
+    else:
+        with setup.database.connect() as conn:
+            conn.execute('UPDATE durable_jobs SET state=? WHERE id=?', (state, job.id))
+    with patch.object(setup.documents, 'stage', side_effect=OSError('synthetic failure')):
+        with pytest.raises(OSError):
+            enqueue(setup, data)
+    assert setup.documents.read(job.payload['document_ref']) == data
+
+
+def test_storage_cap_is_tenant_wide_and_preserves_duplicates(setup):
+    from app.rag.documents import StorageQuotaExceeded
+    setup.documents.max_tenant_documents = 1
+    data = pdf()
+    one = enqueue(setup, data)
+    assert enqueue(setup, data).id == one.id
+    with pytest.raises(StorageQuotaExceeded):
+        enqueue(setup, pdf('different'))
+    two = enqueue(setup, data, setup.scope_b)
+    assert one.payload['document_ref'] != two.payload['document_ref']
+    assert len(list(setup.documents.directory.glob('*.pdf'))) == 2
+
+
+def test_write_failure_removes_temporary_file(setup):
+    with patch('app.rag.documents.os.fsync', side_effect=OSError('synthetic disk failure')):
+        with pytest.raises(OSError):
+            enqueue(setup)
+    assert not list(setup.documents.directory.iterdir())
+
+
+def test_failure_after_staging_before_commit_cleans_file(setup):
+    with patch('app.jobs.repository.decode_job', side_effect=ValueError('synthetic failure')):
+        with pytest.raises(ValueError):
+            enqueue(setup)
+    assert not list(setup.documents.directory.iterdir())
+    with setup.database.connect() as conn:
+        assert conn.execute('SELECT COUNT(*) FROM durable_jobs').fetchone()[0] == 0
+
+
+def test_ambiguous_commit_acknowledgement_preserves_committed_document(setup):
+    from contextlib import contextmanager
+    transaction = setup.jobs._transaction
+    calls = [0]
+    @contextmanager
+    def ambiguous_transaction():
+        calls[0] += 1
+        current = calls[0]
+        with transaction() as conn:
+            yield conn
+        # validate_scope is first; admission commits before losing its acknowledgement.
+        if current == 2:
+            raise OSError('synthetic lost acknowledgement')
+    data = pdf()
+    with patch.object(setup.jobs, '_transaction', ambiguous_transaction):
+        with pytest.raises(OSError):
+            enqueue(setup, data)
+    with setup.database.connect() as conn:
+        row = conn.execute('SELECT payload_json FROM durable_jobs').fetchone()
+    assert setup.documents.read(json.loads(row['payload_json'])['document_ref']) == data
+    assert enqueue(setup, data).state == 'queued'
+
+
+def test_concurrent_storage_limit_without_job_quotas(setup):
+    from concurrent.futures import ThreadPoolExecutor
+    from app.quotas import QuotaSettings
+    from app.rag.documents import StorageQuotaExceeded
+    setup.jobs.quotas = QuotaSettings(False)
+    setup.documents.max_tenant_documents = 1
+    data = [pdf('one'), pdf('two')]
+    barrier = threading.Barrier(2)
+    def upload(index):
+        # Independent repositories and stores, sharing only persistent resources.
+        repository = JobRepository(setup.database, quotas=QuotaSettings(False))
+        documents = RagDocumentStore(setup.documents.directory, max_tenant_documents=1)
+        service = RagIngestionService(JobService(repository), documents, setup.rag.settings)
+        barrier.wait(timeout=10)
+        try:
+            return service.stage_and_enqueue(data[index], scope=setup.scope)
+        except StorageQuotaExceeded:
+            return None
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(upload, range(2)))
+    assert sum(job is not None for job in results) == 1
+    assert len(list(setup.documents.directory.glob('*.pdf'))) == 1
+
+
+def test_retained_missing_document_is_not_deleted_after_failed_repair(setup):
+    data = pdf()
+    job = enqueue(setup, data)
+    setup.documents.delete(job.payload['document_ref'])
+    stage = setup.documents.stage
+    def fail(*args):
+        stage(*args)
+        raise OSError('synthetic repair failure')
+    with patch.object(setup.documents, 'stage', side_effect=fail):
+        with pytest.raises(OSError):
+            enqueue(setup, data)
+    assert setup.documents.read(job.payload['document_ref']) == data
+
+
+def test_cleanup_after_competing_admission_preserves_document(setup):
+    from concurrent.futures import ThreadPoolExecutor
+    from contextlib import contextmanager
+    published, committed = threading.Event(), threading.Event()
+    data = pdf()
+    repository = JobRepository(setup.database)
+    documents = RagDocumentStore(setup.documents.directory)
+    service = RagIngestionService(JobService(repository), documents, setup.rag.settings)
+    transaction, stage = repository._transaction, documents.stage
+    calls = [0]
+    @contextmanager
+    def ordered_transaction():
+        calls[0] += 1
+        if calls[0] == 3:  # reconciliation, before reacquiring the DB write lock
+            assert committed.wait(timeout=10)
+        with transaction() as conn:
+            yield conn
+    def fail_stage(*args):
+        stage(*args)
+        published.set()
+        raise OSError('synthetic admission failure')
+    def failed_upload():
+        with patch.object(repository, '_transaction', ordered_transaction), \
+                patch.object(documents, 'stage', side_effect=fail_stage):
+            with pytest.raises(OSError):
+                service.stage_and_enqueue(data, scope=setup.scope)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        failed = pool.submit(failed_upload)
+        assert published.wait(timeout=10)
+        accepted = enqueue(setup, data)
+        committed.set()
+        failed.result(timeout=10)
+    assert setup.documents.read(accepted.payload['document_ref']) == data
+    with setup.database.connect() as conn:
+        assert conn.execute('SELECT COUNT(*) FROM durable_jobs').fetchone()[0] == 1

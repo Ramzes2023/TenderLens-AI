@@ -17,7 +17,7 @@ from app.jobs.worker import PermanentJobError, RetryableJobError
 from app.parsers.pdf import MAX_BYTES, PdfSummary
 from .chunking import chunk_pages
 from .config import PROJECT_ROOT, RagConfigurationError
-from .documents import DocumentError, RagDocumentStore, document_reference
+from .documents import DocumentError, RagDocumentStore, StorageQuotaExceeded, document_reference
 from .embedding import EmbeddingError, TransientEmbeddingError
 from .qdrant_store import QdrantStoreError, QdrantSchemaError
 
@@ -54,7 +54,11 @@ def load_ingestion_options():
             raise ValueError
     except ValueError:
         raise RagConfigurationError('Invalid RAG embedding batch size.') from None
-    return RagDocumentStore(directory), batch
+    try:
+        limit = int(os.environ.get('VALYQON_RAG_MAX_TENANT_DOCUMENTS', '1000'))
+        return RagDocumentStore(directory, max_tenant_documents=limit), batch
+    except (ValueError, DocumentError):
+        raise RagConfigurationError('Invalid tenant document limit.') from None
 
 
 def extract_staged_pdf(data):
@@ -79,12 +83,39 @@ class RagIngestionService:
     def stage_and_enqueue(self, data, *, scope):
         if not isinstance(scope, JobScope) or scope.account_id is None or scope.organization_id is None:
             raise JobValueError('Authorized organization scope required.')
-        # Validate relational membership/company before staging; enqueue checks again.
         self.validate_scope(scope)
-        reference, digest = self.documents.stage(data, scope, self.pipeline)
+        reference, digest = self.documents.identity(data, scope, self.pipeline)
         payload = {'schema': 1, 'document_ref': reference, 'sha256': digest, 'pipeline_version': self.pipeline}
-        return self.jobs.enqueue(JOB_TYPE, payload, scope=scope,
-                                 idempotency_key=digest + ':' + self.pipeline)
+        repository = self.jobs.repository
+        created = False
+
+        def references(conn, exclude=None):
+            # All states retained, including failed/cancelled and old pipelines.
+            rows = conn.execute("SELECT payload_json FROM durable_jobs WHERE job_type=? AND organization_id=? AND id<>?",
+                                (JOB_TYPE, scope.organization_id, exclude or '')).fetchall()
+            return {json.loads(row['payload_json']).get('document_ref') for row in rows}
+
+        def prepare(conn, row, inserted):
+            nonlocal created
+            retained = references(conn, row['id'] if inserted else None)
+            if reference not in retained and len(retained) >= self.documents.max_tenant_documents:
+                raise StorageQuotaExceeded()
+            path = self.documents._path(reference)
+            created = not path.exists()
+            self.documents.stage(data, scope, self.pipeline)
+
+        try:
+            return self.jobs.enqueue(JOB_TYPE, payload, scope=scope,
+                                     idempotency_key=digest + ':' + self.pipeline, _prepare=prepare)
+        except BaseException:
+            if created:
+                # Reconcile after rollback, including an ambiguous commit outcome.
+                # Never delete on unavailable DB: retain for operator reconciliation.
+                with repository._transaction() as conn:
+                    repository.lock_rag_storage(conn, scope)
+                    if reference not in references(conn):
+                        self.documents.delete(reference)
+            raise
 
     def validate_scope(self, scope):
         database = self.jobs.repository.database

@@ -32,7 +32,7 @@ from app.organizations import OrganizationError
 from app.parsers.pdf import MAX_BYTES
 from app.quotas import QuotaExceeded
 from app.jobs import JobScope, JobValueError
-from app.rag.documents import DocumentError
+from app.rag.documents import DocumentError, StorageQuotaExceeded
 from app.rag.ingestion import pipeline_identity, vector_scope
 from app.rag import (
     QdrantStoreError,
@@ -118,6 +118,8 @@ async def enqueue_rag_document(organization_id: int, request: Request, response:
         raise HTTPException(413, 'PDF exceeds 10 MiB limit.')
     try:
         job = await asyncio.to_thread(service.stage_and_enqueue, data, scope=scope)
+    except StorageQuotaExceeded:
+        raise HTTPException(429, 'Tenant document storage limit exceeded.', headers={'Cache-Control': 'no-store'}) from None
     except DocumentError:
         raise HTTPException(422, 'Invalid PDF staging request.') from None
     except QuotaExceeded as exc:

@@ -99,7 +99,9 @@ class JobRepository:
             raise JobValueError('Invalid stored job scope.')
 
     @observe("job.enqueue")
-    def enqueue(self, job_type, payload, *, scope, priority=0, max_attempts=None, available_at=None, idempotency_key=None):
+    def enqueue(self, job_type, payload, *, scope, priority=0, max_attempts=None, available_at=None, idempotency_key=None, _prepare=None):
+        # _prepare is trusted synchronous application code, never request policy.
+        # It executes after admission and before commit under the storage lock.
         job_type_name(job_type)
         self._scope_filter(scope)
         encoded = encode_json(payload, self.settings.max_payload_bytes)
@@ -121,13 +123,16 @@ class JobRepository:
             self._validate_scope(conn, scope)
             from app.quotas.admission import lock, admit
             tenant_key = lock(conn, self.database.backend, self.quotas, scope, job_type)
+            if _prepare is not None:
+                self.lock_rag_storage(conn, scope)
             now = self._now(conn)
             job_id = str(uuid.uuid4())
             cursor = conn.execute('''INSERT INTO durable_jobs
                 (id,job_type,state,account_id,organization_id,company_id,payload_json,priority,max_attempts,available_at,created_at,idempotency_hash)
                 VALUES(?,?,'queued',?,?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING''',
                 (job_id, job_type, *scope.values, encoded, priority, attempts, now if available_at is None else available_at, now, fingerprint))
-            if cursor.rowcount == 0:
+            inserted = cursor.rowcount != 0
+            if not inserted:
                 # A conflicting row may have become terminal between INSERT and SELECT.
                 # Keep enqueue atomic by locking the active identity's row in PostgreSQL.
                 row = conn.execute("SELECT * FROM durable_jobs WHERE idempotency_hash=? AND state IN ('queued','running','succeeded')" +
@@ -139,7 +144,17 @@ class JobRepository:
             else:
                 admit(conn, self.quotas, tenant_key, job_id, now)
                 row = conn.execute('SELECT * FROM durable_jobs WHERE id=?', (job_id,)).fetchone()
+            if _prepare is not None:
+                _prepare(conn, row, inserted)
             return decode_job(row)
+
+    def lock_rag_storage(self, conn, scope):
+        # Separate namespace: unconditional even when job quotas are disabled.
+        if self.database.backend == 'postgresql':
+            identity = int.from_bytes(hashlib.sha256(
+                ('rag-storage:organization:' + str(scope.organization_id)).encode()).digest()[:8],
+                'big', signed=True)
+            conn.execute('SELECT pg_advisory_xact_lock(?)', (identity,))
 
     def validate_scope(self, scope):
         """Revalidate stored authorization parents before worker-side processing."""

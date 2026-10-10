@@ -32,3 +32,18 @@ def test_password_toggle_is_not_a_submit_and_auth_stays_generic():
         assert '← Back to VALYQON' in html
         assert 'j.detail' not in html
         assert 'credentials:' in html
+
+
+def test_discovery_filters_have_one_owner_without_navigation_catalog():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    premium = (root / "app/api/static/premium.js").read_text(encoding="utf-8")
+    discovery = (root / "app/api/static/discovery.js").read_text(encoding="utf-8")
+    from app.api.discovery_ui import DISCOVERY_HTML
+    for marker in ("filterSource", "filterCurrency", "hydrateDiscoveryCatalog",
+                   "ensureOptions", "MutationObserver", "CURRENCIES", "SOURCES"):
+        assert marker not in premium
+    assert 'id="filterSource"' in DISCOVERY_HTML
+    assert 'id="filterCurrency"' in DISCOVERY_HTML
+    assert "options('filterSource',items.map(i=>i.source))" in discovery
+    assert "options('filterCurrency',items.map(i=>i.currency))" in discovery

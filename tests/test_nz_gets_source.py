@@ -412,7 +412,7 @@ def test_source_fetches_official_rss(
 
     monkeypatch.setattr(
         "app.sources.nz_gets_rss."
-        "httpx.AsyncClient",
+        "source_client",
         FakeClient,
     )
 
@@ -473,7 +473,7 @@ def test_source_wraps_http_failure(
 
     monkeypatch.setattr(
         "app.sources.nz_gets_rss."
-        "httpx.AsyncClient",
+        "source_client",
         FakeClient,
     )
 

@@ -202,7 +202,7 @@ def test_sam_source_posts_official_search_contract(
             return FakeResponse()
 
     monkeypatch.setattr(
-        "app.sources.sam_gov_api.httpx.AsyncClient",
+        "app.sources.sam_gov_api.source_client",
         FakeClient,
     )
 
@@ -264,7 +264,7 @@ def test_sam_source_clamps_limit_to_100(
             return FakeResponse()
 
     monkeypatch.setattr(
-        "app.sources.sam_gov_api.httpx.AsyncClient",
+        "app.sources.sam_gov_api.source_client",
         FakeClient,
     )
 
@@ -299,7 +299,7 @@ def test_sam_source_wraps_http_failure_without_key(
             raise httpx.ConnectError("offline")
 
     monkeypatch.setattr(
-        "app.sources.sam_gov_api.httpx.AsyncClient",
+        "app.sources.sam_gov_api.source_client",
         FakeClient,
     )
 

@@ -212,7 +212,7 @@ def test_source_follows_official_next_page(
             return FakeResponse(payload)
 
     monkeypatch.setattr(
-        "app.sources.kz_goszakup.httpx.AsyncClient",
+        "app.sources.kz_goszakup.source_client",
         FakeClient,
     )
 
@@ -312,7 +312,7 @@ def test_source_clamps_limit_to_100(
             return FakeResponse(payload)
 
     monkeypatch.setattr(
-        "app.sources.kz_goszakup.httpx.AsyncClient",
+        "app.sources.kz_goszakup.source_client",
         FakeClient,
     )
 
@@ -365,7 +365,7 @@ def test_source_rejects_external_next_page(
             return FakeResponse()
 
     monkeypatch.setattr(
-        "app.sources.kz_goszakup.httpx.AsyncClient",
+        "app.sources.kz_goszakup.source_client",
         FakeClient,
     )
 
@@ -432,7 +432,7 @@ def test_source_rejects_conflicting_duplicate_ids(
             return FakeResponse(payload)
 
     monkeypatch.setattr(
-        "app.sources.kz_goszakup.httpx.AsyncClient",
+        "app.sources.kz_goszakup.source_client",
         FakeClient,
     )
 
@@ -471,7 +471,7 @@ def test_source_wraps_http_failure_without_token(
             )
 
     monkeypatch.setattr(
-        "app.sources.kz_goszakup.httpx.AsyncClient",
+        "app.sources.kz_goszakup.source_client",
         FakeClient,
     )
 
@@ -532,7 +532,7 @@ def test_source_sends_bearer_token_only_in_headers(
             return FakeResponse()
 
     monkeypatch.setattr(
-        "app.sources.kz_goszakup.httpx.AsyncClient",
+        "app.sources.kz_goszakup.source_client",
         FakeClient,
     )
 
@@ -601,7 +601,7 @@ def test_source_rejects_trd_buy_prefix_escape(
             return FakeResponse()
 
     monkeypatch.setattr(
-        "app.sources.kz_goszakup.httpx.AsyncClient",
+        "app.sources.kz_goszakup.source_client",
         FakeClient,
     )
 
@@ -671,7 +671,7 @@ def test_source_rejects_repeated_next_page(
             return FakeResponse(payload)
 
     monkeypatch.setattr(
-        "app.sources.kz_goszakup.httpx.AsyncClient",
+        "app.sources.kz_goszakup.source_client",
         FakeClient,
     )
 

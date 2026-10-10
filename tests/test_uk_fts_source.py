@@ -197,7 +197,7 @@ def test_source_uses_official_api_contract(
             return FakeResponse()
 
     monkeypatch.setattr(
-        "app.sources.uk_fts_api.httpx.AsyncClient",
+        "app.sources.uk_fts_api.source_client",
         FakeClient,
     )
 
@@ -247,7 +247,7 @@ def test_source_clamps_limit_to_100(
             return FakeResponse()
 
     monkeypatch.setattr(
-        "app.sources.uk_fts_api.httpx.AsyncClient",
+        "app.sources.uk_fts_api.source_client",
         FakeClient,
     )
 
@@ -280,7 +280,7 @@ def test_source_wraps_http_failure(
             raise httpx.ConnectError("offline")
 
     monkeypatch.setattr(
-        "app.sources.uk_fts_api.httpx.AsyncClient",
+        "app.sources.uk_fts_api.source_client",
         FakeClient,
     )
 

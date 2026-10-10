@@ -15,7 +15,7 @@ from app.database.backend import StorageError, StorageIntegrityError
 from app.jobs.models import JobScope
 from app.jobs.worker import PermanentJobError, RetryableJobError
 from .eis_rss import SourceError
-from .http import ConnectorTransportError, FetchPolicy, bounded_fetch
+from .http import ConnectorTransportError, FetchPolicy, bounded_fetch, _is_public_ip_error
 from .opportunities import validate_notice
 from .registry import SourceRegistryError
 
@@ -132,8 +132,9 @@ class ConnectorSyncHandler:
             status = error.response.status_code
             kind = RetryableJobError if status in (408, 429) or 500 <= status <= 599 else PermanentJobError
             raise kind('Connector fetch failed.') from None
-        except (TimeoutError, httpx.TransportError, OSError):
-            raise RetryableJobError('Connector unavailable.') from None
+        except (TimeoutError, httpx.TransportError, OSError) as error:
+            kind = PermanentJobError if _is_public_ip_error(error) else RetryableJobError
+            raise kind('Connector unavailable.') from None
         except (SourceError, ValueError, TypeError):
             raise PermanentJobError('Connector schema/configuration failed.') from None
         if type(notices) is not list or len(notices) > self.max_records:

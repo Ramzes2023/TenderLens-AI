@@ -1,4 +1,5 @@
 import asyncio
+import html
 
 import pytest
 
@@ -6,8 +7,137 @@ from app.sources.eis_rss import SourceError
 from app.sources.india_cppp import (
     INDIA_CPPP_LIST_URL,
     IndiaCpppSource,
+    _next_page_url,
     parse_india_cppp_listing,
 )
+
+
+_PAGINATION_QUERY = (
+    "?component=%24TablePages.linkFwd&page=FrontEndListTendersbyDate"
+    "&service=direct&session=T&sp=AFrontEndListTendersbyDate%2Ctable&sp=2"
+)
+
+
+def _pagination_page(href: str) -> bytes:
+    return _page(_row()).replace(
+        b"</body>",
+        f'<a href="{html.escape(href, quote=True)}">Next</a></body>'.encode(),
+    )
+
+
+@pytest.mark.parametrize(
+    "prefix, expected_prefix",
+    [
+        ("", "https://eprocure.gov.in/eprocure/app"),
+        ("app", "https://eprocure.gov.in/eprocure/app"),
+        ("./app", "https://eprocure.gov.in/eprocure/app"),
+        ("/eprocure/app", "https://eprocure.gov.in/eprocure/app"),
+        ("https://eprocure.gov.in/eprocure/app", "https://eprocure.gov.in/eprocure/app"),
+        ("https://eprocure.gov.in:443/eprocure/app", "https://eprocure.gov.in:443/eprocure/app"),
+    ],
+)
+def test_source_allows_official_pagination(monkeypatch, prefix, expected_prefix):
+    calls = []
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, url, **kwargs):
+            calls.append(url)
+            content = (
+                _pagination_page(prefix + _PAGINATION_QUERY)
+                if len(calls) == 1
+                else _page(_row(tender_id="ID-2", reference="REF-2"))
+            )
+
+            class Response:
+                def raise_for_status(self):
+                    pass
+
+            response = Response()
+            response.content = content
+            response.url = url
+            return response
+
+    monkeypatch.setattr(
+        "app.sources.india_cppp.source_client", lambda **kwargs: FakeClient()
+    )
+    notices = asyncio.run(IndiaCpppSource().fetch(limit=2))
+    assert len(notices) == 2
+    assert calls == [INDIA_CPPP_LIST_URL, expected_prefix + _PAGINATION_QUERY]
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "https://attacker.example/eprocure/app",
+        "//attacker.example/eprocure/app",
+        "//eprocure.gov.in/eprocure/app",
+        "http://eprocure.gov.in/eprocure/app",
+        "https://127.0.0.1/eprocure/app",
+        "https://169.254.169.254/eprocure/app",
+        "https://eprocure.gov.in.attacker.example/eprocure/app",
+        "https://eprocure.gov.in:8443/eprocure/app",
+        "https://eprocure.gov.in:invalid/eprocure/app",
+        "https://eprocure.gov.in:99999/eprocure/app",
+        "https://secret:password@eprocure.gov.in/eprocure/app",
+        "https://@eprocure.gov.in/eprocure/app",
+        "https://eprocure.gov.in@attacker.example/eprocure/app",
+        "https://[invalid/eprocure/app",
+        "/other/app",
+        "/eprocure/app/extra",
+        "/eprocure/%61pp",
+        "../app",
+        "https://eprocure.gov.in\\@attacker.example/eprocure/app",
+        " https://attacker.example/eprocure/app",
+        "https://eprocure.gov.in\n.attacker.example/eprocure/app",
+        "ftp://eprocure.gov.in/eprocure/app",
+    ],
+)
+def test_source_blocks_unsafe_pagination_before_request(monkeypatch, prefix):
+    calls = []
+    href = prefix + _PAGINATION_QUERY + "&token=sensitive-pagination-token"
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, url, **kwargs):
+            calls.append(url)
+            assert len(calls) == 1, "Blocked pagination request was sent"
+
+            class Response:
+                content = _pagination_page(href)
+
+                def raise_for_status(self):
+                    pass
+
+            response = Response()
+            response.url = url
+            return response
+
+    monkeypatch.setattr(
+        "app.sources.india_cppp.source_client", lambda **kwargs: FakeClient()
+    )
+    with pytest.raises(SourceError) as error:
+        asyncio.run(IndiaCpppSource().fetch(limit=2))
+    assert str(error.value) == "India CPPP returned an unsafe pagination destination."
+    assert href not in str(error.value)
+    assert "sensitive-pagination-token" not in str(error.value)
+    assert error.value.__cause__ is None
+    assert error.value.__suppress_context__
+    assert calls == [INDIA_CPPP_LIST_URL]
+
+
+def test_pagination_ignores_links_without_forward_component():
+    assert _next_page_url(_pagination_page("https://attacker.example/")) is None
 
 
 def _row(
@@ -314,7 +444,7 @@ def test_source_fetches_multiple_pages_and_deduplicates(
 
     monkeypatch.setattr(
         "app.sources.india_cppp."
-        "httpx.AsyncClient",
+        "source_client",
         FakeClient,
     )
 
@@ -399,7 +529,7 @@ def test_source_stops_on_repeated_page_signature(
 
     monkeypatch.setattr(
         "app.sources.india_cppp."
-        "httpx.AsyncClient",
+        "source_client",
         FakeClient,
     )
 
@@ -449,7 +579,7 @@ def test_source_wraps_http_failure(
 
     monkeypatch.setattr(
         "app.sources.india_cppp."
-        "httpx.AsyncClient",
+        "source_client",
         FakeClient,
     )
 

@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import unquote, urljoin
+from urllib.parse import unquote, urljoin, urlsplit
 
 import httpx
 
@@ -345,10 +345,30 @@ def _next_page_url(
             "component=$TablePages.linkFwd"
             in decoded
         ):
-            return urljoin(
-                INDIA_CPPP_HOME_URL,
-                link,
-            )
+            try:
+                # Reject ambiguous syntax before URL parsers can normalize it.
+                if (
+                    link.startswith("//")
+                    or "\\" in link
+                    or any(ord(char) <= 32 or ord(char) == 127 for char in link)
+                ):
+                    raise ValueError
+                destination = urljoin(INDIA_CPPP_HOME_URL, link)
+                parts = urlsplit(destination)
+                if (
+                    parts.scheme != "https"
+                    or parts.hostname != "eprocure.gov.in"
+                    or (parts.port if parts.port is not None else 443) != 443
+                    or parts.username is not None
+                    or parts.password is not None
+                    or parts.path != "/eprocure/app"
+                ):
+                    raise ValueError
+            except ValueError:
+                raise SourceError(
+                    "India CPPP returned an unsafe pagination destination."
+                ) from None
+            return destination
 
     return None
 

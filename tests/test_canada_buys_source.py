@@ -289,7 +289,7 @@ def test_source_fetches_official_dataset(
             return FakeResponse()
 
     monkeypatch.setattr(
-        "app.sources.canada_buys_dataset.httpx.AsyncClient",
+        "app.sources.canada_buys_dataset.source_client",
         FakeClient,
     )
 
@@ -323,7 +323,7 @@ def test_source_wraps_http_failure(
             raise httpx.ConnectError("offline")
 
     monkeypatch.setattr(
-        "app.sources.canada_buys_dataset.httpx.AsyncClient",
+        "app.sources.canada_buys_dataset.source_client",
         FakeClient,
     )
 

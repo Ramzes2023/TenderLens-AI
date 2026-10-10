@@ -118,7 +118,7 @@ def test_ted_source_posts_official_search_contract(
             return FakeResponse()
 
     monkeypatch.setattr(
-        "app.sources.ted_api.httpx.AsyncClient",
+        "app.sources.ted_api.source_client",
         FakeClient,
     )
 
@@ -170,7 +170,7 @@ def test_ted_source_clamps_limit_to_100(
             return FakeResponse()
 
     monkeypatch.setattr(
-        "app.sources.ted_api.httpx.AsyncClient",
+        "app.sources.ted_api.source_client",
         FakeClient,
     )
 
@@ -203,7 +203,7 @@ def test_ted_source_wraps_http_failure(
             raise httpx.ConnectError("offline")
 
     monkeypatch.setattr(
-        "app.sources.ted_api.httpx.AsyncClient",
+        "app.sources.ted_api.source_client",
         FakeClient,
     )
 

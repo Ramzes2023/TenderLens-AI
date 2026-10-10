@@ -270,7 +270,7 @@ def test_source_fetches_active_opportunities(
 
     monkeypatch.setattr(
         "app.sources.za_etenders."
-        "httpx.AsyncClient",
+        "source_client",
         FakeClient,
     )
 
@@ -339,7 +339,7 @@ def test_source_wraps_http_failure(
 
     monkeypatch.setattr(
         "app.sources.za_etenders."
-        "httpx.AsyncClient",
+        "source_client",
         FakeClient,
     )
 

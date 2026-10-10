@@ -237,3 +237,27 @@ Commits: pending first premium checkpoint.
 Manual browser review: still pending; no new browser dependencies installed.
 Known issues: no visual smoke claim; application views not yet upgraded.
 Exact next step: validate landing/auth checkpoint, then refine shell and product workspaces.
+
+## Phase 24S.2B.4 - Completed
+
+Phase 24S.2B.4 is completed. This documentation-only closure changes no other phase status or roadmap item.
+
+HTTP subsystem protection summary:
+
+- SSRF protection validates public destinations, guards DNS resolution and the connected peer, and preserves TLS verification.
+- Gzip/deflate decompression is bounded, with wire-size limits on received responses.
+- Authentication dispatch quotas bound authentication-related request dispatch.
+- Cleanup is finite; `PublicIPError` is classified as permanent rather than retried as a transient failure.
+
+Reported full offline regression:
+
+- `1817 passed`
+- `7 skipped`
+- `440 subtests passed`
+- `FULL_REGRESSION_EXIT=0`
+
+The independent final read-only security audit found zero confirmed remaining P0/P1/P2 findings within the reviewed HTTP subsystem. This is a scoped static-review conclusion, not proof of the absence of vulnerabilities or verification of live DNS, peer, TLS or production behavior. The reported regression and audit were not rerun for this documentation-only closure.
+
+No production deployment was performed as part of this closure. Existing work and all other roadmap statuses are preserved.
+
+PRODUCTION_TOUCHED=False

@@ -1,6 +1,7 @@
 """Tender source adapters and orchestration primitives."""
 from .base import TenderSource
 from .models import TenderNotice
+from .b2b_center import B2BCenterNotice, B2BCenterSource, parse_b2b_center_listing
 from .eis_rss import (
     EisRssSource,
     SourceError,
@@ -83,6 +84,9 @@ from .kz_goszakup import (
 )
 
 __all__ = [
+    "B2BCenterNotice",
+    "B2BCenterSource",
+    "parse_b2b_center_listing",
     "TenderSource",
     "TenderNotice",
     "EisRssSource",

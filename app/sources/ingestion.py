@@ -24,6 +24,7 @@ SYSTEM_SCOPE = JobScope()
 # Explicit server-owned hosts. EIS custom operator URLs remain supported by live
 # discovery; worker ingestion deliberately only permits the official EIS host.
 HOSTS = {
+    'b2b_center': frozenset({'www.b2b-center.ru'}),
     'eis_223': frozenset({'zakupki.gov.ru'}),
     'eis': frozenset({'zakupki.gov.ru', 'www.zakupki.gov.ru'}),
     'ted': frozenset({'api.ted.europa.eu'}),

@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Iterable
 
 from .austender_rss import AusTenderRssSource
+from .b2b_center import B2BCenterSource
 from .canada_buys_dataset import CanadaBuysDatasetSource
 from .eis_rss import EisRssSource, SourceError
 from .eis_223_rss import Eis223RssSource
@@ -91,6 +92,8 @@ class SourceCatalog:
 
             if (
                 (registration.key == "eis" or (
+                    registration.key == "b2b_center" and hasattr(source, "repository")
+                ) or (
                     registration.key == "eis_223" and (
                         registration.capabilities.keyword_search
                         or hasattr(source, "repository")  # Snapshot filtering is local.
@@ -392,6 +395,15 @@ def build_source_catalog(
                                                 pagination=False, documents=False, incremental_sync=False),
             ),
         ])
+
+    if settings.b2b_center_enabled:
+        registry.register(SourceRegistration(
+            key="b2b_center", display_name="B2B-Center aggregate procurement listing",
+            source=B2BCenterSource(timeout=timeout), transport=SourceTransport.HTML,
+            jurisdictions=("RU",), languages=("ru",),
+            homepage_url="https://www.b2b-center.ru/", official=False, enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
 
     return SourceCatalog(
         registry=registry,

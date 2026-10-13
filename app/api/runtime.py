@@ -97,15 +97,6 @@ def build_runtime() -> ApiRuntime:
         raise StorageError("Usage admission startup failed.") from None
 
     try:
-        from app.jobs import JobRepository, JobService, load_job_settings
-        from app.scoring.runs import ScoringRunService
-        scoring_jobs = JobRepository(runtime.database, load_job_settings())
-        scoring_jobs.initialize()
-        runtime.scoring_run_service = ScoringRunService(JobService(scoring_jobs))
-    except Exception:
-        runtime.component_errors['scoring_runs'] = 'Background scoring unavailable'
-
-    try:
         from app.cache import build_cache
         runtime.cache = build_cache()
         runtime.owns_cache = True
@@ -249,6 +240,18 @@ def build_runtime() -> ApiRuntime:
         runtime.source_catalog = build_source_catalog(monitor_settings)
     except Exception:
         runtime.component_errors["sources"] = "Source catalog unavailable"
+
+    # Share the discovery catalog; a missing catalog keeps 223 selection closed.
+    try:
+        from app.jobs import JobRepository, JobService, load_job_settings
+        from app.scoring.runs import ScoringRunService
+        scoring_jobs = JobRepository(runtime.database, load_job_settings())
+        scoring_jobs.initialize()
+        runtime.scoring_run_service = ScoringRunService(
+            JobService(scoring_jobs), catalog=runtime.source_catalog
+        )
+    except Exception:
+        runtime.component_errors['scoring_runs'] = 'Background scoring unavailable'
 
     try:
         from app.monitoring import MonitoringRepository, TenderMonitorService

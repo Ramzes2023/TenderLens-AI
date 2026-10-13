@@ -20,10 +20,25 @@ TABLES = (
     "auth_password_resets", "auth_email_verifications", "tenders", "saved_opportunities",
     "discovery_search_history", "monitor_subscriptions", "monitor_seen", "rag_chunks",
     "support_tickets", "support_ticket_messages", "durable_jobs", "source_opportunities",
-    "scoring_public_revisions", "scoring_snapshots", "scoring_candidates", "scoring_results", "quota_admissions", "synchronous_usage",
+    "scoring_public_revisions", "scoring_snapshots", "scoring_candidates", "scoring_results", "quota_admissions", "synchronous_usage", "source_notice_observations",
 )
 METADATA = {"schema_meta", "app_schema_migrations", "app_data_imports"}
 OPTIONAL = {"synchronous_usage", "quota_admissions", "rag_chunks", "support_ticket_messages", "durable_jobs", "source_opportunities", "scoring_public_revisions", "scoring_snapshots", "scoring_candidates", "scoring_results"}
+OPTIONAL.add("source_notice_observations")
+
+
+def observation_schema(conn):
+    """Compare actual DDL, including constraints, indexes and hidden columns.
+
+    Only fixed identifiers are used. Exact migration DDL is deliberately required:
+    equivalent hand-written schemas need explicit review rather than guessing.
+    """
+    objects = [tuple(row) for row in conn.execute(
+        "SELECT type,name,sql FROM sqlite_master WHERE tbl_name=? ORDER BY type,name",
+        ("source_notice_observations",))]
+    columns = [tuple(row) for row in conn.execute(
+        'PRAGMA table_xinfo("source_notice_observations")')]
+    return objects, columns
 
 
 def validate_versions(conn, *, legacy=False):
@@ -56,6 +71,10 @@ def preflight_source(conn):
     names = set(table_names(conn))
     if names - set(TABLES) - METADATA:
         raise StorageError("Source has unsupported tables; explicit migration review required.")
+    observation_migration = "app_schema_migrations" in names and conn.execute(
+        "SELECT 1 FROM app_schema_migrations WHERE version=14").fetchone() is not None
+    if ("source_notice_observations" in names) != bool(observation_migration):
+        raise StorageError("Source observation schema requires its known migration 14.")
     if "durable_jobs" not in names and "app_schema_migrations" in names:
         if conn.execute("SELECT 1 FROM app_schema_migrations WHERE version=9").fetchone():
             raise StorageError("Source job schema is missing; upgrade a backed-up copy first.")
@@ -81,6 +100,9 @@ def preflight_source(conn):
         try:
             template.migrate()
             with closing(template.connect()) as reference:
+                if "source_notice_observations" in names:
+                    if observation_schema(conn) != observation_schema(reference):
+                        raise StorageError("Source observation schema differs from migration 14.")
                 columns = {table: table_columns(reference, table) for table in TABLES if table in names}
                 signatures = {
                     table: [(row[1], row[2].upper(), row[5]) for row in reference.execute(f"PRAGMA table_info({identifier(table)})")]

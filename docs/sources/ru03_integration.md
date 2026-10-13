@@ -22,14 +22,12 @@ enqueue through the existing ConnectorSyncService. Only `zakupki.gov.ru` is
 allowed for this connector; the existing SSRF protections and five-request
 budget apply. Temporary transport errors retain retryability.
 
-Scoring requires explicit `sources=['eis_223']` and a configured catalog passed
-as `ScoringRunService(jobs, catalog=catalog)`. Existing service construction
-without a catalog continues rejecting 223 selection. Actual composition lives in
-`app/api/runtime.py::build_runtime`: ScoringRunService is created before
-runtime.source_catalog, without passing that catalog. This file is outside the
-closeout allowlist. No lifecycle or route workaround was introduced and no
-runtime file was modified. The minimal future authorized fix is to supply the
-same catalog after successful catalog construction, failing closed if absent.
+Scoring requires explicit `sources=['eis_223']` and a configured catalog.
+`app/api/runtime.py::build_runtime` now constructs ScoringRunService after
+the catalog and passes the existing `runtime.source_catalog` instance.
+No second catalog or scoring pipeline is created. Catalog failure preserves
+standard scoring with `catalog=None` and rejects 223 selection. Default
+selection remains `ted`; existing source ordering and 44-FZ behavior are unchanged.
 Stored snapshots retain the existing base TenderNotice scoring
 contract. Algorithms, weights and thresholds are unchanged.
 
@@ -84,29 +82,60 @@ operator CA bundle, timeout/status behavior, actual notice identity stability
 and metadata evidence. No network, EIS, Docker, PostgreSQL, deployment,
 production migration, customer data change or commit was performed.
 
-Delivery status: A COMPLETE; B PARTIAL (explicit service integration exists,
-application composition outside the allowed areas remains unwired);
-C COMPLETE; D COMPLETE within content-revision semantics; E PARTIAL
-(test code added, independent host execution and results pending).
+## Final runtime integration
 
-## Closeout coverage and limitations
+Base: `5f53570ec7cf65815d45de42d9f20dfc9b59764a`.
+The narrow application runtime wiring blocker is resolved.
 
-The new runtime suite exercises the real FastAPI route and existing queue worker
-with a constructor-configured service: default ted, unchanged eis selection,
-explicit 223 activation, replay identity, invalid input and customer/company
-isolation. A runtime catalog alone cannot activate an unconfigured service.
-These tests do not claim that production build_runtime is wired.
+`tests/test_ru03_scoring_runtime.py` now runs the activation/isolation matrix
+through both manual composition and real `build_runtime`. Runtime configuration
+is synthetic; repositories, HTTP routes, queue and scoring handler remain real,
+using only the host runner's temporary SQLite database. The catalog factory is
+called once, and the scoring service receives the identical runtime catalog.
+The existing 44-FZ discovery adapter also retains that catalog's source instance.
 
-The integration suite now includes customer-scoped connector rejection before
-fetch and synthetic SQLite upgrade from migration 13 to 14, repeat migration,
-old ledger/data preservation and foreign-key integrity. Migration statements in
-these tests target only the host runner's temporary fixture database.
-Migration 14 contains only additive CREATE TABLE/INDEX IF NOT EXISTS statements;
-existing opportunities are not automatically backfilled into observation history.
-Disabled-by-default mode requires no new secrets.
+Coverage includes default-off, URLs without enablement, enablement without feeds,
+static RSS activation, profile-feed activation, explicit source selection,
+unchanged default ted and eis scoring, registry ordering, duplicate/limit
+rejection, replay identity and company/organization isolation. A failed catalog
+build additionally preserves standard scoring while rejecting eis_223.
 
-Closeout remains partial: runtime composition is outside the allowed scope and
-the additional tests await independent host execution. The prior 294 passing
-tests did not explicitly include test_ru03_integration.py. Pytest was not run.
-git diff --check passed; syntax checking could not run because python was not
-available on PATH in the sandbox. Live QA remains outstanding as listed above.
+Migration 14 was reviewed: only additive CREATE TABLE/INDEX IF NOT EXISTS;
+no schema changes or migrations were applied to existing databases.
+Pytest was not run in the Codex sandbox. Independent host execution remains
+required; the previously reported 671 passed, 2 skipped is not a result for
+these new changes. `git diff --check` passed. Changes remain uncommitted.
+Live EIS verification remains outstanding; no live availability claim is made.
+
+## RU-03 SQLite import compatibility repair
+
+The reported Windows result (718 passed, 2 skipped, 1 failed) identified an
+import allowlist mismatch: migration 14's domain is `source_observations`, but
+its actual table is `source_notice_observations`. The importer now includes
+that fixed table in source validation, destination emptiness checks and the
+existing transactional transfer/count verification. Observation revisions are
+preserved; no identity sequence or tenant mapping is changed.
+
+Presence of the table requires the known migration 14 ledger entry (including
+the existing domain/checksum validation); migration 14 also requires the table.
+Source table/index DDL and complete `table_xinfo` are compared with an isolated
+database generated by the existing migration machinery. This checks nullability,
+defaults, primary keys, constraints and hidden columns, and rejects extra indexes
+or triggers on this table. Exact canonical DDL is intentionally required;
+hand-written equivalent schemas require explicit review. Arbitrary extra tables,
+integrity failures, foreign-key failures and unsupported versions remain rejected.
+Legacy sources without migration 14 and its table retain the existing contract.
+
+`tests/test_ru03_import_contract.py` covers migrated/read-only sources, observation
+history transfer, nonempty destination rejection, altered columns/types/constraints,
+indexes/triggers, missing table/ledger, changed checksums, unrelated tables,
+legacy formats and real SQLite integrity/FK violations. The offline transfer test
+uses real SQLite row operations and substitutes only PostgreSQL sequence calls;
+it does not claim PostgreSQL integration coverage. The existing actual scoring
+worker parity regression continues to call the real import preflight.
+
+No pytest execution occurred in the Codex sandbox. Host execution of the new
+suite and scoring worker regressions is required before claiming a passing
+result. No production or user database was opened or migrated. Runtime wiring
+remains unchanged by this import repair. Existing legacy-table validation is
+unchanged; the stricter complete-schema comparison is scoped to migration 14.

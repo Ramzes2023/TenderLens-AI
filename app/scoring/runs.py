@@ -7,7 +7,7 @@ import json
 import re
 import sqlite3
 from contextlib import closing
-from dataclasses import asdict
+from dataclasses import asdict, fields
 
 from pydantic import ValidationError
 
@@ -49,6 +49,17 @@ def digest(value):
 
 def profile_digest(profile):
     return digest(profile.model_dump(mode='json'))
+
+
+def _restore_notice(encoded, source):
+    stored = json.loads(encoded)
+    if not isinstance(stored, dict):
+        raise TypeError('Stored notice must be a JSON object.')
+    # Subclass provenance remains stored; scoring uses the base notice contract.
+    base_fields = {field.name for field in fields(TenderNotice)}
+    notice = TenderNotice(**{name: value for name, value in stored.items()
+                             if name in base_fields})
+    return validate_notice(notice, source)
 
 
 def validate_configuration(sources, limit):
@@ -117,7 +128,7 @@ class ScoringRunService:
                     counts[source] = len(rows)
                     taken = 0
                     for row in rows:
-                        notice = validate_notice(TenderNotice(**json.loads(row['notice_json'])), source)
+                        notice = _restore_notice(row['notice_json'], source)
                         revision = digest([asdict(notice), row['connector_version']])
                         examined.append([source, notice.external_id, revision])
                         # Same source snapshot keyword semantics as OpportunityRepository.read.
@@ -205,7 +216,7 @@ class ScoringRunHandler:
             for row in rows:
                 if context.should_stop:
                     raise RetryableJobError()
-                notice = validate_notice(TenderNotice(**json.loads(row['notice_json'])), row['source_id'])
+                notice = _restore_notice(row['notice_json'], row['source_id'])
                 if digest([asdict(notice), row['connector_version']]) != row['revision']:
                     raise ScoringInputError('Invalid public revision.')
                 if prefilter_notice(notice, profile) is None:

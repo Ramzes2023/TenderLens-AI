@@ -93,9 +93,15 @@ class OpportunityRepository:
             rows = conn.execute('''SELECT notice_json FROM source_opportunities WHERE source_id=?
                 ORDER BY last_seen DESC,external_id LIMIT 1000''', (source_id,)).fetchall()
         result = []
+        base_fields = {field.name for field in fields(TenderNotice)}
         terms = tuple(str(term).casefold() for term in search_terms if str(term).strip())[:20]
         for row in rows:
-            notice = TenderNotice(**json.loads(row[0]))
+            stored = json.loads(row[0])
+            if not isinstance(stored, dict):
+                raise TypeError('Stored notice must be a JSON object.')
+            # Subclass provenance stays stored; the read contract is TenderNotice.
+            notice = TenderNotice(**{name: value for name, value in stored.items()
+                                     if name in base_fields})
             text = ' '.join(str(getattr(notice, field.name) or '') for field in fields(notice)).casefold()
             if not terms or any(term in text for term in terms):
                 result.append(notice)

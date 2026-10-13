@@ -1,0 +1,20 @@
+{
+  "tektorg_wsdl": {
+    "url": "https://api.tektorg.ru/procedures/wsdl",
+    "status": "BLOCKED_OR_UNVERIFIED",
+    "content_sha256": null,
+    "reason": "HTTPError"
+  },
+  "roseltorg_public": {
+    "url": "https://www.roseltorg.ru/torgi",
+    "status": "BLOCKED_OR_UNVERIFIED",
+    "content_sha256": null,
+    "reason": "URLError"
+  },
+  "fabrikant_public": {
+    "url": "https://www.fabrikant.ru/",
+    "status": "BLOCKED_OR_UNVERIFIED",
+    "content_sha256": null,
+    "reason": "RemoteDisconnected"
+  }
+}

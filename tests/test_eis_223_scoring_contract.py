@@ -96,7 +96,7 @@ def test_corrupt_base_fields_still_rejected(system, table, corruption):
     assert stored(s, table) == encoded
 
 
-def test_eis_223_remains_unregistered(system):
-    assert 'eis_223' not in SOURCE_IDS
+def test_eis_223_requires_explicit_configuration(system):
+    assert 'eis_223' in SOURCE_IDS
     with pytest.raises(ScoringInputError):
         enqueue(system, sources=['eis_223'])

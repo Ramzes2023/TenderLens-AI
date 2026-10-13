@@ -27,7 +27,7 @@ MAX_SOURCES = 5
 MAX_PER_SOURCE = 100
 SCAN_PER_SOURCE = 1000
 MAX_RESULTS = MAX_SOURCES * MAX_PER_SOURCE
-SOURCE_IDS = frozenset({'eis', 'ted', 'sam_gov', 'uk_fts', 'canada_buys', 'austender',
+SOURCE_IDS = frozenset({'eis_223', 'eis', 'ted', 'sam_gov', 'uk_fts', 'canada_buys', 'austender',
                         'nz_gets', 'india_cppp', 'kz_goszakup', 'za_etenders'})
 
 
@@ -80,7 +80,8 @@ def validate_payload(payload):
 
 
 class ScoringRunService:
-    def __init__(self, jobs):
+    def __init__(self, jobs, *, catalog=None):
+        self.catalog = catalog
         self.jobs = jobs
         self.database = jobs.repository.database
 
@@ -113,6 +114,9 @@ class ScoringRunService:
 
     def enqueue(self, *, scope, sources=('ted',), limit_per_source=20):
         config = validate_configuration(sources, limit_per_source)
+        if 'eis_223' in sources:
+            if self.catalog is None or 'eis_223' not in self.catalog.enabled_keys:
+                raise ScoringInputError('EIS 223 must be explicitly configured.')
         # Short bounded transaction freezes the selected public revisions together.
         # Existing adapter's transaction lock serializes snapshot reads with ingestion.
         with closing(self.database.connect()) as conn:

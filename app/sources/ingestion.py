@@ -24,6 +24,7 @@ SYSTEM_SCOPE = JobScope()
 # Explicit server-owned hosts. EIS custom operator URLs remain supported by live
 # discovery; worker ingestion deliberately only permits the official EIS host.
 HOSTS = {
+    'eis_223': frozenset({'zakupki.gov.ru'}),
     'eis': frozenset({'zakupki.gov.ru', 'www.zakupki.gov.ru'}),
     'ted': frozenset({'api.ted.europa.eu'}),
     'sam_gov': frozenset({'api.sam.gov'}),
@@ -72,7 +73,7 @@ def validate_payload(payload, registry):
         raise PermanentJobError('Invalid connector routing.') from None
     if source not in HOSTS or not registration.enabled or payload['connector_version'] != connector_version(source):
         raise PermanentJobError('Unsupported connector configuration.')
-    if source == 'eis' and hasattr(registration.source, 'urls') and not registration.source.urls:
+    if source in {'eis', 'eis_223'} and hasattr(registration.source, 'urls') and not registration.source.urls:
         raise PermanentJobError('Static EIS feeds required for shared ingestion.')
     return registration
 
@@ -119,7 +120,7 @@ class ConnectorSyncHandler:
             source = replace(source, max_concurrency=1)
         # At most five listing/feed requests; AusTender adds one detail per notice.
         request_limit = (self.max_records + 1 if source_id == 'austender'
-                         else 5 if source_id in {'eis', 'india_cppp', 'kz_goszakup'} else 1)
+                         else 5 if source_id in {'eis', 'eis_223', 'india_cppp', 'kz_goszakup'} else 1)
         async def fetch():
             with bounded_fetch(FetchPolicy(HOSTS[source_id], request_limit)):
                 return await asyncio.wait_for(source.fetch(self.max_records), timeout=180)

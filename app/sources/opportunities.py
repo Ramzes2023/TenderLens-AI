@@ -65,6 +65,7 @@ class OpportunityRepository:
 
     def initialize(self):
         self.database.migrate('opportunities')
+        self.database.migrate('source_observations')
 
     def upsert(self, notice, connector_version):
         validate_notice(notice, notice.source)
@@ -84,6 +85,9 @@ class OpportunityRepository:
                     conn.execute('''UPDATE source_opportunities SET notice_json=?,connector_version=?,last_seen=?
                         WHERE source_id=? AND external_id=?''',
                         (encoded, connector_version, now, notice.source, notice.external_id))
+                if notice.source in {'eis', 'eis_223'}:
+                    from .observations import record_observation
+                    record_observation(conn, notice, encoded, now, connector_version)
                 return inserted
 
     def read(self, source_id, limit=20, search_terms=()):

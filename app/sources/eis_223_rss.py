@@ -1,4 +1,4 @@
-"""Isolated, unregistered EIS 223-FZ RSS candidate adapter."""
+"""Explicitly configured EIS 223-FZ RSS adapter for the existing source framework."""
 from __future__ import annotations
 
 import hashlib
@@ -17,6 +17,7 @@ from .eis_rss import (
 )
 from .http import ConnectorTransportError, page_limit, source_client
 from .models import TenderNotice
+from .ru_procurement_signals import extract_ru_procurement_signals
 
 SOURCE_NAME = "eis_223"
 MAX_RESPONSE_BYTES = 5 * 1024 * 1024
@@ -63,6 +64,7 @@ class Eis223Notice(TenderNotice):
     feed_url: str | None = None
     raw_guid: str | None = None
     raw_description: str | None = None
+    procurement_signals: dict | None = None
 
 
 def parse_eis_223_feed(
@@ -110,6 +112,8 @@ def parse_eis_223_feed(
             **values, observed_law=f"{match.group(1)}-FZ" if match else None,
             feed_url=feed_url, raw_guid=guid or None,
             raw_description=description or None,
+            procurement_signals=asdict(extract_ru_procurement_signals(
+                {"title": base.title, "description": description})),
         )
         if notice.identity not in seen:
             seen.add(notice.identity)
@@ -180,5 +184,5 @@ class Eis223RssSource:
                         if len(merged) >= limit:
                             return merged
         except (httpx.HTTPError, OSError, ConnectorTransportError):
-            raise SourceError("Could not fetch EIS 223 RSS; check HTTP, timeout and TLS CA") from None
+            raise  # Preserve existing worker transport classification.
         return merged

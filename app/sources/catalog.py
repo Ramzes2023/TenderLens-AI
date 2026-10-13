@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Iterable
 from .austender_rss import AusTenderRssSource
 from .canada_buys_dataset import CanadaBuysDatasetSource
 from .eis_rss import EisRssSource, SourceError
+from .eis_223_rss import Eis223RssSource
 from .india_cppp import IndiaCpppSource
 from .kz_goszakup import KazakhstanGoszakupApiSource
 from .multi import MultiSourceFetcher, MultiSourceFetchReport
@@ -89,7 +90,12 @@ class SourceCatalog:
             source = registration.source
 
             if (
-                registration.key == "eis"
+                (registration.key == "eis" or (
+                    registration.key == "eis_223" and (
+                        registration.capabilities.keyword_search
+                        or hasattr(source, "repository")  # Snapshot filtering is local.
+                    )
+                ))
                 and registration.enabled
                 and hasattr(
                     source,
@@ -372,6 +378,20 @@ def build_source_catalog(
             ),
         ]
     )
+
+    if settings.eis_223_configured:
+        registry = SourceRegistry([
+            *registry.registrations(),
+            SourceRegistration(
+                key="eis_223", display_name="EIS 223-FZ",
+                source=Eis223RssSource(urls=settings.eis_223_rss_urls,
+                                      timeout=timeout, ca_bundle_file=settings.ca_bundle_file),
+                transport=SourceTransport.RSS, jurisdictions=("RU",), languages=("ru",),
+                homepage_url="https://zakupki.gov.ru/", official=True, enabled=True,
+                capabilities=SourceCapabilities(keyword_search=settings.eis_223_profile_feeds_enabled,
+                                                pagination=False, documents=False, incremental_sync=False),
+            ),
+        ])
 
     return SourceCatalog(
         registry=registry,

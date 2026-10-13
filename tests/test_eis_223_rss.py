@@ -182,7 +182,7 @@ def test_empty_fetch_and_page_policy(monkeypatch):
 @pytest.mark.parametrize("status", [301, 403, 429, 500])
 def test_http_failures(monkeypatch, status):
     transport(monkeypatch, lambda request: httpx.Response(status, content=b"", headers={"location": URL}))
-    with pytest.raises(SourceError):
+    with pytest.raises(httpx.HTTPStatusError):
         asyncio.run(adapter.Eis223RssSource((URL,)).fetch())
 
 
@@ -191,7 +191,7 @@ def test_transport_failures(monkeypatch, error):
     def handler(request):
         raise error
     transport(monkeypatch, handler)
-    with pytest.raises(SourceError):
+    with pytest.raises(type(error)):
         asyncio.run(adapter.Eis223RssSource((URL,)).fetch())
 
 
@@ -265,6 +265,6 @@ def test_stream_timeout_closes_response(monkeypatch):
 
     stream = Stream()
     transport(monkeypatch, lambda request: httpx.Response(200, stream=stream))
-    with pytest.raises(SourceError):
+    with pytest.raises(httpx.ReadTimeout):
         asyncio.run(adapter.Eis223RssSource((URL,)).fetch())
     assert stream.closed

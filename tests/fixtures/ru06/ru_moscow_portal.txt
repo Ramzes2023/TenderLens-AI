@@ -1,0 +1,15 @@
+<noscript>You need to enable JavaScript to run this app.</noscript><script src="/lib/cadesplugin_api.js?1791912700909"></script><script id="statsmosru" src="https://stats.mos.ru/counter.js" onload="statsMosRuCounter()" defer="defer" async="true"></script><script>var _tmr = window._tmr || (window._tmr = []);
+
+        _tmr.push({id: "3348678", type: "pageView", start: (new Date()).getTime()});
+
+        (function (d, w, id) {
+
+        if (d.getElementById(id)) return;
+
+        var ts = d.createElement("script"); ts.type = "text/javascript"; ts.async = true; ts.id = id;
+
+        ts.src = "https://top-fwz1.mail.ru/js/code.js";
+
+        var f = function () {var s = d.getElementsByTagName("script")[0]; s.parentNode.insertBefore(ts, s);};
+
+        

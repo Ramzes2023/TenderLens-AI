@@ -1,0 +1,10 @@
+                   <!-- END RESPONSIVE MENU TOGGLER -->
+                </li>
+                <li class="menu-items menu-item">
+                    <a href="/Search/Requests" class="dropdown-toggle">
+                        <i class="fa fa-search color-6c83a5"></i>
+                        <span class="itemname itemname-hide-on-mobile"> Закупки </span>
+                    </a>
+                </li>
+                <li class="menu-items menu-item">
+                    <a href="https://zakupki.lenreg.ru/marketplace-b2b" class="dropdown-to

@@ -1,0 +1,10 @@
+<tr>
+                        <td><a href="https://www.b2b-center.ru/app/market-next/shtutsera-khomuty/tender-4633901/" class="text-primary fw-bold" target="_blank">ШТУЦЕРА, ХОМУТЫ</a></td>
+                        <td>15.10.2026 07:00</td>
+                        <td>ЕХТР Юнит ТВО</td>
+                         <td>Волгоградская область</td>
+                        <td>
+                            4633901
+                            <div class="small"></div>
+                        </td>
+                    </tr>

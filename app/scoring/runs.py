@@ -142,6 +142,78 @@ class ScoringRunService:
         payload = {'snapshot_id': identity, 'profile_digest': pd, 'engine_version': ENGINE_VERSION}
         return self.jobs.enqueue(JOB_TYPE, payload, scope=scope, idempotency_key=identity)
 
+    def list_page(self, *, scope, page_size=20, state=None):
+        if type(page_size) is not int or not 1 <= page_size <= 100:
+            raise ScoringInputError('Invalid scoring page.')
+        with closing(self.database.connect()) as conn, conn:
+            conn.execute('BEGIN')
+            self._profile(conn, scope)
+            clause, params = self.jobs.repository._scope_filter(scope)
+            if state is None:
+                rows = conn.execute('SELECT id,created_at FROM durable_jobs WHERE ' + clause +
+                                    ' AND job_type=? ORDER BY created_at DESC,id DESC LIMIT 1001',
+                                    (*params, JOB_TYPE)).fetchall()
+                if len(rows) > 1000:
+                    raise ScoringInputError('Run population exceeds verified 1000-run manifest bound.')
+                from datetime import datetime, timezone
+                state = {'ids': [row['id'] for row in rows], 'offset': 0,
+                         'as_of': datetime.now(timezone.utc).isoformat()}
+            items = []
+            for identity in state['ids'][state['offset']:state['offset'] + page_size]:
+                job = decode_job(conn.execute('SELECT * FROM durable_jobs WHERE id=? AND ' + clause,
+                                              (identity, *params)).fetchone())
+                if job is None:
+                    items.append({'job_id': identity, 'storage_state': 'missing'})
+                    continue
+                try:
+                    snapshot = self._snapshot(conn, scope, job.payload)
+                    items.append({'job_id': identity, 'status': job.state, 'created_at': job.created_at,
+                                  'snapshot_id': snapshot['identity'], 'profile_digest': snapshot['profile_digest'],
+                                  'engine_version': snapshot['engine_version'],
+                                  'candidate_count': snapshot['candidate_count'], 'storage_state': 'available'})
+                except ScoringInputError:
+                    items.append({'job_id': identity, 'storage_state': 'invalid_or_stale_profile'})
+            next_state = dict(state, offset=state['offset'] + len(items))
+            return {'items': items, 'state': next_state, 'observed_count': len(state['ids']),
+                    'has_more': next_state['offset'] < len(state['ids']), 'candidate_limit': MAX_RESULTS,
+                    'as_of': state['as_of'], 'storage_state': 'available',
+                    'completeness': 'complete_manifest_page' if all(i['storage_state'] == 'available' for i in items)
+                    else 'partial_manifest_page', 'lifetime_total': None}
+
+    def revision_page(self, job_id, *, scope, limit=50, offset=0):
+        page = self.view(job_id, scope=scope, limit=limit, offset=offset)
+        if not page['complete']:
+            return dict(page, revisions=[], candidate_limit=MAX_RESULTS, has_more=False)
+        with closing(self.database.connect()) as conn, conn:
+            conn.execute('BEGIN')
+            self._profile(conn, scope)
+            self._snapshot(conn, scope, {'snapshot_id': page['snapshot_id'],
+                                        'profile_digest': page['profile_digest'], 'engine_version': ENGINE_VERSION})
+            rows = conn.execute('''SELECT r.*,c.revision,p.notice_json,p.connector_version
+                FROM scoring_results r LEFT JOIN scoring_candidates c
+                ON c.snapshot_id=r.snapshot_id AND c.ordinal=r.ordinal
+                LEFT JOIN scoring_public_revisions p ON p.revision=c.revision
+                WHERE r.job_id=? AND r.snapshot_id=?
+                ORDER BY r.score DESC,r.completeness DESC,r.ordinal LIMIT ? OFFSET ?''',
+                (job_id, page['snapshot_id'], limit, offset)).fetchall()
+            bodies = []
+            for row in rows:
+                item = {'ordinal': row['ordinal'], 'revision': row['revision'],
+                        'calculated_at': row['calculated_at'], 'calculation_time_kind': 'fenced_materialization',
+                        'storage_state': 'available'}
+                try:
+                    body = json.loads(row['notice_json'])
+                    notice = validate_notice(TenderNotice(**body), row['source_id'])
+                    if (notice.external_id != row['external_id'] or
+                            digest([asdict(notice), row['connector_version']]) != row['revision']):
+                        raise ValueError()
+                    item.update(notice=body, connector_version=row['connector_version'])
+                except (ValueError, TypeError):
+                    item['storage_state'] = 'missing_or_corrupt_revision'
+                bodies.append(item)
+        return dict(page, revisions=bodies, candidate_limit=MAX_RESULTS,
+                    has_more=offset + len(page['items']) < page['result_count'])
+
     def view(self, job_id, *, scope, limit=50, offset=0):
         if type(limit) is not int or not 1 <= limit <= 100 or type(offset) is not int or not 0 <= offset <= MAX_RESULTS:
             raise ScoringInputError('Invalid scoring page.')

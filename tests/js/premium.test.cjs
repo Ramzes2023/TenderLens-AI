@@ -1,0 +1,15 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const values=Array.from({length:6},()=>({textContent:''}));
+const elements={commandCenter:{dataset:{},attrs:{},setAttribute(k,v){this.attrs[k]=v},querySelectorAll(){return values}},analyticsContext:{},analyticsStatus:{},appNotice:{textContent:''},organizationSelect:{selectedOptions:[{textContent:'Organization A'}]}};
+const events={},state={activeCompanyId:1,activeCompanyName:'Company A'};
+const script=fs.readFileSync('app/api/static/premium.js','utf8').split('/* Phase 24P.2 consumes context only. Aggregation and chart controls await 24P.3. */')[1];
+vm.runInNewContext('/* context */'+script,{state,document:{getElementById:id=>elements[id]},window:{addEventListener:(key,fn)=>events[key]=fn}});
+const center=elements.commandCenter;
+assert.equal(center.dataset.state,'unavailable');assert.equal(center.attrs['aria-busy'],'false');
+assert.match(elements.analyticsContext.textContent,/Organization A.*Company A/);
+state.activeCompanyName='Loading workspace...';state.activeCompanyId=null;events['workspace-context']();
+assert.equal(center.dataset.state,'loading');assert.equal(center.attrs['aria-busy'],'true');assert(values.every(v=>v.textContent==='Loading…'));
+elements.appNotice.textContent='Failure';events['workspace-context']();assert.equal(center.dataset.state,'error');assert.equal(center.attrs['aria-busy'],'false');
+elements.appNotice.textContent='';state.activeCompanyName='No active company';events['workspace-context']();assert.equal(center.dataset.state,'no-company');
+state.activeCompanyId=2;state.activeCompanyName='<Company B>';events['workspace-context']();assert.equal(center.dataset.state,'unavailable');assert(!elements.analyticsContext.textContent.includes('Company A'));assert(values.every(v=>v.textContent==='Unavailable'));
+console.log('Premium context/loading/error/no-company/isolation states: PASS');

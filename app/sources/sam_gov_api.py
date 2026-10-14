@@ -11,6 +11,7 @@ from .http import source_client
 
 from .eis_rss import SourceError
 from .models import TenderNotice
+from .enrichment import enrichment
 
 
 SAM_GOV_SEARCH_URL = "https://api.sam.gov/opportunities/v2/search"
@@ -67,6 +68,15 @@ def _place_of_performance(value: Any) -> str | None:
         parts.append(item)
 
     return ", ".join(parts) if parts else None
+
+
+def _country_locations(raw):
+    place = raw.get('placeOfPerformance')
+    country = place.get('country') if isinstance(place, dict) else None
+    if not isinstance(country, dict):
+        return []
+    return [[{'path': f'placeOfPerformance.country.{key}', 'value': country[key]}
+             for key in ('code', 'name') if key in country]]
 
 
 def _customer_name(raw: dict[str, Any]) -> str | None:
@@ -165,6 +175,15 @@ def parse_sam_gov_response(
                     raw.get("placeOfPerformance")
                 ),
                 summary=None,
+                enrichment=enrichment(
+                    source_name, notice_id[:500],
+                    locations=_country_locations(raw),
+                    dates={
+                        'publication': {'path': 'postedDate', 'value': raw.get('postedDate')},
+                        'deadline': {'path': 'responseDeadLine' if _clean_text(raw.get('responseDeadLine')) else 'reponseDeadLine',
+                                     'value': raw.get('responseDeadLine') if _clean_text(raw.get('responseDeadLine')) else raw.get('reponseDeadLine')},
+                    },
+                ),
             )
         )
 

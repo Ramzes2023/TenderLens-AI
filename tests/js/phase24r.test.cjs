@@ -14,22 +14,24 @@ function element() {
 const nodes = {}, get = id => nodes[id] ||= element();
 const links = [...html.matchAll(/<a href="#([^"]+)" data-nav="([^"]+)">[\s\S]*?<span>([^<]+)<\/span>/g)]
   .map(m => Object.assign(element(), {dataset:{nav:m[2]},textContent:m[3]}));
-assert.equal(links.length,15);
+assert.equal(links.length,16);
 const articles = ['companies','companyCreator','tenders','monitoringCenter','organizationCard','telegramCard'].map(get);
 const sections = [...html.matchAll(/data-page="([^"]+)"/g)]
   .map(m => Object.assign(element(), {dataset:{page:m[1]}}));
 const events = {}, location = {hash:''};
-const context = {document:{getElementById:get,
+const theme = {};
+const context = {document:{body:{classList:{toggle(key,value){theme[key]=value;}}},getElementById:get,
   querySelector(selector){return selector==='.workspace-context'?get('context'):links.find(l=>selector.includes(`"${l.dataset.nav}"`))},
   querySelectorAll(selector){return selector==='[data-nav]'?links:selector==='[data-page]'?[...sections,...articles]:[]}},
   location, CSS:{escape:x=>x}, window:{addEventListener:(k,f)=>events[k]=f,
     dispatchEvent(){},matchMedia:()=>({addEventListener(){}})}, Event:class {}};
-vm.runInNewContext(fs.readFileSync('app/api/static/shell.js','utf8').split('/* Workspace lifecycle:')[0],context);
+vm.runInNewContext(fs.readFileSync('app/api/static/shell.js','utf8').split('/* Document hub')[0],context);
 for (const link of links) {
   location.hash='#'+link.dataset.nav; events.hashchange();
   assert.equal(get('pageHeading').textContent,link.textContent);
+  assert.equal(theme['command-view'],true);
   assert.equal(link.attributes['aria-current'],'page');
-  const future=['recommended','notifications','billing','ai-analysis'].includes(link.dataset.nav);
+  const future=['recommended','notifications','billing'].includes(link.dataset.nav);
   assert.equal(get('futurePage').hidden,!future);
   if(future) assert.match(get('futureText').textContent,/not available/);
   if(link.dataset.nav==='billing') assert.equal(get('futureNext').hidden,true);

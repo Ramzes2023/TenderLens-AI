@@ -16,7 +16,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.companies import (
     CompanyAuthorizationError,
@@ -69,6 +69,14 @@ class IngestionAskRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     question: Annotated[str, Field(min_length=1, max_length=2000)]
 
+    @field_validator('question')
+    @classmethod
+    def meaningful_question(cls, value):
+        value = value.strip()
+        if not value:
+            raise ValueError('Enter a question about the document.')
+        return value
+
 
 async def _ingestion_scope(request, organization_id, company_id, *, write=False):
     account = await _account(request)
@@ -102,6 +110,45 @@ async def _ingestion_job(service, job_id, scope):
     if job is None:
         raise HTTPException(404, 'RAG job not found.')
     return job
+
+
+@router.get('/companies/{company_id}/rag/capabilities')
+async def rag_capabilities(organization_id: int, company_id: int, request: Request,
+                           response: Response):
+    """Configuration admission only: never claim worker or provider liveness."""
+    await _ingestion_scope(request, organization_id, company_id)
+    runtime = _runtime(request)
+    ingestion = getattr(runtime, 'rag_ingestion_service', None)
+    rag = getattr(runtime, 'rag_service', None)
+    provider = getattr(runtime, 'provider', None)
+    configured = ingestion is not None and rag is not None and provider is not None
+    compatible = False
+    if configured:
+        try:
+            compatible = ingestion.pipeline == pipeline_identity(rag.settings)
+        except (AttributeError, TypeError, ValueError):
+            compatible = False
+    # Read access remains useful for viewers, but they cannot stage documents.
+    account = await _account(request)
+    try:
+        await asyncio.to_thread(_organization_service(request).require_membership,
+                                account, organization_id, {'owner', 'admin', 'member'})
+        can_upload = True
+    except OrganizationError:
+        can_upload = False
+    await _ingestion_scope(request, organization_id, company_id)
+    response.headers['Cache-Control'] = 'no-store'
+    return {
+        'configured': configured and compatible,
+        'can_upload': can_upload and configured and compatible,
+        'max_pdf_bytes': MAX_BYTES,
+        'worker_status': 'not_checked',
+        'message': (
+            'Services configured; ingestion requires a running worker. Availability is checked on each request.'
+            if configured and compatible else
+            'Document Q&A unavailable: ingestion, embeddings, vector storage and an AI provider must share a configured pipeline.'
+        ),
+    }
 
 
 @router.post('/rag/documents', status_code=202)

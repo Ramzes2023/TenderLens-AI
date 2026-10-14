@@ -274,6 +274,6 @@ def test_responsive_shell_asset_cache_version():
 
     assert (
         "/assets/shell.js?"
-        "v=phase24r"
+        "v=ui-fix-20261013"
         in html
     )

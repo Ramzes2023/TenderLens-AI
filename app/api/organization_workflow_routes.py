@@ -7,6 +7,11 @@ from app.quotas.synchronous import admitted_operation
 
 import asyncio
 import json
+from datetime import datetime, timezone
+from app.sources.international import public_diagnostic
+
+from app.analytics.fit import FIT_POLICY_VERSION, PREVIEW_ENGINE_VERSION, PreviewProvenance
+from app.scoring.runs import profile_digest
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel
@@ -599,6 +604,16 @@ def _source_health_items(
                     error_type
                 ),
                 message=message,
+                diagnostic=(public_diagnostic(run_by_source[key].message)
+                    if key in {'ted', 'uk_fts', 'world_bank'} and key in run_by_source and state == 'failed' else None),
+                coverage={
+                    'ted': 'Anonymous published ACTIVE notices; literal keyword search; at most 100 notices in one page. Missing deadlines remain unknown.',
+                    'uk_fts': 'Recent one-hour update window; tender stage; at most two pages of 100 releases; keyword matching is local. Missing deadlines remain unknown.',
+                    'world_bank': 'DS00979/RS00909, recent seven calendar days; at most two pages of 100 records; local keyword matching. Closed, undated and sparse records excluded.',
+                }.get(key),
+                last_successful_sync=(datetime.now(timezone.utc).isoformat()
+                    if key in {'ted', 'uk_fts', 'world_bank'} and key in run_by_source and state == 'healthy'
+                    else getattr(previous_by_source.get(key), 'last_successful_sync', None)),
             )
         )
 
@@ -769,6 +784,9 @@ from app.scoring.preview import score_metadata_preview as _metadata_preview_scor
 def _discovery_item(
     match,
     profile,
+    *,
+    organization_id=None,
+    company_id=None,
 ):
     notice = match.notice
 
@@ -776,7 +794,17 @@ def _discovery_item(
         notice
     )
 
+    scoring = _metadata_preview_scoring(metadata_analysis, profile)
+    provenance = None
+    if organization_id is not None and company_id is not None:
+        provenance = PreviewProvenance(
+            organization_id=organization_id, company_id=company_id,
+            profile_digest=profile_digest(profile), engine_version=PREVIEW_ENGINE_VERSION,
+            scoring_policy_version=FIT_POLICY_VERSION, scoring_stage='metadata_preview',
+            scored_at=datetime.now(timezone.utc).isoformat(),
+        )
     return TenderDiscoveryItem(
+        preliminary_provenance=provenance,
         source=notice.source,
         external_id=notice.external_id,
         title=notice.title,
@@ -790,12 +818,10 @@ def _discovery_item(
         reasons=list(match.reasons),
         published_at=notice.published_at,
         summary=notice.summary,
+        enrichment=notice.enrichment,
         analysis_stage="metadata_preview",
         metadata_analysis=metadata_analysis,
-        preliminary_scoring=_metadata_preview_scoring(
-            metadata_analysis,
-            profile,
-        ),
+        preliminary_scoring=scoring,
         full_ai_analyzed=False,
     )
 
@@ -913,6 +939,14 @@ async def save_discovered_opportunity(
             ),
         )
 
+    provenance = getattr(payload, 'preliminary_provenance', None)
+    if provenance is not None and (
+        provenance.organization_id != organization_id
+        or provenance.company_id != workspace.id
+        or provenance.profile_digest != profile_digest(workspace.profile)
+    ):
+        raise HTTPException(status_code=409, detail="Company context changed. Run discovery again before saving.")
+
     repository = _shortlist_repository(
         request
     )
@@ -1023,6 +1057,108 @@ async def remove_saved_opportunity(
             "Cache-Control": "no-store",
         },
     )
+
+
+@router.get('/companies/{company_id}/discovery/history-snapshots')
+async def history_snapshot_batch(organization_id: int, company_id: int, request: Request,
+                                 response: Response, population_cursor: str, ids: str,
+                                 page_size: int = 20, start: str | None = None, end: str | None = None):
+    from app.analytics.paging import CursorError, unseal, utc_filter
+    account = await _account(request)
+    repository = _discovery_history_repository(request)
+    key = request.app.state.api_settings.api_key
+    if not key or not key.strip():
+        raise HTTPException(503, detail={'storage_state': 'unavailable', 'reason': 'Existing app signing key unavailable.'})
+    try:
+        start, end = utc_filter(start), utc_filter(end)
+        binding = ['history-v1', account.id, organization_id, company_id, start, end, page_size]
+        state = unseal(population_cursor, key, binding)
+        if len(ids) > 500:
+            raise CursorError('Snapshot ID query is too large.')
+        identities = [int(value) for value in ids.split(',')]
+        if not 1 <= len(identities) <= 20 or any(value <= 0 for value in identities):
+            raise CursorError('Snapshot batch must contain 1..20 positive IDs.')
+        # Reauthorize even when every requested ID is missing or outside the watermark.
+        await asyncio.to_thread(repository.page_discovery_history, account.id, organization_id,
+                                company_id, state=state, page_size=1, start=start, end=end)
+        items, seen = [], set()
+        for identity in identities:
+            if identity in seen:
+                items.append({'id': identity, 'state': 'duplicate_request'})
+                continue
+            seen.add(identity)
+            record = await asyncio.to_thread(repository.get_discovery_search_history_for_organization,
+                                             account.id, organization_id, company_id, identity)
+            if record is None:
+                items.append({'id': identity, 'state': 'missing_in_authorized_scope'})
+                continue
+            timestamp = utc_filter(record.created_at)
+            if (record.id > state['fence'] or record.created_at > state['as_of'] or
+                    (start and timestamp < start) or (end and timestamp >= end)):
+                items.append({'id': identity, 'state': 'out_of_watermark_or_query'})
+                continue
+            try:
+                snapshot = _discovery_history_detail(record).discovery
+                items.append({'id': identity, 'state': 'available' if len(snapshot.items) == record.result_count
+                              else 'incomplete_count_mismatch', 'snapshot': snapshot.model_dump(mode='json')})
+            except HTTPException:
+                items.append({'id': identity, 'state': 'missing' if not record.snapshot_json.strip() else 'corrupt'})
+    except (CursorError, ValueError):
+        raise HTTPException(422, 'Invalid snapshot query or population cursor.') from None
+    except DatabaseError as error:
+        if isinstance(error, DatabaseAuthorizationError):
+            _discovery_history_data_error(error)
+        raise HTTPException(503, detail={'storage_state': 'error', 'completeness': 'unavailable'}) from None
+    response.headers['Cache-Control'] = 'no-store'
+    return {'items': items, 'storage_state': 'available', 'lifetime_total': None}
+
+
+@router.get('/companies/{company_id}/discovery/history-page')
+async def page_company_history(organization_id: int, company_id: int, request: Request,
+                               response: Response, page_size: int = 20, cursor: str | None = None,
+                               start: str | None = None, end: str | None = None):
+    from app.analytics.paging import CursorError, seal, unseal, utc_filter
+    import time
+    account = await _account(request)
+    repository = _discovery_history_repository(request)
+    key = request.app.state.api_settings.api_key
+    if not key or not key.strip():
+        raise HTTPException(503, detail={'storage_state': 'unavailable', 'reason': 'Existing app signing key unavailable.'})
+    try:
+        start, end = utc_filter(start), utc_filter(end)
+        if not 1 <= page_size <= 20 or (start and end and start >= end):
+            raise CursorError('Invalid page size or time interval.')
+        binding = ['history-v1', account.id, organization_id, company_id, start, end, page_size]
+        state = unseal(cursor, key, binding) if cursor else None
+        page = await asyncio.to_thread(repository.page_discovery_history, account.id, organization_id,
+                                      company_id, page_size=page_size, state=state, start=start, end=end)
+    except CursorError as error:
+        raise HTTPException(422, str(error)) from None
+    except DatabaseError as error:
+        if isinstance(error, DatabaseAuthorizationError):
+            _discovery_history_data_error(error)
+        raise HTTPException(503, detail={'storage_state': 'error', 'completeness': 'unavailable'}) from None
+    state = page.pop('state')
+    state.update(binding=binding, expires=state.get('expires', time.time() + 3600))
+    items = []
+    for record in page.pop('records'):
+        item = {'event': _discovery_history_summary(record).model_dump(), 'snapshot_state': 'available'}
+        try:
+            detail = _discovery_history_detail(record)
+            item['snapshot'] = detail.discovery.model_dump(mode='json')
+            if len(detail.discovery.items) != record.result_count:
+                item['snapshot_state'] = 'incomplete_count_mismatch'
+            identities = [(entry.source, entry.external_id) for entry in detail.discovery.items]
+            item['duplicate_identity_count'] = len(identities) - len(set(identities))
+        except HTTPException:
+            item['snapshot_state'] = 'missing' if not record.snapshot_json.strip() else 'corrupt'
+        items.append(item)
+    response.headers['Cache-Control'] = 'no-store'
+    return dict(page, items=items, next_cursor=seal(state, key) if page['has_more'] else None,
+                population_cursor=seal(state, key), as_of=state['as_of'], id_watermark=state['fence'],
+                read_count=state['read_count'], lifetime_total=None,
+                snapshot_completeness='partial' if any(i['snapshot_state'] != 'available' or i.get('duplicate_identity_count') for i in items) else 'complete_page',
+                time_field='search_created_at', interval='[start,end)', timezone='UTC')
 
 
 @router.get(
@@ -1383,12 +1519,19 @@ async def organization_discover_tenders(
         "Cache-Control"
     ] = "no-store"
 
+    current_workspace = await _active_company(request, account, organization_id)
+    if (current_workspace is None or current_workspace.id != workspace.id
+            or profile_digest(current_workspace.profile) != profile_digest(workspace.profile)):
+        raise HTTPException(status_code=409, detail="Company context changed during discovery. Run discovery again.")
+
     discovery_response = (
         TenderDiscoveryResponse(
             items=[
                 _discovery_item(
                     match,
                     workspace.profile,
+                    organization_id=organization_id,
+                    company_id=workspace.id,
                 )
                 for match in matches
             ],

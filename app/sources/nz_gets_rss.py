@@ -16,6 +16,7 @@ from .http import source_client
 
 from .eis_rss import SourceError
 from .models import TenderNotice
+from .enrichment import enrichment
 
 
 NZ_GETS_RSS_URL = (
@@ -378,6 +379,11 @@ def parse_nz_gets_rss(
                 if overview
                 else None
             ),
+            enrichment=enrichment(source_name, rfx_id[:500], dates={
+                'publication': {'path': 'item.pubDate', 'value': item.findtext('pubDate')},
+                'deadline': {'path': 'item.description.Close date', 'value': close_date,
+                             'raw_status': 'extracted_description_text'},
+            }),
         )
 
         normalized.append(

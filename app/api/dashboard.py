@@ -260,12 +260,12 @@ def _dashboard_html() -> str:
       <div id="companyActionMessage"></div>
       <div id="companies"><div class="empty">Loading…</div></div>
     </article>
-    <article class="p s7"><h2>Recent analyzed documents <button onclick="loadTenders()">Reload</button></h2><div id="tenders"><div class="empty">Loading…</div></div></article>
+    <article class="p s7"><h2><span data-ui-en="Recent analyzed documents" data-ui-ru="Последние проанализированные документы">Recent analyzed documents</span> <button onclick="loadTenders()">Reload</button></h2><div id="tenders"><div class="empty">Loading…</div></div></article>
     <article id="monitoringCenter"
              class="p s12"
              data-page="monitoring">
       <h2>
-        <span>Monitoring center</span>
+        <span data-ui-en="Monitoring center" data-ui-ru="Центр мониторинга">Monitoring center</span>
         <span class="toolbar">
           <button type="button"
                   onclick="loadMonitoring()">
@@ -291,7 +291,7 @@ def _dashboard_html() -> str:
            style="margin-top:16px">
 
         <div class="f4">
-          <label>Active company</label>
+          <label data-ui-en="Active company" data-ui-ru="Активная компания">Active company</label>
           <div id="monitoringCompany"
                class="title">
             Loading...
@@ -299,7 +299,7 @@ def _dashboard_html() -> str:
         </div>
 
         <div class="f4">
-          <label>Monitoring mode</label>
+          <label data-ui-en="Monitoring mode" data-ui-ru="Режим мониторинга">Monitoring mode</label>
           <div id="monitoringMode"
                class="title">
             Loading...
@@ -307,7 +307,7 @@ def _dashboard_html() -> str:
         </div>
 
         <div class="f4">
-          <label>Configured feeds</label>
+          <label data-ui-en="Configured feeds" data-ui-ru="Настроенные источники">Configured feeds</label>
           <div id="monitoringFeeds"
                class="title">
             Loading...
@@ -315,7 +315,7 @@ def _dashboard_html() -> str:
         </div>
 
         <div class="f4">
-          <label>Background monitoring</label>
+          <label data-ui-en="Background monitoring" data-ui-ru="Фоновый мониторинг">Background monitoring</label>
           <div id="monitoringBackground"
                class="title">
             Loading...
@@ -474,6 +474,8 @@ async function loadCompanies(){{
   }}
 
   root.innerHTML=items.map(item=>{{
+      const mode=item.profile?.business_mode||'sell';
+      const ruMode=({{sell:'Продажа',buy:'Покупка',both:'Продажа и покупка'}})[mode]||mode;
     const words=(
       item.profile?.search_keywords
       ||item.profile?.product_keywords
@@ -495,12 +497,12 @@ async function loadCompanies(){{
         <div>
           <div class="title">
             ${{esc(item.name)}}
-            ${{item.is_active?'<span class="active">ACTIVE</span>':''}}
+            ${{item.is_active?'<span class="active" data-ui-en="ACTIVE" data-ui-ru="АКТИВНА">ACTIVE</span>':''}}
           </div>
 
           <div class="sub">
-            #${{item.id}} ?
-            ${{esc(item.profile?.business_mode||'sell')}}
+            #${{item.id}} ·
+            <span data-ui-en="${{esc(mode)}}" data-ui-ru="${{esc(ruMode)}}">${{esc(mode)}}</span>
             ${{words?'<br>'+esc(words):''}}
           </div>
         </div>
@@ -863,6 +865,20 @@ async function applyCompanyPdfProfile(){{
     if(input)input.value='';
 
     await loadCompanies();
+
+    if(location.port!=='8765'&&usingSharedOrganization()&&canWriteWorkspace()
+       &&state.activeCompanyId===companyId){{
+      const org=state.organizationId;
+      const next=document.createElement('button');
+      next.type='button';
+      next.textContent='Review profile -> Find tenders';
+      next.onclick=()=>{{
+        if(location.port==='8765'||!usingSharedOrganization()||!canWriteWorkspace()
+           ||state.organizationId!==org||state.activeCompanyId!==companyId)return;
+        location.hash='discover';
+      }};
+      statusRoot.appendChild(next);
+    }}
 
   }}catch(e){{
     statusRoot.innerHTML=
@@ -1446,7 +1462,30 @@ async function refreshAll(){{
 async function logout(){{try{{await api('/api/v1/auth/logout',{{method:'POST'}})}}finally{{location.replace('/login')}}}}
 {ORGANIZATION_SCRIPT}
 {TELEGRAM_SCRIPT}
-refreshAll().catch(e=>{{if(!String(e.message||e).includes('Authentication required'))document.getElementById('appNotice').textContent='Workspace unavailable. Check your connection and select Refresh to retry.'}});
+refreshAll().catch(e=>{{
+  if(String(e.message||e).includes('Authentication required'))return;
+  const preview=location.port==='8765';
+  const message=preview?'Local preview: /api is disabled. Workspace data is unavailable here.':'Workspace unavailable. Check your connection and select Refresh to retry.';
+  const notice=document.getElementById('appNotice');
+  const unavailableRu=preview?'Локальное превью: /api отключён. Данные рабочей области здесь недоступны.':'Рабочая область недоступна. Проверьте соединение и обновите страницу.';
+
+  notice.dataset.uiEn=message;notice.dataset.uiRu=unavailableRu;
+  notice.textContent=window.MainLocale?.locale==='ru'?unavailableRu:message;
+  state.activeCompanyName='Workspace unavailable';
+  const workspaceSelect=document.getElementById('organizationSelect');
+  if(workspaceSelect&&workspaceSelect.options.length===1&&/Loading/i.test(workspaceSelect.options[0].textContent)){{
+    const option=workspaceSelect.options[0];option.dataset.uiEn='Workspace unavailable';option.dataset.uiRu='Рабочая область недоступна';option.textContent=window.MainLocale?.locale==='ru'?option.dataset.uiRu:option.dataset.uiEn;
+  }}
+  for(const id of ['email','monitorCompany','monitoringCompany','monitoringMode','monitoringFeeds','monitoringBackground','monitoringNotifications','monitoringAccess','monitoringExplanation']){{
+    const node=document.getElementById(id);
+    if(node){{node.textContent=window.MainLocale?.locale==='ru'?'Недоступно':'Unavailable';}}
+  }}
+  for(const id of ['companies','tenders']){{
+    const node=document.getElementById(id);
+    if(node){{node.replaceChildren();const empty=document.createElement('p');empty.className='empty';empty.dataset.uiEn=message;empty.dataset.uiRu=unavailableRu;empty.textContent=notice.textContent;node.append(empty);}}
+  }}
+  window.dispatchEvent(new Event('workspace-context'));
+}});
 </script>
 </body>
 </html>"""

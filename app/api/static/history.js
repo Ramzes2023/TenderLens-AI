@@ -103,7 +103,7 @@ function renderHistory(){
         ${escape(status)}
       </span>
 
-      <h3>
+       <h3 data-ui-en="Discovery #${escape(record.id)}" data-ui-ru="Поиск №${escape(record.id)}">
         Discovery #${escape(record.id)}
       </h3>
 

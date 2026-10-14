@@ -1,0 +1,40 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const {count,width,model,names,rows,project,arcs,key,validateDictionary}=require('../../scripts/p39e_preview/view.js');
+const html=fs.readFileSync(process.argv[2],'utf8'),data=JSON.parse(html.match(/<script id="fixture" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+assert.ok(validateDictionary());
+assert.deepEqual(Object.keys(data.cases),['normal','empty','unknown','legacy','foreign','future','filtered']);
+for(const bad of [NaN,Infinity,-1,1.5,'2',null,Number.MAX_SAFE_INTEGER+1])assert.throws(()=>count(bad));
+assert.equal(width(0,0),0);assert.equal(width(3,2),100);
+for(const r of Object.values(data.cases)){const ms=model(r);assert.equal(ms.filter(x=>x.kind==='kpi').length,6);assert.equal(rows(r).length,r.U.length);for(const a of arcs(ms)){assert.ok(Number.isFinite(a.length)&&a.length>=0&&a.length<=100);assert.ok(a.offset>=0&&a.offset<=100);}}
+const r=data.cases.normal,rs=rows(r),ms=model(r);
+assert.deepEqual(names.map(n=>r.kpis[n].value),[4,2,2,1,1,1]);assert.ok(Math.abs(arcs(ms)[0].length-200/3)<1e-12);assert.equal(ms.find(x=>x.name==='Fit unknown').d,4);
+assert.equal(model(data.cases.unknown)[1].value,null);assert.equal(model(data.cases.empty)[0].value,0);
+assert.equal(project(rs,' HIGH ').length,1);for(const band of ['high','medium','low','unknown'])assert.equal(project(rs,'',band).length,r.fit_bands[band]?.numerator??1);
+for(const [type,state,ids]of r.deadline_grouping.states)assert.deepEqual(project(rs,'','',type+' / '+state).map(x=>x.identity),ids);
+assert.equal(project(rs,'','','','identity-desc')[0].text,'ted / zero');assert.equal(project(rs,'','','','fit')[0].band,'high');assert.equal(project(rs,'','','','deadline')[0].text,'ted / high');assert.equal(project(rs,'','','','identity',new Set([key(r.U[0])])).length,1);
+for(const bad of [NaN,Infinity,-1,1.5]){const copy=structuredClone(r);copy.fit_bands.high.value=bad;assert.throws(()=>model(copy));}
+const broken=structuredClone(r);broken.fit_bands.high.identities=[['IT','fake']];assert.throws(()=>model(broken));
+class Element{constructor(tag='div'){this.tag=tag;this.children=[];this.listeners={};this.attributes={};this.textContent='';this.value='';}append(...xs){this.children.push(...xs);if(this.tag==='select'&&this.children.length===xs.length&&!this.value&&xs[0]?.value)this.value=xs[0].value;}replaceChildren(...xs){this.children=xs;this.textContent='';}setAttribute(k,v){this.attributes[k]=v;}getAttribute(k){return this.attributes[k];}removeAttribute(k){delete this.attributes[k];}addEventListener(k,f){this.listeners[k]=f;}}
+const nodes={};for(const id of ['fixture','scenario','retry','cards','fit','ring','deadline','deadline-states','rows','provenance','context','detail','status','search','fit-filter','deadline-filter','sort','reset','subset','records','observations','window','lang-en','lang-ru','storage-note','clear-group','back-records','explorer','chart-sources','top-records','widget-coverage','widget-activity','widget-sources','filter-chips','identity-body','identity-panel'])nodes[id]=new Element(['scenario','fit-filter','deadline-filter','sort'].includes(id)?'select':'div');
+nodes.fixture.textContent=JSON.stringify(data);const nav=Array.from({length:5},()=>new Element('a'));
+const document={getElementById:id=>nodes[id],createElement:tag=>new Element(tag),createElementNS:(_,tag)=>new Element(tag),documentElement:{lang:'en'},querySelectorAll:selector=>selector==='nav a'?nav:[]};
+vm.runInNewContext(fs.readFileSync('scripts/p39e_preview/view.js','utf8'),{document});
+assert.equal(nodes.cards.children.length,6);assert.equal(nodes.ring.children[0].tag,'svg');assert.equal(nodes.records.children.length,4);assert.equal(nodes.deadline.children.length,2);
+nodes.search.value='zero';nodes.search.listeners.input();assert.equal(nodes.records.children.length,1);nodes.reset.listeners.click();assert.equal(nodes.records.children.length,4);
+nodes['fit-filter'].value='high';nodes['fit-filter'].listeners.change();assert.equal(nodes.records.children.length,2);nodes.reset.listeners.click();
+nodes['deadline-filter'].value='instant / future';nodes['deadline-filter'].listeners.change();assert.equal(nodes.records.children.length,1);nodes.reset.listeners.click();
+nodes.sort.value='identity-desc';nodes.sort.listeners.change();assert.equal(nodes.records.children[0].children[0].children[0].textContent,'ted / zero');
+nodes.cards.children[2].listeners.click();assert.equal(nodes.records.children.length,2);assert.match(nodes.detail.textContent,/Population commitment/);
+nodes.cards.children[4].listeners.click();assert.equal(nodes.records.children.length,4);assert.match(nodes.detail.textContent,/IT/);
+nodes.fit.children[3].listeners.click();assert.equal(nodes.records.children.length,1);nodes.reset.listeners.click();
+nodes.deadline.children[0].children[1].listeners.click();assert.equal(nodes.records.children.length,1);nodes.records.children[0].listeners.click();assert.match(nodes.detail.textContent,/ted/);
+nodes.scenario.value='empty';nodes.scenario.listeners.change();assert.equal(nodes.cards.children[0].children[1].textContent,'0');assert.doesNotMatch(nodes.detail.textContent,/ted/);assert.equal(nodes.search.value,'');
+nodes.scenario.value='unknown';nodes.scenario.listeners.change();assert.equal(nodes.cards.children[1].children[1].textContent,'No data');
+nodes.scenario.value='invalid';nodes.scenario.listeners.change();assert.equal(nodes.cards.children.length,0);assert.equal(nodes.records.children.length,0);assert.match(nodes.status.textContent,/Test data contract error/);
+nodes.scenario.value='normal';nodes.retry.listeners.click();assert.equal(nodes.records.children.length,4);nav[2].listeners.click();assert.equal(nav[2].attributes['aria-current'],'location');assert.equal(nav[0].attributes['aria-current'],undefined);
+for(const scenario of Object.keys(data.cases)){nodes.scenario.value=scenario;nodes.scenario.listeners.change();assert.equal(nodes.cards.children.length,6);assert.equal(nodes.search.value,'');assert.equal(nodes.sort.value,'identity');assert.equal(nodes.records.children.filter(x=>x.tag==='button').length,data.cases[scenario].U.length);assert.ok(nodes.provenance.textContent.includes(scenario));} nodes.scenario.value='normal';nodes.scenario.listeners.change();
+const attack=structuredClone(data);attack.cases.normal.U[0][1]='<img onerror=alert(1)>';const ar=attack.cases.normal;for(const f of ar.fits)if(f.identity[1]==='calendar')f.identity[1]=ar.U[0][1];for(const m of Object.values(ar.kpis).concat(Object.values(ar.fit_bands))){for(const i of m.identities)if(Array.isArray(i)&&i[1]==='calendar')i[1]=ar.U[0][1];}for(const x of ar.deadline_grouping.buckets.concat(ar.deadline_grouping.states))for(const i of x[2])if(i[1]==='calendar')i[1]=ar.U[0][1];nodes.fixture.textContent=JSON.stringify(attack); vm.runInNewContext(fs.readFileSync('scripts/p39e_preview/view.js','utf8'),{document}); assert.equal(nodes.records.children.length,4); assert.ok(nodes.records.children.some(b=>b.children[0].children[0].textContent.includes('<img onerror='))); assert.ok(nodes.records.children.every(b=>b.children[0].children[0].children.length===0));
+assert.doesNotMatch(html,/innerHTML|fetch\(|XMLHttpRequest|color-scheme:light|barrow|min-width:680px/);
+for(const marker of ['background:#07101f','sidebar','fit-layout','OPPORTUNITY EXPLORER','pathLength:100','@media(max-width:480px)',':focus-visible'])assert.ok(html.includes(marker),marker);
+console.log('P39G JS PASS: seven scenarios, verified ring, typed tracks, search/filter/sort/reset, drilldowns, source/country isolation, stale clearing, navigation, numeric rejection, dark/mobile contracts');

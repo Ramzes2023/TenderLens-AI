@@ -1,9 +1,11 @@
 /* Navigation-only command menu: no implied global search or hidden API calls. */
 (function(){
  const $=id=>document.getElementById(id),dialog=$('commandPalette');
- function render(){const query=$('commandQuery').value.trim().toLowerCase();const links=[...document.querySelectorAll('[data-nav]')].filter(a=>a.textContent.trim().toLowerCase().includes(query));$('commandResults').replaceChildren();for(const link of links){const button=document.createElement('button');button.textContent='Go to '+link.textContent.trim();button.onclick=()=>{location.hash=link.dataset.nav;dialog.close();};$('commandResults').append(button);}if(!links.length)$('commandResults').textContent='No matching pages.';}
+ function render(){const query=$('commandQuery').value.trim().toLowerCase();const links=[...document.querySelectorAll('[data-nav]')].filter(a=>a.textContent.trim().toLowerCase().includes(query));$('commandResults').replaceChildren();for(const link of links){const button=document.createElement('button');button.textContent=(window.MainLocale?.t('go')||'Go to ')+link.textContent.trim();button.onclick=()=>{location.hash=link.dataset.nav;dialog.close();};$('commandResults').append(button);}if(!links.length)$('commandResults').textContent=window.MainLocale?.t('noPages')||'No matching pages.';}
  function open(){render();dialog.showModal();$('commandQuery').focus();}
  $('openCommands').onclick=open;$('closeCommands').onclick=()=>dialog.close();$('commandQuery').addEventListener('input',render);
+ window.addEventListener('shell-locale-change',()=>{if(dialog.open)render();});
+ dialog.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();dialog.close();$('openCommands').focus();return;}if(!['ArrowDown','ArrowUp'].includes(e.key))return;const buttons=[...$('commandResults').querySelectorAll('button')];if(!buttons.length)return;e.preventDefault();const index=buttons.indexOf(document.activeElement);const next=index<0?(e.key==='ArrowDown'?0:buttons.length-1):(index+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;buttons[next].focus();});
  window.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();if(!dialog.open)open();}});
  const system=$('healthBadge')?.closest('article');if(system)system.dataset.page='settings';
  window.addEventListener('workspace-context',()=>{$('sideCompany').textContent=state.activeCompanyName||'Choose a company';});
@@ -187,10 +189,7 @@
       );
 
     const noCompany =
-      !companyLabel
-      || /no active company/i.test(
-        companyLabel.textContent
-      );
+      !state.activeCompanyId;
 
     document.body.classList.toggle(
       "overview-no-company",
@@ -409,4 +408,27 @@
   } else {
     mountOverviewV2();
   }
+})();
+
+/* Phase 24P.2 consumes context only. Aggregation and chart controls await 24P.3. */
+(function () {
+  'use strict';
+  const center = document.getElementById('commandCenter');
+  if (!center || !center.setAttribute) return;
+  const context = document.getElementById('analyticsContext');
+  const status = document.getElementById('analyticsStatus');
+  function update() {
+    const loading = String(state.activeCompanyName || '').startsWith('Loading workspace');
+    const error = loading && Boolean(document.getElementById('appNotice').textContent);
+    const noCompany = !state.activeCompanyId;
+    center.setAttribute('aria-busy', String(loading && !error));
+    center.dataset.state = error ? 'error' : loading ? 'loading' : noCompany ? 'no-company' : 'unavailable';
+    const select = document.getElementById('organizationSelect');
+    const organization = select?.selectedOptions?.[0]?.textContent || 'No shared organization selected';
+    context.textContent = 'Organization: ' + organization + ' · Company: ' + (state.activeCompanyName || 'No active company');
+    status.textContent = error ? 'Workspace could not be loaded. Use Refresh workspace in Account to retry.' : loading ? 'Loading workspace context… Analytics remain unavailable.' : noCompany ? 'Choose an organization and active company to prepare analytics. No statistics have been calculated.' : 'Workspace ready. Verified analytics data arrives in 24P.3; charts and ranking are not active.';
+    center.querySelectorAll('.kpi-value').forEach(node => { node.textContent = error ? 'Unavailable' : loading ? 'Loading…' : 'Unavailable'; });
+  }
+  window.addEventListener('workspace-context', update);
+  update();
 })();

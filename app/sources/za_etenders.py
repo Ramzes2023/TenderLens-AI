@@ -14,6 +14,7 @@ from .http import source_client
 
 from .eis_rss import SourceError
 from .models import TenderNotice
+from .enrichment import enrichment
 
 
 ZA_ETENDERS_ACTIVE_TENDERS_URL = (
@@ -329,6 +330,17 @@ def parse_za_etenders_response(
             region=region,
             summary=_summary(
                 row
+            ),
+            enrichment=enrichment(
+                source_name, external_id[:500],
+                classifications=[{
+                    'scheme': 'za-etenders-category', 'code': row['category'],
+                    'label': row['category'], 'path': 'category', 'role': 'reported',
+                }] if _useful_text(row.get('category')) else [],
+                dates={
+                    'publication': {'path': 'date_Published', 'value': row.get('date_Published')},
+                    'deadline': {'path': 'closing_Date', 'value': row.get('closing_Date')},
+                },
             ),
         )
 

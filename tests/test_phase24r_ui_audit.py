@@ -60,7 +60,7 @@ def test_customer_copy_and_links_are_professional(page):
                       'Industrial Pumping Equipment Supply', '€2.4M',
                       'legacy account namespace', 'raw token', 'next phase'):
         assert forbidden not in copy
-    assert not re.search('[\u0400-\u04ff]', copy)
+    assert not re.search('[\u0400-\u04ff]', copy.replace('Русский', ''))
     for tag, attrs in parsed.nodes:
         if tag == 'a' and 'href' in attrs:
             assert attrs['href'] != '#'
@@ -78,7 +78,7 @@ def test_all_navigation_targets_and_palette_destinations_are_mapped():
     assigned = {'companies', 'documents', 'monitoring', 'team', 'settings'}
     future = {'recommended', 'ai-analysis', 'notifications', 'billing'}
     assert nav == static | assigned | future
-    for key in future:
+    for key in future - {'ai-analysis'}:
         assert re.search(r"(?:'" + key + r"'|" + key + r"):'.*?not available", shell)
     ids = {a['id'] for _, a in parsed.nodes if 'id' in a}
     for tag, attrs in parsed.nodes:
@@ -108,8 +108,14 @@ def test_unloaded_counts_and_future_pages_do_not_fabricate_results():
 
 def test_modified_javascript_has_consistent_cache_versions():
     html = dashboard_html()
-    for asset in ('shell', 'discovery', 'saved', 'history', 'source_health', 'support'):
+    assert '/assets/shell.js?v=ui-fix-20261013' in html
+    assert '/assets/premium.js?v=ui-fix-20261013' in html
+    for asset in ('saved', 'support'):
         assert f'/assets/{asset}.js?v=phase24r' in html
+    assert '/assets/discovery.js?v=phase24-customer-onepass' in html
+    assert '/assets/source_health.js?v=ui-fix-20261013' in html
+    assert '/assets/history.js?v=ui-fix-20261013' in html
+    assert '/assets/workspace_locale.js?v=20261013' in html
     assert '/assets/responsive.css?v=phase24q' in html
 
 

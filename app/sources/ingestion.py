@@ -18,6 +18,7 @@ from .eis_rss import SourceError
 from .http import ConnectorTransportError, FetchPolicy, bounded_fetch, _is_public_ip_error
 from .opportunities import validate_notice
 from .registry import SourceRegistryError
+from .world_bank import WorldBankSourceError
 
 JOB_TYPE = 'connector.sync.v1'
 SYSTEM_SCOPE = JobScope()
@@ -28,6 +29,7 @@ HOSTS = {
     'ted': frozenset({'api.ted.europa.eu'}),
     'sam_gov': frozenset({'api.sam.gov'}),
     'uk_fts': frozenset({'www.find-tender.service.gov.uk'}),
+    'world_bank': frozenset({'datacatalogapi.worldbank.org'}),
     'canada_buys': frozenset({'canadabuys.canada.ca'}),
     'austender': frozenset({'www.tenders.gov.au', 'tenders.gov.au'}),
     'nz_gets': frozenset({'www.gets.govt.nz'}),
@@ -118,7 +120,8 @@ class ConnectorSyncHandler:
         if source_id == 'austender' and hasattr(source, 'max_concurrency'):
             source = replace(source, max_concurrency=1)
         # At most five listing/feed requests; AusTender adds one detail per notice.
-        request_limit = (self.max_records + 1 if source_id == 'austender'
+        request_limit = (4 if source_id in {'ted', 'uk_fts', 'world_bank'}
+                         else self.max_records + 1 if source_id == 'austender'
                          else 5 if source_id in {'eis', 'india_cppp', 'kz_goszakup'} else 1)
         async def fetch():
             with bounded_fetch(FetchPolicy(HOSTS[source_id], request_limit)):
@@ -135,7 +138,9 @@ class ConnectorSyncHandler:
         except (TimeoutError, httpx.TransportError, OSError) as error:
             kind = PermanentJobError if _is_public_ip_error(error) else RetryableJobError
             raise kind('Connector unavailable.') from None
-        except (SourceError, ValueError, TypeError):
+        except (SourceError, WorldBankSourceError, ValueError, TypeError) as error:
+            if source_id in {'ted', 'uk_fts', 'world_bank'} and getattr(error, 'retryable', False):
+                raise RetryableJobError('International connector temporarily unavailable.') from None
             raise PermanentJobError('Connector schema/configuration failed.') from None
         if type(notices) is not list or len(notices) > self.max_records:
             raise PermanentJobError('Connector exceeded result contract.')

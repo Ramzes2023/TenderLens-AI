@@ -15,6 +15,7 @@ from .http import source_client
 
 from .eis_rss import SourceError
 from .models import TenderNotice
+from .enrichment import enrichment
 
 
 CANADABUYS_OPEN_TENDERS_URL = (
@@ -294,6 +295,10 @@ def parse_canadabuys_csv(
                     if summary
                     else None
                 ),
+                enrichment=enrichment(source_name, reference[:500], dates={
+                    'publication': {'path': _PUBLICATION_DATE, 'value': row.get(_PUBLICATION_DATE)},
+                    'deadline': {'path': _CLOSING_DATE, 'value': row.get(_CLOSING_DATE)},
+                }),
             )
         )
 

@@ -11,6 +11,7 @@ from .http import page_limit, source_client
 
 from .eis_rss import SourceError
 from .models import TenderNotice
+from .enrichment import enrichment
 
 
 KZ_GOSZAKUP_API_BASE_URL = "https://ows.goszakup.gov.kz"
@@ -182,6 +183,10 @@ def parse_kz_goszakup_response(
                     if summary
                     else None
                 ),
+                enrichment=enrichment(source_name, advert_id[:500], dates={
+                    'publication': {'path': 'publish_date', 'value': raw.get('publish_date')},
+                    'deadline': {'path': 'end_date', 'value': raw.get('end_date')},
+                }),
             )
         )
 

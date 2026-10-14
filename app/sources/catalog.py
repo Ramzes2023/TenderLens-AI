@@ -21,6 +21,7 @@ from .registry import (
 from .sam_gov_api import SamGovApiSource
 from .ted_api import TedApiSource
 from .uk_fts_api import UkFindTenderApiSource
+from .world_bank import WorldBankSource
 from .za_etenders import ZaETendersSource
 
 
@@ -87,6 +88,9 @@ class SourceCatalog:
 
         for registration in self.registry.registrations():
             source = registration.source
+
+            if registration.key == 'ted' and registration.enabled and hasattr(source, 'for_search_terms'):
+                registration = replace(registration, source=source.for_search_terms(terms))
 
             if (
                 registration.key == "eis"
@@ -227,7 +231,7 @@ def build_source_catalog(
                 ),
                 official=True,
                 enabled=True,
-                capabilities=SourceCapabilities(),
+                capabilities=SourceCapabilities(keyword_search=True, pagination=True),
             ),
             SourceRegistration(
                 key="sam_gov",
@@ -258,7 +262,15 @@ def build_source_catalog(
                 ),
                 official=True,
                 enabled=True,
-                capabilities=SourceCapabilities(),
+                capabilities=SourceCapabilities(pagination=True, incremental_sync=True),
+            ),
+            SourceRegistration(
+                key='world_bank', display_name='World Bank Group — Finances One',
+                source=WorldBankSource(timeout=timeout), transport=SourceTransport.DATASET,
+                jurisdictions=('GLOBAL',), languages=('en',),
+                homepage_url='https://financesone.worldbank.org/api-explorer?id=DS00979',
+                official=True, enabled=True,
+                capabilities=SourceCapabilities(pagination=True, incremental_sync=True),
             ),
             SourceRegistration(
                 key="canada_buys",

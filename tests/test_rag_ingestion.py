@@ -411,6 +411,31 @@ def test_application_upload_status_ask_and_company_isolation(setup):
     data = pdf()
     with TestClient(create_app(runtime=runtime, settings=ApiSettings('127.0.0.1', 8000, False))) as client:
         client.cookies.set(SESSION_COOKIE, auth.create_session(setup.account))
+        capability = client.get(prefix + '/capabilities')
+        assert capability.status_code == 200, capability.text
+        assert capability.headers['Cache-Control'] == 'no-store'
+        assert capability.json()['configured'] and capability.json()['can_upload']
+        assert capability.json()['worker_status'] == 'not_checked'
+        assert capability.json()['max_pdf_bytes'] == MAX_BYTES
+        runtime.provider = None
+        assert not client.get(prefix + '/capabilities').json()['configured']
+        runtime.provider = Provider()
+        from app.organizations import Role
+        viewer = setup.auth_repo.find_account_by_id(setup.scope_b.account_id)
+        setup.organizations.add_membership(setup.scope.organization_id, viewer.id, Role.VIEWER)
+        client.cookies.clear()
+        client.cookies.set(SESSION_COOKIE, auth.create_session(viewer))
+        viewer_capability = client.get(prefix + '/capabilities')
+        assert viewer_capability.status_code == 200, viewer_capability.text
+        assert viewer_capability.json()['configured'] and not viewer_capability.json()['can_upload']
+        assert client.post(prefix + '/documents', files={'file': ('fixture.pdf', data, 'application/pdf')}).status_code == 403
+        setup.organizations.remove_membership(setup.scope.organization_id, viewer.id)
+        client.cookies.clear()
+        client.cookies.set(SESSION_COOKIE, auth.create_session(setup.account))
+        original_settings = setup.rag.settings
+        setup.rag.settings = replace(original_settings, embedding_model='changed-model')
+        assert not client.get(prefix + '/capabilities').json()['can_upload']
+        setup.rag.settings = original_settings
         response = client.post(prefix + '/documents', files={'file': ('../../customer-email.pdf', data, 'application/pdf')})
         assert response.status_code == 202, response.text
         body = response.json()
@@ -419,6 +444,7 @@ def test_application_upload_status_ask_and_company_isolation(setup):
         assert client.post(prefix + f'/jobs/{job_id}/ask', json={'question': 'delivery?'}).status_code == 409
         execute(setup)
         assert client.get(prefix + f'/jobs/{job_id}').json()['ready']
+        assert client.post(prefix + f'/jobs/{job_id}/ask', json={'question': '   '}).status_code == 422
         assert client.get(other_prefix + f'/jobs/{job_id}').status_code == 404
         assert client.post(other_prefix + f'/jobs/{job_id}/ask', json={'question': 'delivery?'}).status_code == 404
         answer = client.post(prefix + f'/jobs/{job_id}/ask', json={'question': 'delivery?'})
@@ -435,7 +461,10 @@ def test_application_upload_status_ask_and_company_isolation(setup):
         assert blocked.status_code == 403
         client.cookies.clear()
         client.cookies.set(SESSION_COOKIE, auth.create_session(setup.auth_repo.find_account_by_id(setup.scope_b.account_id)))
+        assert client.get(prefix + '/capabilities').status_code == 403
         assert client.get(prefix + f'/jobs/{job_id}').status_code == 403
+        client.cookies.clear()
+        assert client.get(prefix + '/capabilities').status_code == 401
 
 
 def test_upload_quota_denial_does_not_enqueue(setup):

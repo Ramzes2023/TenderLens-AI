@@ -58,6 +58,9 @@ def test_source_health_contract():
         "duration_ms",
         "error_type",
         "message",
+        "coverage",
+        "last_successful_sync",
+        "diagnostic",
     }
 
     assert set(

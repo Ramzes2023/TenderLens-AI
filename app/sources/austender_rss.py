@@ -16,6 +16,7 @@ from .http import source_client
 
 from .eis_rss import SourceError
 from .models import TenderNotice
+from .enrichment import enrichment
 
 
 AUSTENDER_RSS_URL = (
@@ -51,6 +52,7 @@ class AusTenderRssItem:
     title: str
     url: str
     published_at: str | None
+    raw_published_at: str | None = None
 
 
 def _clean_text(value: Any) -> str | None:
@@ -159,6 +161,7 @@ def parse_austender_rss(
                 published_at=_parse_rss_date(
                     item.findtext("pubDate")
                 ),
+                raw_published_at=item.findtext('pubDate'),
             )
         )
 
@@ -231,7 +234,7 @@ def _parse_publish_date(
     return cleaned
 
 
-def _parse_timezone_close(page: str) -> str | None:
+def _timezone_close_raw(page: str) -> str | None:
     match = re.search(
         r'href=["\']([^"\']*'
         r"TimeZone\?[^\"\']+)['\"]",
@@ -255,6 +258,13 @@ def _parse_timezone_close(page: str) -> str | None:
         return None
 
     raw = unquote_plus(values[0]).strip()
+    return raw
+
+
+def _parse_timezone_close(page: str) -> str | None:
+    raw = _timezone_close_raw(page)
+    if raw is None:
+        return None
 
     try:
         parsed = datetime.strptime(
@@ -406,6 +416,7 @@ def parse_austender_detail_page(
     url: str,
     rss_title: str,
     rss_published_at: str | None = None,
+    rss_raw_published_at: str | None = None,
     source_name: str = "austender",
 ) -> TenderNotice:
     """Normalize one official AusTender ATM detail page."""
@@ -485,6 +496,26 @@ def parse_austender_detail_page(
             summary[:4000]
             if summary
             else None
+        ),
+        enrichment=enrichment(
+            source_name, external_id[:500],
+            classifications=[{
+                'scheme': 'austender-category',
+                'code': _data_layer_field(page, 'atmCategoryCode'),
+                'label': _data_layer_field(page, 'atmCategoryTitle'),
+                'path': 'dataLayer.atmCategoryCode', 'role': 'reported',
+            }] if _data_layer_field(page, 'atmCategoryCode') else [],
+            dates={
+                'publication': {'path': 'detail.Publish Date' if fields.get('Publish Date') else 'rss.pubDate',
+                                'value': fields.get('Publish Date') or rss_raw_published_at or rss_published_at,
+                                'raw_status': 'detail_text' if fields.get('Publish Date') else 'rss_text' if rss_raw_published_at else 'upstream_normalized'},
+                'deadline': {
+                    'path': 'detail.TimeZone.CloseDateTime' if _parse_timezone_close(page) else 'detail.Close Date & Time',
+                    'value': _timezone_close_raw(page) if _parse_timezone_close(page) else fields.get('Close Date & Time'),
+                    'display_value': fields.get('Close Date & Time'),
+                    'raw_status': 'decoded_timezone_parameter' if _parse_timezone_close(page) else 'detail_text',
+                },
+            },
         ),
     )
 
@@ -585,6 +616,7 @@ class AusTenderRssSource:
                             rss_published_at=(
                                 item.published_at
                             ),
+                            rss_raw_published_at=item.raw_published_at,
                             source_name=self.name,
                         )
 

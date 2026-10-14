@@ -15,6 +15,7 @@ from .http import page_limit, source_client
 
 from .eis_rss import SourceError
 from .models import TenderNotice
+from .enrichment import enrichment
 
 
 INDIA_CPPP_HOME_URL = (
@@ -79,6 +80,8 @@ class _CpppRow:
     published_at: datetime
     deadline: datetime
     opening_at: datetime
+    raw_published_at: str | None = None
+    raw_deadline: str | None = None
 
     @property
     def fingerprint(
@@ -313,6 +316,8 @@ def _extract_rows(
                 published_at=published_at,
                 deadline=deadline,
                 opening_at=opening_at,
+                raw_published_at=data['published'],
+                raw_deadline=data['deadline'],
             )
         )
 
@@ -397,6 +402,12 @@ def _to_notice(
         ),
         region=None,
         summary=None,
+        enrichment=enrichment(source_name, row.external_id[:500], dates={
+            'publication': {'path': 'listing.Published Date', 'value': row.raw_published_at,
+                            'raw_status': 'extracted_cell_text'},
+            'deadline': {'path': 'listing.Bid Submission End Date', 'value': row.raw_deadline,
+                         'raw_status': 'extracted_cell_text'},
+        }),
     )
 
 

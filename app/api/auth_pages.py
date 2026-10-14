@@ -7,6 +7,7 @@ from html import escape
 from urllib.parse import quote
 
 from app import __version__
+from .public_locale import public_html
 
 
 def _page(
@@ -105,7 +106,7 @@ def _page(
     </section>
   </main>
   <script>
-    document.getElementById('togglePassword').addEventListener('click',()=>{{const input=document.getElementById('password'),toggle=document.getElementById('togglePassword');const show=input.type==='password';input.type=show?'text':'password';toggle.textContent=show?'Hide':'Show';toggle.setAttribute('aria-pressed',String(show));}});
+    document.getElementById('togglePassword').addEventListener('click',()=>{{const input=document.getElementById('password'),toggle=document.getElementById('togglePassword');const show=input.type==='password';input.type=show?'text':'password';PublicLocale.message(toggle,show?'Hide':'Show');toggle.setAttribute('aria-pressed',String(show));}});
     const form=document.getElementById('auth'),msg=document.getElementById('msg'),btn=document.getElementById('submit');
     const registerMode={str(register).lower()};
     form.addEventListener('submit',async e=>{{
@@ -145,12 +146,12 @@ def _page(
             &&r.status===403
             &&data.detail==='Email verification required.'
           ){{
-            window.location.replace(
+            window.location.replace(PublicLocale.url(
               '/verify-email?email='
               +encodeURIComponent(email)
               +'&next='
               +encodeURIComponent({next_path_json})
-            );
+            ));
             return;
           }}
 
@@ -162,26 +163,26 @@ def _page(
         }}
 
         if(registerMode){{
-          window.location.replace(
+          window.location.replace(PublicLocale.url(
             '/verify-email?email='
             +encodeURIComponent(data.email||email)
             +'&next='
             +encodeURIComponent({next_path_json})
             +'&sent='
-            +(data.verification_sent?'1':'0')
-          );
+            +(data.accepted?'accepted':(data.verification_sent?'1':'0'))
+          ));
           return;
         }}
 
-        window.location.replace(
+        window.location.replace(PublicLocale.url(
           {next_path_json}
-        );
+        ));
 
       }} catch(err) {{
-        msg.textContent=
+        PublicLocale.message(msg,
           err instanceof TypeError
             ?'Connection unavailable. Please try again.'
-            :(err.message||'Authentication unavailable. Please try again.');
+            :(err.message||'Authentication unavailable. Please try again.'));
 
         msg.style.display='block';
 
@@ -197,19 +198,19 @@ def _page(
 def login_html(
     next_path: str = "/dashboard",
 ) -> str:
-    return _page(
+    return public_html(_page(
         "login",
         next_path,
-    )
+    ))
 
 
 def register_html(
     next_path: str = "/dashboard",
 ) -> str:
-    return _page(
+    return public_html(_page(
         "register",
         next_path,
-    )
+    ))
 
 
 
@@ -256,7 +257,7 @@ def verify_email_html(
         __version__
     )
 
-    return f"""<!doctype html>
+    return public_html(f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -450,7 +451,7 @@ def verify_email_html(
       value,
       ok=false
     ){{
-      statusNode.textContent=value;
+      PublicLocale.message(statusNode,value);
       statusNode.classList.toggle(
         'ok',
         Boolean(ok)
@@ -466,7 +467,7 @@ def verify_email_html(
 
         }}else{{
           statusMessage(
-            'Check your inbox for the VALYQON AI verification link.'
+            'Check your inbox for the VALYQON AI verification link. If an eligible account exists, a link will be sent when delivery is available.'
           );
         }}
 
@@ -503,7 +504,7 @@ def verify_email_html(
         history.replaceState(
           {{}},
           '',
-          '/verify-email'
+          PublicLocale.url('/verify-email')
         );
 
         statusMessage(
@@ -512,9 +513,9 @@ def verify_email_html(
         );
 
         setTimeout(
-          ()=>window.location.replace(
+          ()=>window.location.replace(PublicLocale.url(
             nextPath
-          ),
+          )),
           500
         );
 
@@ -586,7 +587,7 @@ def verify_email_html(
     verify();
   </script>
 </body>
-</html>"""
+</html>""")
 
 
 def _password_reset_page(*, reset: bool) -> str:
@@ -621,10 +622,10 @@ def _password_reset_page(*, reset: bool) -> str:
     script = '''  <script>
     const resetMode=RESET_MODE;
     const token=new URLSearchParams(window.location.search).get('token')||'';
-    if(resetMode) history.replaceState({},'', '/reset-password');
+    if(resetMode) history.replaceState({},'', PublicLocale.url('/reset-password'));
     const form=document.getElementById('auth'),msg=document.getElementById('msg'),btn=document.getElementById('submit');
     msg.setAttribute('role','status');
-    function message(text){msg.textContent=text;msg.style.display='block';}
+    function message(text){PublicLocale.message(msg,text);msg.style.display='block';}
     if(resetMode&&!token){message('Password reset link is invalid or expired. Request a new link.');btn.disabled=true;}
     form.addEventListener('submit',async event=>{
       event.preventDefault();
@@ -643,7 +644,7 @@ def _password_reset_page(*, reset: bool) -> str:
         if(resetMode){
           completed=true;
           message('Password reset complete. Returning to sign in...');
-          setTimeout(()=>window.location.replace('/login'),500);
+          setTimeout(()=>window.location.replace(PublicLocale.url('/login')),500);
         }else{
           message('If an eligible account exists for this email, a password reset link has been sent.');
         }
@@ -655,11 +656,11 @@ def _password_reset_page(*, reset: bool) -> str:
 
 
 def forgot_password_html() -> str:
-    return _password_reset_page(reset=False)
+    return public_html(_password_reset_page(reset=False))
 
 
 def reset_password_html() -> str:
-    return _password_reset_page(reset=True)
+    return public_html(_password_reset_page(reset=True))
 
 
 __all__ = [

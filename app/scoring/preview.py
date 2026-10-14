@@ -1,6 +1,9 @@
 """Existing Discover metadata formula, independent of HTTP and AI providers."""
 from .engine import score_tender
 
+# Version of this unchanged metadata formula; distinct from durable-run orchestration.
+PREVIEW_ENGINE_VERSION = 'metadata-preview-v2'
+
 def score_metadata_preview(
     metadata_analysis,
     profile,

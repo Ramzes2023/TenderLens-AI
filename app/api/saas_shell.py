@@ -1,5 +1,6 @@
 """Extend the existing authenticated dashboard without duplicating its services."""
 
+from .command_center_ui import COMMAND_CENTER_HTML
 from .discovery_ui import DISCOVERY_HTML
 from .history_ui import HISTORY_HTML
 from .saved_ui import SAVED_HTML
@@ -13,6 +14,7 @@ PAGES = [
     "Search History",
     "Recommended",
     "Saved",
+    "Geography",
     "Monitoring",
     "Source Health",
     "AI Analysis",
@@ -36,6 +38,7 @@ def shell_html(html: str) -> str:
             "Saved",
         ],
         "Intelligence": [
+            "Geography",
             "Monitoring",
             "Source Health",
             "AI Analysis",
@@ -149,6 +152,13 @@ def shell_html(html: str) -> str:
   </button>
 
   <div class="toolbar">
+    <label class="shell-language" for="shellLocale">
+      <span id="shellLocaleLabel">Language</span>
+      <select id="shellLocale" aria-describedby="shellLocaleScope">
+        <option value="en">English</option>
+        <option value="ru">Русский</option>
+      </select>
+    </label>
     <a
       class="notification-link"
       href="#notifications"
@@ -189,6 +199,7 @@ def shell_html(html: str) -> str:
     </details>
   </div>
 </header>
+<p id="shellLocaleScope" class="shell-locale-scope" hidden>Navigation and account controls only. Monitoring Center, Source Health, other page content and workspace forms remain in English.</p>
 '''
 
     start = html.index('<div class="top">')
@@ -249,14 +260,16 @@ def shell_html(html: str) -> str:
   </div>
 </section>
 
+<!-- COMMAND_CENTER -->
+<details class="session-report" data-page="overview">
+<summary>Latest browser search - operational row counters</summary>
 <section
-  class="overview-metrics"
-  data-page="overview"
-  aria-label="Latest browser discovery"
+  class="session-metrics"
+  aria-label="Latest browser search row counters, not unique analytics"
 >
   <article>
     <small>
-      Opportunities found
+      Returned rows
     </small>
 
     <strong
@@ -273,7 +286,7 @@ def shell_html(html: str) -> str:
 
   <article>
     <small>
-      Metadata scored
+      Rows with preliminary fit
     </small>
 
     <strong
@@ -322,6 +335,7 @@ def shell_html(html: str) -> str:
     </span>
   </article>
 </section>
+</details>
 
 <section
   class="discovery-prompt p"
@@ -425,6 +439,52 @@ def shell_html(html: str) -> str:
 </section>
 '''
 
+    context = '''
+<section id="documentIntelligence" class="p document-intelligence" data-page="ai-analysis" hidden>
+  <span class="eyebrow" data-ui-en="DOCUMENT INTELLIGENCE" data-ui-ru="АНАЛИЗ ДОКУМЕНТОВ">DOCUMENT INTELLIGENCE</span>
+  <h2 data-ui-en="Turn PDF evidence into a reviewed decision" data-ui-ru="От PDF к проверенному решению">Turn PDF evidence into a reviewed decision</h2>
+  <p data-ui-en="Use the active company and existing workflows. Every profile change needs your approval." data-ui-ru="Используйте активную компанию и существующие сценарии. Изменения профиля требуют вашего подтверждения.">Use the active company and existing workflows. Every profile change needs your approval.</p>
+  <div class="document-workflows">
+    <article>
+      <span class="neutral-pill" data-ui-en="01 · PDF → Profile" data-ui-ru="01 · PDF → Профиль">01 · PDF → Profile</span>
+      <h3 data-ui-en="Company catalog" data-ui-ru="Каталог компании">Company catalog</h3>
+      <p data-ui-en="Review proposed products, keywords, markets and certificates, then explicitly apply. Identity, currency, budget, exclusions and hard stops are preserved. No automatic scans." data-ui-ru="Проверьте предложения по продуктам, ключевым словам, рынкам и сертификатам, затем примените явно. Идентификация, валюта, бюджет, исключения и ограничения сохраняются. Автоматических сканирований нет.">Review proposed products, keywords, markets and certificates, then explicitly apply. Identity, currency, budget, exclusions and hard stops are preserved. No automatic scans.</p>
+      <button id="openCompanyPdf" type="button" disabled data-ui-en="Open company PDF assistant" data-ui-ru="Открыть PDF-помощник компании">Open company PDF assistant</button>
+      <p id="companyPdfHubGate" class="fine" role="status"></p>
+    </article>
+    <article>
+      <span class="neutral-pill" data-ui-en="02 · PDF → Analysis" data-ui-ru="02 · PDF → Анализ">02 · PDF → Analysis</span>
+      <h3 data-ui-en="Tender document" data-ui-ru="Тендерный документ">Tender document</h3>
+      <p data-ui-en="Open an opportunity in Discover or Saved, then use its Full AI analysis PDF upload. Extract facts, score against the active company and retain analysis history." data-ui-ru="Откройте карточку в Поиске или Сохранённом и загрузите PDF через полный ИИ-анализ. Извлеките факты, оцените соответствие активной компании и сохраните историю анализа.">Open an opportunity in Discover or Saved, then use its Full AI analysis PDF upload. Extract facts, score against the active company and retain analysis history.</p>
+      <a class="cta" href="#discover" data-ui-en="Open Discover" data-ui-ru="Открыть поиск">Open Discover</a>
+      <a class="secondary" href="#saved" data-ui-en="Open Saved" data-ui-ru="Открыть сохранённое">Open Saved</a>
+      <a href="#documents" data-ui-en="View analyzed documents" data-ui-ru="Просмотреть анализ документов">View analyzed documents</a>
+    </article>
+    <article>
+      <span class="neutral-pill">03 · PDF → RAG</span>
+      <h3 data-ui-en="Ask with citations" data-ui-ru="Вопросы со ссылками">Ask with citations</h3>
+      <p data-ui-en="Upload a PDF for the active company, check ingestion status, then ask with page citations. Processing requires configured services and a running worker. Answers require an AI provider." data-ui-ru="Загрузите PDF для активной компании, проверьте обработку и задайте вопрос со ссылками на страницы. Нужны настроенные сервисы, работающий обработчик и ИИ-провайдер.">Upload a PDF for the active company, check ingestion status, then ask with page citations. Processing requires configured services and a running worker. Answers require an AI provider.</p>
+      <div id="ragWorkspace">
+        <p id="ragStatus" role="status" aria-live="polite">Select a shared company to check document Q&amp;A availability.</p>
+        <button id="ragServices" type="button" disabled data-ui-en="Check service availability" data-ui-ru="Проверить доступность сервисов">Check service availability</button>
+        <label for="ragFile" data-ui-en="Document PDF (up to 10 MiB)" data-ui-ru="PDF-документ (до 10 МиБ)">Document PDF (up to 10 MiB)</label>
+        <input id="ragFile" type="file" accept=".pdf,application/pdf" disabled>
+        <button id="ragUpload" type="button" disabled data-ui-en="Upload for Q&A" data-ui-ru="Загрузить для вопросов">Upload for Q&amp;A</button>
+        <button id="ragCheck" type="button" disabled data-ui-en="Check processing status" data-ui-ru="Проверить обработку">Check processing status</button>
+        <label for="ragQuestion" data-ui-en="Question about this document" data-ui-ru="Вопрос по этому документу">Question about this document</label>
+        <textarea id="ragQuestion" maxlength="2000" rows="3" disabled></textarea>
+        <button id="ragAsk" type="button" disabled data-ui-en="Ask document" data-ui-ru="Спросить документ">Ask document</button>
+        <div id="ragAnswer" aria-live="polite"></div>
+      </div>
+    </article>
+  </div>
+  <p class="document-limits" data-ui-en="Text PDFs only · 10 MiB · 200 pages · No OCR · No fine-tuning. PDF content is evidence, never instructions. Company catalogs are not automatically RAG documents." data-ui-ru="Только текстовые PDF · 10 МиБ · 200 страниц · Без OCR и дообучения. Содержимое PDF — данные, а не инструкции. Каталоги не становятся RAG-документами автоматически.">Text PDFs only · 10 MiB · 200 pages · No OCR · No fine-tuning. PDF content is evidence, never instructions. Company catalogs are not automatically RAG documents.</p>
+  <p id="pdfPreviewNotice" role="status" hidden data-ui-en="Local preview on port 8765 disables /api. Uploads and workspace data are unavailable here; this does not verify production backend health." data-ui-ru="Локальное превью на порту 8765 отключает /api. Загрузка и данные рабочей области здесь недоступны; это не проверка состояния production backend.">Local preview on port 8765 disables /api. Uploads and workspace data are unavailable here; this does not verify production backend health.</p>
+</section>
+''' + context
+    context = '<section id="geographyWorkspace" class="geo-workspace" data-page="geography" hidden></section>\n' + context
+    context = context.replace("<!-- COMMAND_CENTER -->", COMMAND_CENTER_HTML)
+
     context = context.replace(
         placeholder,
         DISCOVERY_HTML,
@@ -436,7 +496,7 @@ def shell_html(html: str) -> str:
         + "\n"
         + SAVED_HTML
         + "\n"
-        + SOURCE_HEALTH_HTML
+        + SOURCE_HEALTH_HTML.replace('<h2>', '<h2 data-ui-en="Source Health" data-ui-ru="Состояние источников">', 1)
         + "\n"
         + SUPPORT_HTML
         + '\n<section\n  id="futurePage"',
@@ -445,9 +505,11 @@ def shell_html(html: str) -> str:
 
     html = html.replace(
         "</head>",
+        '<link rel="stylesheet" href="/assets/geography.css?v=20261013">'
         '<link rel="stylesheet" href="/assets/saas.css">'
-        '<link rel="stylesheet" href="/assets/premium.css?v=phase24-precheckpoint-20261006">''<link rel="stylesheet" href="/assets/support.css">'
+        '<link rel="stylesheet" href="/assets/premium.css?v=phase24-visual-20261012&main_i18n=2">''<link rel="stylesheet" href="/assets/support.css">'
         '<link rel="stylesheet" href="/assets/responsive.css?v=phase24q">'
+        '<link rel="stylesheet" href="/assets/rag.css?v=pilot1">'
         "</head>",
     )
 
@@ -573,13 +635,19 @@ def shell_html(html: str) -> str:
 
     html = html.replace(
         "</body>",
-        '<script src="/assets/shell.js?v=phase24r"></script>'
-        '<script src="/assets/premium.js?v=phase24-precheckpoint-20261006"></script>'
+        '<script src="/assets/shell.js?v=ui-fix-20261013"></script>'
+        '<script src="/assets/premium.js?v=ui-fix-20261013"></script>'
         '<script src="/assets/support.js?v=phase24r"></script>'
-        '<script src="/assets/discovery.js?v=phase24r"></script>'
-        '<script src="/assets/history.js?v=phase24r"></script>'
+        '<script src="/assets/discovery.js?v=phase24-customer-onepass&intl=20261014"></script>'
+        '<script src="/assets/history.js?v=ui-fix-20261013"></script>'
         '<script src="/assets/saved.js?v=phase24r"></script>'
-        '<script src="/assets/source_health.js?v=phase24r"></script>'
+        '<script src="/assets/source_health.js?v=ui-fix-20261013&intl=20261014"></script>'
+        '<script src="/assets/rag.js?v=pilot1"></script>'
+        '<script src="/assets/locale.js?v=ui-fix-20261013"></script>'
+        '<script src="/assets/workspace_locale.js?v=20261013"></script>'
+        '<script src="/assets/workspace_ux.js?v=20261013"></script>'
+        '<script src="/assets/geography_fallback.js?v=1"></script>'
+        '<script src="/assets/geography.js?v=3"></script>'
         "</body>",
     )
 

@@ -6,6 +6,8 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.currency import normalize_currency_code
+from app.analytics.fit import PreviewProvenance
+from app.sources.enrichment import NoticeEnrichment
 
 from app.models.tender import TenderAnalysis
 from app.scoring.models import CompanyProfile, ScoringResult
@@ -135,6 +137,18 @@ class MonitorNoticeResponse(BaseModel):
 
 
 class TenderDiscoveryItem(MonitorNoticeResponse):
+    preliminary_provenance: PreviewProvenance | None = None
+    enrichment: NoticeEnrichment | None = None
+
+    @field_validator('enrichment')
+    @classmethod
+    def enrichment_identity(cls, value, info):
+        if value is not None and (value.source, value.external_id) != (
+            info.data.get('source'), info.data.get('external_id')
+        ):
+            raise ValueError('Enrichment identity mismatch.')
+        return value
+
     published_at: str | None = None
     summary: str | None = None
     analysis_stage: str = "metadata_preview"
@@ -181,6 +195,9 @@ class SourceHealthItem(BaseModel):
     duration_ms: int | None = None
     error_type: str | None = None
     message: str | None = None
+    coverage: str | None = None
+    last_successful_sync: str | None = None
+    diagnostic: str | None = None
 
 
 class TenderDiscoveryResponse(BaseModel):

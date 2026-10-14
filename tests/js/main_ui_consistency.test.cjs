@@ -1,0 +1,12 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const read=p=>fs.readFileSync(path.join(__dirname,'../..',p),'utf8');
+const locale=read('app/api/static/locale.js'),shell=read('app/api/static/shell.js'),css=read('app/api/static/premium.css');
+const control={dataset:{uiEn:'Open company PDF assistant',uiRu:'Открыть PDF-помощник компании'},textContent:'',set innerHTML(_){throw Error('Unsafe HTML');}};
+const state={activeCompanyId:7,organizationId:4,uiEpoch:9,activeCompanyName:'Company <test>'},before=JSON.stringify(state),events=[];
+const c={state,document:{documentElement:{},body:{},querySelectorAll:s=>s==='[data-ui-en][data-ui-ru]'?[control]:[],querySelector:()=>null,getElementById:()=>null},localStorage:{getItem:()=>null,setItem(){}},MutationObserver:class{observe(){}},Event:class{constructor(type){this.type=type;}},fetch(){throw Error('Locale must not fetch');},window:{addEventListener(){},dispatchEvent:e=>events.push(e.type)}};
+vm.runInNewContext(locale,c);assert.equal(control.textContent,control.dataset.uiEn);c.window.MainLocale.setLocale('ru');assert.equal(control.textContent,control.dataset.uiRu);assert.equal(control.lang,'ru');assert.equal(JSON.stringify(state),before);assert.deepEqual(events,['shell-locale-change']);c.window.MainLocale.setLocale('en');assert.equal(control.textContent,control.dataset.uiEn);
+assert.match(shell,/\['overview','discover','search-history','recommended','saved','geography','monitoring','source-health','ai-analysis','documents','companies','team','billing','settings','notifications','support'\]\.includes\(page\)/);
+assert.match(css,/body\.saas\.command-view \.p\{background:linear-gradient/);assert.match(css,/\.document-workflows\{display:grid;grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);assert.match(css,/@media\(max-width:1100px\)\{\.document-workflows\{grid-template-columns:1fr/);
+const dashboard=read('app/api/dashboard.py');assert.match(dashboard,/Local preview: \/api is disabled/);assert.match(dashboard,/state.activeCompanyName='Workspace unavailable'/);assert.match(dashboard,/node\.replaceChildren\(\);const empty=document.createElement\('p'\)/);
+console.log('Shared surfaces, safe bilingual controls, unchanged company context and unavailable states passed');

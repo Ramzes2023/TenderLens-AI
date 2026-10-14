@@ -1,7 +1,7 @@
 """Normalized tender notice returned by external sources."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -18,6 +18,7 @@ class TenderNotice:
     deadline: str | None = None
     region: str | None = None
     summary: str | None = None
+    enrichment: dict | None = field(default=None, compare=False, hash=False)
 
     @property
     def identity(self) -> tuple[str, str]:

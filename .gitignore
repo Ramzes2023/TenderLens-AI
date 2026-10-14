@@ -43,3 +43,7 @@ logs/
 .localcoder*
 .DS_Store
 Thumbs.db
+
+# Isolated local UI verification environment
+.ui-fix-venv/
+.intl-source-venv/

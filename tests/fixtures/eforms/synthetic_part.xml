@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETIC path unit fixture only; no published-notice or full XSD validation claim. -->
+<cn:ContractNotice xmlns:cn="urn:oasis:names:specification:ubl:schema:xsd:ContractNotice-2"
+ xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+ xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+ <cbc:ContractFolderID>procedure-synthetic-part</cbc:ContractFolderID>
+ <cac:ProcurementProjectLot>
+  <cbc:ID schemeName="Part">PAR-0001</cbc:ID>
+  <cac:ProcurementProject>
+   <cac:MainCommodityClassification><cbc:ItemClassificationCode listName="cpv">03111100</cbc:ItemClassificationCode></cac:MainCommodityClassification>
+  </cac:ProcurementProject>
+ </cac:ProcurementProjectLot>
+</cn:ContractNotice>

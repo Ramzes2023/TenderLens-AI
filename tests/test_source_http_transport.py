@@ -290,16 +290,31 @@ def test_cancellation_after_tcp_closes_stream():
     asyncio.run(run())
 
 
-def test_timeout_budget_includes_dns_and_fallback():
+def test_timeout_budget_includes_dns_and_fallback(monkeypatch):
+    # Model elapsed DNS/TCP time deterministically. Windows monotonic clock ticks
+    # can coalesce two short sleeps; cancellation still uses the real AnyIO timer.
+    elapsed = [0.0]
+
+    class BudgetClock:
+        def __getattr__(self, name):
+            return getattr(anyio, name)
+
+        def current_time(self):
+            return elapsed[0]
+
+        def current_effective_deadline(self):
+            return 0.1
+
+    monkeypatch.setattr('app.sources.http_transport.anyio', BudgetClock())
     async def run():
         async def resolver(host, port):
-            await anyio.sleep(0.01)
+            elapsed[0] += 0.02
             return ['8.8.8.8', '1.1.1.1']
         class SlowTCP(TCP):
             async def connect_tcp(self, host, port, **kwargs):
                 self.calls.append((host, port, kwargs))
-                await anyio.sleep(0.01)
                 if len(self.calls) == 1:
+                    elapsed[0] += 0.03
                     raise httpcore.ConnectError('unreachable')
                 await anyio.sleep_forever()
         tcp = SlowTCP()

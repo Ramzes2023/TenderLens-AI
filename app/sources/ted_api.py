@@ -1,7 +1,9 @@
 """Official TED Search API v3 procurement source adapter."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+import math
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
 
@@ -11,6 +13,8 @@ from .http import source_client
 
 from .eis_rss import SourceError
 from .models import TenderNotice
+from .enrichment import enrichment
+from .international import source_date, closed, request_json, diagnostic, retryable
 
 
 TED_SEARCH_URL = "https://api.ted.europa.eu/v3/notices/search"
@@ -25,6 +29,8 @@ TED_FIELDS = (
     "total-value-cur",
     "place-of-performance",
     "description-proc",
+    "notice-type",
+    "main-classification-proc",
 )
 
 
@@ -108,7 +114,8 @@ def _first_float(value: Any) -> float | None:
             normalized = normalized.replace(",", "")
 
         try:
-            return float(normalized)
+            number = float(normalized)
+            return number if math.isfinite(number) and number >= 0 else None
         except ValueError:
             continue
 
@@ -117,13 +124,14 @@ def _first_float(value: Any) -> float | None:
 
 def _notice_url(publication_number: str) -> str:
     encoded = quote(publication_number, safe="-")
-    return f"https://ted.europa.eu/en/notice/{encoded}/html"
+    return f"https://ted.europa.eu/en/notice/-/detail/{encoded}"
 
 
 def parse_ted_search_response(
     payload: dict[str, Any],
     *,
     source_name: str = "ted",
+    now: datetime | None = None,
 ) -> list[TenderNotice]:
     """Normalize one TED Search API response into VALYQON notices."""
 
@@ -133,10 +141,19 @@ def parse_ted_search_response(
         raise SourceError("TED returned an invalid notices response.")
 
     notices: list[TenderNotice] = []
+    seen: set[str] = set()
 
     for raw in raw_notices:
         if not isinstance(raw, dict):
             raise SourceError("TED returned an invalid notice object.")
+
+        notice_type = _first_text(raw.get('notice-type'))
+        # ACTIVE scope includes result/award notices: keep competition notices.
+        if notice_type and notice_type.casefold() not in {
+            'cn-standard', 'cn-social', 'cn-desg', 'subco', 'pin-cfc-standard',
+            'pin-cfc-social', 'qu-sy', '16', '17', '18', '19', '20', '21', '22', '23', '24',
+        }:
+            continue
 
         publication_number = _first_text(
             raw.get("publication-number")
@@ -147,10 +164,15 @@ def parse_ted_search_response(
                 "TED returned a notice without publication-number."
             )
 
+        if publication_number in seen:
+            continue
+        seen.add(publication_number)
+
         title = (
             _first_text(raw.get("notice-title"))
-            or f"TED notice {publication_number}"
         )
+        if not title:
+            raise SourceError('TED returned a notice without title.')
 
         deadline = (
             _first_text(
@@ -160,15 +182,21 @@ def parse_ted_search_response(
             or _first_text(raw.get("deadline"))
         )
 
+        try:
+            deadline = source_date(deadline)
+            published = source_date(_first_text(raw.get('publication-date')))
+        except ValueError:
+            raise SourceError('TED returned an invalid date.') from None
+        if closed(deadline, now=now):
+            continue
+
         notices.append(
             TenderNotice(
                 source=source_name,
                 external_id=publication_number[:500],
                 title=title[:1000],
                 url=_notice_url(publication_number)[:2000],
-                published_at=_first_text(
-                    raw.get("publication-date")
-                ),
+                published_at=published,
                 tender_number=publication_number[:500],
                 customer=_first_text(raw.get("buyer-name")),
                 initial_price=_first_float(
@@ -184,6 +212,30 @@ def parse_ted_search_response(
                 summary=(
                     _first_text(raw.get("description-proc")) or None
                 ),
+                enrichment=enrichment(
+                    source_name, publication_number[:500],
+                    locations=[[{'path': 'place-of-performance', 'value': value}]
+                               for value in _text_values(raw.get('place-of-performance'))],
+                    classifications=[{'scheme': 'CPV', 'code': code,
+                                      'path': 'main-classification-proc', 'role': 'primary'}
+                                     for code in _text_values(raw.get('main-classification-proc'))],
+                    public_metadata={
+                        'attribution': 'Publications Office of the European Union / TED',
+                        'reference_url': _notice_url(publication_number),
+                        'original_language': None,
+                        'available_title_languages': list(raw.get('notice-title', {})) if isinstance(raw.get('notice-title'), dict) else [],
+                        'notice_type': notice_type,
+                        'deadline_state': 'reported' if deadline else 'not_supplied',
+                        'raw_publication_date': raw.get('publication-date'),
+                    },
+                    dates={
+                        'publication': {'path': 'publication-date', 'value': published},
+                        'deadline': {'path': next((key for key in ('deadline-receipt-tender-date-lot',
+                                                  'deadline-date-lot', 'deadline') if _first_text(raw.get(key))), 'deadline'),
+                                     'value': next((raw[key] for key in ('deadline-receipt-tender-date-lot',
+                                                   'deadline-date-lot', 'deadline') if _first_text(raw.get(key))), None)},
+                    },
+                ),
             )
         )
 
@@ -198,6 +250,21 @@ class TedApiSource:
     scope: str = "ACTIVE"
     timeout: float = 30.0
     name: str = "ted"
+
+    def __post_init__(self):
+        if not math.isfinite(self.timeout) or not 0 < self.timeout <= 120:
+            raise ValueError('timeout must be finite and between 0 and 120 seconds.')
+
+    def for_search_terms(self, terms, **kwargs):
+        # Only literal words enter expert syntax, never user operators.
+        import re
+        phrases = [' '.join(re.findall(r'[^\W_]+', str(term), re.UNICODE))[:120]
+                   for term in tuple(terms)[:10]]
+        phrases = [phrase for phrase in phrases if phrase]
+        if not phrases:
+            return self
+        query = '(' + ' OR '.join(f'FT = "{phrase}"' for phrase in phrases) + ')'
+        return replace(self, query=query + ' SORT BY publication-date DESC')
 
     async def fetch(self, limit: int = 20) -> list[TenderNotice]:
         limit = max(1, min(int(limit), 100))
@@ -215,37 +282,24 @@ class TedApiSource:
         try:
             async with source_client(
                 timeout=self.timeout,
-                follow_redirects=True,
-                trust_env=True,
+                follow_redirects=False,
+                trust_env=False,
                 headers={
                     "Accept": "application/json",
                     "User-Agent": "VALYQON-AI (+procurement-source)",
                 },
             ) as client:
-                response = await client.post(
-                    TED_SEARCH_URL,
-                    json=request_body,
-                )
-                response.raise_for_status()
-
-                if len(response.content) > 10 * 1024 * 1024:
-                    raise SourceError(
-                        "TED response exceeds the safe 10 MiB limit."
-                    )
-
-                try:
-                    payload = response.json()
-                except ValueError:
-                    raise SourceError(
-                        "TED returned invalid JSON."
-                    ) from None
+                payload = await request_json(client, 'POST', TED_SEARCH_URL,
+                                             hosts={'api.ted.europa.eu'}, json=request_body)
+                if payload.get('timedOut'):
+                    raise SourceError('TED search timed out; results are incomplete.')
 
         except SourceError:
             raise
-        except (httpx.HTTPError, OSError):
-            raise SourceError(
-                "Unable to fetch TED notices."
-            ) from None
+        except (httpx.HTTPError, OSError, ValueError) as error:
+            failure = SourceError('Unable to fetch TED notices. ' + diagnostic(error))
+            failure.retryable = retryable(error)
+            raise failure from None
 
         if not isinstance(payload, dict):
             raise SourceError("TED returned an invalid JSON object.")
@@ -253,7 +307,7 @@ class TedApiSource:
         return parse_ted_search_response(
             payload,
             source_name=self.name,
-        )
+        )[:limit]
 
 
 __all__ = [

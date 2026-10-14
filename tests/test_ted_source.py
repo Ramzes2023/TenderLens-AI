@@ -57,7 +57,7 @@ def test_parse_ted_search_response_normalizes_notice() -> None:
     assert notice.region == "DE, Berlin"
     assert notice.summary == "Laboratory equipment procurement."
     assert notice.url == (
-        "https://ted.europa.eu/en/notice/123456-2026/html"
+        "https://ted.europa.eu/en/notice/-/detail/123456-2026"
     )
 
 

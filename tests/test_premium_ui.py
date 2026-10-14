@@ -47,3 +47,42 @@ def test_discovery_filters_have_one_owner_without_navigation_catalog():
     assert 'id="filterCurrency"' in DISCOVERY_HTML
     assert "options('filterSource',items.map(i=>i.source))" in discovery
     assert "options('filterCurrency',items.map(i=>i.currency))" in discovery
+
+def test_command_center_truthful_presentation_contract():
+    from app.api.dashboard import dashboard_html
+    html = dashboard_html()
+    parser = Links()
+    parser.feed(html)
+    for label in ('Discovered', 'Matched', 'High Fit', 'Active Sources', 'Countries', 'Closing Soon', 'Tender Activity', 'Company Fit', 'Global Geography', 'Deadline Calendar', 'Top Opportunities'):
+        assert label in html
+    assert html.count('class="command-kpi"') == 6
+    assert html.count('class="kpi-value">Unavailable') == 6
+    assert 'No opportunity ranking or sortable table is active' in html
+    assert 'Date range: unavailable' in html
+    assert 'id="discoveredCount"' in html and 'Returned rows' in html
+    assert 'id="commandCenter"' in html and 'aria-busy="true"' in html
+    for key in ('activity', 'fit', 'geography', 'deadlines', 'industry', 'category', 'sources', 'health', 'completeness', 'opportunities'):
+        assert 'panel-' + key in parser.ids
+
+def test_command_center_has_no_simulated_chart_controls_or_duplicate_ids():
+    from app.api.command_center_ui import COMMAND_CENTER_HTML
+    from pathlib import Path
+    class Nodes(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.ids = []
+            self.tags = []
+        def handle_starttag(self, tag, attrs):
+            self.tags.append(tag)
+            attrs = dict(attrs)
+            if 'id' in attrs:
+                self.ids.append(attrs['id'])
+    parser = Nodes()
+    parser.feed(COMMAND_CENTER_HTML)
+    assert len(parser.ids) == len(set(parser.ids))
+    assert not {'canvas', 'button', 'select', 'input'} & set(parser.tags)
+    css = (Path(__file__).resolve().parents[1] / 'app/api/static/premium.css').read_text(encoding='utf-8')
+    assert 'body.saas.command-view' in css
+    assert '.command-kpis { grid-template-columns:repeat(3,minmax(0,1fr))' in css
+    assert '@media(max-width:600px)' in css and '@media(max-width:360px)' in css
+    assert 'prefers-reduced-motion:reduce' in css

@@ -1,0 +1,9 @@
+#ragWorkspace{display:grid;gap:12px;width:100%;min-width:0;}
+#ragWorkspace label{font-size:13px;font-weight:600;line-height:1.5;}
+#ragWorkspace input,#ragWorkspace textarea,#ragWorkspace button{box-sizing:border-box;width:100%;max-width:100%;min-width:0;}
+#ragWorkspace textarea{padding:12px;border:1px solid #64748b;border-radius:8px;background:#fff;color:#172b47;font:inherit;resize:vertical;}
+#ragWorkspace :focus-visible{outline:3px solid #377bea;outline-offset:3px;}
+#ragWorkspace :disabled{cursor:not-allowed;opacity:.65;}
+#ragStatus,#ragAnswer{overflow-wrap:anywhere;line-height:1.65;}
+#ragAnswer p{white-space:pre-wrap;}
+#ragAnswer ul{padding-left:20px;}

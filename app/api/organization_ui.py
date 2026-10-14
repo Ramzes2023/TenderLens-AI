@@ -117,7 +117,10 @@ async function loadOrganizations(){
     'organizationSelect'
   );
 
-  const previous=state.organizationId;
+    let previous=state.organizationId;
+    if(!Number.isInteger(previous) && Number.isInteger(state.accountId)){
+      try{previous=Number(localStorage.getItem(`valyqon.organization.${state.accountId}`));}catch{}
+    }
 
   select.innerHTML=items.map(item=>{
     const duplicate=items.some(other=>other.id!==item.id && other.name===item.name);
@@ -126,7 +129,8 @@ async function loadOrganizations(){
       ?`${name} · PERSONAL`
       :name;
 
-    return `<option value="${item.id}">${esc(label)}</option>`;
+      const ruLabel=item.personal?`${name} · ЛИЧНОЕ`:name;
+      return `<option value="${item.id}" data-ui-en="${esc(label)}" data-ui-ru="${esc(ruLabel)}">${esc(label)}</option>`;
   }).join('');
 
   if(
@@ -144,6 +148,7 @@ async function loadOrganizations(){
   select.value=String(
     state.organizationId
   );
+    rememberOrganization();
 
   document.getElementById(
     'organizationCount'
@@ -154,7 +159,12 @@ async function loadOrganizations(){
   await loadOrganizationManagement();
 }
 
-async function selectOrganization(){
+  function rememberOrganization(){
+    if(!Number.isInteger(state.accountId) || !state.organizations.some(o=>o.id===state.organizationId))return;
+    try{localStorage.setItem(`valyqon.organization.${state.accountId}`,String(state.organizationId));}catch{}
+  }
+
+  async function selectOrganization(){
   const value=Number(
     document.getElementById(
       'organizationSelect'
@@ -169,6 +179,7 @@ async function selectOrganization(){
   }
 
   state.organizationId=value;
+    rememberOrganization();
 
   clearInviteLink();
 
@@ -220,6 +231,7 @@ async function createOrganization(){
     await loadOrganizations();
 
     state.organizationId=created.id;
+    rememberOrganization();
 
     document.getElementById(
       'organizationSelect'

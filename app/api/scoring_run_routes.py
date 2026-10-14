@@ -1,5 +1,6 @@
 """Opt-in asynchronous scoring. Existing synchronous Discover remains the default."""
 import asyncio
+import json
 import sqlite3
 from typing import Annotated
 
@@ -49,7 +50,7 @@ async def execute(request, response, organization_id, company_id, operation):
         raise HTTPException(403, 'Scoring access denied.') from None
     except ScoringInputError:
         raise HTTPException(409, 'Scoring input changed or is invalid; request a new run.') from None
-    except (sqlite3.Error, StorageError, JobValueError, CompanyRepositoryError):
+    except (sqlite3.Error, StorageError, JobValueError, CompanyRepositoryError, json.JSONDecodeError):
         raise HTTPException(503, 'Background scoring is unavailable.') from None
     response.headers['Cache-Control'] = 'no-store'
     return value
@@ -66,6 +67,38 @@ async def enqueue_run(organization_id: ScopeID, company_id: ScopeID, payload: Sc
                 'profile_digest': job.payload['profile_digest'], 'snapshot_id': job.payload['snapshot_id']}
 
     return await execute(request, response, organization_id, company_id, operation)
+
+
+@router.get('')
+async def list_runs(organization_id: ScopeID, company_id: ScopeID, request: Request, response: Response,
+                    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+                    cursor: Annotated[str | None, Query(max_length=100000)] = None):
+    from app.analytics.paging import CursorError, seal, unseal
+    import time
+    def operation(service, scope):
+        key = request.app.state.api_settings.api_key
+        if not key or not key.strip():
+            raise HTTPException(503, 'Existing app signing key unavailable.')
+        binding = ['scoring-list-v1', *scope.values, page_size]
+        try:
+            state = unseal(cursor, key, binding) if cursor else None
+            page = service.list_page(scope=scope, page_size=page_size, state=state)
+            state = page.pop('state')
+            state.update(binding=binding, expires=state.get('expires', time.time() + 3600))
+            return dict(page, next_cursor=seal(state, key) if page['has_more'] else None)
+        except CursorError:
+            raise HTTPException(422, 'Invalid scoring cursor.') from None
+    return await execute(request, response, organization_id, company_id, operation)
+
+
+@router.get('/{job_id}/revisions')
+async def read_revisions(organization_id: ScopeID, company_id: ScopeID,
+                         job_id: Annotated[str, Path(min_length=1, max_length=64)],
+                         request: Request, response: Response,
+                         limit: Annotated[int, Query(ge=1, le=100)] = 50,
+                         offset: Annotated[int, Query(ge=0, le=500)] = 0):
+    return await execute(request, response, organization_id, company_id,
+                         lambda service, scope: service.revision_page(job_id, scope=scope, limit=limit, offset=offset))
 
 
 @router.get('/{job_id}')

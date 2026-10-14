@@ -206,7 +206,8 @@ async def current_account(request: Request, *, touch: bool = True):
     if not token:
         return None
     try:
-        return await asyncio.to_thread(service.account_for_token, token, touch=touch)
+        from app.analytics.admission import dispatch
+        return await dispatch(service.account_for_token, token, touch=touch)
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

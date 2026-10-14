@@ -9,11 +9,14 @@ from email.utils import parsedate_to_datetime
 from urllib.parse import parse_qs, urlsplit
 
 from .models import TenderNotice
+from .enrichment import validate_enrichment, with_connector
 
 
 def validate_notice(notice, source_id):
     if not isinstance(notice, TenderNotice) or notice.source != source_id:
         raise ValueError('Invalid normalized notice.')
+    if notice.enrichment is not None:
+        validate_enrichment(notice.enrichment, notice.source, notice.external_id)
     if type(source_id) is not str or not re.fullmatch('[a-z0-9][a-z0-9_-]{0,63}', source_id):
         raise ValueError('Invalid normalized source identity.')
     limits = {'source': 64, 'external_id': 500, 'title': 1000, 'url': 2000,
@@ -71,6 +74,7 @@ class OpportunityRepository:
         if (type(connector_version) is not str or not re.fullmatch(
                 r'connector-sync-v1:' + re.escape(notice.source) + r':adapter-r[1-9][0-9]{0,3}', connector_version)):
             raise ValueError('Invalid connector provenance.')
+        notice = with_connector(notice, connector_version)
         encoded = json.dumps(asdict(notice), ensure_ascii=False, allow_nan=False, separators=(',', ':'))
         now = datetime.now(timezone.utc).isoformat()
         with closing(self.database.connect()) as conn:
@@ -96,7 +100,8 @@ class OpportunityRepository:
         terms = tuple(str(term).casefold() for term in search_terms if str(term).strip())[:20]
         for row in rows:
             notice = TenderNotice(**json.loads(row[0]))
-            text = ' '.join(str(getattr(notice, field.name) or '') for field in fields(notice)).casefold()
+            text = ' '.join(str(getattr(notice, field.name) or '') for field in fields(notice)
+                            if field.name != 'enrichment').casefold()
             if not terms or any(term in text for term in terms):
                 result.append(notice)
             if len(result) >= limit:

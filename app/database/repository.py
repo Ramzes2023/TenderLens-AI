@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import sqlite3
 from app.database.backend import database_for, StorageError, StorageIntegrityError
+from app.database.analytics_read import bounded_read, preflight
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -1031,6 +1032,59 @@ class TenderRepository:
             raise DatabaseError(
                 "Could not read discovery history."
             ) from None
+
+    def page_discovery_history(self, account_id, organization_id, company_id, *,
+                               page_size=20, state=None, start=None, end=None, read_limits=None):
+        """Read-only keyset over persisted second-resolution UTC search events."""
+        from datetime import timedelta
+        if type(page_size) is not int or not 1 <= page_size <= 20:
+            raise ValueError('Page size must be 1..20.')
+        def bound(value):
+            if value is None:
+                return None
+            instant = datetime.fromisoformat(value)
+            if instant.microsecond:
+                instant = instant.replace(microsecond=0) + timedelta(seconds=1)
+            return instant.isoformat(timespec='seconds')
+        try:
+            with closing(self._connect()) as conn, bounded_read(conn, read_limits), conn:
+                conn.execute('BEGIN')
+                self._require_org_role(conn, account_id, organization_id)
+                self._require_company_scope(conn, organization_id, company_id)
+                if state is None:
+                    fence = conn.execute('SELECT COALESCE(MAX(id),0) FROM discovery_search_history').fetchone()[0]
+                    state = {'fence': fence, 'as_of': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+                             'after': None, 'observed_count': None, 'read_count': 0}
+                clause = 'organization_id=? AND company_id=? AND id<=? AND created_at<=?'
+                params = [organization_id, company_id, state['fence'], state['as_of']]
+                for operator, value in [('>=', start), ('<', end)]:
+                    if value is not None:
+                        clause += ' AND created_at' + operator + '?'
+                        params.append(bound(value))
+                count = (preflight(conn, clause, params, read_limits) if read_limits is not None else
+                         conn.execute('SELECT COUNT(*) FROM discovery_search_history WHERE ' + clause, params).fetchone()[0])
+                original_count = count if state['observed_count'] is None else state['observed_count']
+                if state['after'] is not None:
+                    clause += ' AND (created_at<? OR (created_at=? AND id<?))'
+                    stamp, identity = state['after']
+                    params.extend([stamp, stamp, identity])
+                rows = conn.execute('SELECT * FROM discovery_search_history WHERE ' + clause +
+                                    ' ORDER BY created_at DESC,id DESC LIMIT ?', (*params, page_size + 1)).fetchall()
+                more = len(rows) > page_size
+                rows = rows[:page_size]
+                records = [self._deserialize_discovery_search_history(row) for row in rows]
+                next_state = dict(state, observed_count=original_count,
+                                  read_count=state['read_count'] + len(records))
+                if records:
+                    next_state['after'] = [records[-1].created_at, records[-1].id]
+                return {'records': records, 'state': next_state, 'has_more': more,
+                        'observed_count': original_count, 'remaining_storage_count': count,
+                        'completeness': 'complete_observed_storage' if count == original_count else 'incomplete_deleted_events',
+                        'storage_state': 'available'}
+        except DatabaseAuthorizationError:
+            raise
+        except (sqlite3.Error, StorageError, ValueError, TypeError):
+            raise DatabaseError('Could not page discovery history.') from None
 
     def find_by_hash(self, owner_user_id: int, pdf_sha256: str) -> StoredTender | None:
         try:

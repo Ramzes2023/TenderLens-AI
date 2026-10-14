@@ -7,6 +7,7 @@ import json
 from html import escape
 
 from app import __version__
+from .public_locale import public_html
 
 
 def invitation_page_html(
@@ -23,7 +24,7 @@ def invitation_page_html(
         .replace("&", "\\u0026")
     )
 
-    return f"""<!doctype html>
+    return public_html(f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -265,12 +266,12 @@ function showAuth(){{
   document.getElementById(
     'loginLink'
   ).href=
-    `/login?next=${{next}}`;
+    PublicLocale.url(`/login?next=${{next}}`);
 
   document.getElementById(
     'registerLink'
   ).href=
-    `/register?next=${{next}}`;
+    PublicLocale.url(`/register?next=${{next}}`);
 
   document.getElementById(
     'authActions'
@@ -303,10 +304,7 @@ async function loadInvitation(){{
 
     const data=await response.json();
 
-    document.getElementById(
-      'intro'
-    ).textContent=
-      'You have been invited to join a VALYQON AI organization.';
+    PublicLocale.message(document.getElementById('intro'), 'You have been invited to join a VALYQON AI organization.');
 
     document.getElementById(
       'organization'
@@ -318,10 +316,7 @@ async function loadInvitation(){{
     ).textContent=
       data.email_hint;
 
-    document.getElementById(
-      'role'
-    ).textContent=
-      data.role;
+    PublicLocale.message(document.getElementById('role'), data.role);
 
     document.getElementById(
       'details'
@@ -330,16 +325,12 @@ async function loadInvitation(){{
     );
 
   }}catch(e){{
-    document.getElementById(
-      'intro'
-    ).textContent=
-      'This invitation cannot be used.';
+    PublicLocale.message(document.getElementById('intro'), 'This invitation cannot be used.');
 
     message.className=
       'msg error';
 
-    message.textContent=
-      e instanceof TypeError?'Connection unavailable. Please retry.':e.message||'The invitation could not be processed. Please retry.';
+    PublicLocale.message(message, e instanceof TypeError?'Connection unavailable. Please retry.':e.message||'The invitation could not be processed. Please retry.');
   }}
 }}
 
@@ -352,11 +343,11 @@ async function acceptInvitation(){{
     'message'
   );
 
-  message.textContent='';
+  PublicLocale.message(message,'');
 
   try{{
     button.disabled=true;
-    button.textContent='Accepting...';
+    PublicLocale.message(button,'Accepting...');
 
     const response=await fetch(
       acceptPath,
@@ -386,13 +377,12 @@ async function acceptInvitation(){{
     message.className=
       'msg success';
 
-    message.textContent=
-      'Invitation accepted. Opening your dashboard...';
+    PublicLocale.message(message,'Invitation accepted. Opening your dashboard...');
 
     setTimeout(
-      ()=>location.replace(
+      ()=>location.replace(PublicLocale.url(
         '/dashboard'
-      ),
+      )),
       500
     );
 
@@ -400,20 +390,18 @@ async function acceptInvitation(){{
     message.className=
       'msg error';
 
-    message.textContent=
-      e instanceof TypeError?'Connection unavailable. Please retry.':e.message||'The invitation could not be processed. Please retry.';
+    PublicLocale.message(message, e instanceof TypeError?'Connection unavailable. Please retry.':e.message||'The invitation could not be processed. Please retry.');
 
   }}finally{{
     button.disabled=false;
-    button.textContent=
-      'Accept invitation';
+    PublicLocale.message(button,'Accept invitation');
   }}
 }}
 
 loadInvitation();
 </script>
 </body>
-</html>"""
+</html>""")
 
 
 __all__ = [

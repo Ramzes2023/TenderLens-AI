@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from .landing import landing_html
+from .public_help import help_html
 
 import asyncio
 import hashlib
@@ -120,6 +121,16 @@ def _company_response(workspace) -> CompanyResponse:
         created_at=workspace.created_at,
         updated_at=workspace.updated_at,
     )
+
+
+@router.get("/how-it-works", response_class=HTMLResponse, include_in_schema=False)
+async def public_guide_page():
+    return HTMLResponse(help_html('guide'), headers={"Cache-Control": "no-store"})
+
+
+@router.get("/usage-guidelines", response_class=HTMLResponse, include_in_schema=False)
+async def public_guidelines_page():
+    return HTMLResponse(help_html('guidelines'), headers={"Cache-Control": "no-store"})
 
 
 @router.get("/", include_in_schema=False)

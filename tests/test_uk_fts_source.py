@@ -71,7 +71,7 @@ def test_parse_uk_fts_normalizes_realistic_release() -> None:
     notice = notices[0]
 
     assert notice.source == "uk_fts"
-    assert notice.external_id == "093514-2026"
+    assert notice.external_id == "ocds-h6vhtk-078017"
     assert notice.tender_number == "C460160"
     assert notice.title == (
         "Insourced Breast USC One-Stop Triple Assessment"
@@ -80,12 +80,12 @@ def test_parse_uk_fts_normalizes_realistic_release() -> None:
         "Hull University Teaching Hospitals NHS Trust"
     )
     assert notice.published_at == (
-        "2026-10-02T16:18:43+01:00"
+        "2026-10-02T15:18:43+00:00"
     )
     assert notice.initial_price == 765000.0
     assert notice.currency == "GBP"
     assert notice.deadline == (
-        "2026-10-21T12:00:00+01:00"
+        "2026-10-21T11:00:00+00:00"
     )
     assert notice.region == "UKE1"
     assert notice.summary == (
@@ -93,7 +93,7 @@ def test_parse_uk_fts_normalizes_realistic_release() -> None:
     )
     assert notice.url == (
         "https://www.find-tender.service.gov.uk/"
-        "procurement/ocds-h6vhtk-078017"
+        "Notice/093514-2026"
     )
 
 
@@ -103,10 +103,13 @@ def test_parser_falls_back_to_release_description() -> None:
             {
                 "id": "000001-2026",
                 "ocid": "ocds-h6vhtk-000001",
+                "date": "2026-10-01T12:00:00Z",
+                "tag": ["tender"],
                 "description": "Release description",
                 "tender": {
                     "id": "T-1",
                     "title": "Example procurement",
+                    "status": "active",
                 },
             }
         ]
@@ -207,10 +210,9 @@ def test_source_uses_official_api_contract(
 
     assert result == []
     assert captured["url"] == UK_FTS_SEARCH_URL
-    assert captured["params"] == {
-        "stages": "tender",
-        "limit": "25",
-    }
+    assert captured['params']['stages'] == 'tender'
+    assert captured['params']['limit'] == '25'
+    assert set(captured['params']) == {'stages', 'limit', 'updatedFrom', 'updatedTo'}
 
 
 def test_source_clamps_limit_to_100(

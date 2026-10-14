@@ -3,6 +3,8 @@
 'use strict';
 
 const $=id=>document.getElementById(id);
+const internationalNamesRu={ted:'Европейский союз — TED',uk_fts:'Великобритания — Find a Tender',world_bank:'Группа Всемирного банка — Finances One'};
+const internationalStatesRu={healthy:'Работает',failed:'Ошибка',disabled:'Отключён',not_checked:'Не проверен'};
 const workspace=$('sourceHealthWorkspace');
 
 if(!workspace)return;
@@ -208,7 +210,7 @@ function render(payload){
 
    return `
     <article class="tender-card">
-      <span class="chip">
+      <span class="chip" ${internationalNamesRu[source.source]?`data-ui-en="${escape(stateLabel(source.state))}" data-ui-ru="${escape(internationalStatesRu[source.state]||'Неизвестно')}"`:''}>
         ${escape(stateLabel(source.state))}
       </span>
 
@@ -216,7 +218,7 @@ function render(payload){
         ${escape(String(source.transport||'unknown').toUpperCase())}
       </span>
 
-      <h3>
+      <h3 ${internationalNamesRu[source.source]?`data-ui-en="${escape(source.display_name||source.source)}" data-ui-ru="${escape(internationalNamesRu[source.source])}"`:''}>
         ${escape(source.display_name||source.source)}
       </h3>
 
@@ -251,6 +253,9 @@ function render(payload){
       </div>
 
       ${note}
+      ${source.coverage?`<p class="fine">${escape(source.coverage)}</p>`:''}
+      ${source.last_successful_sync?`<p class="fine">Last successful sync: ${escape(source.last_successful_sync)}</p>`:''}
+      ${source.diagnostic?`<p class="fine">${escape(source.diagnostic)}</p>`:''}
 
       ${
        url
@@ -263,7 +268,7 @@ function render(payload){
 
  $('sourceHealthMessage').textContent=
   sources.length
-   ? `Showing ${sources.length} configured procurement sources. Status comes from the latest recorded Discovery run and does not trigger a new source check.`
+    ? `Showing ${sources.length} catalogued procurement sources. Status comes from the latest recorded Discovery run and does not trigger a new source check.`
    : 'No procurement source metadata is available.';
 }
 

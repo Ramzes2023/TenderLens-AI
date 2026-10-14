@@ -31,6 +31,17 @@ class MonitoringSettings:
     profile_feeds_enabled: bool = True
     profile_feed_limit: int = 5
 
+    eis_223_enabled: bool = False
+    eis_223_rss_urls: tuple[str, ...] = ()
+    eis_223_profile_feeds_enabled: bool = False
+    b2b_center_enabled: bool = False
+    eis_direct_enabled: bool = False
+    eis_system_trust_enabled: bool = False
+
+    @property
+    def eis_223_configured(self) -> bool:
+        return self.eis_223_enabled and (bool(self.eis_223_rss_urls) or self.eis_223_profile_feeds_enabled)
+
     @property
     def source_configured(self) -> bool:
         return bool(self.eis_rss_urls) or self.profile_feeds_enabled
@@ -96,6 +107,12 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         max_notifications_per_cycle=max_notifications,
         request_timeout=timeout,
         eis_rss_urls=urls,
+        eis_223_enabled=_bool("EIS_223_ENABLED", False),
+        b2b_center_enabled=_bool("B2B_CENTER_ENABLED", False),
+        eis_direct_enabled=_bool("EIS_DIRECT_ENABLED", False),
+        eis_system_trust_enabled=_bool("EIS_SYSTEM_TRUST_ENABLED", False),
+        eis_223_rss_urls=_urls(os.environ.get("EIS_223_RSS_URLS", "")),
+        eis_223_profile_feeds_enabled=_bool("EIS_223_PROFILE_FEEDS_ENABLED", False),
         profile_feeds_enabled=_bool("EIS_PROFILE_FEEDS_ENABLED", True),
         profile_feed_limit=profile_feed_limit,
         ca_bundle_file=ca_path.resolve() if ca_path else None,

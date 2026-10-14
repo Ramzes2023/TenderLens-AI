@@ -39,6 +39,9 @@ jobs:
         run: python -m compileall -q app/sources tests/test_ru_source_integration_contract.py
       - name: Test Russian source contracts (offline, no host proof)
         run: python -m pytest -q tests/test_ru_source_integration_contract.py
+      - name: Check existing catalog worker and analytics contracts
+        timeout-minutes: 3
+        run: python -m pytest -q tests/test_source_catalog.py tests/test_connector_workers.py tests/test_analytics_dates.py tests/test_analytics_normalization.py
       - name: Public source to ephemeral SQLite and keyword search (observational, non-gating)
         timeout-minutes: 3
         run: python -m scripts.ru_public_live_smoke

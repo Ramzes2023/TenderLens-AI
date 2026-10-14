@@ -38,9 +38,15 @@ def eis_system_ssl_context() -> ssl.SSLContext:
         raise SourceError("EIS system trust requires the Windows certificate store")
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     purpose = ssl.Purpose.SERVER_AUTH.oid
-    certificates = [ssl.DER_cert_to_PEM_cert(cert)
-                    for cert, encoding, trust in ssl.enum_certificates("ROOT")
-                    if encoding == "x509_asn" and (trust is True or purpose in trust)]
+    # Windows' default trust loader consults both ROOT and CA stores.
+    # Omitting CA can discard an intermediate needed for a verified chain.
+    # Enumerate only the system's server-auth-trusted entries; never use
+    # environment CA files, untrusted certificates, or TLS verification bypass.
+    certificates = []
+    for store in ("ROOT", "CA"):
+        for cert, encoding, trust in ssl.enum_certificates(store):
+            if encoding == "x509_asn" and (trust is True or purpose in trust):
+                certificates.append(ssl.DER_cert_to_PEM_cert(cert))
     if not certificates:
         raise SourceError("Windows has no server-auth trusted roots")
     context.load_verify_locations(cadata="".join(certificates))

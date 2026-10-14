@@ -7,22 +7,71 @@ static feeds as a fallback. Both RSS 2.0 and Atom payloads are accepted.
 from __future__ import annotations
 
 import hashlib
+import math
+from contextlib import asynccontextmanager, nullcontext
 import html
 import re
+import ssl
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx
 
-from .http import page_limit, source_client
+from .http import FetchPolicy, bounded_fetch, _policy, page_limit, source_client
 
 from .models import TenderNotice
 
 
 class SourceError(RuntimeError):
     pass
+
+
+def eis_system_ssl_context() -> ssl.SSLContext:
+    """Use Windows' server-auth trusted roots, without environment CA overrides.
+
+    This is an operator opt-in, not a fallback after certificate failure.
+    No certificate is downloaded or trusted merely because a server supplied it.
+    """
+    if not hasattr(ssl, "enum_certificates"):
+        raise SourceError("EIS system trust requires the Windows certificate store")
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    purpose = ssl.Purpose.SERVER_AUTH.oid
+    # Windows' default trust loader consults both ROOT and CA stores.
+    # Omitting CA can discard an intermediate needed for a verified chain.
+    # Enumerate only the system's server-auth-trusted entries; never use
+    # environment CA files, untrusted certificates, or TLS verification bypass.
+    certificates = []
+    for store in ("ROOT", "CA"):
+        for cert, encoding, trust in ssl.enum_certificates(store):
+            if encoding == "x509_asn" and (trust is True or purpose in trust):
+                certificates.append(ssl.DER_cert_to_PEM_cert(cert))
+    if not certificates:
+        raise SourceError("Windows has no server-auth trusted roots")
+    context.load_verify_locations(cadata="".join(certificates))
+    context.verify_mode = ssl.CERT_REQUIRED
+    context.check_hostname = True
+    return context
+
+
+def eis_tls_verify(*, direct, system_trust, ca_bundle_file):
+    if system_trust:
+        if not direct or ca_bundle_file is not None:
+            raise ValueError("EIS system trust requires direct=True and no CA bundle override")
+        return eis_system_ssl_context()
+    return str(ca_bundle_file) if ca_bundle_file else True
+
+
+@asynccontextmanager
+async def eis_client(factory, *, direct, **kwargs):
+    """Bound direct discovery too; retain an existing worker request budget."""
+    policy = (bounded_fetch(FetchPolicy(frozenset({'zakupki.gov.ru'}), 20,
+                                       max_bytes=5 * 1024 * 1024))
+              if direct and _policy.get() is None else nullcontext())
+    with policy:
+        async with factory(**kwargs) as client:
+            yield client
 
 EIS_EXTENDED_RSS_URL = "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html"
 
@@ -274,6 +323,63 @@ def _eis_business_summary(
     return cleaned[:4000] or None
 
 
+def requires_eis_law_validation(client, url: str, *, direct: bool) -> bool:
+    """Only legacy in-memory MockTransport fixtures may omit legal evidence.
+
+    Inspect the selected route, not the factory identity or the feed content.
+    Unknown clients/routes fail closed; direct-mode tests exercise the live gate.
+    MockTransport results never establish live or independently verified law.
+    """
+    if direct:
+        return True
+    select = getattr(client, "_transport_for_url", None)
+    if not callable(select):
+        return True
+    return type(select(httpx.URL(url))) is not httpx.MockTransport
+
+
+def verify_eis_feed_law(payload: bytes, wanted: str) -> None:
+    """Validate the whole feed before limiting records or assigning identity."""
+    if len(payload) > 5 * 1024 * 1024:
+        raise SourceError("EIS RSS exceeds 5 MiB")
+    probe = payload.replace(b"\x00", b"").lower()
+    if b"<!doctype" in probe or b"<!entity" in probe:
+        raise SourceError("EIS DTD/entities rejected")
+    try:
+        root = ET.fromstring(payload)
+    except ET.ParseError:
+        raise SourceError("EIS malformed XML") from None
+    if _local_name(root.tag) not in {"rss", "feed", "rdf"}:
+        raise SourceError("EIS response is not a feed")
+    for entry in root.iter():
+        if _local_name(entry.tag) not in {"item", "entry"}:
+            continue
+        parts = urlsplit(_entry_link(entry))
+        description = _child_text(entry, {"description", "summary", "content"})
+        marker = "Найденный результат:"
+        result = description.partition(marker)[2] if marker in description else description
+        labels = re.findall(
+            r"Размещение\s+выполняется\s+по\s*:\s*(44|223)\s*[-–]?\s*ФЗ\b", result, re.I)
+        route = ("223-FZ" if parts.path.startswith("/223/purchase/public/purchase/")
+                 else "44-FZ" if parts.path.startswith("/epz/order/notice/") else None)
+        numbers = parse_qs(parts.query, keep_blank_values=True).get("regNumber", [])
+        if (parts.scheme != "https" or parts.netloc != "zakupki.gov.ru"
+                or parts.fragment or len(numbers) != 1
+                or not re.fullmatch(r"[0-9]{11,20}", numbers[0])
+                or route != wanted or not labels
+                or {label + "-FZ" for label in labels} != {wanted}):
+            raise SourceError("EIS law verification failed: mixed, unknown or conflicting result")
+
+
+def validate_eis_direct_urls(urls) -> None:
+    for raw in urls:
+        parts = urlsplit(raw)
+        if (parts.scheme != "https" or parts.netloc != "zakupki.gov.ru"
+                or parts.path != "/epz/order/extendedsearch/rss.html" or parts.fragment
+                or "\\" in raw or any(c.isspace() or ord(c) < 32 for c in raw)):
+            raise SourceError("Direct EIS requires the official HTTPS RSS endpoint")
+
+
 def parse_eis_feed(payload: bytes, *, source_name: str = "eis") -> list[TenderNotice]:
     try:
         root = ET.fromstring(payload)
@@ -337,6 +443,12 @@ class EisRssSource:
     timeout: float = 30.0
     ca_bundle_file: Path | None = None
     name: str = "eis"
+    direct: bool = False
+    system_trust: bool = False
+
+    def __post_init__(self):
+        if not math.isfinite(self.timeout) or not 0 < self.timeout <= 120:
+            raise ValueError("EIS timeout must be finite and in (0, 120]")
 
     def for_search_terms(self, search_terms, *, max_feeds: int = 5) -> "EisRssSource":
         generated = build_eis_rss_urls(search_terms, max_feeds=max_feeds)
@@ -345,21 +457,26 @@ class EisRssSource:
             timeout=self.timeout,
             ca_bundle_file=self.ca_bundle_file,
             name=self.name,
+            direct=self.direct,
+            system_trust=self.system_trust,
         )
 
     async def fetch(self, limit: int = 20) -> list[TenderNotice]:
         limit = max(1, min(int(limit), 100))
         if not self.urls:
             return []
-        verify: bool | str = str(self.ca_bundle_file) if self.ca_bundle_file else True
+        if self.direct:
+            validate_eis_direct_urls(self.urls)
+        verify = eis_tls_verify(direct=self.direct, system_trust=self.system_trust,
+                                ca_bundle_file=self.ca_bundle_file)
         merged: list[TenderNotice] = []
         seen: set[tuple[str, str]] = set()
         try:
-            async with source_client(
+            async with eis_client(source_client, direct=self.direct,
                 timeout=self.timeout,
-                follow_redirects=True,
+                follow_redirects=not self.direct,
                 verify=verify,
-                trust_env=True,
+                trust_env=not self.direct,
                 headers={"User-Agent": "TenderLensAI/0.9 (+RSS monitor)"},
             ) as client:
                 for url in self.urls[:page_limit(len(self.urls))]:
@@ -371,6 +488,8 @@ class EisRssSource:
                     content_type = response.headers.get("content-type", "").lower()
                     if "html" in content_type or payload.lstrip().lower().startswith(b"<!doctype html"):
                         raise SourceError("ЕИС вернул HTML вместо RSS/Atom XML.")
+                    if requires_eis_law_validation(client, url, direct=self.direct):
+                        verify_eis_feed_law(payload, "44-FZ")
                     for notice in parse_eis_feed(payload, source_name=self.name):
                         if notice.identity in seen:
                             continue

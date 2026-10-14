@@ -22,6 +22,7 @@ import httpx
 from .http import FetchPolicy, bounded_fetch, _policy, page_limit, source_client
 
 from .models import TenderNotice
+from .enrichment import enrichment
 
 
 class SourceError(RuntimeError):
@@ -398,6 +399,7 @@ def parse_eis_feed(payload: bytes, *, source_name: str = "eis") -> list[TenderNo
         number_match = _NOTICE_RE.search(combined + " " + link)
         tender_number = number_match.group(1) if number_match else None
         external_id = guid or tender_number or _stable_id(guid, link, title, published or "")
+        deadline = _extract(_DEADLINE_RE, combined)
         notices.append(TenderNotice(
             source=source_name,
             external_id=external_id[:500],
@@ -430,9 +432,16 @@ def parse_eis_feed(payload: bytes, *, source_name: str = "eis") -> list[TenderNo
             ),
             initial_price=_parse_money(combined),
             currency="RUB" if re.search(r"(?:₽|руб(?:\.|лей|ля)?)", combined, re.I) else None,
-            deadline=_extract(_DEADLINE_RE, combined),
+            deadline=deadline,
             region=_extract(_REGION_RE, combined),
             summary=_eis_business_summary(description),
+            enrichment=enrichment(
+                source_name, external_id[:500],
+                dates={
+                    "publication": {"path": "pubdate", "value": published},
+                    "deadline": {"path": "description.deadline", "value": deadline},
+                },
+            ),
         ))
     return notices
 

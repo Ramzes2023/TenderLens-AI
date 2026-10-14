@@ -168,11 +168,9 @@ def parse_ted_search_response(
             continue
         seen.add(publication_number)
 
-        title = (
-            _first_text(raw.get("notice-title"))
-        )
-        if not title:
-            raise SourceError('TED returned a notice without title.')
+        # Some historical public TED captures do not include notice-title.
+        # Keep the official identifier visible without inventing a procurement title.
+        title = _first_text(raw.get("notice-title")) or f"TED notice {publication_number}"
 
         deadline = (
             _first_text(

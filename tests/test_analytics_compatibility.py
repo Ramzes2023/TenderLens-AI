@@ -249,25 +249,65 @@ def test_stored_source_errors_and_future_extras_never_escape_allowlist(analytics
 
 
 def test_guarded_runner_blocks_network_variants_and_dotenv_before_io():
-    import socket
+    """Assert audit enforcement in its own interpreter, without real network I/O.
+
+    Production offline workers install an audit hook in their child process.
+    A regular CI pytest process does not, so external socket connects here
+    would be both unsafe and slow. Exercise the real guard after installing it
+    in a disposable child interpreter, including actual socket construction.
+    """
+    import subprocess
     import sys
-    # These calls must be rejected before OS dispatch by the existing runner.
-    for method in ('connect', 'connect_ex'):
-        with socket.socket() as sock, pytest.raises(RuntimeError, match='External network forbidden'):
-            getattr(sock, method)(('192.0.2.1', 9))
-    with socket.socket(type=socket.SOCK_DGRAM) as sock, pytest.raises(RuntimeError, match='External network forbidden'):
-        sock.sendto(b'guard-proof', ('192.0.2.1', 9))
-    with pytest.raises(RuntimeError, match='External DNS forbidden'):
-        socket.getaddrinfo('external.invalid', 443)
-    with pytest.raises(RuntimeError, match='External DNS forbidden'):
-        socket.gethostbyname('external.invalid')
-    with pytest.raises(RuntimeError, match='External DNS forbidden'):
-        socket.gethostbyaddr('192.0.2.1')
-    # Emit the same audit event without opening/reading any secret file.
-    for path in ('C:/synthetic/.env', 'C:/synthetic/.env.test', 'C:/synthetic/.ENV',
-                 'C:/synthetic/.env.', 'C:/synthetic/.env ', 'C:/synthetic/.env:stream'):
-        with pytest.raises(RuntimeError, match='Secret dotenv read forbidden'):
-            sys.audit('open', path, 'r', 0)
+    from pathlib import Path
+
+    child = r"""
+import socket
+import sys
+from app.analytics.offline_worker import guard
+
+sys.addaudithook(guard)
+try:
+    socket.socket()
+except RuntimeError as exc:
+    assert str(exc) == "forbidden"
+else:
+    raise AssertionError("socket construction was allowed")
+
+for event, args in [
+    ("socket.connect", (None, ("192.0.2.1", 9))),
+    ("socket.connect_ex", (None, ("192.0.2.1", 9))),
+    ("socket.sendto", (None, ("192.0.2.1", 9))),
+    ("socket.getaddrinfo", ("external.invalid", 443, 0, 0, 0)),
+    ("socket.gethostbyname", ("external.invalid",)),
+    ("socket.gethostbyaddr", ("192.0.2.1",)),
+    ("subprocess.Popen", ("forbidden", [], None, {})),
+]:
+    try:
+        sys.audit(event, *args)
+    except RuntimeError as exc:
+        assert str(exc) == "forbidden"
+    else:
+        raise AssertionError("audit event unexpectedly allowed: " + event)
+
+for path in ("C:/synthetic/.env", "C:/synthetic/.env.test",
+             "C:/synthetic/.ENV", "C:/synthetic/.env.",
+             "C:/synthetic/.env ", "C:/synthetic/.env:stream"):
+    try:
+        sys.audit("open", path, "r", 0)
+    except RuntimeError as exc:
+        assert str(exc) == "forbidden"
+    else:
+        raise AssertionError("dotenv audit event unexpectedly allowed")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", child],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert result.returncode == 0, "Isolated audit-guard enforcement failed"
 
 
 def test_existing_source_fixtures_reach_authorized_api_and_exact_replay(analytics):

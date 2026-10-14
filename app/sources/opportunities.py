@@ -99,7 +99,25 @@ class OpportunityRepository:
         result = []
         terms = tuple(str(term).casefold() for term in search_terms if str(term).strip())[:20]
         for row in rows:
-            notice = TenderNotice(**json.loads(row[0]))
+            payload = json.loads(row[0])
+            if not isinstance(payload, dict) or payload.get('source') != source_id:
+                raise ValueError('Stored source identity mismatch.')
+            # Russian adapters may add public law/provenance fields to the
+            # frozen TenderNotice dataclass. Recreate only known subclasses
+            # when their extra fields are actually present. This keeps the
+            # existing normalized base contract for all other sources.
+            notice_type = TenderNotice
+            if source_id == 'eis_223' and any(key in payload for key in (
+                'requested_law', 'observed_law', 'feed_url', 'procurement_signals',
+            )):
+                from .eis_223_rss import Eis223Notice
+                notice_type = Eis223Notice
+            elif source_id == 'b2b_center' and any(key in payload for key in (
+                'listing_url', 'upstream_url', 'upstream_host', 'origin',
+            )):
+                from .b2b_center import B2BCenterNotice
+                notice_type = B2BCenterNotice
+            notice = notice_type(**payload)
             text = ' '.join(str(getattr(notice, field.name) or '') for field in fields(notice)
                             if field.name != 'enrichment').casefold()
             if not terms or any(term in text for term in terms):

@@ -118,7 +118,12 @@ def test_actual_b2b_capture_snapshot_lookup(tmp_path):
     from app.sources.opportunities import OpportunityRepository
     from app.sources.snapshots import snapshot_catalog, SnapshotSource
     payload = (Path(__file__).with_name('fixtures') / 'ru08' / 'b2b_search.html').read_bytes()
-    assert hashlib.sha256(payload).hexdigest() == 'b5ec85c85e9a29ff2fd02a6815adbdcdc61ca2155d34fb8c18e057325d945aa7'
+    # Original host capture was 246338 bytes; Git stores normalized LF text.
+    # Accept original raw bytes or the separately pinned canonical Git variant.
+    assert (hashlib.sha256(payload).hexdigest()
+            == 'b5ec85c85e9a29ff2fd02a6815adbdcdc61ca2155d34fb8c18e057325d945aa7'
+            or hashlib.sha256(payload.replace(bytes([13, 10]), bytes([10]))).hexdigest()
+            == '1f937626a85fffdb99de5bb7db10fc99a5a6a41407cc53a53e04c35c0565fc7d')
     notices = parse_b2b_center_listing(payload)
     assert len(notices) == 10
     repo = OpportunityRepository(Database(DatabaseSettings('ru12-test', tmp_path / 'notices.sqlite')))

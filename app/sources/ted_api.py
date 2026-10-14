@@ -30,7 +30,6 @@ TED_FIELDS = (
     "place-of-performance",
     "description-proc",
     "notice-type",
-    "main-classification-proc",
 )
 
 
@@ -214,9 +213,9 @@ def parse_ted_search_response(
                     source_name, publication_number[:500],
                     locations=[[{'path': 'place-of-performance', 'value': value}]
                                for value in _text_values(raw.get('place-of-performance'))],
-                    classifications=[{'scheme': 'CPV', 'code': code,
-                                      'path': 'main-classification-proc', 'role': 'primary'}
-                                     for code in _text_values(raw.get('main-classification-proc'))],
+                    # Search-field documentation does not establish per-notice
+                    # response-field or lot binding: no CPV claim is inferred.
+                    classifications=[],
                     public_metadata={
                         'attribution': 'Publications Office of the European Union / TED',
                         'reference_url': _notice_url(publication_number),

@@ -205,7 +205,8 @@ def test_pages_and_fixed_login_destination(api):
     assert '<meta name="referrer" content="no-referrer">' in page.text
     assert "Confirm password" in page.text
     assert "Use at least 12 characters." in page.text
-    assert "window.location.replace('/login')" in page.text
+    # Locale-aware redirect still has a fixed, safe same-origin login destination.
+    assert "window.location.replace(PublicLocale.url('/login'))" in page.text
     assert "evil.example" not in page.text
     assert 'new URLSearchParams(window.location.search)' in page.text
     assert 'history.replaceState' in page.text

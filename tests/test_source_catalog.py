@@ -428,5 +428,5 @@ def test_catalog_unified_fetch_uses_multisource_and_profile_eis():
     )
 
     assert titles["ted"] == (
-        "ted:default"
+        "ted:pump,valve"
     )

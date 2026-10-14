@@ -19,6 +19,7 @@ import httpx
 from .http import page_limit, source_client
 
 from .models import TenderNotice
+from .enrichment import enrichment as build_notice_enrichment
 
 
 class SourceError(RuntimeError):
@@ -292,6 +293,7 @@ def parse_eis_feed(payload: bytes, *, source_name: str = "eis") -> list[TenderNo
         number_match = _NOTICE_RE.search(combined + " " + link)
         tender_number = number_match.group(1) if number_match else None
         external_id = guid or tender_number or _stable_id(guid, link, title, published or "")
+        deadline_text = _extract(_DEADLINE_RE, combined)
         notices.append(TenderNotice(
             source=source_name,
             external_id=external_id[:500],
@@ -324,9 +326,24 @@ def parse_eis_feed(payload: bytes, *, source_name: str = "eis") -> list[TenderNo
             ),
             initial_price=_parse_money(combined),
             currency="RUB" if re.search(r"(?:₽|руб(?:\.|лей|ля)?)", combined, re.I) else None,
-            deadline=_extract(_DEADLINE_RE, combined),
+            deadline=deadline_text,
             region=_extract(_REGION_RE, combined),
             summary=_eis_business_summary(description),
+            enrichment=build_notice_enrichment(
+                source_name, external_id[:500],
+                dates={
+                    'publication': {
+                        'path': 'pubdate',
+                        'value': published,
+                        'raw_status': 'rss_text' if published else 'missing',
+                    },
+                    'deadline': {
+                        'path': 'description.deadline',
+                        'value': deadline_text,
+                        'raw_status': 'description_text' if deadline_text else 'missing',
+                    },
+                },
+            ),
         ))
     return notices
 

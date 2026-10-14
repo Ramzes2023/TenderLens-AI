@@ -82,12 +82,28 @@ jobs:
           PY
       - name: Compile
         run: python -m compileall -q app tests scripts
-      - name: Test
-        run: python -m pytest -vv --maxfail=1 --durations=15
+      - name: Test (Linux-compatible suite)
+        run: python -m pytest -vv --maxfail=1 --durations=15 --ignore=tests/test_p39e_local_preview.py
+
+  windows-offline-fixture:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Compile Windows-only offline fixture tools
+        run: python -m compileall -q app tests scripts
+      - name: Test Windows-only process isolation and offline preview
+        run: python -m pytest -vv --maxfail=1 --durations=15 tests/test_p39e_local_preview.py
 
   docker-build:
     runs-on: ubuntu-latest
-    needs: tests
+    needs: [tests, windows-offline-fixture]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3

@@ -7,6 +7,8 @@ A passing process exit only means the *diagnostic ran*: results may be BLOCKED.
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
+from unittest.mock import patch
 import json
 import os
 import tempfile
@@ -16,7 +18,9 @@ from app.database.backend import Database
 from app.database.config import DatabaseSettings
 from app.monitoring.config import MonitoringSettings
 from app.sources.catalog import build_source_catalog
-from app.sources.eis_rss import EIS_EXTENDED_RSS_URL
+from app.sources import eis_rss, eis_223_rss, b2b_center
+from app.sources.eis_rss import build_eis_rss_url
+from app.sources.eis_223_rss import build_eis_223_rss_url
 from app.sources.opportunities import OpportunityRepository
 from app.sources.snapshots import snapshot_catalog
 
@@ -34,11 +38,11 @@ def _settings():
         max_items=MAX_RECORDS,
         max_notifications_per_cycle=5,
         request_timeout=REQUEST_TIMEOUT,
-        eis_rss_urls=(EIS_EXTENDED_RSS_URL + "?fz44=on",),
+        eis_rss_urls=(build_eis_rss_url("поставка"),),
         ca_bundle_file=None,
         profile_feeds_enabled=False,
         eis_223_enabled=True,
-        eis_223_rss_urls=(EIS_EXTENDED_RSS_URL + "?fz223=on",),
+        eis_223_rss_urls=(build_eis_223_rss_url("поставка"),),
         eis_223_profile_feeds_enabled=False,
         b2b_center_enabled=True,
         eis_direct_enabled=True,
@@ -46,8 +50,27 @@ def _settings():
     )
 
 
-async def _fetch(source):
-    return await asyncio.wait_for(source.fetch(MAX_RECORDS), timeout=TOTAL_FETCH_TIMEOUT)
+async def _fetch(key, source, entry):
+    # Observe only the HTTP status exposed through the existing bounded,
+    # public-IP-validated transport. Never log URL, response body or headers.
+    module = {"eis": eis_rss, "eis_223": eis_223_rss,
+              "b2b_center": b2b_center}[key]
+    original = module.source_client
+
+    @asynccontextmanager
+    async def observed_client(**kwargs):
+        hooks = kwargs.get("event_hooks") or {}
+        async def record(response):
+            entry["http_status"] = response.status_code
+        kwargs["event_hooks"] = {
+            **hooks, "response": [*(hooks.get("response") or []), record],
+        }
+        async with original(**kwargs) as client:
+            yield client
+
+    with patch.object(module, "source_client", observed_client):
+        return await asyncio.wait_for(source.fetch(MAX_RECORDS),
+                                      timeout=TOTAL_FETCH_TIMEOUT)
 
 
 def main():
@@ -63,11 +86,11 @@ def main():
             for key in SOURCE_KEYS:
                 entry = result[key] = {
                     "state": "BLOCKED", "records": 0, "db": 0, "query": 0,
-                    "error_type": None,
+                    "error_type": None, "http_status": None,
                 }
                 try:
                     adapter = catalog.registry.get(key).source
-                    notices = asyncio.run(_fetch(adapter))
+                    notices = asyncio.run(_fetch(key, adapter, entry))
                     if not notices:
                         entry.update(state="EMPTY_NOT_VERIFIED")
                         continue

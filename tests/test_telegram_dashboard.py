@@ -165,6 +165,11 @@ class TelegramDashboardTests(unittest.TestCase):
         self.assertIn("2500", html)
         self.assertIn("pagehide", html)
         self.assertIn("AbortController", html)
-        self.assertNotIn("localStorage", html)
+        # Only the non-secret selected organization ID may be remembered.
+        # Authentication cookies, Telegram linking tokens and credentials
+        # must never be stored in browser storage.
+        self.assertEqual(html.count("localStorage"), 2)
+        self.assertIn('localStorage.getItem(`valyqon.organization.${state.accountId}`)', html)
+        self.assertIn('localStorage.setItem(`valyqon.organization.${state.accountId}`', html)
         self.assertNotIn("sessionStorage", html)
         self.assertNotIn("console.log", html)

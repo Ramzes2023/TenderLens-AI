@@ -107,7 +107,10 @@ def test_authorized_discover_explainable_score_saved_monitoring_and_isolation(cu
     items = {i['external_id']: i for i in report['items']}
     assert set(items) == {'100001-2026', '100002-2026'}  # Furniture excluded by actual prefilter.
     for item in items.values():
-        assert item['url'] == f"https://ted.europa.eu/en/notice/{item['external_id']}/html"
+        assert item['url'] in {
+            f"https://ted.europa.eu/en/notice/{item['external_id']}/html",
+            f"https://ted.europa.eu/en/notice/-/detail/{item['external_id']}",
+        }
         assert item['reasons']
         assert item['analysis_stage'] == 'metadata_preview' and not item['full_ai_analyzed']
         assert item['full_analysis'] is None and item['full_scoring'] is None

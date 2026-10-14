@@ -393,6 +393,25 @@ def parse_eis_feed(payload: bytes, *, source_name: str = "eis") -> list[TenderNo
         title = _child_text(entry, {"title"}) or "Закупка без названия"
         description = _child_text(entry, {"description", "summary", "content"})
         published = _child_text(entry, {"pubdate", "published", "updated"}) or None
+        # Retain the exact upstream publication/update text for audit: normalized
+        # TenderNotice fields may trim RSS whitespace, but provenance must not.
+        raw_publication = None
+        publication_path = "pubdate"
+        for child in list(entry):
+            field_name = _local_name(child.tag)
+            if field_name not in {"pubdate", "published", "updated"}:
+                continue
+            original = "".join(child.itertext()) if list(child) else (child.text or "")
+            if original.strip():
+                raw_publication = original
+                publication_path = field_name
+                break
+        publication_evidence = {
+            "path": publication_path,
+            "value": raw_publication,
+        }
+        if publication_path == "updated":
+            publication_evidence["semantics"] = "source_update"
         guid = _child_text(entry, {"guid", "id"})
         link = _entry_link(entry)
         combined = _clean(" ".join(filter(None, [title, description])))
@@ -438,7 +457,7 @@ def parse_eis_feed(payload: bytes, *, source_name: str = "eis") -> list[TenderNo
             enrichment=enrichment(
                 source_name, external_id[:500],
                 dates={
-                    "publication": {"path": "pubdate", "value": published},
+                    "publication": publication_evidence,
                     "deadline": {"path": "description.deadline", "value": deadline},
                 },
             ),

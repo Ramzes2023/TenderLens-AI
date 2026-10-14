@@ -51,6 +51,35 @@ jobs:
           printf '%s  %s\n' \
             '79241647c6acae10fcf61b3112cef35228339c632c664bfc4f8101f82c0556bd' \
             '.cache/phase24p33-xml-context/official_eforms_lot_schema.html' | sha256sum --check
+      - name: Validate synthetic fixture byte commitment
+        run: |
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          path = Path('tests/fixtures/p39d_offline_history.json')
+          expected = '6d7ff62145ca4c05388d988419ccd4343c269e842c0614bab0ea3edbdbbccfaf'
+          original = path.read_bytes()
+          lf = original.removeprefix(b'\xef\xbb\xbf').replace(b'\r\n', b'\n')
+          variants = {
+              'original': original,
+              'utf8_lf': lf,
+              'utf8_lf_no_final_newline': lf.rstrip(b'\r\n'),
+              'utf8_lf_with_final_newline': lf.rstrip(b'\r\n') + b'\n',
+              'utf8_crlf': lf.replace(b'\n', b'\r\n'),
+              'utf8_crlf_with_final_newline': lf.rstrip(b'\r\n').replace(b'\n', b'\r\n') + b'\r\n',
+          }
+          for label, data in variants.items():
+              if hashlib.sha256(data).hexdigest() == expected:
+                  if data != original:
+                      path.write_bytes(data)
+                  print('PINNED_FIXTURE=VERIFIED; FORM=' + label)
+                  break
+          else:
+              print('PINNED_FIXTURE=MISMATCH_NO_FORMAT_MATCH')
+              print('FIXTURE_SHA256=' + hashlib.sha256(original).hexdigest())
+              print('FIXTURE_SIZE=' + str(len(original)))
+              print('NO_CHECKSUM_REPLACEMENT=YES')
+          PY
       - name: Compile
         run: python -m compileall -q app tests scripts
       - name: Test

@@ -7,6 +7,7 @@ on:
       - "app/monitoring/config.py"
       - "tests/test_ru_source_integration_contract.py"
       - "scripts/ru_public_live_smoke.py"
+      - "scripts/ru_public_platform_probe.py"
       - ".github/workflows/ru-source-contracts.yml"
   pull_request:
     paths:
@@ -14,6 +15,7 @@ on:
       - "app/monitoring/config.py"
       - "tests/test_ru_source_integration_contract.py"
       - "scripts/ru_public_live_smoke.py"
+      - "scripts/ru_public_platform_probe.py"
       - ".github/workflows/ru-source-contracts.yml"
 
 permissions:
@@ -38,3 +40,6 @@ jobs:
       - name: Public source to ephemeral SQLite and keyword search (observational, non-gating)
         timeout-minutes: 3
         run: python -m scripts.ru_public_live_smoke
+      - name: Structural scan of public platform listings (observational only)
+        timeout-minutes: 2
+        run: python -m scripts.ru_public_platform_probe

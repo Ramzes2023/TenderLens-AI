@@ -89,3 +89,70 @@ def test_b2b_rejects_non_notice_html_without_network():
                  b'<html>Captcha verification</html>'):
         with pytest.raises(SourceError):
             parse_b2b_center_listing(body)
+
+
+def test_russian_notices_survive_sqlite_and_snapshot_keyword_search(tmp_path):
+    """Actual offline storage and search; subclass metadata must survive reads."""
+    from app.database.backend import Database
+    from app.database.config import DatabaseSettings
+    from app.sources.b2b_center import B2BCenterNotice
+    from app.sources.eis_223_rss import Eis223Notice
+    from app.sources.models import TenderNotice
+    from app.sources.opportunities import OpportunityRepository
+    from app.sources.snapshots import snapshot_catalog
+
+    catalog = build_source_catalog(_settings(
+        eis_rss_urls=(EIS_EXTENDED_RSS_URL + '?fz44=on',),
+        eis_223_enabled=True,
+        eis_223_rss_urls=(EIS_EXTENDED_RSS_URL + '?fz223=on',),
+        b2b_center_enabled=True,
+        profile_feeds_enabled=False,
+    ))
+    db = Database(DatabaseSettings('ru-offline-test', tmp_path / 'ru_sources.sqlite'))
+    repo = OpportunityRepository(db)
+    repo.initialize()
+    notices = (
+        TenderNotice(
+            source='eis', external_id='test-44-id-001', title='Тестовая закупка 44',
+            url='https://zakupki.gov.ru/epz/order/notice/ea44/view/common-info.html?regNumber=12345678901',
+        ),
+        Eis223Notice(
+            source='eis_223', external_id='test-223-id-001',
+            title='Тестовая закупка 223',
+            url='https://zakupki.gov.ru/223/purchase/public/purchase/info/common-info.html?regNumber=12345678901',
+            observed_law='223-FZ', feed_url=EIS_EXTENDED_RSS_URL + '?fz223=on',
+            raw_guid='test-223-id-001',
+        ),
+        B2BCenterNotice(
+            source='b2b_center', external_id='test-b2b-id-001',
+            title='Тестовая закупка B2B-Center',
+            url='https://www.b2b-center.ru/search/number/test-b2b-id-001/',
+            upstream_url='https://zakupki.gov.ru/epz/order/notice/ea44/view/common-info.html?regNumber=12345678901',
+            upstream_host='zakupki.gov.ru', origin='aggregated',
+        ),
+    )
+    try:
+        for notice in notices:
+            assert repo.upsert(notice, f'connector-sync-v1:{notice.source}:adapter-r1')
+            assert not repo.upsert(notice, f'connector-sync-v1:{notice.source}:adapter-r1')
+        snapshot = snapshot_catalog(catalog, repo)
+        for original in notices:
+            result = asyncio.run(snapshot.fetch(
+                source_keys=(original.source,),
+                search_terms=(original.external_id,),
+                limit_per_source=10,
+            ))
+            assert not result.failures
+            assert len(result.notices) == 1
+            restored = result.notices[0]
+            assert restored.identity == original.identity
+            assert restored.url == original.url
+            assert type(restored) is type(original)
+            if isinstance(original, Eis223Notice):
+                assert restored.observed_law == '223-FZ'
+                assert restored.feed_url == original.feed_url
+            if isinstance(original, B2BCenterNotice):
+                assert restored.upstream_url == original.upstream_url
+                assert restored.origin == 'aggregated'
+    finally:
+        db.close()

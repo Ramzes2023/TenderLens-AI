@@ -51,12 +51,15 @@ class Structure(HTMLParser):
 
 async def probe(name, host, url):
     entry = {"state": "BLOCKED", "http_status": None,
-             "bytes": 0, "tables": 0, "rows": 0,
+             "bytes": 0, "declared_bytes": None, "tables": 0, "rows": 0,
              "links": 0, "fabrikant_detail_links": 0,
              "error_type": None, "redirect_path": None, "redirect_host_class": None}
 
     async def status_hook(response):
         entry["http_status"] = response.status_code
+        declared = response.headers.get("content-length", "")
+        if declared.isdigit():
+            entry["declared_bytes"] = min(int(declared), 100_000_000)
         if response.status_code in (301, 302, 303, 307, 308):
             location = response.headers.get("location", "")
             candidate = urlsplit(urljoin(str(response.request.url), location))
@@ -68,7 +71,8 @@ async def probe(name, host, url):
                 entry["redirect_host_class"] = "CROSS_HOST_OR_UNSAFE"
 
     try:
-        with bounded_fetch(FetchPolicy(frozenset({host}), 1, max_bytes=2 * 1024 * 1024)):
+        with bounded_fetch(FetchPolicy(frozenset({host}), 1,
+                                       max_bytes=(5 if name == "fabrikant" else 2) * 1024 * 1024)):
             async with source_client(
                 timeout=12, trust_env=False, follow_redirects=False,
                 event_hooks={"response": [status_hook]},

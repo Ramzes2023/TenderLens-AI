@@ -16,7 +16,7 @@ from app.sources.http import FetchPolicy, bounded_fetch, source_client
 TARGETS = (
     ("tektorg", "www.tektorg.ru", "https://www.tektorg.ru/procedures/bi-procedures"),
     ("roseltorg", "www.roseltorg.ru", "https://www.roseltorg.ru/torgi"),
-    ("fabrikant", "44.fabrikant.ru", "https://44.fabrikant.ru/44/catalog/procedure"),
+    ("fabrikant", "www.fabrikant.ru", "https://www.fabrikant.ru/procedure/search"),
 )
 
 

@@ -156,3 +156,17 @@ def test_russian_notices_survive_sqlite_and_snapshot_keyword_search(tmp_path):
                 assert restored.origin == 'aggregated'
     finally:
         db.close()
+
+
+def test_eis_dates_are_preserved_as_validated_source_provenance():
+    from app.sources.eis_rss import parse_eis_feed
+    from app.sources.enrichment import validate_enrichment
+    from tests.test_monitoring import RSS
+
+    notice = parse_eis_feed(RSS)[0]
+    evidence = validate_enrichment(notice.enrichment, notice.source, notice.external_id)
+    assert evidence.dates["publication"]["path"] == "pubdate"
+    assert evidence.dates["publication"]["normalized"]["status"] == "valid"
+    assert evidence.dates["deadline"]["path"] == "description.deadline"
+    assert evidence.dates["deadline"]["normalized"]["status"] == "ambiguous"
+    assert notice.deadline == "15.10.2026 18:00"

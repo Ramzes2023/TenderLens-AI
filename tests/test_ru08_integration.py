@@ -25,11 +25,17 @@ from app.sources.ru08_integration import (
 
 FIXTURES = Path(__file__).with_name('fixtures') / 'ru08'
 CAPTURE_HASH = 'b5ec85c85e9a29ff2fd02a6815adbdcdc61ca2155d34fb8c18e057325d945aa7'
+# Git normalizes the captured response's mixed CRLF/LF line endings.
+# Keep the original 246338-byte host-capture digest above; separately pin
+# the canonical 243045-byte Git checkout rather than pretending it is raw.
+REPOSITORY_NORMALIZED_CAPTURE_HASH = '1f937626a85fffdb99de5bb7db10fc99a5a6a41407cc53a53e04c35c0565fc7d'
 
 
 def captured_records():
     payload = (FIXTURES / 'b2b_search.html').read_bytes()
-    assert hashlib.sha256(payload).hexdigest() == CAPTURE_HASH
+    assert (hashlib.sha256(payload).hexdigest() == CAPTURE_HASH
+            or hashlib.sha256(payload.replace(b'\r\n', b'\n')).hexdigest()
+            == REPOSITORY_NORMALIZED_CAPTURE_HASH)
     return parse_b2b_center_listing(payload, limit=100)
 
 

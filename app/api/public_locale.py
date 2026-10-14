@@ -3,6 +3,7 @@ from html import escape
 from html.parser import HTMLParser
 import json
 from pathlib import Path
+import re
 
 COPY = json.loads((Path(__file__).parent / 'static/public_copy.json').read_text(encoding='utf-8'))
 
@@ -61,7 +62,13 @@ def public_html(html: str) -> str:
     html = ''.join(parser.output)
     dictionary = json.dumps(COPY, ensure_ascii=False).replace('<', '\\u003c').replace('&', '\\u0026')
     assets = '<meta name="description" content="Global Procurement Intelligence powered by AI"><link rel="stylesheet" href="/assets/public.css?v=20261014">' + f'<script id="public-dictionary" type="application/json">{dictionary}</script><script src="/assets/public_locale.js?v=20261014"></script>'
-    html = html.replace('</head>', assets + '</head>')
+    # Public language styles precede the final responsive override across all pages.
+    responsive = re.findall(r'<link rel="stylesheet" href="/assets/responsive\\.css[^"]*">', html)
+    if len(responsive) == 1:
+        html = html.replace(responsive[0], '', 1)
+        html = html.replace('</head>', assets + responsive[0] + '</head>')
+    else:
+        html = html.replace('</head>', assets + '</head>')
     if 'class="auth-premium"' in html or 'class="invitation-page"' in html:
         html = html.replace('<main class="card">', '<main class="card">' + language_selector(), 1)
         html = html.replace('</main>', '<div class="public-auth-help"><a href="/how-it-works" data-public-copy="How it works">How it works</a> · <a href="/usage-guidelines" data-public-copy="Usage guidelines">Usage guidelines</a></div></main>')

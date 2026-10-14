@@ -23,7 +23,7 @@ def responses(request):
     assert request.url.path == '/api/1.0/ocdsReleasePackages'
     assert request.url.params['stages'] == 'tender'
     assert request.url.params['limit'] == '5'
-    assert 'publishedFrom' in request.url.params
+    assert 'updatedFrom' in request.url.params and 'updatedTo' in request.url.params
     return httpx.Response(503)
 
 

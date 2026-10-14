@@ -19,6 +19,15 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: python -m pip install -r requirements-dev.txt
+      - name: Restore pinned official eForms CPV reference
+        run: |
+          mkdir -p .cache/phase24p33-completion
+          curl --fail --location --show-error --silent --retry 2 --connect-timeout 15 --max-time 180 \
+            'https://raw.githubusercontent.com/OP-TED/eForms-SDK/1.15.1/codelists/cpv.gc' \
+            --output .cache/phase24p33-completion/official_eforms_cpv.gc
+          printf '%s  %s\n' \
+            'e8f48feedb63ce1583caa22825011afccd402973c28a885c2e81f89460fd6301' \
+            '.cache/phase24p33-completion/official_eforms_cpv.gc' | sha256sum --check --status
       - name: Compile
         run: python -m compileall -q app tests scripts
       - name: Test

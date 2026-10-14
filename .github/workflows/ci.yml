@@ -28,6 +28,15 @@ jobs:
           printf '%s  %s\n' \
             'e8f48feedb63ce1583caa22825011afccd402973c28a885c2e81f89460fd6301' \
             '.cache/phase24p33-completion/official_eforms_cpv.gc' | sha256sum --check --status
+      - name: Restore pinned TED search-field evidence
+        run: |
+          mkdir -p .cache/phase24p33-completion
+          curl --fail --location --show-error --silent --retry 2 --connect-timeout 15 --max-time 120 \
+            'https://docs.ted.europa.eu/ODS/latest/reuse/field-list.html' \
+            --output .cache/phase24p33-completion/official_ted_search_fields.html
+          printf '%s  %s\n' \
+            '79324dc627ee846f137e8cf4d069509784d51dcc7770f592dcd58096e261a419' \
+            '.cache/phase24p33-completion/official_ted_search_fields.html' | sha256sum --check
       - name: Compile
         run: python -m compileall -q app tests scripts
       - name: Test

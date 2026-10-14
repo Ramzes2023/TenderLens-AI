@@ -30,11 +30,9 @@ def test_search_history_is_real_workspace_page():
         in html
     )
 
-    assert (
-        "/assets/history.js?"
-        "v=phase24r"
-        in html
-    )
+    # The history bundle must be versioned, but the release ID can change.
+    import re
+    assert re.search(r'/assets/history\.js\?v=[A-Za-z0-9_-]+', html)
 
     assert (
         'href="#search-history"'

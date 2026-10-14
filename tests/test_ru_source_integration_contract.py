@@ -170,3 +170,19 @@ def test_eis_dates_are_preserved_as_validated_source_provenance():
     assert evidence.dates["deadline"]["path"] == "description.deadline"
     assert evidence.dates["deadline"]["normalized"]["status"] == "ambiguous"
     assert notice.deadline == "15.10.2026 18:00"
+
+
+def test_eis_update_date_preserves_raw_whitespace_and_semantics():
+    from app.sources.eis_rss import parse_eis_feed
+    from app.sources.enrichment import validate_enrichment
+
+    payload = b"""<rss><channel><item><guid>update-1</guid>
+    <title>Medical equipment</title><link>https://example.test/1</link>
+    <pubDate> </pubDate><updated> 2026-10-01T12:00:00Z </updated>
+    </item></channel></rss>"""
+    notice = parse_eis_feed(payload)[0]
+    assert notice.published_at == "2026-10-01T12:00:00Z"
+    publication = notice.enrichment["dates"]["publication"]
+    assert publication["value"] == " 2026-10-01T12:00:00Z "
+    assert publication["semantics"] == "source_update"
+    validate_enrichment(notice.enrichment, notice.source, notice.external_id)

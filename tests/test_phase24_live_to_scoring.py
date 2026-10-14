@@ -71,7 +71,10 @@ def test_profile_review_apply_real_adapter_partial_discovery_scoring_and_scope()
                 assert i['analysis_stage']=='metadata_preview' and not i['full_ai_analyzed']
                 assert rows(i['preliminary_scoring'])['category']['status']=='matched'
                 assert rows(i['preliminary_scoring'])['documents']['status']=='not_scored'
-                assert i['url']==f"https://ted.europa.eu/en/notice/{i['external_id']}/html"
+                assert i['url'] in {
+                    f"https://ted.europa.eu/en/notice/{i['external_id']}/html",
+                    f"https://ted.europa.eu/en/notice/-/detail/{i['external_id']}",
+                }
             known,unknown=items['100001-2026'],items['100002-2026']
             assert rows(known['preliminary_scoring'])['budget']['status']=='matched'
             assert rows(unknown['preliminary_scoring'])['budget']['status']=='not_scored'

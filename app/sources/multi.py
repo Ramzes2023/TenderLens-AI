@@ -9,6 +9,7 @@ from typing import Iterable
 
 from .models import TenderNotice
 from .registry import SourceRegistration, SourceRegistry
+from .ru_dedup import deduplicate
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +41,7 @@ class MultiSourceFetchReport:
     attempted_sources: tuple[str, ...]
     successful_sources: tuple[str, ...]
     statuses: tuple[SourceRunStatus, ...]
+    duplicate_provenance: tuple[tuple[TenderNotice, ...], ...] = ()
 
     @property
     def partial_failure(self) -> bool:
@@ -224,8 +226,10 @@ class MultiSourceFetcher:
                         source_notices[index]
                     )
 
+        deduplicated, provenance = deduplicate(merged)
         return MultiSourceFetchReport(
-            notices=tuple(merged),
+            notices=deduplicated,
+            duplicate_provenance=provenance,
             failures=tuple(failures),
             attempted_sources=tuple(item.key for item in selected),
             successful_sources=tuple(successful),

@@ -35,6 +35,8 @@ class MonitoringSettings:
     eis_223_rss_urls: tuple[str, ...] = ()
     eis_223_profile_feeds_enabled: bool = False
     b2b_center_enabled: bool = False
+    eis_direct_enabled: bool = False
+    eis_system_trust_enabled: bool = False
 
     @property
     def eis_223_configured(self) -> bool:
@@ -107,6 +109,8 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         eis_rss_urls=urls,
         eis_223_enabled=_bool("EIS_223_ENABLED", False),
         b2b_center_enabled=_bool("B2B_CENTER_ENABLED", False),
+        eis_direct_enabled=_bool("EIS_DIRECT_ENABLED", False),
+        eis_system_trust_enabled=_bool("EIS_SYSTEM_TRUST_ENABLED", False),
         eis_223_rss_urls=_urls(os.environ.get("EIS_223_RSS_URLS", "")),
         eis_223_profile_feeds_enabled=_bool("EIS_223_PROFILE_FEEDS_ENABLED", False),
         profile_feeds_enabled=_bool("EIS_PROFILE_FEEDS_ENABLED", True),

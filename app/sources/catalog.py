@@ -162,6 +162,8 @@ def build_source_catalog(
         timeout=timeout,
         ca_bundle_file=settings.ca_bundle_file,
         name="eis",
+        direct=settings.eis_direct_enabled,
+        system_trust=settings.eis_system_trust_enabled,
     )
 
     sam_source = (
@@ -197,10 +199,7 @@ def build_source_catalog(
         [
             SourceRegistration(
                 key="eis",
-                display_name=(
-                    "Russian Unified Procurement "
-                    "Information System (EIS)"
-                ),
+                display_name="EIS 44-FZ",
                 source=eis,
                 transport=SourceTransport.RSS,
                 jurisdictions=("RU",),
@@ -388,7 +387,9 @@ def build_source_catalog(
             SourceRegistration(
                 key="eis_223", display_name="EIS 223-FZ",
                 source=Eis223RssSource(urls=settings.eis_223_rss_urls,
-                                      timeout=timeout, ca_bundle_file=settings.ca_bundle_file),
+                                      timeout=timeout, ca_bundle_file=settings.ca_bundle_file,
+                                      direct=settings.eis_direct_enabled,
+                                      system_trust=settings.eis_system_trust_enabled),
                 transport=SourceTransport.RSS, jurisdictions=("RU",), languages=("ru",),
                 homepage_url="https://zakupki.gov.ru/", official=True, enabled=True,
                 capabilities=SourceCapabilities(keyword_search=settings.eis_223_profile_feeds_enabled,
@@ -398,7 +399,7 @@ def build_source_catalog(
 
     if settings.b2b_center_enabled:
         registry.register(SourceRegistration(
-            key="b2b_center", display_name="B2B-Center aggregate procurement listing",
+            key="b2b_center", display_name="B2B-Center",
             source=B2BCenterSource(timeout=timeout), transport=SourceTransport.HTML,
             jurisdictions=("RU",), languages=("ru",),
             homepage_url="https://www.b2b-center.ru/", official=False, enabled=True,

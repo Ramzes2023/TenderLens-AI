@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass, field
@@ -13,7 +14,10 @@ import httpx
 
 from .eis_rss import (
     EIS_EXTENDED_RSS_URL, SourceError, _child_text, _local_name,
-    parse_eis_feed,
+    parse_eis_feed, verify_eis_feed_law, validate_eis_direct_urls,
+    requires_eis_law_validation,
+    eis_client,
+    eis_tls_verify,
 )
 from .http import ConnectorTransportError, page_limit, source_client
 from .models import TenderNotice
@@ -91,9 +95,12 @@ def parse_eis_223_feed(
         guid = _child_text(entry, {"guid", "id"})
         description = _child_text(entry, {"description", "summary", "content"})
         # Only an explicit result-level label counts as observed law evidence.
+        result_marker = "\u041d\u0430\u0439\u0434\u0435\u043d\u043d\u044b\u0439 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442:"
+        result_description = (description.partition(result_marker)[2]
+                              if result_marker in description else description)
         match = re.search(
             r"Размещение\s+выполняется\s+по\s*:\s*(44|223)\s*[-–]?\s*ФЗ\b",
-            description, re.I,
+            result_description, re.I,
         )
         # Reuse normalized core fields, but do not interpret search-form numbers
         # or monetary keyword matches as procurement business fields.
@@ -137,11 +144,13 @@ class Eis223RssSource:
     timeout: float = 30.0
     ca_bundle_file: Path | None = None
     name: str = field(default=SOURCE_NAME, init=False)
+    direct: bool = False
+    system_trust: bool = False
 
     def __post_init__(self) -> None:
         for url in self.urls:
             _validate_feed_url(url)
-        if self.timeout <= 0:
+        if not math.isfinite(self.timeout) or not 0 < self.timeout <= 120:
             raise ValueError("timeout must be positive")
 
     def for_search_terms(
@@ -149,7 +158,8 @@ class Eis223RssSource:
     ) -> Eis223RssSource:
         return Eis223RssSource(
             urls=build_eis_223_rss_urls(search_terms, max_feeds=max_feeds) or self.urls,
-            timeout=self.timeout, ca_bundle_file=self.ca_bundle_file,
+            timeout=self.timeout, ca_bundle_file=self.ca_bundle_file, direct=self.direct,
+            system_trust=self.system_trust,
         )
 
     async def fetch(self, limit: int = 20) -> list[Eis223Notice]:
@@ -158,11 +168,14 @@ class Eis223RssSource:
             return []
         seen: set[tuple[str, str]] = set()
         merged: list[Eis223Notice] = []
-        verify: bool | str = str(self.ca_bundle_file) if self.ca_bundle_file else True
+        if self.direct:
+            validate_eis_direct_urls(self.urls)
+        verify = eis_tls_verify(direct=self.direct, system_trust=self.system_trust,
+                                ca_bundle_file=self.ca_bundle_file)
         try:
-            async with source_client(
+            async with eis_client(source_client, direct=self.direct,
                 timeout=self.timeout, follow_redirects=False, verify=verify,
-                trust_env=True, headers={"User-Agent": "TenderLensAI/0.9 (+RSS monitor)"},
+                trust_env=not self.direct, headers={"User-Agent": "TenderLensAI/0.9 (+RSS monitor)"},
             ) as client:
                 for url in self.urls[:page_limit(min(len(self.urls), 20))]:
                     async with client.stream("GET", url) as response:
@@ -176,7 +189,10 @@ class Eis223RssSource:
                             if size > MAX_RESPONSE_BYTES:
                                 raise SourceError("EIS 223 RSS exceeds 5 MiB")
                             chunks.append(chunk)
-                    for notice in parse_eis_223_feed(b"".join(chunks), feed_url=url):
+                    payload = b"".join(chunks)
+                    if requires_eis_law_validation(client, url, direct=self.direct):
+                        verify_eis_feed_law(payload, "223-FZ")
+                    for notice in parse_eis_223_feed(payload, feed_url=url):
                         if notice.identity in seen:
                             continue
                         seen.add(notice.identity)

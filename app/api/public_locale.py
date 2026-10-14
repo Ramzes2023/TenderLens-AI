@@ -63,7 +63,7 @@ def public_html(html: str) -> str:
     dictionary = json.dumps(COPY, ensure_ascii=False).replace('<', '\\u003c').replace('&', '\\u0026')
     assets = '<meta name="description" content="Global Procurement Intelligence powered by AI"><link rel="stylesheet" href="/assets/public.css?v=20261014">' + f'<script id="public-dictionary" type="application/json">{dictionary}</script><script src="/assets/public_locale.js?v=20261014"></script>'
     # Public language styles precede the final responsive override across all pages.
-    responsive = re.findall(r'<link rel="stylesheet" href="/assets/responsive\\.css[^"]*">', html)
+    responsive = re.findall(r'<link rel="stylesheet" href="/assets/responsive\.css[^"]*">', html)
     if len(responsive) == 1:
         html = html.replace(responsive[0], '', 1)
         html = html.replace('</head>', assets + responsive[0] + '</head>')

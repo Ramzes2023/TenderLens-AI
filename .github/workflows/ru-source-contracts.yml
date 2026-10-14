@@ -8,6 +8,7 @@ on:
       - "tests/test_ru_source_integration_contract.py"
       - "scripts/ru_public_live_smoke.py"
       - "scripts/ru_public_platform_probe.py"
+      - "scripts/ru_eis_system_ca_probe.py"
       - ".github/workflows/ru-source-contracts.yml"
   pull_request:
     paths:
@@ -16,6 +17,7 @@ on:
       - "tests/test_ru_source_integration_contract.py"
       - "scripts/ru_public_live_smoke.py"
       - "scripts/ru_public_platform_probe.py"
+      - "scripts/ru_eis_system_ca_probe.py"
       - ".github/workflows/ru-source-contracts.yml"
 
 permissions:
@@ -43,3 +45,6 @@ jobs:
       - name: Structural scan of public platform listings (observational only)
         timeout-minutes: 2
         run: python -m scripts.ru_public_platform_probe
+      - name: Strict Linux system CA EIS network probe (observational only)
+        timeout-minutes: 1
+        run: python -m scripts.ru_eis_system_ca_probe

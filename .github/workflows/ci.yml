@@ -37,6 +37,20 @@ jobs:
           printf '%s  %s\n' \
             '79324dc627ee846f137e8cf4d069509784d51dcc7770f592dcd58096e261a419' \
             '.cache/phase24p33-completion/official_ted_search_fields.html' | sha256sum --check
+      - name: Restore pinned eForms SDK example and lot schema
+        run: |
+          mkdir -p .cache/phase24p33-xml-context
+          cp tests/fixtures/eforms/official_sdk_cn_24_minimal.xml \
+            .cache/phase24p33-xml-context/official_sdk_cn_24_minimal.xml
+          printf '%s  %s\n' \
+            '3bba90994d3e7d86ed8bb07f5c2fc49b8be27523b9ac5397c83ee86312b43ef8' \
+            '.cache/phase24p33-xml-context/official_sdk_cn_24_minimal.xml' | sha256sum --check
+          curl --fail --location --show-error --silent --retry 2 --connect-timeout 15 --max-time 120 \
+            'https://docs.ted.europa.eu/eforms/latest/schema/procedure-lot-part-information.html' \
+            --output .cache/phase24p33-xml-context/official_eforms_lot_schema.html
+          printf '%s  %s\n' \
+            '79241647c6acae10fcf61b3112cef35228339c632c664bfc4f8101f82c0556bd' \
+            '.cache/phase24p33-xml-context/official_eforms_lot_schema.html' | sha256sum --check
       - name: Compile
         run: python -m compileall -q app tests scripts
       - name: Test

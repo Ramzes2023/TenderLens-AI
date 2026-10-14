@@ -22,7 +22,7 @@ import httpx
 from .http import FetchPolicy, bounded_fetch, _policy, page_limit, source_client
 
 from .models import TenderNotice
-from .enrichment import enrichment
+from .enrichment import enrichment as build_notice_enrichment
 
 
 class SourceError(RuntimeError):
@@ -392,33 +392,25 @@ def parse_eis_feed(payload: bytes, *, source_name: str = "eis") -> list[TenderNo
     for entry in entries:
         title = _child_text(entry, {"title"}) or "Закупка без названия"
         description = _child_text(entry, {"description", "summary", "content"})
-        published = _child_text(entry, {"pubdate", "published", "updated"}) or None
-        # Retain the exact upstream publication/update text for audit: normalized
-        # TenderNotice fields may trim RSS whitespace, but provenance must not.
-        raw_publication = None
-        publication_path = "pubdate"
-        for child in list(entry):
-            field_name = _local_name(child.tag)
-            if field_name not in {"pubdate", "published", "updated"}:
+        published = None
+        published_raw = None
+        published_path = None
+        for date_node in list(entry):
+            name = _local_name(date_node.tag)
+            if name not in {"pubdate", "published", "updated"}:
                 continue
-            original = "".join(child.itertext()) if list(child) else (child.text or "")
-            if original.strip():
-                raw_publication = original
-                publication_path = field_name
+            candidate = "".join(date_node.itertext()) if list(date_node) else (date_node.text or "")
+            cleaned = _clean(candidate)
+            if cleaned:
+                published, published_raw, published_path = cleaned, candidate, name
                 break
-        publication_evidence = {
-            "path": publication_path,
-            "value": raw_publication,
-        }
-        if publication_path == "updated":
-            publication_evidence["semantics"] = "source_update"
         guid = _child_text(entry, {"guid", "id"})
         link = _entry_link(entry)
         combined = _clean(" ".join(filter(None, [title, description])))
         number_match = _NOTICE_RE.search(combined + " " + link)
         tender_number = number_match.group(1) if number_match else None
         external_id = guid or tender_number or _stable_id(guid, link, title, published or "")
-        deadline = _extract(_DEADLINE_RE, combined)
+        deadline_text = _extract(_DEADLINE_RE, combined)
         notices.append(TenderNotice(
             source=source_name,
             external_id=external_id[:500],
@@ -451,14 +443,23 @@ def parse_eis_feed(payload: bytes, *, source_name: str = "eis") -> list[TenderNo
             ),
             initial_price=_parse_money(combined),
             currency="RUB" if re.search(r"(?:₽|руб(?:\.|лей|ля)?)", combined, re.I) else None,
-            deadline=deadline,
+            deadline=deadline_text,
             region=_extract(_REGION_RE, combined),
             summary=_eis_business_summary(description),
-            enrichment=enrichment(
+            enrichment=build_notice_enrichment(
                 source_name, external_id[:500],
                 dates={
-                    "publication": publication_evidence,
-                    "deadline": {"path": "description.deadline", "value": deadline},
+                    'publication': {
+                        'path': published_path or 'pubdate',
+                        'value': published_raw,
+                        'semantics': 'source_update' if published_path == 'updated' else 'published_at',
+                        'raw_status': 'rss_text' if published_raw else 'missing',
+                    },
+                    'deadline': {
+                        'path': 'description.deadline',
+                        'value': deadline_text,
+                        'raw_status': 'description_text' if deadline_text else 'missing',
+                    },
                 },
             ),
         ))

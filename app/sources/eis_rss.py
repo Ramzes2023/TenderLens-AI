@@ -286,7 +286,18 @@ def parse_eis_feed(payload: bytes, *, source_name: str = "eis") -> list[TenderNo
     for entry in entries:
         title = _child_text(entry, {"title"}) or "Закупка без названия"
         description = _child_text(entry, {"description", "summary", "content"})
-        published = _child_text(entry, {"pubdate", "published", "updated"}) or None
+        published = None
+        published_raw = None
+        published_path = None
+        for date_node in list(entry):
+            name = _local_name(date_node.tag)
+            if name not in {"pubdate", "published", "updated"}:
+                continue
+            candidate = "".join(date_node.itertext()) if list(date_node) else (date_node.text or "")
+            cleaned = _clean(candidate)
+            if cleaned:
+                published, published_raw, published_path = cleaned, candidate, name
+                break
         guid = _child_text(entry, {"guid", "id"})
         link = _entry_link(entry)
         combined = _clean(" ".join(filter(None, [title, description])))
@@ -333,9 +344,10 @@ def parse_eis_feed(payload: bytes, *, source_name: str = "eis") -> list[TenderNo
                 source_name, external_id[:500],
                 dates={
                     'publication': {
-                        'path': 'pubdate',
-                        'value': published,
-                        'raw_status': 'rss_text' if published else 'missing',
+                        'path': published_path or 'pubdate',
+                        'value': published_raw,
+                        'semantics': 'source_update' if published_path == 'updated' else 'published_at',
+                        'raw_status': 'rss_text' if published_raw else 'missing',
                     },
                     'deadline': {
                         'path': 'description.deadline',

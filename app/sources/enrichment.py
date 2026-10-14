@@ -24,7 +24,7 @@ class NoticeEnrichment(BaseModel):
     classification: dict[str, Any]
     dates: dict[str, Any] = Field(default_factory=dict)
     scoring_provenance: Literal['unavailable_in_source_notice'] = 'unavailable_in_source_notice'
-    public_metadata: dict[str, Any] | None = None
+    public_metadata: dict[str, Any] | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @model_validator(mode='after')
     def validate_evidence(self):

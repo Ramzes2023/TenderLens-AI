@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 from html.parser import HTMLParser
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urljoin
 
 from app.sources.http import FetchPolicy, bounded_fetch, source_client
 
@@ -53,10 +53,19 @@ async def probe(name, host, url):
     entry = {"state": "BLOCKED", "http_status": None,
              "bytes": 0, "tables": 0, "rows": 0,
              "links": 0, "fabrikant_detail_links": 0,
-             "error_type": None}
+             "error_type": None, "redirect_path": None, "redirect_host_class": None}
 
     async def status_hook(response):
         entry["http_status"] = response.status_code
+        if response.status_code in (301, 302, 303, 307, 308):
+            location = response.headers.get("location", "")
+            candidate = urlsplit(urljoin(str(response.request.url), location))
+            if (candidate.scheme == "https" and candidate.hostname == host
+                    and not candidate.username and not candidate.password):
+                entry["redirect_host_class"] = "SAME_VERIFIED_HOST"
+                entry["redirect_path"] = candidate.path[:160]
+            else:
+                entry["redirect_host_class"] = "CROSS_HOST_OR_UNSAFE"
 
     try:
         with bounded_fetch(FetchPolicy(frozenset({host}), 1, max_bytes=2 * 1024 * 1024)):

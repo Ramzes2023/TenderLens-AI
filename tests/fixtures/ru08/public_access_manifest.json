@@ -1,0 +1,47 @@
+[
+  {
+    "name": "tektorg_public",
+    "url": "https://www.tektorg.ru/",
+    "status": "BLOCKED",
+    "records_verified": 0,
+    "reason": "HTTP_307"
+  },
+  {
+    "name": "roseltorg_search",
+    "url": "https://www.roseltorg.ru/procedures/search",
+    "status": "BLOCKED",
+    "records_verified": 0,
+    "reason": "URL_ERROR_TimeoutError"
+  },
+  {
+    "name": "roseltorg_torgi",
+    "url": "https://www.roseltorg.ru/torgi",
+    "status": "BLOCKED",
+    "records_verified": 0,
+    "reason": "URL_ERROR_TimeoutError"
+  },
+  {
+    "name": "fabrikant_search",
+    "url": "https://www.fabrikant.ru/procedure/search",
+    "status": "BLOCKED",
+    "records_verified": 0,
+    "reason": "URL_ERROR_TimeoutError"
+  },
+  {
+    "name": "fabrikant_catalog",
+    "url": "https://bonus.fabrikant.ru/procedure/catalog/",
+    "status": "BLOCKED",
+    "records_verified": 0,
+    "reason": "URL_ERROR_TimeoutError"
+  },
+  {
+    "name": "b2b_search",
+    "url": "https://www.b2b-center.ru/search/",
+    "status": "RESPONSE_SAVED_UNVALIDATED",
+    "records_verified": 0,
+    "body_bytes": 246338,
+    "content_type": "text/html",
+    "sha256": "b5ec85c85e9a29ff2fd02a6815adbdcdc61ca2155d34fb8c18e057325d945aa7",
+    "sample_path": "C:\\Users\\ramze\\AppData\\Local\\Temp\\VALYQON_RU08_SIX_20261013_220933\\public_responses\\b2b_search.html"
+  }
+]

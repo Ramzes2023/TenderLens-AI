@@ -250,6 +250,11 @@ def build_runtime() -> ApiRuntime:
     except Exception:
         runtime.component_errors["sources"] = "Source catalog unavailable"
 
+    # Scoring is initialized independently before source discovery. Attach the
+    # catalog after source discovery so unconfigured Russian sources fail closed.
+    if runtime.scoring_run_service is not None:
+        runtime.scoring_run_service.catalog = runtime.source_catalog
+
     try:
         from app.monitoring import MonitoringRepository, TenderMonitorService
 

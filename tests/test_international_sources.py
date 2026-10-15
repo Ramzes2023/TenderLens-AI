@@ -160,7 +160,7 @@ def test_source_timeout_diagnostics(monkeypatch, adapter, module):
 
 
 @pytest.mark.parametrize('adapter,module', [(TedApiSource(), 'ted_api'), (UkFindTenderApiSource(), 'uk_fts_api'), (WorldBankSource(), 'world_bank')])
-def test_registry_worker_ingestion_and_safe_retry(monkeypatch, adapter, module):
+def test_registry_worker_ingestion_and_safe_retry(monkeypatch, tmp_path, adapter, module):
     from types import SimpleNamespace
     from app.sources.catalog import SourceCatalog
     from app.sources.registry import SourceRegistry, SourceRegistration
@@ -169,11 +169,29 @@ def test_registry_worker_ingestion_and_safe_retry(monkeypatch, adapter, module):
     from app.jobs.worker import RetryableJobError
     registry = SourceRegistry([SourceRegistration(key=adapter.name, display_name=adapter.name, source=adapter)])
     catalog = SourceCatalog(registry, MultiSourceFetcher(registry))
-    stored = []
-    store = SimpleNamespace(upsert=lambda notice, version: stored.append((notice, version)) or True)
+    # Use the real isolated database, job lease, and fenced opportunity write:
+    # a permissive SimpleNamespace.upsert would bypass the security contract.
+    import threading
+    import uuid
+    from app.database.backend import Database
+    from app.database.config import DatabaseSettings
+    from app.jobs import JobRepository, JobService
+    from app.jobs.worker import ExecutionContext
+    from app.sources.ingestion import ConnectorSyncService, JOB_TYPE
+    from app.sources.opportunities import OpportunityRepository
+    database = Database(DatabaseSettings('', tmp_path / f'{adapter.name}-integration.db'))
+    jobs = JobRepository(database)
+    jobs.initialize()
+    store = OpportunityRepository(database)
+    store.initialize()
+    service = ConnectorSyncService(JobService(jobs), catalog)
+    job = service.enqueue(adapter.name)
+    claim = jobs.claim_next('worker-' + uuid.uuid4().hex, job_types=(JOB_TYPE,))
+    assert claim and claim.job.id == job.id
+    context = ExecutionContext(claim.job, threading.Event())
+    context.fenced_write = lambda write: jobs.fenced_write(claim.job.id, claim.token, write)
     handler = ConnectorSyncHandler(catalog, store, max_records=5)
-    context = SimpleNamespace(job=SimpleNamespace(scope=SYSTEM_SCOPE), should_stop=False)
-    payload = {'schema': 1, 'source_id': adapter.name, 'sync_window': sync_window(), 'connector_version': connector_version(adapter.name)}
+    payload = claim.job.payload
     data = fixture(adapter.name)
     if adapter.name == 'world_bank':
         data['data'][0]['publication_date'] = datetime.now(timezone.utc).strftime('%d-%b-%Y')
@@ -181,10 +199,15 @@ def test_registry_worker_ingestion_and_safe_retry(monkeypatch, adapter, module):
         return httpx.Response(200, json=data)
     monkeypatch.setattr(f'app.sources.{module}.source_client', lambda **kw: source_client(**kw, transport=httpx.MockTransport(respond)))
     result = handler(context, payload)
-    assert result['accepted_count'] == 1 and len(stored) == 1
-    validate_notice(stored[0][0], adapter.name)
+    assert result['accepted_count'] == 1
+    persisted = store.read(adapter.name)
+    assert len(persisted) == 1
+    validate_notice(persisted[0], adapter.name)
+    assert jobs.complete(claim.job.id, claim.token, result)
     def unavailable(request):
         return httpx.Response(429, headers={'Retry-After': '11'}, json={})
     monkeypatch.setattr(f'app.sources.{module}.source_client', lambda **kw: source_client(**kw, transport=httpx.MockTransport(unavailable)))
     with pytest.raises(RetryableJobError):
         handler(context, payload)
+    assert len(store.read(adapter.name)) == 1
+    database.close()

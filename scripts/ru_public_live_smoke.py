@@ -32,6 +32,12 @@ TOTAL_FETCH_TIMEOUT = 25
 
 
 def _settings():
+    # Optional verified app-only EIS CA file for isolated live diagnostics.
+    # This does NOT modify the OS trust store or trust other source hosts.
+    raw_ca = os.environ.get("VALYQON_RU_EIS_CA_CERT", "").strip()
+    ca_file = Path(raw_ca).resolve() if raw_ca else None
+    if ca_file is not None and not ca_file.is_file():
+        raise ValueError("Verified EIS app-scoped certificate file not found.")
     return MonitoringSettings(
         enabled=False,
         interval_seconds=600,
@@ -39,14 +45,15 @@ def _settings():
         max_notifications_per_cycle=5,
         request_timeout=REQUEST_TIMEOUT,
         eis_rss_urls=(build_eis_rss_url("поставка"),),
-        ca_bundle_file=None,
+        ca_bundle_file=ca_file,
         profile_feeds_enabled=False,
         eis_223_enabled=True,
         eis_223_rss_urls=(build_eis_223_rss_url("поставка"),),
         eis_223_profile_feeds_enabled=False,
         b2b_center_enabled=True,
         eis_direct_enabled=True,
-        eis_system_trust_enabled=(os.name == "nt"),  # Windows: strict system CA store.
+        eis_system_trust_enabled=(os.name == "nt" and ca_file is None),
+        # Explicitly pinned EIS application bundle overrides Windows trust mode.
     )
 
 

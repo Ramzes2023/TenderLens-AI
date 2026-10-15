@@ -61,3 +61,41 @@ must work before repeat evidence is available.
 6. Review changed files for regressions and approve activation/merge separately.
 
 **Until then: leave PR #36 draft, sources off, production and `main` unchanged.**
+
+
+## 15 October continuation — genuine JETRO URL correction
+
+A public Japanese government procurement detail confirms that **local** JETRO
+notices are addressed as `/en/database/procurement/local/articles/<16-character
+hex ID>.html`, rather than the old, incorrect national-style
+`/local/articles/<numeric>/<numeric>.html` URL. For example, the official
+JETRO regional detail is:
+`https://www.jetro.go.jp/en/database/procurement/local/articles/b25795fdff1a1aba.html`.
+National notices still use the separate numerical hierarchy, e.g.
+`https://www.jetro.go.jp/en/database/procurement/national/articles/379164/2026012100070000.html`.
+
+The branch now validates both forms separately, retains stable distinct
+`external_id` values and tests wrong-section/cross-host links. The
+pre-existing local parser necessarily discarded legitimate local links.
+This correction is **offline contract evidence only**, not proof of successful
+new live ingestion from JETRO.
+
+The fallback search form is limited to a fixed official HTTPS host, bounded
+two requests in the connector worker, and JETRO's *before deadline*
+filter. The fallback must still parse real competitive procurement rows,
+not generic search-page text. The two expected URLs need live-host
+confirmation and repeatable database/search proof before approval.
+
+The other Hong Kong RSS feeds are officially documented by Hong Kong
+Housing Authority and EMSD, but may be empty or blocked by a particular
+network origin; status remains unknown until real transport and persisted
+notices are proven. Fail-closed logic must not fabricate tenders.
+
+**CI blocker remains external to Python execution:** GitHub-hosted Actions
+report `runner_id=0` and `steps=[]` immediately for Asian, Russian and
+general CI jobs. A local self-hosted PR run is **not** an acceptable
+workaround for executing unreviewed pull request code. GitHub Actions
+account settings or a trusted manual execution pathway must be resolved
+before any claim of green acceptance.
+
+**Main/production unchanged; PR #36 remains draft and unmerged.**

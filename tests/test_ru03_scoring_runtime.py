@@ -80,7 +80,7 @@ def test_real_route_activation_and_isolation(system, runtime_builder, compositio
     s.store.initialize()
     notice = parse_eis_223_feed(RSS, feed_url=URL)[0]
     s.store.upsert(notice, 'connector-sync-v1:eis_223:adapter-r1')
-    s.store.upsert(replace(notice, source='eis'), 'connector-sync-v1:eis:adapter-r1')
+    s.store.upsert(replace(notice, source='eis', enrichment=None, 'connector-sync-v1:eis:adapter-r1')
     if composition == 'build_runtime':
         runtime = runtime_builder(configuration)
         service, catalog = runtime.scoring_run_service, runtime.source_catalog

@@ -313,6 +313,43 @@ def test_six_source_catalog_connects_to_real_worker_and_sqlite(monkeypatch, tmp_
         db.close()
 
 
+def test_jetro_fallback_performs_only_two_fixed_official_requests(monkeypatch):
+    from app.sources.asia_public import JETRO_SEARCH_URLS
+    calls = []
+
+    async def fake_fetch(url, timeout, accept):
+        calls.append(url)
+        assert timeout == 30.0
+        assert accept == "text/html"
+        if len(calls) == 1:
+            return b"<html><table></table></html>"
+        return JETRO
+
+    monkeypatch.setattr("app.sources.asia_public._fetch", fake_fetch)
+    notices = asyncio.run(AsiaPublicSource("jp_jetro_national").fetch(5))
+    assert len(notices) == 1
+    assert calls == [
+        JETRO_LISTS["jp_jetro_national"],
+        JETRO_SEARCH_URLS["jp_jetro_national"],
+    ]
+    validate_notice(notices[0], "jp_jetro_national")
+
+
+def test_jetro_fallback_fails_closed_when_both_queries_are_empty(monkeypatch):
+    from app.sources.asia_public import JETRO_SEARCH_URLS
+    calls = []
+
+    async def fake_fetch(url, timeout, accept):
+        calls.append(url)
+        return b"<html><body>no procurement notices</body></html>"
+
+    monkeypatch.setattr("app.sources.asia_public._fetch", fake_fetch)
+    with pytest.raises(SourceError, match="no verifiable"):
+        asyncio.run(AsiaPublicSource("jp_jetro_local").fetch(5))
+    assert calls == [JETRO_LISTS["jp_jetro_local"],
+                     JETRO_SEARCH_URLS["jp_jetro_local"]]
+
+
 def test_bounded_timeout_and_unknown_source_fail_closed():
     with pytest.raises(ValueError):
         AsiaPublicSource("private_webhook")

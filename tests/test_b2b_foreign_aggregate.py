@@ -87,3 +87,18 @@ def test_multiple_b2b_organizations_remain_rejected():
     ).encode("utf-8")
     with pytest.raises(SourceError, match="structure"):
         parse_b2b_center_listing(inject_inside_listing(fragment), limit=100)
+
+
+def test_optional_cross_platform_url_fragment_does_not_drop_genuine_b2b_notice():
+    # A third-party URL containing a fragment is not a verified source link.
+    needle = b'?regNumber=0338200012226000019"'
+    assert CAPTURE.count(needle) == 1
+    mutated = CAPTURE.replace(needle, b'?regNumber=0338200012226000019#tracking"', 1)
+    records = parse_b2b_center_listing(mutated, limit=100)
+    assert len(records) == 10
+    notice = next(n for n in records if n.external_id == "l0338200012226000019-1")
+    assert notice.url == (
+        "https://www.b2b-center.ru/search/number/l0338200012226000019-1/"
+    )
+    assert notice.upstream_url is None
+    assert notice.tender_number is None

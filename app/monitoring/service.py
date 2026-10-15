@@ -4,11 +4,16 @@ from __future__ import annotations
 import asyncio
 import re
 from dataclasses import dataclass
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
+from app.currency import normalize_currency_code
 from app.scoring.models import CompanyProfile
 from app.sources.base import TenderSource
 from app.sources.models import TenderNotice
+
+if TYPE_CHECKING:
+    from app.sources.catalog import SourceCatalog
+    from app.sources.multi import MultiSourceFetchReport
 
 from .config import MonitoringSettings
 from .repository import MonitoringRepository, Subscription
@@ -24,25 +29,152 @@ def _contains(text: str, phrase: str) -> bool:
     return phrase.casefold().strip() in text.casefold()
 
 
-def _term_match(text: str, phrase: str) -> bool:
-    """Conservative token-prefix match for RSS pre-filtering.
 
-    EIS morphology can return inflected Russian forms (e.g. ``профиль`` /
-    ``профиля``), so an exact substring alone is too brittle for discovery.
+
+
+def _term_match(
+    text: str,
+    term: str,
+) -> bool:
     """
-    if _contains(text, phrase):
-        return True
-    hay = re.findall(r"[0-9a-zа-яё]+", text.casefold())
-    needles = re.findall(r"[0-9a-zа-яё]+", phrase.casefold())
-    needles = [item for item in needles if len(item) >= 4]
-    if not needles:
+    Unicode word / phrase matcher.
+
+    Latin words stay exact:
+        gold != golden
+        gold != goldhofer
+
+    Russian words use conservative inflection stems:
+        насосы == насосов
+        клапаны == клапанов
+        оборудование == оборудования
+        профиль == профиля
+    """
+    suffixes = (
+        "\u0438\u044f\u043c\u0438",
+        "\u044f\u043c\u0438",
+        "\u0430\u043c\u0438",
+        "\u043e\u0433\u043e",
+        "\u0435\u043c\u0443",
+        "\u043e\u043c\u0443",
+        "\u044b\u043c\u0438",
+        "\u0438\u043c\u0438",
+        "\u0438\u044f\u0445",
+        "\u0430\u0445",
+        "\u044f\u0445",
+        "\u043e\u0432",
+        "\u0435\u0432",
+        "\u0435\u0439",
+        "\u0430\u043c",
+        "\u044f\u043c",
+        "\u043e\u043c",
+        "\u0435\u043c",
+        "\u043e\u0439",
+        "\u0438\u0439",
+        "\u044b\u0439",
+        "\u0430\u044f",
+        "\u044f\u044f",
+        "\u043e\u0435",
+        "\u0435\u0435",
+        "\u044b\u0435",
+        "\u0438\u0435",
+        "\u0438\u044f",
+        "\u044b\u0445",
+        "\u0438\u0445",
+        "\u0443\u044e",
+        "\u044e\u044e",
+        "\u0430",
+        "\u044f",
+        "\u044b",
+        "\u0438",
+        "\u0435",
+        "\u043e",
+        "\u0443",
+        "\u044e",
+        "\u044c",
+    )
+
+    def normalize_token(
+        token: str,
+    ) -> str:
+        value = (
+            token.casefold()
+            .replace(
+                "\u0451",
+                "\u0435",
+            )
+        )
+
+        is_russian = (
+            bool(value)
+            and all(
+                0x0430
+                <= ord(char)
+                <= 0x044F
+                for char in value
+            )
+        )
+
+        if not is_russian:
+            return value
+
+        for suffix in suffixes:
+            if (
+                value.endswith(suffix)
+                and (
+                    len(value)
+                    - len(suffix)
+                ) >= 4
+            ):
+                return value[
+                    :-len(suffix)
+                ]
+
+        return value
+
+    haystack = [
+        normalize_token(token)
+        for token in re.findall(
+            r"[^\W_]+",
+            text or "",
+            flags=re.UNICODE,
+        )
+    ]
+
+    needle = [
+        normalize_token(token)
+        for token in re.findall(
+            r"[^\W_]+",
+            term or "",
+            flags=re.UNICODE,
+        )
+    ]
+
+    if not needle:
         return False
-    for needle in needles:
-        prefix_len = min(6, len(needle))
-        prefix = needle[:prefix_len]
-        if not any(token.startswith(prefix) for token in hay):
-            return False
-    return True
+
+    width = len(needle)
+
+    if width > len(haystack):
+        return False
+
+    for index in range(
+        len(haystack)
+        - width
+        + 1
+    ):
+        if (
+            haystack[
+                index:
+                index + width
+            ]
+            == needle
+        ):
+            return True
+
+    return False
+
+
+
 
 
 def prefilter_notice(notice: TenderNotice, profile: CompanyProfile | None) -> MonitorMatch | None:
@@ -63,16 +195,90 @@ def prefilter_notice(notice: TenderNotice, profile: CompanyProfile | None) -> Mo
             return None
         reasons.append("Направление: " + ", ".join(matched[:5]))
 
-    if notice.initial_price is not None:
-        if profile.min_contract_value is not None and notice.initial_price < profile.min_contract_value:
+    currency = normalize_currency_code(
+        notice.currency
+    )
+
+    accepted_currencies = {
+        normalized
+        for item in profile.accepted_currencies
+        if (
+            normalized
+            := normalize_currency_code(
+                item
+            )
+        )
+    }
+
+    budget_comparable = (
+        notice.initial_price is not None
+        and currency is not None
+        and len(accepted_currencies) == 1
+        and currency in accepted_currencies
+    )
+
+    if (
+        notice.initial_price is not None
+        and currency is not None
+        and accepted_currencies
+        and currency not in accepted_currencies
+    ):
+        reasons.append(
+            "\u0412\u0430\u043b\u044e\u0442\u0430 "
+            "\u043e\u0442\u043b\u0438\u0447\u0430\u0435\u0442\u0441\u044f "
+            "\u043e\u0442 \u0432\u0430\u043b\u044e\u0442\u044b "
+            "\u0431\u044e\u0434\u0436\u0435\u0442\u0430 "
+            "\u043f\u0440\u043e\u0444\u0438\u043b\u044f; "
+            "\u0441\u0443\u043c\u043c\u044b "
+            "\u043d\u0430\u043f\u0440\u044f\u043c\u0443\u044e "
+            "\u043d\u0435 "
+            "\u0441\u0440\u0430\u0432\u043d\u0438\u0432\u0430\u043b\u0438\u0441\u044c."
+        )
+
+    if (
+        notice.initial_price is not None
+        and currency is None
+    ):
+        reasons.append(
+            "\u0421\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c "
+            "\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u0430 "
+            "\u0431\u0435\u0437 \u0432\u0430\u043b\u044e\u0442\u044b; "
+            "\u0431\u044e\u0434\u0436\u0435\u0442 "
+            "\u043d\u0430\u043f\u0440\u044f\u043c\u0443\u044e "
+            "\u043d\u0435 "
+            "\u0441\u0440\u0430\u0432\u043d\u0438\u0432\u0430\u043b\u0441\u044f."
+        )
+
+    if budget_comparable:
+        if (
+            profile.min_contract_value is not None
+            and notice.initial_price
+            < profile.min_contract_value
+        ):
             if profile.hard_stop_on_budget:
                 return None
-            reasons.append("Стоимость ниже целевого минимума профиля.")
+
+            reasons.append(
+                "Стоимость ниже целевого "
+                "минимума профиля."
+            )
+
         if profile.max_contract_value is not None:
-            if notice.initial_price > profile.max_contract_value and profile.hard_stop_on_budget:
+            if (
+                notice.initial_price
+                > profile.max_contract_value
+                and profile.hard_stop_on_budget
+            ):
                 return None
-            if notice.initial_price <= profile.max_contract_value:
-                reasons.append("Бюджет известен и не превышает лимит профиля.")
+
+            if (
+                notice.initial_price
+                <= profile.max_contract_value
+            ):
+                reasons.append(
+                    "Бюджет известен и "
+                    "не превышает лимит профиля."
+                )
 
     if notice.region and profile.allowed_regions:
         matches_region = any(_contains(notice.region, region) or _contains(region, notice.region)
@@ -137,6 +343,82 @@ class TenderMonitorService:
     ) -> list[MonitorMatch]:
         profile = await self.profile_for_owner(owner_user_id)
         return await self.fetch_matches_for_profile(profile)
+
+    async def fetch_matches_from_catalog_for_profile(
+        self,
+        catalog: "SourceCatalog",
+        profile: CompanyProfile | None,
+    ) -> tuple[
+        list[MonitorMatch],
+        "MultiSourceFetchReport",
+    ]:
+        """Fetch global sources and pre-filter against an explicit profile."""
+
+        search_terms = (
+            tuple(profile.monitoring_keywords)
+            if profile is not None
+            else ()
+        )
+
+        report = await catalog.fetch(
+            limit_per_source=self.settings.max_items,
+            search_terms=search_terms,
+            max_eis_feeds=self.settings.profile_feed_limit,
+        )
+
+        matches: list[MonitorMatch] = []
+
+        for notice in report.notices:
+            match = prefilter_notice(
+                notice,
+                profile,
+            )
+
+            if match is not None:
+                matches.append(match)
+
+        return matches, report
+
+    async def fetch_matches_from_catalog(
+        self,
+        catalog: "SourceCatalog",
+        owner_user_id: int | None = None,
+    ) -> tuple[
+        list[MonitorMatch],
+        "MultiSourceFetchReport",
+    ]:
+        """Fetch global sources using the resolved owner profile."""
+
+        profile = await self.profile_for_owner(
+            owner_user_id
+        )
+
+        return await self.fetch_matches_from_catalog_for_profile(
+            catalog,
+            profile,
+        )
+
+    async def scan_new_from_catalog(
+        self,
+        catalog: "SourceCatalog",
+        owner_user_id: int,
+    ) -> tuple[
+        list[MonitorMatch],
+        "MultiSourceFetchReport",
+    ]:
+        matches, report = (
+            await self.fetch_matches_from_catalog(
+                catalog,
+                owner_user_id,
+            )
+        )
+
+        new_matches = await self.claim_new(
+            owner_user_id,
+            matches,
+        )
+
+        return new_matches, report
 
     async def claim_new_for_organization(
         self,

@@ -82,10 +82,13 @@ def test_multi_source_fetch_merges_and_deduplicates() -> None:
         MultiSourceFetcher(registry).fetch(limit_per_source=20)
     )
 
+    # Results are intentionally interleaved across successful
+    # procurement sources so one source cannot monopolize a capped
+    # global discovery result set.
     assert [item.identity for item in report.notices] == [
         ("ted", "1"),
-        ("ted", "2"),
         ("sam", "A"),
+        ("ted", "2"),
     ]
     assert report.failures == ()
     assert report.attempted_sources == ("ted", "sam")

@@ -13,7 +13,7 @@ def test_branding_on_all_browser_entry_points():
         assert 'VALYQON AI' in html
         assert 'TenderLens AI' not in html
     assert 'Find. Analyze. Score. Win.' in login_html()
-    assert 'AI Procurement Intelligence Platform' in dashboard_html()
+    assert 'Global Procurement Intelligence powered by AI' in dashboard_html()
 
 
 def test_legacy_configuration_and_session_identity_remain_supported(tmp_path):

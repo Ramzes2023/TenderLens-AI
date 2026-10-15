@@ -7,6 +7,7 @@ import json
 from html import escape
 
 from app import __version__
+from .public_locale import public_html
 
 
 def invitation_page_html(
@@ -23,7 +24,7 @@ def invitation_page_html(
         .replace("&", "\\u0026")
     )
 
-    return f"""<!doctype html>
+    return public_html(f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -33,7 +34,7 @@ def invitation_page_html(
         content="noindex,nofollow">
 
   <title>
-    Organization invitation ? VALYQON AI
+    Organization invitation | VALYQON AI
   </title>
 
   <style>
@@ -144,9 +145,10 @@ def invitation_page_html(
       margin-top:24px;
     }}
   </style>
+  <link rel="stylesheet" href="/assets/responsive.css?v=phase24q">
 </head>
 
-<body>
+<body class="invitation-page">
   <main class="card">
     <div class="label">
       VALYQON AI
@@ -157,7 +159,7 @@ def invitation_page_html(
     </h1>
 
     <p id="intro">
-      Checking invitation?
+      Checking invitation...
     </p>
 
     <div id="details"
@@ -249,19 +251,11 @@ const returnPath=
   `/invite/${{encodedToken}}`;
 
 async function responseDetail(response){{
-  let detail=`${{response.status}} ${{response.statusText}}`;
-
-  try{{
-    const data=await response.json();
-
-    if(data.detail){{
-      detail=typeof data.detail==='string'
-        ?data.detail
-        :JSON.stringify(data.detail);
-    }}
-  }}catch(_){{}}
-
-  return detail;
+  return response.status===403
+    ?'Sign in with the invited email address to continue.'
+    :response.status===404||response.status===410||response.status===422
+      ?'This invitation is invalid, expired, or no longer available. Ask your workspace administrator for a new link.'
+      :'The invitation could not be processed. Please retry.';
 }}
 
 function showAuth(){{
@@ -272,12 +266,12 @@ function showAuth(){{
   document.getElementById(
     'loginLink'
   ).href=
-    `/login?next=${{next}}`;
+    PublicLocale.url(`/login?next=${{next}}`);
 
   document.getElementById(
     'registerLink'
   ).href=
-    `/register?next=${{next}}`;
+    PublicLocale.url(`/register?next=${{next}}`);
 
   document.getElementById(
     'authActions'
@@ -310,10 +304,7 @@ async function loadInvitation(){{
 
     const data=await response.json();
 
-    document.getElementById(
-      'intro'
-    ).textContent=
-      'You have been invited to join a VALYQON AI organization.';
+    PublicLocale.message(document.getElementById('intro'), 'You have been invited to join a VALYQON AI organization.');
 
     document.getElementById(
       'organization'
@@ -325,10 +316,7 @@ async function loadInvitation(){{
     ).textContent=
       data.email_hint;
 
-    document.getElementById(
-      'role'
-    ).textContent=
-      data.role;
+    PublicLocale.message(document.getElementById('role'), data.role);
 
     document.getElementById(
       'details'
@@ -337,16 +325,12 @@ async function loadInvitation(){{
     );
 
   }}catch(e){{
-    document.getElementById(
-      'intro'
-    ).textContent=
-      'This invitation cannot be used.';
+    PublicLocale.message(document.getElementById('intro'), 'This invitation cannot be used.');
 
     message.className=
       'msg error';
 
-    message.textContent=
-      e.message||String(e);
+    PublicLocale.message(message, e instanceof TypeError?'Connection unavailable. Please retry.':e.message||'The invitation could not be processed. Please retry.');
   }}
 }}
 
@@ -359,11 +343,11 @@ async function acceptInvitation(){{
     'message'
   );
 
-  message.textContent='';
+  PublicLocale.message(message,'');
 
   try{{
     button.disabled=true;
-    button.textContent='Accepting?';
+    PublicLocale.message(button,'Accepting...');
 
     const response=await fetch(
       acceptPath,
@@ -393,13 +377,12 @@ async function acceptInvitation(){{
     message.className=
       'msg success';
 
-    message.textContent=
-      'Invitation accepted. Opening your dashboard?';
+    PublicLocale.message(message,'Invitation accepted. Opening your dashboard...');
 
     setTimeout(
-      ()=>location.replace(
+      ()=>location.replace(PublicLocale.url(
         '/dashboard'
-      ),
+      )),
       500
     );
 
@@ -407,20 +390,18 @@ async function acceptInvitation(){{
     message.className=
       'msg error';
 
-    message.textContent=
-      e.message||String(e);
+    PublicLocale.message(message, e instanceof TypeError?'Connection unavailable. Please retry.':e.message||'The invitation could not be processed. Please retry.');
 
   }}finally{{
     button.disabled=false;
-    button.textContent=
-      'Accept invitation';
+    PublicLocale.message(button,'Accept invitation');
   }}
 }}
 
 loadInvitation();
 </script>
 </body>
-</html>"""
+</html>""")
 
 
 __all__ = [

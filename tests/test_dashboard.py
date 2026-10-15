@@ -21,6 +21,7 @@ class DashboardTests(unittest.TestCase):
             "/",
             "/login",
             "/register",
+            "/verify-email",
             "/invite/{token}",
             "/dashboard",
         ):
@@ -98,12 +99,22 @@ class DashboardTests(unittest.TestCase):
         )
 
         self.assertIn(
-            'window.location.replace("/invite/sample-token")',
+            'encodeURIComponent("/invite/sample-token")',
             login,
         )
 
         self.assertIn(
-            'window.location.replace("/invite/sample-token")',
+            'encodeURIComponent("/invite/sample-token")',
+            register,
+        )
+
+        self.assertIn(
+            '"/invite/sample-token"',
+            login,
+        )
+
+        self.assertIn(
+            "/verify-email?email=",
             register,
         )
 

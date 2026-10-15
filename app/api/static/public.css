@@ -1,0 +1,66 @@
+/* Public presentation only; authenticated map and workspace styles remain owned by their assets. */
+.public-languages{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.public-languages button{display:inline-flex;align-items:center;justify-content:center;gap:7px;width:auto;min-height:38px;padding:7px 10px;border:1px solid #476187;border-radius:9px;background:#10223b;color:#eaf2ff;font:600 13px system-ui;cursor:pointer}
+.public-languages svg{width:23px;height:14px;flex-shrink:0;border-radius:2px}
+.public-languages button[aria-pressed=true]{border-color:#a6c7ff;background:#254875;box-shadow:inset 0 -2px #a6c7ff}
+body.landing{background:#07101f;color:#f4f7fb;font-family:system-ui,-apple-system,sans-serif}
+.landing .landing-top{max-width:1440px;margin:auto;gap:16px;flex-wrap:wrap;padding:20px 28px;position:relative}
+.landing .landing-top nav{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+.landing .landing-top a{font-size:14px}
+.landing .landing-top .toolbar{margin-left:auto;flex-wrap:wrap}
+.landing main{max-width:1240px;margin:auto}
+.landing .content-section,.landing .faq{padding:72px 28px}
+.landing p{color:#b9c9e2;line-height:1.75}
+.landing h2{font-size:clamp(1.8rem,3.3vw,2.8rem);line-height:1.2;letter-spacing:-.025em}
+.landing h3{line-height:1.35}
+.landing .premium-hero{padding:68px 28px;gap:44px}
+.landing .fine{color:#b1c2dd;font-size:13px;line-height:1.7}
+.landing footer{display:flex;flex-wrap:wrap;gap:20px;align-items:center;padding:36px 28px;border-top:1px solid #2b4164;max-width:1240px;margin:auto}
+.landing .public-tour{border:1px solid #38557b;background:linear-gradient(120deg,#102642,#0c192c);border-radius:20px;padding:32px;margin:20px 28px}
+.landing .public-tour h2{margin-top:0}
+.landing .public-tour .toolbar{flex-wrap:wrap;gap:16px}
+.landing .guide-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;counter-reset:guide}
+.landing .guide-step{padding:28px;background:#101f35;border:1px solid #304667;border-radius:18px;counter-increment:guide}
+.landing .guide-step h2{font-size:1.45rem;margin:18px 0 12px}
+.landing .guide-step:before{content:counter(guide,decimal-leading-zero);color:#9bc2ff;font-size:1.5rem;font-weight:700}
+.landing .availability{display:inline-block;padding:5px 10px;border:1px solid #607fa6;border-radius:20px;color:#d5e7ff;font-size:12px;margin-left:14px}
+.landing .guide-preview{padding:20px;background:#081528;border:1px dashed #6480a7;border-radius:12px;margin-top:28px}
+.landing .guide-preview ol{padding-left:20px;line-height:2;color:#c6d5eb}
+.landing .guide-preview strong{color:#a9caff}
+.landing .guide-intro{max-width:850px}
+.public-menu{display:none}
+.mobile-public-locale{display:none}
+.auth-premium .public-languages{grid-column:1/-1;padding:18px 24px;border-bottom:1px solid #304667}
+.auth-premium .public-auth-help{grid-column:1/-1;padding:18px 24px;text-align:center;border-top:1px solid #304667;font-size:13px}
+.auth-premium .card{min-width:0}
+.auth-premium #msg,.auth-premium #status{overflow-wrap:anywhere}
+.auth-premium .form h2{line-height:1.25}
+.auth-premium .version{color:#a2b6d3}
+.landing *, .auth-premium *{min-width:0}
+.landing a:hover,.auth-premium a:hover{text-decoration:underline;text-underline-offset:4px}
+.landing :focus-visible,.auth-premium :focus-visible{outline:3px solid #bfd7ff;outline-offset:4px}
+@media(max-width:1000px){.landing .landing-top{padding:16px 20px}.landing .landing-top nav{width:100%;order:3}.landing .landing-top .toolbar{margin-left:0}.landing .premium-hero{gap:28px}}
+@media(max-width:600px){.landing .landing-top{gap:12px}.public-menu{display:block;background:#183250;color:#fff;border:1px solid #6682a7;border-radius:8px;padding:10px;font:inherit}.landing .landing-top nav{display:none;align-items:flex-start;padding:16px;border:1px solid #38557b;border-radius:12px}.landing .landing-top nav.is-open{display:flex}.landing .landing-top .toolbar{width:100%;gap:12px}.landing .premium-hero{padding:40px 20px;grid-template-columns:1fr}.landing .content-section,.landing .faq{padding:44px 20px}.landing .guide-grid{grid-template-columns:1fr}.landing .public-tour{margin:16px 20px;padding:22px}.landing .guide-step{padding:22px}.landing .toolbar a{white-space:normal}.auth-premium{padding:14px}.auth-premium main.card{padding:0}.auth-premium main.card>.logo,.auth-premium main.card>h1,.auth-premium main.card>p,.auth-premium main.card>#status,.auth-premium main.card>#resendBox{margin-left:22px;margin-right:22px}.auth-premium .form{padding:28px 22px}.auth-premium h1{font-size:1.9rem}.landing footer{padding:28px 20px}}
+@media(prefers-reduced-motion:reduce){.landing *,.auth-premium *{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+/* Preserve the established light public canvas; navy panels provide emphasis. */
+body.landing.premium{background:#f5f8fc;color:#172b47;overflow-wrap:anywhere}
+body.landing.premium p,body.landing.premium .fine{color:#475d79}
+body.landing.premium .public-tour,body.landing.premium .guide-step{color:#f4f7fb}
+body.landing.premium .public-tour h2,body.landing.premium .guide-step h2{color:#f4f7fb}
+body.landing.premium .public-tour p,body.landing.premium .guide-step p,body.landing.premium .guide-preview p{color:#c3d2e8}
+body.landing.premium .public-tour a:not(.secondary),body.landing.premium .guide-step a{color:#b4d1ff}
+body.landing.premium .guide-intro h1{font-size:clamp(2rem,5vw,3.5rem);line-height:1.15;letter-spacing:-.035em;margin:20px 0}
+body.landing.premium .guide-preview{margin:28px 0;color:#eaf2ff}
+body.landing.premium .landing-top .compact{display:inline-flex}
+body.landing.premium .fine{font-size:13px}
+body.landing.premium .landing-top nav a{min-height:38px;display:inline-flex;align-items:center}
+body.landing.premium .trust-strip>span>span:before{content:none}
+.auth-premium .password-control input{padding-right:108px}
+.auth-premium .password-toggle{min-height:34px;max-width:100px}
+.invitation-page .public-languages{padding-bottom:20px;margin-bottom:20px;border-bottom:1px solid #40516e}
+.invitation-page .public-auth-help{padding-top:20px;margin-top:20px;border-top:1px solid #40516e;font-size:13px}
+.invitation-page .public-languages button{color:#eaf2ff;background:#10223b}
+.invitation-page .version{color:#a2b6d3}
+body.landing.premium .step-number{color:#3e6399}
+body.landing.premium .market small{color:#526783}
+@media(max-width:600px){.mobile-public-locale{display:block;width:100%;order:2}.landing .landing-top nav .public-languages{width:100%;padding-top:12px;border-top:1px solid #c5d2e5}.landing .landing-top nav{overflow:visible}}

@@ -1,0 +1,71 @@
+{
+  "endpoint_url": "https://api.ted.europa.eu/v3/notices/search",
+  "openapi_sha256": "e0cfe4e84123c3b62118ca99e07e8b9a09467494846280b8c7e60d700fbd2ff8",
+  "response_sha256": "8246a105bea0e0603a2669bbc99a2098df704870449060c827bf7973c6585b81",
+  "request_sha256": "5a9f4cbd84cf8d2a5d384a858fdcfe03ac563738868073a26e4831abc69d8c0f",
+  "request": {
+    "fields": [
+      "publication-number",
+      "classification-cpv",
+      "main-classification-proc",
+      "additional-classification-proc",
+      "main-classification-lot",
+      "additional-classification-lot",
+      "main-classification-part",
+      "additional-classification-part"
+    ],
+    "scope": "ACTIVE",
+    "checkQuerySyntax": false,
+    "paginationMode": "PAGE_NUMBER",
+    "limit": 3,
+    "page": 1,
+    "query": "classification-cpv = 45000000"
+  },
+  "response": {
+    "totalNoticeCount": 108760,
+    "iterationNextToken": null,
+    "timedOut": false,
+    "notices": [
+      {
+        "publication-number": "392803-2016",
+        "classification-cpv": [
+          "45000000",
+          "45200000",
+          "45440000"
+        ]
+      },
+      {
+        "publication-number": "392804-2016",
+        "classification-cpv": [
+          "45000000",
+          "45200000",
+          "45310000"
+        ]
+      },
+      {
+        "publication-number": "392805-2016",
+        "classification-cpv": [
+          "45000000",
+          "45200000",
+          "45261000"
+        ]
+      }
+    ]
+  },
+  "removed_fields": [
+    "notices[].links"
+  ],
+  "schema_only_array_of_string_fields": [
+    "main-classification-proc",
+    "main-classification-part",
+    "main-classification-lot",
+    "additional-classification-proc",
+    "additional-classification-part",
+    "additional-classification-lot"
+  ],
+  "demonstrated_array_of_string_fields": [
+    "classification-cpv"
+  ],
+  "context_binding": "unproven; aggregate across Procedure/Part/Lot",
+  "extraction_status": "blocked_entity_scope"
+}

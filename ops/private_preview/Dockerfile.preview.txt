@@ -1,0 +1,15 @@
+# syntax=docker/dockerfile:1
+FROM python:3.12-slim-bookworm
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PYTHON_DOTENV_DISABLED=1
+WORKDIR /app
+COPY ops/private_preview/requirements.preview.txt /app/requirements.preview.txt
+RUN pip install -r /app/requirements.preview.txt
+COPY app /app/app
+COPY config/company_profile.example.json /app/config/company_profile.example.json
+COPY ops/private_preview /app/ops/private_preview
+# Uploaded archives may preserve owner-only modes. Normalize copied source while
+# still root so the non-root runtime can traverse packages and read code/assets.
+RUN chmod 755 /app && find /app/app /app/config /app/ops -type d -exec chmod 755 {} + && find /app/app /app/config /app/ops -type f -exec chmod 644 {} +
+RUN useradd --system --uid 10001 --create-home preview && mkdir /app/data && chown preview:preview /app/data
+USER preview
+CMD ["python", "-m", "uvicorn", "ops.private_preview.preview_app:create_preview_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-access-log", "--no-proxy-headers"]

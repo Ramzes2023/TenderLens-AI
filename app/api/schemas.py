@@ -1,9 +1,13 @@
 """HTTP request/response schemas for Phase 10."""
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.currency import normalize_currency_code
+from app.analytics.fit import PreviewProvenance
+from app.sources.enrichment import NoticeEnrichment
 
 from app.models.tender import TenderAnalysis
 from app.scoring.models import CompanyProfile, ScoringResult
@@ -32,6 +36,25 @@ class TenderListItem(BaseModel):
     fit_score: float | None
     created_at: str
     updated_at: str
+
+    @field_validator(
+        "currency",
+        mode="before",
+    )
+    @classmethod
+    def normalize_currency(
+        cls,
+        value,
+    ):
+        if (
+            value is None
+            or isinstance(value, str)
+        ):
+            return normalize_currency_code(
+                value
+            )
+
+        return value
 
 
 class TenderDetail(BaseModel):
@@ -92,6 +115,104 @@ class MonitorNoticeResponse(BaseModel):
     deadline: str | None = None
     region: str | None = None
     reasons: list[str]
+
+    @field_validator(
+        "currency",
+        mode="before",
+    )
+    @classmethod
+    def normalize_currency(
+        cls,
+        value,
+    ):
+        if (
+            value is None
+            or isinstance(value, str)
+        ):
+            return normalize_currency_code(
+                value
+            )
+
+        return value
+
+
+class TenderDiscoveryItem(MonitorNoticeResponse):
+    preliminary_provenance: PreviewProvenance | None = None
+    enrichment: NoticeEnrichment | None = None
+
+    @field_validator('enrichment')
+    @classmethod
+    def enrichment_identity(cls, value, info):
+        if value is not None and (value.source, value.external_id) != (
+            info.data.get('source'), info.data.get('external_id')
+        ):
+            raise ValueError('Enrichment identity mismatch.')
+        return value
+
+    published_at: str | None = None
+    summary: str | None = None
+    analysis_stage: str = "metadata_preview"
+    metadata_analysis: TenderAnalysis
+    preliminary_scoring: ScoringResult
+    full_ai_analyzed: bool = False
+
+    # Optional authoritative-document analysis.
+    # Discovery remains metadata-only until a user explicitly
+    # uploads tender documentation through the supported PDF
+    # workflow.
+    full_analysis: TenderAnalysis | None = None
+    full_scoring: ScoringResult | None = None
+    full_analysis_record_id: PositiveId | None = None
+    full_analysis_pdf_sha256: Hash64 | None = None
+    full_analysis_source_filename: str | None = None
+    full_analysis_truncated: bool | None = None
+    full_analysis_warnings: list[str] = Field(
+        default_factory=list
+    )
+
+
+class SourceHealthItem(BaseModel):
+    source: str
+    display_name: str
+    transport: str
+    jurisdictions: list[str] = Field(
+        default_factory=list
+    )
+    languages: list[str] = Field(
+        default_factory=list
+    )
+    homepage_url: str | None = None
+    official: bool
+    enabled: bool
+    authentication_required: bool
+    state: Literal[
+        "healthy",
+        "failed",
+        "disabled",
+        "not_checked",
+    ]
+    notice_count: int | None = None
+    duration_ms: int | None = None
+    error_type: str | None = None
+    message: str | None = None
+    coverage: str | None = None
+    last_successful_sync: str | None = None
+    diagnostic: str | None = None
+
+
+class TenderDiscoveryResponse(BaseModel):
+    items: list[TenderDiscoveryItem]
+    source_statuses: list[
+        SourceHealthItem
+    ] = Field(
+        default_factory=list
+    )
+    attempted_sources: list[str]
+    successful_sources: list[str]
+    failed_sources: list[str]
+    partial_failure: bool
+    total_failure: bool
+    history_id: int | None = None
 
 
 class PdfAnalysisResponse(BaseModel):

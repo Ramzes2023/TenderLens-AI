@@ -1,0 +1,95 @@
+services:
+  api:
+    build:
+      context: ../..
+      # Text suffix keeps the build recipe in source-only wrapper packages.
+      dockerfile: ops/private_preview/Dockerfile.preview.txt
+    mem_limit: 512m
+    cpus: 0.75
+    restart: unless-stopped
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports:
+      - "127.0.0.1:18765:8000"
+    environment:
+      PYTHON_DOTENV_DISABLED: "1"
+      DATABASE_URL: "postgresql://preview:${PREVIEW_DB_PASSWORD:?preview password required}@db:5432/preview"
+      PREVIEW_APP_SECRET: "${PREVIEW_APP_SECRET:?preview signing secret required}"
+      VALYQON_DATABASE_REQUIRE_POSTGRES: "true"
+      VALYQON_DB_POOL_MIN: "1"
+      VALYQON_DB_POOL_MAX: "3"
+      VALYQON_EMAIL_MODE: smtp
+      VALYQON_SMTP_HOST: mailpit
+      VALYQON_SMTP_PORT: "1025"
+      VALYQON_SMTP_FROM: "preview@valyqon.example.test"
+      VALYQON_SMTP_STARTTLS: "false"
+      VALYQON_SMTP_SSL: "false"
+      VALYQON_PUBLIC_BASE_URL: "http://127.0.0.1:18765"
+      VALYQON_REDIS_URL: ""
+      VALYQON_REDIS_REQUIRED: "false"
+      VALYQON_AI_FALLBACK_ENABLED: "false"
+      GIGACHAT_CREDENTIALS: ""
+      GROQ_API_KEY: ""
+      RAG_ENABLED: "false"
+      MONITORING_ENABLED: "false"
+      EIS_PROFILE_FEEDS_ENABLED: "false"
+      EIS_RSS_URLS: ""
+      COMPANY_PROFILE_FILE: /app/config/company_profile.example.json
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    healthcheck:
+      test: [CMD, python, /app/ops/private_preview/healthcheck.py]
+      interval: 20s
+      timeout: 8s
+      start_period: 60s
+      retries: 5
+    networks: [isolated, loopback]
+  db:
+    image: postgres:16
+    mem_limit: 256m
+    cpus: 0.5
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: preview
+      POSTGRES_USER: preview
+      POSTGRES_PASSWORD: "${PREVIEW_DB_PASSWORD:?preview password required}"
+    command: [postgres, -c, shared_buffers=32MB, -c, max_connections=15, -c, work_mem=2MB]
+    volumes:
+      - preview_db:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U preview -d preview"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [isolated]
+  mailpit:
+    image: axllent/mailpit:latest
+    mem_limit: 128m
+    cpus: 0.25
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      MP_MAX_MESSAGES: "100"
+    ports:
+      - "127.0.0.1:18766:8025"
+    networks: [isolated, loopback]
+networks:
+  isolated:
+    internal: true
+  # Internal-only bridges did not publish ports on the host's Docker engine.
+  # This bridge supplies NAT port publishing; it has no outbound masquerading.
+  # The API additionally enforces a DB/Mailpit-only socket policy before startup.
+  loopback:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"
+volumes:
+  preview_db:

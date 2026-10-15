@@ -1,0 +1,12 @@
+# Review-only API override for a separately provisioned Redis service.
+# No service/image is created; current production Compose remains unchanged.
+# Dependency installation, integration validation and cutover are operator steps.
+services:
+  api:
+    environment:
+      VALYQON_REDIS_URL: "${VALYQON_REDIS_URL:?Set the external Redis URL securely}"
+      VALYQON_REDIS_REQUIRED: "true"
+      VALYQON_REDIS_POOL_MAX: "10"
+      VALYQON_REDIS_CONNECT_TIMEOUT: "2"
+      VALYQON_REDIS_SOCKET_TIMEOUT: "2"
+      VALYQON_CACHE_NAMESPACE: "${VALYQON_CACHE_NAMESPACE:?Set a unique environment namespace}"

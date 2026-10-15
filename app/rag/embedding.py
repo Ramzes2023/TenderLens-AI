@@ -28,6 +28,10 @@ class EmbeddingError(RuntimeError):
     pass
 
 
+class TransientEmbeddingError(EmbeddingError):
+    """Availability failure safe for durable retries."""
+
+
 class EmbeddingProvider(Protocol):
     def embed_many(self, texts: Sequence[str]) -> list[tuple[float, ...]]: ...
 
@@ -142,13 +146,16 @@ class GigaChatEmbeddingProvider:
         except (AuthenticationError, ForbiddenError):
             error = EmbeddingError("GigaChat embeddings: проверьте ключ, scope и права доступа.")
         except (TimeoutError, httpx.TimeoutException):
-            error = EmbeddingError("GigaChat embeddings: превышено время ожидания.")
+            error = TransientEmbeddingError("Embedding timeout.")
         except httpx.RequestError:
-            error = EmbeddingError("GigaChat embeddings: ошибка сети или TLS.")
+            error = TransientEmbeddingError("Embedding transport unavailable.")
         except EmbeddingError as exc:
             error = exc
-        except GigaChatException:
-            error = EmbeddingError("GigaChat embeddings: ошибка API, доступа или квоты.")
+        except GigaChatException as exc:
+            # Read only the SDK's numeric status; never inspect/log its body.
+            status = getattr(exc, 'status_code', None)
+            error = (TransientEmbeddingError if status == 429 or status in {500, 502, 503, 504}
+                     else EmbeddingError)("Embedding provider failure.")
         except Exception:
             error = EmbeddingError("Не удалось получить GigaChat semantic embeddings.")
         logger.warning("Embedding request failed: %s", type(error).__name__)

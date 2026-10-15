@@ -1,6 +1,9 @@
 """FastAPI routes exposing VALYQON AI services without Telegram."""
 from __future__ import annotations
 
+from .landing import landing_html
+from .public_help import help_html
+
 import asyncio
 import hashlib
 
@@ -19,7 +22,11 @@ from app.scoring.models import ScoringResult
 from app.services.pdf import summarize_pdf
 from app.services.tender_analysis import AnalysisError, analyze_tender
 
-from .auth_pages import login_html, register_html
+from .auth_pages import (
+    login_html,
+    register_html,
+    verify_email_html,
+)
 from .dashboard import dashboard_html
 from .invitation_page import invitation_page_html
 from .runtime import ApiRuntime
@@ -116,10 +123,20 @@ def _company_response(workspace) -> CompanyResponse:
     )
 
 
+@router.get("/how-it-works", response_class=HTMLResponse, include_in_schema=False)
+async def public_guide_page():
+    return HTMLResponse(help_html('guide'), headers={"Cache-Control": "no-store"})
+
+
+@router.get("/usage-guidelines", response_class=HTMLResponse, include_in_schema=False)
+async def public_guidelines_page():
+    return HTMLResponse(help_html('guidelines'), headers={"Cache-Control": "no-store"})
+
+
 @router.get("/", include_in_schema=False)
 async def root_page(request: Request):
     account = await current_account(request, touch=False)
-    return RedirectResponse("/dashboard" if account is not None else "/login", status_code=303)
+    return HTMLResponse(landing_html(account is not None), headers={"Cache-Control": "no-store"})
 
 
 @router.get(
@@ -195,6 +212,71 @@ async def register_page(
 
 
 @router.get(
+    "/verify-email",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+async def verify_email_page(
+    request: Request,
+    token: str | None = Query(
+        default=None,
+    ),
+    email: str | None = Query(
+        default=None,
+    ),
+    sent: str | None = Query(
+        default=None,
+    ),
+    next_path: str | None = Query(
+        default=None,
+        alias="next",
+    ),
+):
+    target = _safe_next_path(
+        next_path
+    )
+
+    account = await current_account(
+        request,
+        touch=False,
+    )
+
+    if (
+        account is not None
+        and account.email_verified
+    ):
+        return RedirectResponse(
+            target,
+            status_code=303,
+        )
+
+    sent_value = (
+        True
+        if sent == "1"
+        else (
+            False
+            if sent == "0"
+            else None
+        )
+    )
+
+    return HTMLResponse(
+        verify_email_html(
+            token=token,
+            email=email,
+            next_path=target,
+            sent=sent_value,
+        ),
+        headers={
+            "Cache-Control":
+                "no-store",
+            "Referrer-Policy":
+                "no-referrer",
+        },
+    )
+
+
+@router.get(
     "/invite/{token}",
     response_class=HTMLResponse,
     include_in_schema=False,
@@ -226,12 +308,12 @@ async def dashboard(request: Request):
 @router.get("/health", response_model=HealthResponse, tags=["system"])
 async def health(request: Request) -> HealthResponse:
     runtime = _runtime(request)
-    components = runtime.component_status()
+    components = await asyncio.to_thread(runtime.component_status)
     critical = (components["database"], components["scoring"])
-    overall = "ok" if all(value == "ready" for value in critical) else "degraded"
+    overall = "ok" if all(value == "ready" for value in critical) and components.get("cache") != "unavailable" else "degraded"
     return HealthResponse(
         status=overall,
-        service="TenderLens AI",
+        service="VALYQON AI",
         version=__version__,
         components=components,
     )
@@ -314,7 +396,7 @@ async def list_tenders(
     try:
         records = await asyncio.to_thread(repository.list_recent, owner_user_id, limit)
     except DatabaseError as error:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from None
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Document storage is temporarily unavailable.") from None
     return [_list_item(record) for record in records]
 
 
@@ -338,7 +420,7 @@ async def get_tender(
     try:
         record = await asyncio.to_thread(repository.find_by_id, owner_user_id, tender_id)
     except DatabaseError as error:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from None
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Document storage is temporarily unavailable.") from None
     if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Tender not found.")
     return _detail(record)
@@ -547,7 +629,7 @@ async def analyze_pdf_endpoint(
     try:
         existing = await asyncio.to_thread(runtime.tender_repository.find_by_hash, owner_user_id, digest)
     except DatabaseError as error:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from None
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Document storage is temporarily unavailable.") from None
     if existing is not None:
         duplicate_scoring = existing.scoring
         if runtime.company_service is not None:
@@ -627,7 +709,7 @@ async def analyze_pdf_endpoint(
             analysis_truncated=result.truncated,
         )
     except DatabaseError as error:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from None
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Document storage is temporarily unavailable.") from None
 
     return PdfAnalysisResponse(
         duplicate=False,
@@ -642,3 +724,17 @@ async def analyze_pdf_endpoint(
         rag_indexed_chunks=rag_chunks,
         warnings=warnings,
     )
+
+
+@router.get("/forgot-password", response_class=HTMLResponse, include_in_schema=False)
+async def forgot_password_page():
+    from .auth_pages import forgot_password_html
+    return HTMLResponse(forgot_password_html(), headers={"Cache-Control": "no-store"})
+
+
+@router.get("/reset-password", response_class=HTMLResponse, include_in_schema=False)
+async def reset_password_page():
+    from .auth_pages import reset_password_html
+    return HTMLResponse(reset_password_html(), headers={
+        "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
+    })

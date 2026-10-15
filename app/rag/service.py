@@ -1,5 +1,7 @@
 """Semantic RAG orchestration: PDF chunks -> GigaChat embeddings -> Qdrant -> grounded answer."""
 from __future__ import annotations
+from app.observability import observe
+from app.llm.cache import generate_operation, RAG_ANSWER
 
 import asyncio
 
@@ -98,6 +100,7 @@ class RagService:
             provider,
         )
 
+    @observe("rag.index")
     def index_pdf(self, owner_user_id: int, pdf_sha256: str, summary: PdfSummary) -> int:
         page_texts = tuple(summary.page_texts or ())
         if not page_texts and summary.text.strip():
@@ -117,7 +120,9 @@ class RagService:
             list(zip(chunks, vectors, strict=True)),
         )
 
-    def retrieve(self, owner_user_id: int, pdf_sha256: str, question: str) -> list[RetrievedChunk]:
+    @observe("rag.retrieve")
+    def retrieve(self, owner_user_id: int, pdf_sha256: str, question: str, *,
+                 ingestion_scope=None, pipeline_version=None) -> list[RetrievedChunk]:
         question = question.strip()
         if not question:
             raise RagError("Вопрос не должен быть пустым.")
@@ -125,17 +130,23 @@ class RagService:
             vector = self.embedder.embed(question)
         except EmbeddingError as error:
             raise RagError(str(error)) from None
+        if ingestion_scope is not None:
+            return self.store.search(owner_user_id, pdf_sha256, vector, self.settings.top_k,
+                                     ingestion_scope=ingestion_scope, pipeline_version=pipeline_version)
         return self.store.search(owner_user_id, pdf_sha256, vector, self.settings.top_k)
 
+    @observe("rag.answer")
     async def answer(
         self,
         owner_user_id: int,
         pdf_sha256: str,
         question: str,
         provider: LLMProvider,
+        *, ingestion_scope=None, pipeline_version=None,
     ) -> RagAnswer:
         # Embedding can be CPU-heavy or network-bound; keep it off the aiogram event loop.
-        chunks = await asyncio.to_thread(self.retrieve, owner_user_id, pdf_sha256, question)
+        chunks = await asyncio.to_thread(self.retrieve, owner_user_id, pdf_sha256, question,
+                                        ingestion_scope=ingestion_scope, pipeline_version=pipeline_version)
         if not chunks:
             raise RagError("Для этого документа semantic RAG-индекс пока не найден.")
         selected: list[RetrievedChunk] = []
@@ -158,5 +169,5 @@ class RagService:
             "Дай краткий ответ на русском языке. После фактов указывай страницу в формате [стр. N].\n\n"
             f"ВОПРОС:\n{question.strip()}\n\nФРАГМЕНТЫ:\n{context}"
         )
-        response = await provider.generate(prompt, max_tokens=700)
+        response = await generate_operation(provider, RAG_ANSWER, prompt, max_tokens=700)
         return RagAnswer(response.text.strip(), tuple(selected))

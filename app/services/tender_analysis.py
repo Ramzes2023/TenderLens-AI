@@ -1,4 +1,5 @@
 """Bounded factual extraction through the provider-neutral interface."""
+from app.llm.cache import generate_operation, TENDER_ANALYSIS
 import json
 import os
 import re
@@ -7,6 +8,7 @@ from dataclasses import dataclass
 from pydantic import ValidationError
 from app.llm.base import LLMProvider
 from app.models.tender import TenderAnalysis
+from app.sources.models import TenderNotice
 
 DEFAULT_MAX_CHARS = 20000
 
@@ -49,6 +51,55 @@ def prepare_text(text: str, max_chars: int = DEFAULT_MAX_CHARS) -> PreparedText:
     return PreparedText(text[:max_chars], len(text) > max_chars, len(text))
 
 
+def analysis_from_notice(
+    notice: TenderNotice,
+) -> TenderAnalysis:
+    """Build a factual metadata-only analysis without calling an LLM.
+
+    Only fields with a direct semantic mapping from TenderNotice are copied.
+    Document requirements, securities, risks and technical requirements remain
+    unknown until source detail/documents are retrieved and analyzed.
+    """
+
+    def text_or_none(
+        value: str | None,
+    ) -> str | None:
+        if value is None:
+            return None
+
+        value = value.strip()
+
+        if not value:
+            return None
+
+        return value[:3000]
+
+    return TenderAnalysis(
+        title=text_or_none(
+            notice.title
+        ),
+        tender_number=text_or_none(
+            notice.tender_number
+        ),
+        customer=text_or_none(
+            notice.customer
+        ),
+        initial_price=notice.initial_price,
+        currency=text_or_none(
+            notice.currency
+        ),
+        submission_deadline=text_or_none(
+            notice.deadline
+        ),
+        delivery_region=text_or_none(
+            notice.region
+        ),
+        procurement_object=text_or_none(
+            notice.summary
+        ),
+    )
+
+
 def _unique_object(pairs):
     result = {}
     for key, value in pairs:
@@ -77,7 +128,7 @@ async def analyze_tender(text: str, provider: LLMProvider, max_chars: int = DEFA
         + json.dumps(TenderAnalysis.model_json_schema(), ensure_ascii=False)
         + "\nДокумент (JSON-строка):\n" + json.dumps(prepared.text, ensure_ascii=False)
     )
-    response = await provider.generate(prompt, max_tokens=4096)
+    response = await generate_operation(provider, TENDER_ANALYSIS, prompt, max_tokens=4096)
     if response.finish_reason == "length":
         raise AnalysisError("Ответ AI обрезан по длине. Попробуйте меньший документ.")
     try:

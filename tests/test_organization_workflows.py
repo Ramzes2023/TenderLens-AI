@@ -21,6 +21,7 @@ from app.organizations import (
     Role,
 )
 from app.sources.models import TenderNotice
+from app.sources.multi import MultiSourceFetchReport
 
 
 class DynamicSource:
@@ -41,6 +42,49 @@ class DynamicSource:
 
     async def fetch(self, limit=20):
         return self.notices[:limit]
+
+
+class FakeCatalog:
+    def __init__(self, notices):
+        self.notices = tuple(notices)
+        self.calls = []
+
+    async def fetch(
+        self,
+        *,
+        limit_per_source=20,
+        source_keys=None,
+        search_terms=(),
+        max_eis_feeds=5,
+    ):
+        self.calls.append(
+            {
+                "limit_per_source":
+                    limit_per_source,
+                "source_keys":
+                    source_keys,
+                "search_terms":
+                    tuple(search_terms),
+                "max_eis_feeds":
+                    max_eis_feeds,
+            }
+        )
+
+        return MultiSourceFetchReport(
+            notices=self.notices[
+                : limit_per_source * 2
+            ],
+            failures=(),
+            attempted_sources=(
+                "ted",
+                "uk_fts",
+            ),
+            successful_sources=(
+                "ted",
+                "uk_fts",
+            ),
+            statuses=(),
+        )
 
 
 class OrganizationWorkflowTests(unittest.TestCase):
@@ -145,11 +189,36 @@ class OrganizationWorkflowTests(unittest.TestCase):
             None,
         )
 
+        self.catalog = FakeCatalog(
+            [
+                TenderNotice(
+                    source="ted",
+                    external_id="global-aluminium-1",
+                    published_at="2026-10-01T10:00:00Z",
+                    summary="Supply contract for aluminium profiles",
+                    title="Supply of aluminium profile",
+                    url="https://example.test/ted/1",
+                    initial_price=2_000_000,
+                    currency="EUR",
+                ),
+                TenderNotice(
+                    source="uk_fts",
+                    external_id="global-copper-1",
+                    title="Supply of copper cable",
+                    url="https://example.test/uk/1",
+                    initial_price=500_000,
+                    currency="GBP",
+                ),
+            ]
+        )
+
         runtime = ApiRuntime(
             auth_service=self.auth,
             organization_service=self.organizations,
             company_service=self.companies,
             monitoring_service=self.monitoring,
+            tender_discovery_service=self.monitoring,
+            source_catalog=self.catalog,
         )
 
         settings = ApiSettings(
@@ -316,6 +385,182 @@ class OrganizationWorkflowTests(unittest.TestCase):
             viewer_score.status_code,
             200,
             viewer_score.text,
+        )
+
+    def test_global_discovery_uses_catalog_and_active_company(self):
+        self.as_account(
+            self.owner
+        )
+
+        self.create_company(
+            "Discover Aluminium",
+            "aluminium",
+        )
+
+        self.as_account(
+            self.viewer
+        )
+
+        first = self.client.post(
+            self.base(
+                "/discover/tenders"
+            )
+        )
+
+        self.assertEqual(
+            first.status_code,
+            200,
+            first.text,
+        )
+
+        payload = first.json()
+
+        self.assertEqual(
+            len(payload["items"]),
+            1,
+        )
+
+        self.assertEqual(
+            payload["items"][0]["source"],
+            "ted",
+        )
+
+        self.assertEqual(
+            payload["items"][0]["external_id"],
+            "global-aluminium-1",
+        )
+
+        item = payload["items"][0]
+        self.assertEqual(item["published_at"], "2026-10-01T10:00:00Z")
+        self.assertEqual(item["summary"], "Supply contract for aluminium profiles")
+
+        self.assertEqual(
+            item["analysis_stage"],
+            "metadata_preview",
+        )
+
+        self.assertFalse(
+            item["full_ai_analyzed"]
+        )
+
+        self.assertEqual(
+            item["metadata_analysis"]["title"],
+            "Supply of aluminium profile",
+        )
+
+        self.assertEqual(
+            item["metadata_analysis"]["initial_price"],
+            2_000_000,
+        )
+
+        self.assertEqual(
+            item["metadata_analysis"]["currency"],
+            "EUR",
+        )
+
+        self.assertIsNone(
+            item["metadata_analysis"]["contract_term"]
+        )
+
+        self.assertEqual(
+            item["preliminary_scoring"]["profile_name"],
+            "Discover Aluminium",
+        )
+
+        criteria = {
+            criterion["code"]:
+                criterion
+            for criterion
+            in item[
+                "preliminary_scoring"
+            ]["criteria"]
+        }
+
+        self.assertEqual(
+            criteria["category"]["status"],
+            "matched",
+        )
+
+        self.assertEqual(
+            criteria["budget"]["status"],
+            "not_scored",
+        )
+
+        self.assertEqual(
+            payload["attempted_sources"],
+            [
+                "ted",
+                "uk_fts",
+            ],
+        )
+
+        self.assertEqual(
+            payload["successful_sources"],
+            [
+                "ted",
+                "uk_fts",
+            ],
+        )
+
+        self.assertEqual(
+            payload["failed_sources"],
+            [],
+        )
+
+        self.assertFalse(
+            payload["partial_failure"]
+        )
+
+        self.assertFalse(
+            payload["total_failure"]
+        )
+
+        self.assertEqual(
+            self.catalog.calls[-1][
+                "search_terms"
+            ],
+            ("aluminium",),
+        )
+
+        # Discovery is search, not seen-state mutation:
+        # repeating it must still return the opportunity.
+        repeated = self.client.post(
+            self.base(
+                "/discover/tenders"
+            )
+        )
+
+        self.assertEqual(
+            repeated.status_code,
+            200,
+            repeated.text,
+        )
+
+        self.assertEqual(
+            len(
+                repeated.json()["items"]
+            ),
+            1,
+        )
+
+        self.assertEqual(
+            len(self.catalog.calls),
+            2,
+        )
+
+        self.as_account(
+            self.outsider
+        )
+
+        denied = self.client.post(
+            self.base(
+                "/discover/tenders"
+            )
+        )
+
+        self.assertEqual(
+            denied.status_code,
+            403,
         )
 
     def test_monitoring_context_is_shared_and_company_scoped(self):

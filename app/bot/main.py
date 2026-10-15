@@ -50,7 +50,8 @@ def create_dispatcher() -> Dispatcher:
 
 async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: int = 20000,
                   company_profile=None, tender_repository=None, rag_service=None,
-                  monitoring_service=None, company_service=None, auth_service=None) -> None:
+                  monitoring_service=None, company_service=None, auth_service=None,
+                  source_catalog=None, tender_discovery_service=None) -> None:
     if settings.proxy_url:
         session = AiohttpSession(proxy=settings.proxy_url)
         try:
@@ -77,6 +78,10 @@ async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: in
             dispatcher["company_service"] = company_service
         if auth_service is not None:
             dispatcher["auth_service"] = auth_service
+        if source_catalog is not None:
+            dispatcher["source_catalog"] = source_catalog
+        if tender_discovery_service is not None:
+            dispatcher["tender_discovery_service"] = tender_discovery_service
         await bot.get_me()  # Validate credentials before announcing successful startup.
         monitor_task = None
         monitor_stop = None
@@ -110,15 +115,16 @@ def main() -> int:
         print(f"Ошибка конфигурации: {error}", file=sys.stderr)
         return 2
     configure_logging(settings)
-    from app.llm.config import load_settings as load_llm_settings
-    from app.llm.gigachat import GigaChatProvider
+    from app.llm.gateway import build_gateway
     from app.llm.base import LLMConfigurationError
     from app.services.tender_analysis import configured_max_chars, AnalysisError
+    from app.cache import build_cache
+    from app.llm.cache import compose_cached_ai
+    cache = build_cache()
     provider, max_chars = None, 20000
     try:
-        llm_settings = load_llm_settings()
         max_chars = configured_max_chars()
-        provider = GigaChatProvider(llm_settings)
+        provider = compose_cached_ai(build_gateway(), cache)
     except (LLMConfigurationError, AnalysisError):
         logger.warning("AI-анализ отключён: проверьте настройки LLM и лимит текста.")
 
@@ -131,10 +137,21 @@ def main() -> int:
 
     from app.database import (DatabaseConfigurationError, DatabaseError,
                               TenderRepository, load_database_settings)
+    from app.database.backend import Database
+    database = None
+    try:
+        database = Database(load_database_settings())
+        if database.backend == "postgresql":
+            database.migrate()
+    except Exception:
+        if database is not None:
+            database.close()
+        cache.close()
+        logger.error("VALYQON AI database startup failed.")
+        return 2
     tender_repository = None
     try:
-        db_settings = load_database_settings()
-        tender_repository = TenderRepository(db_settings.path)
+        tender_repository = TenderRepository(database)
         tender_repository.initialize()
     except (DatabaseConfigurationError, DatabaseError):
         logger.warning("История тендеров отключена: проверьте DATABASE_URL и доступ к файлу БД.")
@@ -142,11 +159,7 @@ def main() -> int:
     from app.companies import CompanyRepository, CompanyRepositoryError, CompanyService
     company_service = None
     try:
-        if tender_repository is not None:
-            company_repository = CompanyRepository(tender_repository.path)
-        else:
-            from app.database import load_database_settings
-            company_repository = CompanyRepository(load_database_settings().path)
+        company_repository = CompanyRepository(database)
         company_repository.initialize()
         company_service = CompanyService(company_repository, fallback_profile=company_profile)
     except Exception as error:
@@ -155,12 +168,7 @@ def main() -> int:
     from app.auth import AuthRepository, AuthService
     auth_service = None
     try:
-        if tender_repository is not None:
-            auth_db_path = tender_repository.path
-        else:
-            from app.database import load_database_settings
-            auth_db_path = load_database_settings().path
-        auth_repository = AuthRepository(auth_db_path)
+        auth_repository = AuthRepository(database)
         auth_repository.initialize()
         auth_service = AuthService(auth_repository)
     except Exception as error:
@@ -185,48 +193,56 @@ def main() -> int:
     from app.sources import SourceRegistryError, build_source_catalog
 
     monitoring_service = None
+    tender_discovery_service = None
+    source_catalog = None
 
     try:
         monitor_settings = load_monitoring_settings()
         source_catalog = build_source_catalog(monitor_settings)
-        enabled_sources = source_catalog.registry.registrations(
-            enabled_only=True
+        eis_registration = (
+            source_catalog.registry.get(
+                "eis"
+            )
         )
 
-        if enabled_sources:
-            if tender_repository is None:
-                from app.database import load_database_settings
-                db_path = load_database_settings().path
-            else:
-                db_path = tender_repository.path
+        db_path = database
 
-            monitor_repository = MonitoringRepository(db_path)
-            monitor_repository.initialize()
+        monitor_repository = MonitoringRepository(
+            db_path
+        )
+        monitor_repository.initialize()
 
-            # EIS remains the monitoring adapter until global searchable
-            # connectors are enabled in the following source phases.
-            source = source_catalog.registry.get("eis").source
+        # Manual global discovery always has its own service
+        # for profile resolution and source-scoped deduplication.
+        # Its legacy single-source member is not used by /tenders
+        # when SourceCatalog is present.
+        tender_discovery_service = TenderMonitorService(
+            monitor_settings,
+            eis_registration.source,
+            monitor_repository,
+            company_profile,
+            profile_resolver=(
+                company_service.profile_for_owner
+                if company_service is not None
+                else None
+            ),
+            scope_resolver=(
+                company_service.scope_for_owner
+                if company_service is not None
+                else None
+            ),
+        )
 
-            monitoring_service = TenderMonitorService(
-                monitor_settings,
-                source,
-                monitor_repository,
-                company_profile,
-                profile_resolver=(
-                    company_service.profile_for_owner
-                    if company_service is not None
-                    else None
-                ),
-                scope_resolver=(
-                    company_service.scope_for_owner
-                    if company_service is not None
-                    else None
-                ),
+        # Background monitoring intentionally remains EIS-only.
+        if eis_registration.enabled:
+            monitoring_service = (
+                tender_discovery_service
             )
 
         elif monitor_settings.enabled:
             logger.warning(
-                "?????????????? ???????, ?? ???????? ?????????? ???."
+                "Background monitoring is enabled, "
+                "but the EIS source is not configured."
             )
 
     except (
@@ -241,7 +257,9 @@ def main() -> int:
     try:
         asyncio.run(run_bot(
             settings, provider, max_chars, company_profile, tender_repository,
-            rag_service, monitoring_service, company_service, auth_service
+            rag_service, monitoring_service, company_service, auth_service,
+            source_catalog=source_catalog,
+            tender_discovery_service=tender_discovery_service
         ))
     except KeyboardInterrupt:
         logger.info("Бот остановлен пользователем.")
@@ -252,4 +270,7 @@ def main() -> int:
         # Never print exception payloads, which may contain credentials/request URLs.
         logger.error("Бот завершился с ошибкой (%s). Проверьте сеть и настройки Telegram.", type(error).__name__)
         return 1
+    finally:
+        cache.close()
+        database.close()
     return 0

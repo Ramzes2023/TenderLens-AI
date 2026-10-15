@@ -10,3 +10,4 @@ class LLMResponse:
     input_tokens: int | None = None
     output_tokens: int | None = None
     finish_reason: str | None = None
+    attempts: int = 1

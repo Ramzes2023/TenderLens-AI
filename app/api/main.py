@@ -4,15 +4,21 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+import mimetypes
 
 from app import __version__
 
 from .config import ApiSettings, load_api_settings
 from .auth_routes import router as auth_router
+from .support_routes import router as support_router
 from .organization_routes import router as organization_router
 from .organization_company_routes import router as organization_company_router
 from .organization_data_routes import router as organization_data_router
 from .organization_workflow_routes import router as organization_workflow_router
+from .scoring_run_routes import router as scoring_run_router
+from .analytics_routes import router as analytics_router
 from .routes import router
 from .runtime import ApiRuntime, build_runtime
 from .security import LoginRateLimiter
@@ -24,8 +30,17 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.api_settings = api_settings
-        app.state.runtime = runtime or build_runtime()
-        yield
+        owns_runtime = runtime is None
+        active_runtime = build_runtime() if owns_runtime else runtime
+        app.state.runtime = active_runtime
+        from app.analytics.admission import Admission
+        app.state.analytics_admission = Admission(limit=2)
+        try:
+            yield
+        finally:
+            await app.state.analytics_admission.shutdown()
+            if owns_runtime:
+                active_runtime.close()
 
     app = FastAPI(
         title="VALYQON AI API",
@@ -36,11 +51,20 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
         ),
         lifespan=lifespan,
     )
+    from app.observability import RequestDiagnostics, telemetry
+    app.state.telemetry = telemetry
+    app.add_middleware(RequestDiagnostics)
+    # Windows may otherwise serve GeoJSON as application/octet-stream.
+    mimetypes.add_type("application/geo+json", ".geojson")
+    app.mount("/assets", StaticFiles(directory=Path(__file__).parent / "static"), name="assets")
     app.state.login_rate_limiter = LoginRateLimiter()
     app.include_router(auth_router)
+    app.include_router(support_router)
     app.include_router(organization_router)
     app.include_router(organization_company_router)
     app.include_router(organization_workflow_router)
+    app.include_router(scoring_run_router)
+    app.include_router(analytics_router)
     app.include_router(organization_data_router)
     app.include_router(router)
     return app

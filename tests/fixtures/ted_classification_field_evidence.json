@@ -1,0 +1,58 @@
+{
+  "reference_url": "https://docs.ted.europa.eu/ODS/latest/reuse/field-list.html",
+  "reference_sha256": "79324dc627ee846f137e8cf4d069509784d51dcc7770f592dcd58096e261a419",
+  "documentation_component": "ODS 1 / displayed 1.0",
+  "columns": [
+    "Search field",
+    "Alias 1",
+    "Alias 2",
+    "Reference in the eForms SDK"
+  ],
+  "rows": [
+    [
+      "additional-classification-lot",
+      "BT-263-Lot",
+      "",
+      "BT-263-Lot"
+    ],
+    [
+      "additional-classification-part",
+      "BT-263-Part",
+      "",
+      "BT-263-Part"
+    ],
+    [
+      "additional-classification-proc",
+      "BT-263-Procedure",
+      "",
+      "BT-263-Procedure"
+    ],
+    [
+      "classification-cpv",
+      "PC",
+      "",
+      "BT-262-Procedure BT-263-Procedure BT-262-Part BT-263-Part BT-262-Lot BT-263-Lot"
+    ],
+    [
+      "main-classification-lot",
+      "BT-262-Lot",
+      "",
+      "BT-262-Lot"
+    ],
+    [
+      "main-classification-part",
+      "BT-262-Part",
+      "",
+      "BT-262-Part"
+    ],
+    [
+      "main-classification-proc",
+      "BT-262-Procedure",
+      "",
+      "BT-262-Procedure"
+    ]
+  ],
+  "response_json_types": "not documented in supplied field-list",
+  "response_context_binding": "not documented in supplied field-list",
+  "extraction_status": "pending"
+}

@@ -30,10 +30,11 @@ class DatabaseConfigTests(unittest.TestCase):
         settings = load_database_settings(self.env_file)
         self.assertTrue(str(settings.path).endswith(str(Path("local") / "history.db")))
 
-    def test_non_sqlite_rejected(self):
+    def test_postgresql_supported(self):
         os.environ["DATABASE_URL"] = "postgresql://localhost/tenderlens"
-        with self.assertRaises(DatabaseConfigurationError):
-            load_database_settings(self.env_file)
+        settings = load_database_settings(self.env_file)
+        self.assertEqual(settings.backend, "postgresql")
+        self.assertIsNone(settings.path)
 
 
 class RepositoryTests(unittest.TestCase):

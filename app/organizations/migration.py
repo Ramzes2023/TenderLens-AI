@@ -1,13 +1,10 @@
-"""Connection-level helpers: callers own the transaction; no production runner."""
+"""Additive organization schema/backfill helpers; caller owns the transaction."""
 from datetime import datetime, timezone
+from app.database.backend import table_exists, table_columns
 
 
 def now():
     return datetime.now(timezone.utc).isoformat(timespec="microseconds")
-
-
-def table_exists(conn, name):
-    return conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone() is not None
 
 
 def ensure_personal(conn, account_id):
@@ -46,61 +43,14 @@ def backfill_companies(conn, owner_user_id=None):
 
 
 def migrate(conn):
-    # BEGIN IMMEDIATE is held by caller, including ALTER and backfill.
-    conn.execute("""CREATE TABLE IF NOT EXISTS organizations(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL CHECK(length(trim(name)) BETWEEN 1 AND 200),
-        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-        created_by_account_id INTEGER NOT NULL REFERENCES auth_accounts(id) ON DELETE RESTRICT,
-        personal_account_id INTEGER UNIQUE REFERENCES auth_accounts(id) ON DELETE RESTRICT)""")
-    conn.execute("""CREATE TABLE IF NOT EXISTS organization_members(
-        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-        account_id INTEGER NOT NULL REFERENCES auth_accounts(id) ON DELETE RESTRICT,
-        role TEXT NOT NULL CHECK(role IN ('owner','admin','member','viewer')),
-        created_at TEXT NOT NULL,
-        PRIMARY KEY(organization_id,account_id))""")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_org_members_account ON organization_members(account_id,organization_id)")
-
-    conn.execute("""CREATE TABLE IF NOT EXISTS organization_invitations(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-        email TEXT NOT NULL COLLATE NOCASE,
-        role TEXT NOT NULL CHECK(role IN ('admin','member','viewer')),
-        token_hash TEXT NOT NULL UNIQUE,
-        invited_by_account_id INTEGER NOT NULL REFERENCES auth_accounts(id) ON DELETE RESTRICT,
-        expires_at TEXT NOT NULL,
-        accepted_at TEXT,
-        revoked_at TEXT,
-        created_at TEXT NOT NULL)""")
-
-    conn.execute(
-        """CREATE INDEX IF NOT EXISTS idx_org_invites_org
-           ON organization_invitations(
-               organization_id,
-               created_at DESC
-           )"""
-    )
-
-    conn.execute(
-        """CREATE INDEX IF NOT EXISTS idx_org_invites_email
-           ON organization_invitations(
-               email,
-               expires_at
-           )"""
-    )
-
-    conn.execute(
-        """CREATE UNIQUE INDEX IF NOT EXISTS uq_org_pending_invite_email
-           ON organization_invitations(
-               organization_id,
-               email
-           )
-           WHERE accepted_at IS NULL
-             AND revoked_at IS NULL"""
-    )
+    from pathlib import Path
+    schema = Path(__file__).resolve().parents[1] / "database" / "schema" / "organizations.sql"
+    for statement in schema.read_text(encoding="utf-8").split(";"):
+        if statement.strip():
+            conn.execute(statement)
 
     if table_exists(conn, "company_workspaces"):
-        columns = {row[1] for row in conn.execute("PRAGMA table_info(company_workspaces)")}
+        columns = set(table_columns(conn, "company_workspaces"))
         if "organization_id" not in columns:
             conn.execute("ALTER TABLE company_workspaces ADD COLUMN organization_id INTEGER REFERENCES organizations(id) ON DELETE RESTRICT")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_company_org ON company_workspaces(organization_id)")

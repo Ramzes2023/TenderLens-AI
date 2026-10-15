@@ -117,14 +117,20 @@ async function loadOrganizations(){
     'organizationSelect'
   );
 
-  const previous=state.organizationId;
+    let previous=state.organizationId;
+    if(!Number.isInteger(previous) && Number.isInteger(state.accountId)){
+      try{previous=Number(localStorage.getItem(`valyqon.organization.${state.accountId}`));}catch{}
+    }
 
   select.innerHTML=items.map(item=>{
+    const duplicate=items.some(other=>other.id!==item.id && other.name===item.name);
+    const name=duplicate?`${item.name} · #${item.id}`:item.name;
     const label=item.personal
-      ?`${item.name} ? PERSONAL`
-      :item.name;
+      ?`${name} · PERSONAL`
+      :name;
 
-    return `<option value="${item.id}">${esc(label)}</option>`;
+      const ruLabel=item.personal?`${name} · ЛИЧНОЕ`:name;
+      return `<option value="${item.id}" data-ui-en="${esc(label)}" data-ui-ru="${esc(ruLabel)}">${esc(label)}</option>`;
   }).join('');
 
   if(
@@ -142,6 +148,7 @@ async function loadOrganizations(){
   select.value=String(
     state.organizationId
   );
+    rememberOrganization();
 
   document.getElementById(
     'organizationCount'
@@ -152,7 +159,12 @@ async function loadOrganizations(){
   await loadOrganizationManagement();
 }
 
-async function selectOrganization(){
+  function rememberOrganization(){
+    if(!Number.isInteger(state.accountId) || !state.organizations.some(o=>o.id===state.organizationId))return;
+    try{localStorage.setItem(`valyqon.organization.${state.accountId}`,String(state.organizationId));}catch{}
+  }
+
+  async function selectOrganization(){
   const value=Number(
     document.getElementById(
       'organizationSelect'
@@ -167,6 +179,7 @@ async function selectOrganization(){
   }
 
   state.organizationId=value;
+    rememberOrganization();
 
   clearInviteLink();
 
@@ -201,7 +214,7 @@ async function createOrganization(){
 
   try{
     button.disabled=true;
-    button.textContent='Creating?';
+    button.textContent='Creating...';
 
     const created=await api(
       '/api/v1/organizations',
@@ -218,6 +231,7 @@ async function createOrganization(){
     await loadOrganizations();
 
     state.organizationId=created.id;
+    rememberOrganization();
 
     document.getElementById(
       'organizationSelect'
@@ -292,7 +306,7 @@ function renderManagerMember(member){
         <div>
           <div class="title">
             Account #${member.account_id}
-            ${member.account_id===state.accountId?'<span class="active"> ? YOU</span>':''}
+            ${member.account_id===state.accountId?'<span class="active"> YOU</span>':''}
           </div>
           <div class="sub">
             Role: ${esc(member.role)}
@@ -372,9 +386,9 @@ async function loadOrganizationManagement(){
   if(organization.personal){
     membersRoot.innerHTML=
       `<div class="empty">
-        Personal account workspace ? role:
+        Personal account workspace; role:
         <b>${esc(state.organizationRole)}</b>.
-        Personal v1.5 data stays on the legacy account namespace.
+        Your companies and analyzed documents are private to your account.
       </div>`;
 
     invitesRoot.innerHTML=
@@ -518,7 +532,7 @@ async function loadOrganizationInvitations(){
                 </div>
                 <div class="sub">
                   ${esc(item.role)}
-                  ? expires ${esc(item.expires_at)}
+                 ; expires ${esc(item.expires_at)}
                 </div>
               </div>
               <button onclick="revokeOrganizationInvitation(${item.id})">
@@ -569,7 +583,7 @@ async function createOrganizationInvitation(){
 
   try{
     button.disabled=true;
-    button.textContent='Creating?';
+    button.textContent='Creating...';
 
     const created=await api(
       `${organizationBase()}/invitations`,
@@ -600,7 +614,7 @@ async function createOrganizationInvitation(){
     );
 
     message.innerHTML=
-      '<div class="success">Invitation created. Copy this link now ? the raw token is returned only at creation time.</div>';
+      '<div class="success">Invitation created. Copy and share this link with your teammate now; it will not be shown again.</div>';
 
     await loadOrganizationInvitations();
 
@@ -661,9 +675,13 @@ async function copyInviteLink(){
     input.focus();
     input.select();
 
-    document.execCommand(
-      'copy'
-    );
+    let copied=false;
+    try{copied=Boolean(document.execCommand?.('copy'));}catch(_){}
+    if(!copied){
+      document.getElementById('inviteMessage').innerHTML=
+        '<div class="error">Automatic copying is unavailable. Select and copy the invitation link manually.</div>';
+      return;
+    }
   }
 
   document.getElementById(

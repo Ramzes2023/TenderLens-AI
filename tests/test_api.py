@@ -9,6 +9,7 @@ from app import __version__
 from app.api.config import ApiSettings
 from app.api.main import create_app
 from app.api.runtime import ApiRuntime
+from app.auth import AuthRepository, AuthService
 from app.companies import CompanyRepository, CompanyService
 from app.database.repository import TenderRepository
 from app.models.tender import TenderAnalysis
@@ -79,6 +80,12 @@ class ApiTests(unittest.TestCase):
             max_contract_value=5000,
         )
         company_service = CompanyService(company_repo, fallback_profile=profile)
+        auth_repository = AuthRepository(db_path)
+        auth_repository.initialize()
+        auth_service = AuthService(auth_repository)
+        account = auth_service.register("api@example.com", "synthetic secure password 123")
+        account = auth_service.link_legacy_owner(account, 42)
+        token = auth_service.create_session(account)
         runtime = ApiRuntime(
             provider=FakeProvider(),
             company_profile=profile,
@@ -86,10 +93,12 @@ class ApiTests(unittest.TestCase):
             tender_repository=repo,
             rag_service=FakeRag(),
             monitoring_service=FakeMonitoring(),
+            auth_service=auth_service,
         )
         settings = ApiSettings(host="127.0.0.1", port=8000, reload=False, api_key=None)
         self.client_context = TestClient(create_app(runtime=runtime, settings=settings))
         self.client = self.client_context.__enter__()
+        self.client.cookies.set("tenderlens_session", token)
         self.addCleanup(self.client_context.__exit__, None, None, None)
 
     def test_health_and_openapi(self):
@@ -98,7 +107,7 @@ class ApiTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["status"], "ok")
         self.assertEqual(body["version"], __version__)
-        self.assertEqual(body["service"], "TenderLens AI")
+        self.assertEqual(body["service"], "VALYQON AI")
         self.assertEqual(self.client.get("/openapi.json").json()["info"]["title"], "VALYQON AI API")
         self.assertNotIn("phase", body)
         self.assertEqual(body["components"]["database"], "ready")
@@ -109,7 +118,21 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()[0]["id"], self.record.id)
         other = self.client.get("/api/v1/tenders", params={"owner_user_id": 99})
-        self.assertEqual(other.json(), [])
+        self.assertEqual(other.status_code, 403)
+
+    def test_document_storage_errors_do_not_expose_internal_details(self):
+        from unittest.mock import patch
+        from app.database import DatabaseError
+
+        repository = self.client.app.state.runtime.tender_repository
+        for method, url in (("list_recent", "/api/v1/tenders"),
+                            ("find_by_id", f"/api/v1/tenders/{self.record.id}")):
+            with patch.object(repository, method,
+                              side_effect=DatabaseError("SQL SECRET /internal/storage.db")):
+                response = self.client.get(url, params={"owner_user_id": 42})
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(response.json()["detail"],
+                             "Document storage is temporarily unavailable.")
 
     def test_detail_and_not_found(self):
         response = self.client.get(
@@ -120,9 +143,13 @@ class ApiTests(unittest.TestCase):
         hidden = self.client.get(
             f"/api/v1/tenders/{self.record.id}", params={"owner_user_id": 99}
         )
-        self.assertEqual(hidden.status_code, 404)
+        self.assertEqual(hidden.status_code, 403)
+        missing = self.client.get("/api/v1/tenders/999999", params={"owner_user_id": 42})
+        self.assertEqual(missing.status_code, 404)
 
     def test_scoring_endpoint(self):
+        runtime = self.client.app.state.runtime
+        runtime.company_service.create(42, "Demo", runtime.company_profile, make_active=True)
         payload = TenderAnalysis(
             title="Поставка электрооборудования",
             initial_price=1000,
@@ -163,6 +190,8 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.json()["analysis"]["title"], "Already analyzed")
 
     def test_monitoring_endpoints(self):
+        runtime = self.client.app.state.runtime
+        runtime.company_service.create(42, "Demo", runtime.company_profile, make_active=True)
         response = self.client.get("/api/v1/monitoring/status", params={"owner_user_id": 42})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["rss_feeds"], 2)
@@ -209,6 +238,7 @@ class ApiRuntimeBuildTests(unittest.TestCase):
         from unittest.mock import patch
 
         from app.api.runtime import build_runtime
+        from app.database.config import DatabaseSettings
 
         with tempfile.TemporaryDirectory() as directory:
             db_path = Path(directory) / "runtime.db"
@@ -220,7 +250,7 @@ class ApiRuntimeBuildTests(unittest.TestCase):
             with (
                 patch("app.llm.config.load_settings", side_effect=RuntimeError("disabled in test")),
                 patch("app.scoring.config.load_company_profile", return_value=profile),
-                patch("app.database.load_database_settings", return_value=SimpleNamespace(path=db_path)),
+                patch("app.database.load_database_settings", return_value=DatabaseSettings(url="", path=db_path)),
                 patch("app.rag.load_rag_settings", return_value=SimpleNamespace(enabled=False)),
                 patch("app.monitoring.load_monitoring_settings", return_value=SimpleNamespace(source_configured=False)),
             ):
@@ -248,7 +278,7 @@ class ApiKeyTests(unittest.TestCase):
                 params={"owner_user_id": 1},
                 headers={"X-API-Key": "secret"},
             )
-            self.assertEqual(authorized.status_code, 503)
+            self.assertEqual(authorized.status_code, 403)
 
 
 if __name__ == "__main__":

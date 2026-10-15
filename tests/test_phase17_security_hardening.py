@@ -4,8 +4,31 @@ import unittest
 from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlsplit
 
 from fastapi import Depends, FastAPI, Request
+
+
+class RecordingEmailSender:
+    public_base_url = "http://testserver"
+
+    def __init__(self):
+        self.messages = []
+
+    def send_verification(
+        self,
+        *,
+        recipient,
+        verification_url,
+        expires_at,
+    ):
+        self.messages.append(
+            {
+                "recipient": recipient,
+                "verification_url": verification_url,
+                "expires_at": expires_at,
+            }
+        )
 from fastapi.security import APIKeyHeader
 from fastapi.testclient import TestClient
 
@@ -24,10 +47,14 @@ class Phase17SecurityHardeningTests(unittest.TestCase):
         self.repository = AuthRepository(self.path)
         self.repository.initialize()
         self.service = AuthService(self.repository)
+        self.email_sender = RecordingEmailSender()
 
     def _main_client(self):
         app = create_app(
-            runtime=ApiRuntime(auth_service=self.service),
+            runtime=ApiRuntime(
+                auth_service=self.service,
+                email_sender=self.email_sender,
+            ),
             settings=ApiSettings(
                 host="127.0.0.1",
                 port=8000,
@@ -40,6 +67,24 @@ class Phase17SecurityHardeningTests(unittest.TestCase):
         self.addCleanup(ctx.__exit__, None, None, None)
         return app, client
 
+    def _verify_latest(self, client):
+        url = self.email_sender.messages[-1][
+            "verification_url"
+        ]
+        token = parse_qs(
+            urlsplit(url).query
+        )["token"][0]
+
+        response = client.post(
+            "/api/v1/auth/verify-email",
+            json={"token": token},
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
     def test_explicit_cross_origin_auth_write_is_blocked(self):
         _app, client = self._main_client()
         registered = client.post(
@@ -47,6 +92,7 @@ class Phase17SecurityHardeningTests(unittest.TestCase):
             json={"email": "origin@example.com", "password": "very secure password 123"},
         )
         self.assertEqual(registered.status_code, 201)
+        self._verify_latest(client)
 
         blocked = client.post(
             "/api/v1/auth/telegram-link",
@@ -110,6 +156,7 @@ class Phase17SecurityHardeningTests(unittest.TestCase):
             json={"email": "rate@example.com", "password": "very secure password 123"},
         )
         self.assertEqual(created.status_code, 201)
+        self._verify_latest(client)
         self.assertEqual(client.post("/api/v1/auth/logout").status_code, 204)
 
         payload = {"email": "rate@example.com", "password": "definitely wrong password"}

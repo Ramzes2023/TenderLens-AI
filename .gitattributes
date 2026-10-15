@@ -1,0 +1,3 @@
+# Preserve the exact bytes of the authenticated SHA-256-pinned synthetic fixture.
+# Git text normalization would otherwise alter its intentional CRLF newline.
+tests/fixtures/p39d_offline_history.json -text

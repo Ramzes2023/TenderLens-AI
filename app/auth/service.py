@@ -26,6 +26,38 @@ class RegistrationError(AuthError):
     pass
 
 
+class PasswordResetError(AuthError):
+    pass
+
+
+class PasswordResetInvalid(PasswordResetError):
+    pass
+
+
+class PasswordResetRateLimited(PasswordResetError):
+    pass
+
+
+class EmailVerificationError(AuthError):
+    pass
+
+
+class EmailVerificationInvalid(EmailVerificationError):
+    pass
+
+
+class EmailVerificationRateLimited(EmailVerificationError):
+    pass
+
+
+class EmailAlreadyVerified(EmailVerificationError):
+    pass
+
+
+class EmailNotVerified(AuthError):
+    pass
+
+
 class TelegramLinkError(AuthError):
     pass
 
@@ -49,9 +81,36 @@ def _token_hash(token: str) -> str:
 
 
 class AuthService:
-    def __init__(self, repository: AuthRepository, *, session_days: int = 7):
+    def __init__(
+        self,
+        repository: AuthRepository,
+        *,
+        session_days: int = 7,
+        verification_minutes: int = 30,
+        verification_cooldown_seconds: int = 60,
+    ):
         self.repository = repository
-        self.session_days = max(1, min(int(session_days), 30))
+        self.session_days = max(
+            1,
+            min(
+                int(session_days),
+                30,
+            ),
+        )
+        self.verification_minutes = max(
+            5,
+            min(
+                int(verification_minutes),
+                24 * 60,
+            ),
+        )
+        self.verification_cooldown_seconds = max(
+            10,
+            min(
+                int(verification_cooldown_seconds),
+                60 * 60,
+            ),
+        )
 
     def register(self, email: str, password: str) -> AuthAccount:
         clean_email = normalize_email(email)
@@ -75,6 +134,281 @@ class AuthService:
         account, encoded_hash = record
         if not account.is_active or not verify_password(password, encoded_hash):
             raise InvalidCredentials("Invalid email or password.")
+
+        if not account.email_verified:
+            raise EmailNotVerified(
+                "Email verification required."
+            )
+
+        return account
+
+    def issue_email_verification(
+        self,
+        account: AuthAccount,
+        *,
+        enforce_cooldown: bool = True,
+    ) -> tuple[str, str]:
+        if account.email_verified:
+            raise EmailAlreadyVerified(
+                "Email is already verified."
+            )
+
+        token = secrets.token_urlsafe(32)
+        now = datetime.now(
+            timezone.utc
+        )
+
+        expires_at = (
+            now
+            + timedelta(
+                minutes=self.verification_minutes
+            )
+        ).isoformat(
+            timespec="seconds"
+        )
+
+        cooldown_after = None
+
+        if enforce_cooldown:
+            cooldown_after = (
+                now
+                - timedelta(
+                    seconds=(
+                        self.verification_cooldown_seconds
+                    )
+                )
+            ).isoformat(
+                timespec="seconds"
+            )
+
+        try:
+            created = (
+                self.repository
+                .create_email_verification(
+                    account_id=account.id,
+                    token_hash=_token_hash(
+                        token
+                    ),
+                    expires_at=expires_at,
+                    cooldown_after=cooldown_after,
+                )
+            )
+
+        except AuthRepositoryError as error:
+            if (
+                str(error)
+                == "Email is already verified."
+            ):
+                raise EmailAlreadyVerified(
+                    "Email is already verified."
+                ) from None
+
+            raise EmailVerificationError(
+                "Email verification storage is unavailable."
+            ) from None
+
+        if not created:
+            raise EmailVerificationRateLimited(
+                "Please wait before requesting another verification email."
+            )
+
+        return (
+            token,
+            expires_at,
+        )
+
+    def request_email_verification(
+        self,
+        email: str,
+    ) -> tuple[AuthAccount, str, str] | None:
+        """Prepare a resend without revealing whether an account exists."""
+
+        try:
+            clean_email = normalize_email(
+                email
+            )
+        except RegistrationError:
+            return None
+
+        try:
+            record = (
+                self.repository
+                .find_account_by_email(
+                    clean_email
+                )
+            )
+        except AuthRepositoryError:
+            raise EmailVerificationError(
+                "Email verification storage is unavailable."
+            ) from None
+
+        if record is None:
+            return None
+
+        account, _password_hash = (
+            record
+        )
+
+        if (
+            not account.is_active
+            or account.email_verified
+        ):
+            return None
+
+        try:
+            token, expires_at = (
+                self.issue_email_verification(
+                    account,
+                    enforce_cooldown=True,
+                )
+            )
+
+        except (
+            EmailAlreadyVerified,
+            EmailVerificationRateLimited,
+        ):
+            return None
+
+        return (
+            account,
+            token,
+            expires_at,
+        )
+
+    def revoke_email_verification(
+        self,
+        token: str,
+    ) -> None:
+        clean_token = (
+            token
+            or ""
+        ).strip()
+
+        if not clean_token:
+            return
+
+        try:
+            self.repository.delete_email_verification(
+                token_hash=_token_hash(
+                    clean_token
+                ),
+            )
+
+        except AuthRepositoryError:
+            raise EmailVerificationError(
+                "Email verification storage is unavailable."
+            ) from None
+
+    def verify_email(
+        self,
+        token: str,
+    ) -> AuthAccount:
+        clean_token = (
+            token or ""
+        ).strip()
+
+        if (
+            not clean_token
+            or len(clean_token) > 256
+        ):
+            raise EmailVerificationInvalid(
+                "Verification link is invalid or expired."
+            )
+
+        now = datetime.now(
+            timezone.utc
+        ).isoformat(
+            timespec="seconds"
+        )
+
+        try:
+            account = (
+                self.repository
+                .consume_email_verification(
+                    token_hash=_token_hash(
+                        clean_token
+                    ),
+                    now=now,
+                )
+            )
+
+        except AuthRepositoryError:
+            raise EmailVerificationError(
+                "Email verification storage is unavailable."
+            ) from None
+
+        if account is None:
+            raise EmailVerificationInvalid(
+                "Verification link is invalid or expired."
+            )
+
+        return account
+
+    def issue_password_reset(
+        self, account: AuthAccount, *, enforce_cooldown: bool = True,
+    ) -> tuple[str, str]:
+        token = secrets.token_urlsafe(32)
+        now = datetime.now(timezone.utc)
+        expires_at = (now + timedelta(minutes=30)).isoformat(timespec="seconds")
+        cooldown_after = (
+            (now - timedelta(seconds=60)).isoformat(timespec="seconds")
+            if enforce_cooldown else None
+        )
+        try:
+            created = self.repository.create_password_reset(
+                account_id=account.id, token_hash=_token_hash(token),
+                expires_at=expires_at, cooldown_after=cooldown_after,
+            )
+        except AuthRepositoryError:
+            raise PasswordResetError("Password reset is temporarily unavailable.") from None
+        if not created:
+            raise PasswordResetRateLimited("Please wait before requesting another password reset.")
+        return token, expires_at
+
+    def request_password_reset(self, email: str) -> tuple[AuthAccount, str, str] | None:
+        """Suppress unknown, inactive and cooldown-limited requests identically."""
+        try:
+            clean_email = normalize_email(email)
+        except RegistrationError:
+            return None
+        try:
+            record = self.repository.find_account_by_email(clean_email)
+        except AuthRepositoryError:
+            raise PasswordResetError("Password reset is temporarily unavailable.") from None
+        if record is None or not record[0].is_active:
+            return None
+        account = record[0]
+        try:
+            token, expires_at = self.issue_password_reset(account)
+        except PasswordResetRateLimited:
+            return None
+        return account, token, expires_at
+
+    def revoke_password_reset(self, token: str) -> None:
+        if not token:
+            return
+        try:
+            self.repository.delete_password_reset(token_hash=_token_hash(token.strip()))
+        except AuthRepositoryError:
+            raise PasswordResetError("Password reset is temporarily unavailable.") from None
+
+    def reset_password(self, token: str, password: str) -> AuthAccount:
+        clean_token = (token or "").strip()
+        if not clean_token or len(clean_token) > 256:
+            raise PasswordResetInvalid("Password reset link is invalid or expired.")
+        try:
+            password_hash = hash_password(password)
+        except PasswordPolicyError as error:
+            raise PasswordResetInvalid(str(error)) from None
+        try:
+            account = self.repository.consume_password_reset(
+                token_hash=_token_hash(clean_token), password_hash=password_hash,
+                now=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            )
+        except AuthRepositoryError:
+            raise PasswordResetError("Password reset is temporarily unavailable.") from None
+        if account is None:
+            raise PasswordResetInvalid("Password reset link is invalid or expired.")
         return account
 
     def create_session(self, account: AuthAccount) -> str:

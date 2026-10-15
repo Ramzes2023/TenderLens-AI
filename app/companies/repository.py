@@ -1,11 +1,11 @@
-"""SQLite repository for multi-company workspaces.
+"""Backend-neutral repository for multi-company workspaces.
 
-The tables deliberately live in the same SQLite database as tender history so
-Docker/API/bot processes can share one persistent state volume.
+The tables live in the same database as accounts, organizations and tender history.
 """
 from __future__ import annotations
 
 import sqlite3
+from app.database.backend import database_for, StorageError, StorageIntegrityError
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,7 +18,7 @@ from app.tenancy import (
 )
 
 from .models import CompanyWorkspace
-from app.organizations.migration import migrate, backfill_companies
+from app.organizations.migration import backfill_companies
 
 
 class CompanyRepositoryError(RuntimeError):
@@ -34,47 +34,18 @@ class CompanyNotFoundError(CompanyRepositoryError):
 
 
 class CompanyRepository:
-    def __init__(self, path: Path):
-        self.path = Path(path)
+    def __init__(self, path):
+        self.database = database_for(path)
+        self.path = self.database.settings.path
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, timeout=10)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys=ON")
-        return conn
+    def _connect(self):
+        return self.database.connect()
 
     def initialize(self) -> None:
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            with closing(self._connect()) as conn:
-                with conn:
-                    conn.executescript(
-                        """
-                        CREATE TABLE IF NOT EXISTS company_workspaces (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            owner_user_id INTEGER NOT NULL,
-                            name TEXT NOT NULL,
-                            profile_json TEXT NOT NULL,
-                            created_at TEXT NOT NULL,
-                            updated_at TEXT NOT NULL,
-                            UNIQUE(owner_user_id, name)
-                        );
-
-                        CREATE INDEX IF NOT EXISTS idx_company_owner
-                        ON company_workspaces(owner_user_id, updated_at DESC);
-
-                        CREATE TABLE IF NOT EXISTS company_active (
-                            owner_user_id INTEGER PRIMARY KEY,
-                            company_id INTEGER NOT NULL,
-                            updated_at TEXT NOT NULL,
-                            FOREIGN KEY(company_id) REFERENCES company_workspaces(id) ON DELETE CASCADE
-                        );
-                        """
-                    )
-                    conn.execute("BEGIN IMMEDIATE")
-                    migrate(conn)
-        except (OSError, sqlite3.Error):
-            raise CompanyRepositoryError("Не удалось инициализировать company workspace storage.") from None
+            self.database.migrate("companies")
+        except (OSError, sqlite3.Error, StorageError, ValueError):
+            raise CompanyRepositoryError("Could not initialize companies storage.") from None
 
     @staticmethod
     def _workspace(row: sqlite3.Row, active_id: int | None = None) -> CompanyWorkspace:
@@ -160,9 +131,9 @@ class CompanyRepository:
             if row is None:
                 raise CompanyRepositoryError("Не удалось сохранить профиль компании.")
             return self._workspace(row, active_id)
-        except sqlite3.IntegrityError:
+        except (sqlite3.IntegrityError, StorageIntegrityError):
             raise CompanyRepositoryError("Компания с таким названием уже существует.") from None
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise CompanyRepositoryError("Не удалось сохранить профиль компании.") from None
 
     def list_for_owner(self, owner_user_id: int) -> list[CompanyWorkspace]:
@@ -177,7 +148,7 @@ class CompanyRepository:
                     (int(owner_user_id),),
                 ).fetchall()
             return [self._workspace(row, active_id) for row in rows]
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise CompanyRepositoryError("Не удалось получить список компаний.") from None
 
     def get(self, owner_user_id: int, company_id: int) -> CompanyWorkspace | None:
@@ -192,7 +163,7 @@ class CompanyRepository:
                     (int(owner_user_id), int(company_id)),
                 ).fetchone()
             return self._workspace(row, active_id) if row else None
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise CompanyRepositoryError("Не удалось прочитать профиль компании.") from None
 
     def active(self, owner_user_id: int) -> CompanyWorkspace | None:
@@ -209,7 +180,7 @@ class CompanyRepository:
                     (int(owner_user_id), active_id),
                 ).fetchone()
             return self._workspace(row, active_id) if row else None
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise CompanyRepositoryError("Не удалось прочитать активную компанию.") from None
 
     def set_active(self, owner_user_id: int, company_id: int) -> CompanyWorkspace:
@@ -239,7 +210,7 @@ class CompanyRepository:
             return self._workspace(row, int(company_id))
         except CompanyRepositoryError:
             raise
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise CompanyRepositoryError("Не удалось переключить активную компанию.") from None
 
     def update_profile(self, owner_user_id: int, company_id: int, profile: CompanyProfile,
@@ -272,11 +243,11 @@ class CompanyRepository:
                         (int(owner_user_id), int(company_id)),
                     ).fetchone()
             return self._workspace(row, active_id)
-        except sqlite3.IntegrityError:
+        except (sqlite3.IntegrityError, StorageIntegrityError):
             raise CompanyRepositoryError("Компания с таким названием уже существует.") from None
         except CompanyRepositoryError:
             raise
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise CompanyRepositoryError("Не удалось обновить профиль компании.") from None
 
     def delete(self, owner_user_id: int, company_id: int) -> bool:
@@ -311,13 +282,13 @@ class CompanyRepository:
                         else:
                             conn.execute("DELETE FROM company_active WHERE owner_user_id=?", (int(owner_user_id),))
             return deleted
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise CompanyRepositoryError("Не удалось удалить профиль компании.") from None
 
     # ================================================================
     # Phase 18C - organization-scoped company operations.
     #
-    # Membership authorization and writes happen on the same SQLite
+    # Membership authorization and writes happen on the same database
     # connection/transaction to avoid check-then-write races.
     # Legacy owner_user_id methods above remain unchanged.
     # ================================================================
@@ -380,7 +351,7 @@ class CompanyRepository:
             ]
         except CompanyAuthorizationError:
             raise
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise CompanyRepositoryError(
                 "Company storage is unavailable."
             ) from None
@@ -419,7 +390,7 @@ class CompanyRepository:
             )
         except CompanyAuthorizationError:
             raise
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise CompanyRepositoryError(
                 "Company storage is unavailable."
             ) from None
@@ -516,11 +487,11 @@ class CompanyRepository:
 
         except CompanyAuthorizationError:
             raise
-        except sqlite3.IntegrityError:
+        except (sqlite3.IntegrityError, StorageIntegrityError):
             raise CompanyRepositoryError(
                 "Company with this name already exists in the organization."
             ) from None
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise CompanyRepositoryError(
                 "Company storage is unavailable."
             ) from None
@@ -564,7 +535,7 @@ class CompanyRepository:
 
         except CompanyAuthorizationError:
             raise
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise CompanyRepositoryError(
                 "Company storage is unavailable."
             ) from None
@@ -635,7 +606,7 @@ class CompanyRepository:
             CompanyNotFoundError,
         ):
             raise
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise CompanyRepositoryError(
                 "Company storage is unavailable."
             ) from None
@@ -724,11 +695,11 @@ class CompanyRepository:
             CompanyRepositoryError,
         ):
             raise
-        except sqlite3.IntegrityError:
+        except (sqlite3.IntegrityError, StorageIntegrityError):
             raise CompanyRepositoryError(
                 "Company with this name already exists in the organization."
             ) from None
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise CompanyRepositoryError(
                 "Company storage is unavailable."
             ) from None
@@ -812,7 +783,7 @@ class CompanyRepository:
             CompanyNotFoundError,
         ):
             raise
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise CompanyRepositoryError(
                 "Company storage is unavailable."
             ) from None

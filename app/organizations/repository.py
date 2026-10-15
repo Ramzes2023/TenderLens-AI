@@ -1,10 +1,11 @@
 """Internal organization persistence with transactional RBAC invariants."""
 
 import sqlite3
+from app.database.backend import database_for, StorageError, StorageIntegrityError
 from contextlib import contextmanager
 from pathlib import Path
 
-from .migration import ensure_personal, migrate, now
+from .migration import ensure_personal, now
 from .models import Invitation, Membership, Organization, Role
 
 
@@ -13,20 +14,19 @@ class OrganizationError(ValueError):
 
 
 class OrganizationRepository:
-    def __init__(self, path: Path):
-        self.path = Path(path)
+    def __init__(self, path):
+        self.database = database_for(path)
+        self.path = self.database.settings.path
 
     @contextmanager
     def transaction(self, write=False):
-        conn = sqlite3.connect(self.path, timeout=10)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys=ON")
+        conn = self.database.connect()
         try:
             if write:
                 conn.execute("BEGIN IMMEDIATE")
             yield conn
             conn.commit()
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             conn.rollback()
             raise OrganizationError(
                 "Organization storage operation failed."
@@ -38,8 +38,10 @@ class OrganizationRepository:
             conn.close()
 
     def initialize(self):
-        with self.transaction(True) as conn:
-            migrate(conn)
+        try:
+            self.database.migrate("organizations")
+        except (OSError, sqlite3.Error, StorageError):
+            raise OrganizationError("Could not initialize organization storage.") from None
 
     def create(self, name, account_id):
         name = name.strip()
@@ -453,7 +455,7 @@ class OrganizationRepository:
                 """UPDATE organization_invitations
                    SET revoked_at=?
                    WHERE organization_id=?
-                     AND email=?
+                     AND lower(email)=lower(?)
                      AND accepted_at IS NULL
                      AND revoked_at IS NULL
                      AND expires_at<=?""",
@@ -468,7 +470,7 @@ class OrganizationRepository:
             account = conn.execute(
                 """SELECT id, is_active
                    FROM auth_accounts
-                   WHERE email=?""",
+                   WHERE lower(email)=lower(?)""",
                 (email,),
             ).fetchone()
 
@@ -498,7 +500,7 @@ class OrganizationRepository:
                 """SELECT 1
                    FROM organization_invitations
                    WHERE organization_id=?
-                     AND email=?
+                     AND lower(email)=lower(?)
                      AND accepted_at IS NULL
                      AND revoked_at IS NULL""",
                 (
@@ -535,7 +537,7 @@ class OrganizationRepository:
                         timestamp,
                     ),
                 )
-            except sqlite3.IntegrityError:
+            except (sqlite3.IntegrityError, StorageIntegrityError):
                 raise OrganizationError(
                     "Active invitation already exists."
                 ) from None

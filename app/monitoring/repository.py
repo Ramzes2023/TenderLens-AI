@@ -1,7 +1,8 @@
-"""SQLite state for source deduplication and Telegram monitoring subscriptions."""
+"""Database state for source deduplication and Telegram monitoring subscriptions."""
 from __future__ import annotations
 
 import sqlite3
+from app.database.backend import database_for, StorageError, StorageIntegrityError
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -26,43 +27,18 @@ class Subscription:
 
 
 class MonitoringRepository:
-    def __init__(self, path: Path):
-        self.path = Path(path)
+    def __init__(self, path):
+        self.database = database_for(path)
+        self.path = self.database.settings.path
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, timeout=10)
-        conn.row_factory = sqlite3.Row
-        return conn
+    def _connect(self):
+        return self.database.connect()
 
     def initialize(self) -> None:
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            with closing(self._connect()) as conn:
-                with conn:
-                    conn.executescript(
-                        """
-                        CREATE TABLE IF NOT EXISTS monitor_subscriptions (
-                            owner_user_id INTEGER PRIMARY KEY,
-                            chat_id INTEGER NOT NULL,
-                            enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
-                            created_at TEXT NOT NULL,
-                            updated_at TEXT NOT NULL
-                        );
-
-                        CREATE TABLE IF NOT EXISTS monitor_seen (
-                            owner_user_id INTEGER NOT NULL,
-                            source TEXT NOT NULL,
-                            external_id TEXT NOT NULL,
-                            first_seen_at TEXT NOT NULL,
-                            PRIMARY KEY(owner_user_id, source, external_id)
-                        );
-
-                        CREATE INDEX IF NOT EXISTS idx_monitor_subscriptions_enabled
-                        ON monitor_subscriptions(enabled, updated_at DESC);
-                        """
-                    )
-        except (OSError, sqlite3.Error):
-            raise MonitoringRepositoryError("Не удалось инициализировать monitoring-таблицы SQLite.") from None
+            self.database.migrate("monitoring")
+        except (OSError, sqlite3.Error, StorageError, ValueError):
+            raise MonitoringRepositoryError("Could not initialize monitoring storage.") from None
 
     @staticmethod
     def _subscription(row: sqlite3.Row) -> Subscription:
@@ -91,7 +67,7 @@ class MonitoringRepository:
             if row is None:
                 raise MonitoringRepositoryError("Не удалось сохранить подписку.")
             return self._subscription(row)
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise MonitoringRepositoryError("Не удалось сохранить подписку monitoring.") from None
 
     def get_subscription(self, owner_user_id: int) -> Subscription | None:
@@ -101,7 +77,7 @@ class MonitoringRepository:
                     "SELECT * FROM monitor_subscriptions WHERE owner_user_id=?", (owner_user_id,)
                 ).fetchone()
             return self._subscription(row) if row else None
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise MonitoringRepositoryError("Не удалось прочитать подписку monitoring.") from None
 
     def list_active(self) -> list[Subscription]:
@@ -111,7 +87,7 @@ class MonitoringRepository:
                     "SELECT * FROM monitor_subscriptions WHERE enabled=1 ORDER BY updated_at ASC"
                 ).fetchall()
             return [self._subscription(row) for row in rows]
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise MonitoringRepositoryError("Не удалось прочитать активные monitoring-подписки.") from None
 
     def seen(self, owner_user_id: int, source: str, external_id: str) -> bool:
@@ -122,7 +98,7 @@ class MonitoringRepository:
                     (owner_user_id, source, external_id),
                 ).fetchone()
             return row is not None
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise MonitoringRepositoryError("Не удалось проверить дедупликацию monitoring.") from None
 
     def mark_seen_for_organization(
@@ -161,12 +137,12 @@ class MonitoringRepository:
                         )
 
                     cursor = conn.execute(
-                        """INSERT OR IGNORE INTO monitor_seen(
+                        """INSERT INTO monitor_seen(
                             owner_user_id,
                             source,
                             external_id,
                             first_seen_at
-                        ) VALUES (?, ?, ?, ?)""",
+                        ) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING""",
                         (
                             int(owner_user_id),
                             source,
@@ -179,7 +155,7 @@ class MonitoringRepository:
 
         except MonitoringAuthorizationError:
             raise
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise MonitoringRepositoryError(
                 "Could not save organization monitoring dedup state."
             ) from None
@@ -190,10 +166,9 @@ class MonitoringRepository:
             with closing(self._connect()) as conn:
                 with conn:
                     cursor = conn.execute(
-                        "INSERT OR IGNORE INTO monitor_seen(owner_user_id, source, external_id, first_seen_at) "
-                        "VALUES (?, ?, ?, ?)",
+                        'INSERT INTO monitor_seen(owner_user_id, source, external_id, first_seen_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING',
                         (owner_user_id, source, external_id, now),
                     )
             return cursor.rowcount > 0
-        except sqlite3.Error:
+        except (sqlite3.Error, StorageError):
             raise MonitoringRepositoryError("Не удалось сохранить monitoring dedup state.") from None

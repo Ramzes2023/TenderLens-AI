@@ -83,7 +83,7 @@ class EngineTests(unittest.TestCase):
         budget = next(item for item in result.criteria if item.code == "budget")
         self.assertEqual(budget.status, "failed")
         self.assertEqual(budget.earned_points, 0)
-        self.assertTrue(any("превышает лимит" in item for item in result.stop_factors))
+        self.assertTrue(any("exceeds the profile limit" in item for item in result.stop_factors))
         self.assertLess(result.fit_score, 100)
 
     def test_region_failure_creates_hard_stop(self):
@@ -108,7 +108,7 @@ class EngineTests(unittest.TestCase):
         docs = next(item for item in result.criteria if item.code == "documents")
         self.assertEqual(docs.status, "partial")
         self.assertEqual(docs.earned_points, 7.5)
-        self.assertTrue(any("Не подтверждено" in item for item in docs.evidence))
+        self.assertTrue(any("Not confirmed:" in item for item in docs.evidence))
 
     def test_security_is_separate_from_document_risk(self):
         result = score_tender(tender(bid_security_percent=5.0), profile())

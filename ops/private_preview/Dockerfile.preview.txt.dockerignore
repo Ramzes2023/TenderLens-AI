@@ -1,0 +1,21 @@
+# Dedicated allowlist: never send local credentials/data/backups to this build.
+**
+!app/
+!app/**/
+!app/**/*.py
+!app/database/schema/*.sql
+!app/analytics/*.json
+!app/api/static/
+!app/api/static/**
+!config/
+!config/company_profile.example.json
+!ops/
+!ops/private_preview/
+!ops/private_preview/*.py
+!ops/private_preview/*.txt
+!ops/private_preview/Dockerfile.preview
+**/__pycache__/**
+**/.env*
+**/*.pem
+**/*.key
+**/*.log

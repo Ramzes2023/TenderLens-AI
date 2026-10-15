@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from app.auth import AuthService
     from app.organizations import OrganizationService
     from app.sources import SourceCatalog
+    from app.support import SupportRepository
 
 
 @dataclass
@@ -27,16 +28,28 @@ class ApiRuntime:
     company_profile: "CompanyProfile | Any | None" = None
     company_service: "CompanyService | Any | None" = None
     auth_service: "AuthService | Any | None" = None
+    email_sender: "Any | None" = None
     organization_service: "OrganizationService | Any | None" = None
     tender_repository: "TenderRepository | Any | None" = None
     rag_service: "RagService | Any | None" = None
+    rag_ingestion_service: "Any | None" = None
+    scoring_run_service: "Any | None" = None
     monitoring_service: "TenderMonitorService | Any | None" = None
+    tender_discovery_service: "TenderMonitorService | Any | None" = None
     source_catalog: "SourceCatalog | Any | None" = None
+    support_repository: "SupportRepository | Any | None" = None
+    database: "Any | None" = None
+    cache: "Any | None" = None
+    owns_cache: bool = False
     component_errors: dict[str, str] = field(default_factory=dict)
+    synchronous_usage: "Any | None" = None
 
     def component_status(self) -> dict[str, str]:
+        database = self.database or getattr(self.tender_repository, "database", None)
         return {
-            "database": "ready" if self.tender_repository is not None else "unavailable",
+            "cache": self.cache.status() if self.cache is not None else "disabled",
+            "database": "ready" if self.tender_repository is not None and (database is None or database.healthy()) else "unavailable",
+            # Local configured capability only; never probes provider reachability.
             "llm": "ready" if self.provider is not None else "unavailable",
             "scoring": "ready" if (self.company_profile is not None or self.company_service is not None) else "unavailable",
             "companies": "ready" if self.company_service is not None else "unavailable",
@@ -44,20 +57,69 @@ class ApiRuntime:
             "organizations": "ready" if self.organization_service is not None else "unavailable",
             "rag": "ready" if self.rag_service is not None else "unavailable",
             "monitoring": "ready" if self.monitoring_service is not None else "unavailable",
+            "discovery": "ready" if self.tender_discovery_service is not None else "unavailable",
             "sources": "ready" if self.source_catalog is not None else "unavailable",
+            "support": "ready" if self.support_repository is not None else "unavailable",
         }
+
+    def close(self):
+        try:
+            if self.cache is not None and self.owns_cache:
+                self.cache.close()
+        finally:
+            if self.database is not None:
+                self.database.close()
 
 
 def build_runtime() -> ApiRuntime:
     runtime = ApiRuntime()
 
+    from app.database import load_database_settings
+    from app.database.backend import Database, StorageError
+
+    # Fail closed for invalid configuration and failed PostgreSQL initialization.
+    # No component may reinterpret a PostgreSQL URL as a local SQLite path.
+    db_settings = load_database_settings()
+    runtime.database = Database(db_settings)
+    if runtime.database.backend == "postgresql":
+        try:
+            runtime.database.migrate()
+        except Exception:
+            runtime.close()
+            raise StorageError("VALYQON AI database startup failed.") from None
+
+    from app.quotas.synchronous import SynchronousUsage
+    runtime.synchronous_usage = SynchronousUsage(runtime.database)
     try:
-        from app.llm.config import load_settings as load_llm_settings
-        from app.llm.gigachat import GigaChatProvider
+        runtime.synchronous_usage.initialize()
+    except Exception:
+        runtime.close()
+        raise StorageError("Usage admission startup failed.") from None
+
+    try:
+        from app.jobs import JobRepository, JobService, load_job_settings
+        from app.scoring.runs import ScoringRunService
+        scoring_jobs = JobRepository(runtime.database, load_job_settings())
+        scoring_jobs.initialize()
+        runtime.scoring_run_service = ScoringRunService(JobService(scoring_jobs))
+    except Exception:
+        runtime.component_errors['scoring_runs'] = 'Background scoring unavailable'
+
+    try:
+        from app.cache import build_cache
+        runtime.cache = build_cache()
+        runtime.owns_cache = True
+    except Exception:
+        runtime.close()
+        raise
+
+    try:
+        from app.llm.gateway import build_gateway
         from app.services.tender_analysis import configured_max_chars
 
         runtime.tender_max_chars = configured_max_chars()
-        runtime.provider = GigaChatProvider(load_llm_settings())
+        from app.llm.cache import compose_cached_ai
+        runtime.provider = compose_cached_ai(build_gateway(), runtime.cache)
     except Exception:
         runtime.component_errors["llm"] = "LLM configuration unavailable"
 
@@ -69,10 +131,9 @@ def build_runtime() -> ApiRuntime:
         runtime.component_errors["scoring"] = "Company profile unavailable"
 
     try:
-        from app.database import TenderRepository, load_database_settings
+        from app.database import TenderRepository
 
-        db_settings = load_database_settings()
-        repository = TenderRepository(db_settings.path)
+        repository = TenderRepository(runtime.database)
         repository.initialize()
         runtime.tender_repository = repository
     except Exception:
@@ -80,13 +141,8 @@ def build_runtime() -> ApiRuntime:
 
     try:
         from app.companies import CompanyRepository, CompanyService
-        from app.database import load_database_settings
 
-        db_path = (
-            runtime.tender_repository.path
-            if runtime.tender_repository is not None
-            else load_database_settings().path
-        )
+        db_path = runtime.database
         company_repository = CompanyRepository(db_path)
         company_repository.initialize()
         runtime.company_service = CompanyService(company_repository, fallback_profile=runtime.company_profile)
@@ -95,18 +151,52 @@ def build_runtime() -> ApiRuntime:
 
     try:
         from app.auth import AuthRepository, AuthService
-        from app.database import load_database_settings
 
-        db_path = (
-            runtime.tender_repository.path
-            if runtime.tender_repository is not None
-            else load_database_settings().path
-        )
+        db_path = runtime.database
         auth_repository = AuthRepository(db_path)
         auth_repository.initialize()
         runtime.auth_service = AuthService(auth_repository)
     except Exception:
         runtime.component_errors["auth"] = "Authentication unavailable"
+
+    try:
+        from app.auth.email_delivery import (
+            load_email_sender_from_env,
+        )
+
+        runtime.email_sender = (
+            load_email_sender_from_env()
+        )
+
+        if runtime.email_sender is None:
+            runtime.component_errors[
+                "email"
+            ] = "Email delivery not configured"
+
+    except Exception:
+        runtime.component_errors[
+            "email"
+        ] = "Email delivery unavailable"
+
+    try:
+        from app.support import SupportRepository
+
+        db_path = runtime.database
+
+        support_repository = SupportRepository(
+            db_path
+        )
+
+        support_repository.initialize()
+
+        runtime.support_repository = (
+            support_repository
+        )
+
+    except Exception:
+        runtime.component_errors[
+            "support"
+        ] = "Support Center unavailable"
 
     try:
         from app.organizations import OrganizationRepository, OrganizationService
@@ -115,7 +205,7 @@ def build_runtime() -> ApiRuntime:
             raise RuntimeError("Authentication unavailable")
 
         organization_repository = OrganizationRepository(
-            runtime.auth_service.repository.path
+            runtime.database
         )
         organization_repository.initialize()
         runtime.organization_service = OrganizationService(
@@ -135,6 +225,20 @@ def build_runtime() -> ApiRuntime:
     except Exception:
         runtime.component_errors["rag"] = "RAG unavailable"
 
+    try:
+        from app.jobs import JobRepository, JobService, load_job_settings
+        from app.rag.config import load_rag_settings
+        from app.rag.ingestion import RagIngestionService, load_ingestion_options
+
+        ingestion_settings = load_rag_settings()
+        if ingestion_settings.enabled:
+            documents, _ = load_ingestion_options()
+            jobs = JobRepository(runtime.database, load_job_settings())
+            jobs.initialize()
+            runtime.rag_ingestion_service = RagIngestionService(JobService(jobs), documents, ingestion_settings)
+    except Exception:
+        runtime.component_errors['rag_ingestion'] = 'RAG ingestion unavailable'
+
     monitor_settings = None
 
     try:
@@ -147,51 +251,56 @@ def build_runtime() -> ApiRuntime:
         runtime.component_errors["sources"] = "Source catalog unavailable"
 
     try:
-        from app.database import load_database_settings
         from app.monitoring import MonitoringRepository, TenderMonitorService
 
         if monitor_settings is None or runtime.source_catalog is None:
             raise RuntimeError("Source catalog unavailable")
 
-        enabled_sources = runtime.source_catalog.registry.registrations(
-            enabled_only=True
+        eis_registration = (
+            runtime.source_catalog.registry.get(
+                "eis"
+            )
         )
 
-        if enabled_sources:
-            db_path = (
-                runtime.tender_repository.path
-                if runtime.tender_repository is not None
-                else load_database_settings().path
-            )
+        db_path = runtime.database
 
-            repository = MonitoringRepository(db_path)
-            repository.initialize()
+        repository = MonitoringRepository(
+            db_path
+        )
+        repository.initialize()
 
-            # Keep EIS profile-search compatibility while source construction
-            # is centralized in the catalog.
-            source = runtime.source_catalog.registry.get("eis").source
+        runtime.tender_discovery_service = TenderMonitorService(
+            monitor_settings,
+            eis_registration.source,
+            repository,
+            runtime.company_profile,
+            profile_resolver=(
+                runtime.company_service.profile_for_owner
+                if runtime.company_service
+                else None
+            ),
+            scope_resolver=(
+                runtime.company_service.scope_for_owner
+                if runtime.company_service
+                else None
+            ),
+        )
 
-            runtime.monitoring_service = TenderMonitorService(
-                monitor_settings,
-                source,
-                repository,
-                runtime.company_profile,
-                profile_resolver=(
-                    runtime.company_service.profile_for_owner
-                    if runtime.company_service
-                    else None
-                ),
-                scope_resolver=(
-                    runtime.company_service.scope_for_owner
-                    if runtime.company_service
-                    else None
-                ),
+        # Background subscription monitoring remains EIS-only.
+        if eis_registration.enabled:
+            runtime.monitoring_service = (
+                runtime.tender_discovery_service
             )
         else:
             runtime.component_errors["monitoring"] = (
-                "No procurement source configured"
+                "EIS monitoring source not configured"
             )
     except Exception:
-        runtime.component_errors["monitoring"] = "Monitoring unavailable"
+        runtime.component_errors["discovery"] = (
+            "Tender discovery unavailable"
+        )
+        runtime.component_errors["monitoring"] = (
+            "Monitoring unavailable"
+        )
 
     return runtime

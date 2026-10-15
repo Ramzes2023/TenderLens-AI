@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETIC context unit fixture, not a published notice or XSD-valid SDK example. -->
+<cn:ContractNotice xmlns:cn="urn:oasis:names:specification:ubl:schema:xsd:ContractNotice-2"
+ xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+ xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+ <cbc:ContractFolderID>procedure-synthetic</cbc:ContractFolderID>
+ <cac:ProcurementProject>
+  <cac:MainCommodityClassification><cbc:ItemClassificationCode listName="cpv">45000000</cbc:ItemClassificationCode></cac:MainCommodityClassification>
+ </cac:ProcurementProject>
+ <cac:ProcurementProjectLot>
+  <cbc:ID schemeName="Lot">LOT-0001</cbc:ID>
+  <cac:ProcurementProject>
+   <cac:MainCommodityClassification><cbc:ItemClassificationCode listName="cpv">72230000</cbc:ItemClassificationCode></cac:MainCommodityClassification>
+   <cac:AdditionalCommodityClassification><cbc:ItemClassificationCode listName="cpv">72200000</cbc:ItemClassificationCode></cac:AdditionalCommodityClassification>
+  </cac:ProcurementProject>
+ </cac:ProcurementProjectLot>
+ <cac:ProcurementProjectLot>
+  <cbc:ID schemeName="Lot">LOT-0002</cbc:ID>
+  <cac:ProcurementProject>
+   <cac:MainCommodityClassification><cbc:ItemClassificationCode listName="cpv">03111100</cbc:ItemClassificationCode></cac:MainCommodityClassification>
+  </cac:ProcurementProject>
+ </cac:ProcurementProjectLot>
+ <cac:ProcurementProjectLot><cbc:ID schemeName="LotsGroup">GLO-0001</cbc:ID></cac:ProcurementProjectLot>
+</cn:ContractNotice>

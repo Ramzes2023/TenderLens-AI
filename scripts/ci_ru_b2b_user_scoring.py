@@ -40,6 +40,25 @@ async def public_notices(catalog):
     from app.sources.b2b_center import _Document, _Node
     source = catalog.registry.get(SOURCE).source
     original = b2b_center.parse_b2b_center_listing
+    safe_original = b2b_center._safe_url
+
+    def measured_safe_url(raw, *, detail=False):
+        try:
+            return safe_original(raw, detail=detail)
+        except Exception:
+            from urllib.parse import urljoin, urlsplit
+            from re import fullmatch
+            try:
+                p = urlsplit(urljoin(b2b_center.B2B_CENTER_LIST_URL, raw or ""))
+                data = {"detail": bool(detail), "scheme": p.scheme,
+                        "host": p.hostname, "query_present": bool(p.query),
+                        "fragment_present": bool(p.fragment),
+                        "path_matches_expected": bool(fullmatch(
+                            r"/search/number/[A-Za-z0-9-]{1,100}/", p.path))}
+                print("B2B_UNSAFE_URL_SHAPE=" + repr(data), flush=True)
+            except Exception:
+                print("B2B_UNSAFE_URL_SHAPE=UNPARSEABLE", flush=True)
+            raise
 
     def observed_parse(payload, *, limit=100):
         # Structural counts only; no raw HTML, tender identifiers or content.
@@ -72,7 +91,8 @@ async def public_notices(catalog):
         print("B2B_LIVE_CARD_HOST_COUNTS=" + repr(hosts), flush=True)
         return original(payload, limit=limit)
 
-    with patch.object(b2b_center, "parse_b2b_center_listing", observed_parse):
+    with patch.object(b2b_center, "_safe_url", measured_safe_url), \
+            patch.object(b2b_center, "parse_b2b_center_listing", observed_parse):
         return await asyncio.wait_for(source.fetch(limit=10), timeout=30)
 
 

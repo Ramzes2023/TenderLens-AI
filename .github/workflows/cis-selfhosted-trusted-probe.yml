@@ -18,13 +18,17 @@ concurrency:
 jobs:
   inspect-runner:
     name: Trusted runner environment only (no PR code)
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: [self-hosted]
     timeout-minutes: 5
     steps:
       - name: Verify Linux tools without checkout or secrets
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "${RUNNER_NAME:-}" != "VALYQON-RU-01" ]]; then
+            echo "CIS_RUNNER_PROBE=UNEXPECTED_RUNNER"
+            exit 12
+          fi
           echo "CIS_RUNNER_PROBE=START"
           echo "OS=$(uname -s)"
           echo "ARCH=$(uname -m)"

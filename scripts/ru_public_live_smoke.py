@@ -162,9 +162,15 @@ def main():
                          "A successful diagnostic step does **not** imply three live "
                          "integrations are ready.\n")
 
-    # A blocked source should be observable, not falsely reported as live.
-    # This diagnostic never gates the offline test suite because GitHub's
-    # geography/network may differ from the real Windows deployment host.
+    # An explicitly requested strict local-host proof fails closed. The
+    # normal GitHub observational smoke stays non-gating because its network
+    # geography is not the deployment host.
+    if os.environ.get("VALYQON_RU_REQUIRE_EIS_LIVE") == "1":
+        if not all(result[key]["state"] == "PUBLIC_FETCH_SQLITE_KEYWORD_VERIFIED"
+                   for key in ("eis", "eis_223")):
+            print("EIS_44_AND_223_LIVE_PROOF=FAILED", flush=True)
+            return 3
+        print("EIS_44_AND_223_LIVE_PROOF=PASS", flush=True)
     return 0
 
 

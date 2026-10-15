@@ -76,6 +76,14 @@ class PublicProbeTests(unittest.TestCase):
         self.assertFalse(describe_payload("kg_portal_home", b"<html>JSF form</html>", "text/html")["verified"])
         self.assertFalse(describe_payload("kg_known_detail", b"<html>Only navigation</html>", "text/html")["verified"])
 
+    def test_kyrgyzstan_new_portal_requires_real_ids_and_context(self):
+        listing = "№202610122560014988 Жарыяланган Товары Организация Жалал-Абад Планируемая сумма 18000 сом"
+        result = describe_payload("kg_new_portal", listing.encode("utf-8"), "text/html")
+        self.assertTrue(result["verified"])
+        self.assertEqual(result["order_ids"], 1)
+        self.assertFalse(describe_payload("kg_new_portal", b"<html>menu only</html>", "text/html")["verified"])
+        self.assertFalse(describe_payload("kg_new_portal", b"202610122560014988", "text/html")["verified"])
+
     def test_probe_is_bounded_and_has_no_fallback(self):
         opener = Opener(json.dumps({"data": [{"ocid": "ocds-b3wdp1-MD-1770204825070"}]}).encode())
         result = probe("md_mtender_index", "https://public.mtender.gov.md/tenders/", opener)

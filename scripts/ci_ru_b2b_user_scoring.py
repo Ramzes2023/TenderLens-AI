@@ -158,9 +158,21 @@ def main():
     try:
         evidence = acceptance()
     except Exception as error:
-        # Never leak customer data, public response bodies, URLs or credentials.
+        # Only allow fixed, source-code-controlled SourceError reason strings.
+        # Never print arbitrary exceptions, customer data, URLs or response bodies.
+        from app.sources.eis_rss import SourceError
         print("RU_B2B_REAL_AUTH_SCORING=BLOCKED")
         print("FAILURE_CLASS=" + type(error).__name__)
+        if isinstance(error, SourceError):
+            known = {"B2B-Center returned no usable procurement records.",
+                     "B2B-Center unexpected procurement card structure.",
+                     "B2B-Center empty or oversized HTML.",
+                     "B2B-Center listing unavailable.",
+                     "B2B-Center returned unsafe notice URL.",
+                     "B2B-Center procurement title missing.",
+                     "B2B-Center conflicting structured properties."}
+            print("SOURCE_BLOCKER=" + (str(error) if str(error) in known
+                                      else "OTHER_SOURCE_ERROR"))
         return 1
     print("RU_B2B_REAL_AUTH_SCORING=PASS")
     print("RU_B2B_EVIDENCE=" + json.dumps(evidence, sort_keys=True))

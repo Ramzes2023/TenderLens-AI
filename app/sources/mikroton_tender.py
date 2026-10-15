@@ -63,7 +63,7 @@ class _PlainDescription(HTMLParser):
 def _summary(value):
     if value is None:
         return None
-    if type(value) is not str or len(value) > 20000 or "\\x00" in value:
+    if type(value) is not str or len(value) > 20000 or "\x00" in value:
         raise ValueError("Invalid public description")
     parser = _PlainDescription()
     parser.feed(value)

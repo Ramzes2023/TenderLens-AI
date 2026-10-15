@@ -80,3 +80,35 @@ def test_no_detail_proof_from_rss_or_empty_body():
     assert not detail_page_has_identity(
         ("<rss><item>" + number + "</item></rss>").encode(), number, "application/rss+xml"
     )
+
+
+@pytest.mark.parametrize("statuses,failures,expected", [
+    ([302], ["CONNECTOR_TRANSPORT"], "REDIRECT_NOT_FOLLOWED"),
+    ([403], ["CONNECTOR_TRANSPORT"], "ACCESS_RESTRICTED"),
+    ([429], ["CONNECTOR_TRANSPORT"], "REMOTE_RATE_LIMIT_OR_SERVER_ERROR"),
+    ([503], ["CONNECTOR_TRANSPORT"], "REMOTE_RATE_LIMIT_OR_SERVER_ERROR"),
+    ([200], ["CONNECTOR_TRANSPORT"], "HTTP_TRANSPORT_OR_BODY_FAILURE"),
+    ([200], [], "HTML_CONTENT_OR_NUMBER_MISMATCH"),
+    ([], ["ConnectTimeout"], "HTTP_TRANSPORT_OR_BODY_FAILURE"),
+    ([], [], "NO_HTTP_RESPONSE_OBSERVED"),
+])
+def test_detail_status_outcome_is_classified_without_unsafe_data(
+    statuses, failures, expected
+):
+    from scripts.ci_ru_eis_detail_identity import detail_blocker
+
+    record = {"statuses": statuses, "failures": failures, "verified": 0}
+    assert detail_blocker(record) == expected
+    record["verified"] = 1
+    assert detail_blocker(record) is None
+
+
+def test_detail_failure_codes_exclude_exception_messages_and_urls():
+    from app.sources.http import ConnectorTransportError
+    from scripts.ci_ru_eis_detail_identity import detail_failure_code
+
+    assert detail_failure_code(ConnectorTransportError()) == "CONNECTOR_TRANSPORT"
+    secret = "https://zakupki.gov.ru/secret?id=0123456789012"
+    assert detail_failure_code(RuntimeError(secret)) == "OTHER_FAILURE"
+    assert secret not in detail_failure_code(RuntimeError(secret))
+    assert detail_failure_code(TimeoutError(secret)) == "TimeoutError"

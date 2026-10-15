@@ -22,10 +22,12 @@ TARGETS = {
     "md_mtender_known_detail": "https://public.mtender.gov.md/tenders/ocds-b3wdp1-MD-1770204825070",
     "kg_portal_home": "https://zakupki.gov.kg/popp/home.xhtml",
     "kg_known_detail": "https://zakupki.gov.kg/popp/view/order/view.xhtml?id=561794973",
+    "kg_new_portal": "https://goszakupki.okmot.kg/public/?locale=ky",
 }
-HOSTS = {"public.mtender.gov.md", "zakupki.gov.kg"}
+HOSTS = {"public.mtender.gov.md", "zakupki.gov.kg", "goszakupki.okmot.kg"}
 OCID = re.compile(r"^ocds-[a-zA-Z0-9_-]{3,150}$")
 ORDER_LINK = re.compile(r"view/order/view\.xhtml\?id=\d{5,18}")
+NEW_ORDER_ID = re.compile(r"(?:№|&#8470;|&numero;)\s*(20\d{12,20})")
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -69,6 +71,12 @@ def describe_payload(name, raw, content_type):
         links = ORDER_LINK.findall(html)
         return {"verified": bool(links), "kind": "html_listing_with_detail_links",
                 "order_links": len(set(links)), "has_jsf": "javax.faces" in html}
+    if name == "kg_new_portal":
+        ids = set(NEW_ORDER_ID.findall(html))
+        has_description = ("Планируемая сумма" in html or "Организация" in html)
+        return {"verified": bool(ids) and has_description,
+                "kind": "new_portal_tender_listing", "order_ids": len(ids),
+                "has_description": has_description}
     return {"verified": bool(re.search(r"(purchase Name|Date of publication|procurement|Наименование закупки|Наименование конкурса)", html, re.I)),
             "kind": "public_detail_html", "html_bytes": len(raw)}
 
@@ -103,16 +111,22 @@ def probe(name, url, opener):
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--require-live", action="store_true",
-                        help="Fail CI unless an MD index and a KG listing verify actual records")
+                        help="Fail CI unless MD index and at least one KG listing verify records")
+    parser.add_argument("--require-md", action="store_true", help="Fail CI unless Moldova OCIDs verified")
+    parser.add_argument("--require-kg", action="store_true", help="Fail CI unless Kyrgyzstan listing IDs verified")
     args = parser.parse_args(argv)
     opener = build_opener(ProxyHandler({}), HTTPSHandler(context=ssl.create_default_context()), NoRedirect())
     results = [probe(name, url, opener) for name, url in TARGETS.items()]
     summary = {"kind": "observational_public_cis_probe", "results": results,
                "md_index_verified": results[0]["verified"],
-               "kg_listing_verified": results[2]["verified"],
+               "kg_listing_verified": results[2]["verified"] or results[4]["verified"],
                "end_to_end_storage_verified": False,
                "production_activation_allowed": False}
     print(json.dumps(summary, ensure_ascii=False, sort_keys=True, indent=2))
+    if args.require_md and not summary["md_index_verified"]:
+        return 1
+    if args.require_kg and not summary["kg_listing_verified"]:
+        return 1
     return 1 if args.require_live and not (summary["md_index_verified"] and summary["kg_listing_verified"]) else 0
 
 

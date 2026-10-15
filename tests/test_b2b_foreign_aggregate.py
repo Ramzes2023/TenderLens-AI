@@ -23,8 +23,8 @@ def extra_card(host, *, duplicate_organization=False):
 def inject_inside_listing(card):
     # Put synthetic card *before* an existing procurement card, not after
     # the closing HTML root (which HTMLParser may legally ignore).
-    marker = CAPTURE.find(b'itemtype="https://schema.org/ListItem"')
-    assert marker > 0, "Capture no longer has a procurement listing"
+    marker = CAPTURE.find(b'class="cards"')
+    assert marker > 0, "Capture no longer has a procurement card"
     start = CAPTURE.rfind(b'<div', 0, marker)
     assert start > 0
     return CAPTURE[:start] + card + CAPTURE[start:]

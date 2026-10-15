@@ -74,8 +74,10 @@ def run_acceptance(database_url):
     }
 
     try:
+        print("CIS_PG16_STAGE=JOBS_MIGRATION", flush=True)
         jobs = JobRepository(db)
         jobs.initialize()
+        print("CIS_PG16_STAGE=OPPORTUNITIES_MIGRATION", flush=True)
         store = OpportunityRepository(db)
         store.initialize()
         registry = SourceRegistry(
@@ -85,6 +87,7 @@ def run_acceptance(database_url):
             for key, host in originals.items()
         )
         catalog = SourceCatalog(registry, MultiSourceFetcher(registry, concurrency=1))
+        print("CIS_PG16_STAGE=CONNECTOR_CATALOG", flush=True)
         service = ConnectorSyncService(JobService(jobs), catalog)
         handlers = HandlerRegistry()
         handlers.register(JOB_TYPE, ConnectorSyncHandler(catalog, store, max_records=20))
@@ -92,6 +95,7 @@ def run_acceptance(database_url):
         # Real registered Worker, PostgreSQL durable queue, real migrations and
         # per-notice fenced SQL, independent connections for saved searches.
         for source in originals:
+            print("CIS_PG16_STAGE=WORKER_" + source.upper(), flush=True)
             claimable = service.enqueue(source)
             if not Worker(jobs, handlers, job_types=(JOB_TYPE,)).run_once():
                 raise AssertionError("Worker failed to claim")
@@ -110,6 +114,7 @@ def run_acceptance(database_url):
 
         # Real authoritative DB time: un-heartbeated old claim expires and
         # another connection/worker takes over. Old token cannot overwrite.
+        print("CIS_PG16_STAGE=STALE_LEASE_TEST", flush=True)
         rapid = JobRepository(db, JobSettings(lease_seconds=0.8, heartbeat_seconds=0.1))
         next_slot = datetime.now(timezone.utc) + timedelta(hours=2)
         job = ConnectorSyncService(JobService(rapid), catalog).enqueue("am_armeps", now=next_slot)
@@ -138,6 +143,7 @@ def run_acceptance(database_url):
             raise AssertionError("Stale worker corruption")
 
         # A mid-write failure must roll back the mutation, not leave an orphan.
+        print("CIS_PG16_STAGE=ROLLBACK_TEST", flush=True)
         def invalid_write(conn, now):
             store._write_prepared(conn, *store._prepare_upsert(
                 TenderNotice("am_armeps", "rollback-probe", "Rollback Pump",

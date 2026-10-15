@@ -79,13 +79,54 @@ class PublicProbeTests(unittest.TestCase):
         self.assertFalse(describe_payload("kg_portal_home", b"<html>JSF form</html>", "text/html")["verified"])
         self.assertFalse(describe_payload("kg_known_detail", b"<html>Only navigation</html>", "text/html")["verified"])
 
-    def test_kyrgyzstan_new_portal_requires_real_ids_and_context(self):
-        listing = "№202610122560014988 Жарыяланган Товары Организация Жалал-Абад Планируемая сумма 18000 сом"
+    def test_kyrgyzstan_new_portal_requires_complete_notice_fields(self):
+        listing = (
+            "<article>№202610122560014988 Жарыяланган Товары "
+            "Приобретение умных электросчетчиков "
+            "Организация Жалал-Абадский областной центр крови "
+            "Планируемая сумма 18 000 Сом "
+            "Дата публикации 12.10.2026 14:15 "
+            "Дата окончания 15.10.2026 15:52</article>"
+        )
         result = describe_payload("kg_new_portal", listing.encode("utf-8"), "text/html")
         self.assertTrue(result["verified"])
         self.assertEqual(result["order_ids"], 1)
+        self.assertEqual(result["verified_order_count"], 1)
         self.assertFalse(describe_payload("kg_new_portal", b"<html>menu only</html>", "text/html")["verified"])
         self.assertFalse(describe_payload("kg_new_portal", b"202610122560014988", "text/html")["verified"])
+        self.assertFalse(describe_payload(
+            "kg_new_portal", listing.replace("Дата окончания 15.10.2026 15:52", "").encode(), "text/html"
+        )["verified"])
+        self.assertFalse(describe_payload(
+            "kg_new_portal", listing.replace("Планируемая сумма 18 000 Сом", "").encode(), "text/html"
+        )["verified"])
+
+    def test_kyrgyzstan_script_bundle_is_not_live_procurement_evidence(self):
+        script = (
+            '<script>window.__STATE__="№202610122560014988 Жарыяланган Товары '
+            'Приобретение умных электросчетчиков Организация Жалал-Абадский центр '
+            'Планируемая сумма 18 000 Сом Дата публикации 12.10.2026 14:15 '
+            'Дата окончания 15.10.2026 15:52"</script>'
+        )
+        out = describe_payload("kg_new_portal", script.encode(), "text/html")
+        self.assertEqual(out["order_ids"], 1)
+        self.assertEqual(out["verified_order_count"], 0)
+        self.assertFalse(out["verified"])
+
+    def test_kyrgyzstan_does_not_borrow_another_notices_required_fields(self):
+        html = (
+            "<article>№202610122560014988 Жарыяланган Товары "
+            "Incomplete first listing Организация First buyer</article>"
+            "<article>№202610122562617004 Жарыяланган Услуги "
+            "Приобретение услуг по ремонту компьютерной техники "
+            "Организация Учреждение Войсковая часть 2031 "
+            "Планируемая сумма 85 000 Сом "
+            "Дата публикации 12.10.2026 14:28 "
+            "Дата окончания 15.10.2026 15:26</article>"
+        )
+        out = describe_payload("kg_new_portal", html.encode(), "text/html")
+        self.assertEqual(out["verified_order_count"], 1)
+        self.assertTrue(out["verified"])
 
     def test_official_moldova_agency_index_not_empty_page(self):
         document = ('<table><tr><td>AP LP MTender</td>'

@@ -15,6 +15,7 @@ import secrets
 import sys
 import time
 import uuid
+from threading import Barrier
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
@@ -123,8 +124,13 @@ def run_acceptance(database_url):
         concurrent_job = service.enqueue(
             "tj_eprocurement", now=datetime.now(timezone.utc) + timedelta(hours=3))
 
+        start_gate = Barrier(2, timeout=8)
+
         def compete(_index):
             independent_jobs = JobRepository(db)
+            # Both competitors start together and acquire separate pooled
+            # PostgreSQL connections inside their own claim transaction.
+            start_gate.wait()
             return independent_jobs.claim_next(
                 "worker-" + uuid.uuid4().hex, job_types=(JOB_TYPE,))
 

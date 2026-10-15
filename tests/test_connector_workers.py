@@ -170,7 +170,7 @@ def test_partial_storage_failure_retry_is_idempotent(setup):
     s = setup
     s.source.rows = [notice(external_id='one'), notice(external_id='two')]
     job = enqueue(s)
-    original = s.store.upsert
+    original = s.store.upsert_fenced
     calls = 0
     def fail_second(*args):
         nonlocal calls
@@ -178,7 +178,7 @@ def test_partial_storage_failure_retry_is_idempotent(setup):
         if calls == 2:
             raise sqlite3.OperationalError('synthetic raw body secret')
         return original(*args)
-    with patch.object(s.store, 'upsert', side_effect=fail_second):
+    with patch.object(s.store, 'upsert_fenced', side_effect=fail_second):
         run(s)
     assert state(s, job).state == 'queued' and len(s.store.read('ted')) == 1
     s.clock.value += 2
@@ -193,14 +193,56 @@ def test_lease_replay_fences_completion_and_keeps_one_record(setup):
     s = setup
     job = enqueue(s)
     stale = claim(s)
-    s.handler(ExecutionContext(stale.job, threading.Event()), stale.job.payload)
+    stale_context = ExecutionContext(stale.job, threading.Event())
+    stale_context.fenced_write = lambda write: s.jobs.fenced_write(stale.job.id, stale.token, write)
+    s.handler(stale_context, stale.job.payload)
     s.clock.value += s.jobs.settings.lease_seconds + 1
     current = claim(s)
     assert current and current.job.id == job.id and current.token != stale.token
     assert not s.jobs.complete(stale.job.id, stale.token, {'unsafe': 'stale'})
-    result = s.handler(ExecutionContext(current.job, threading.Event()), current.job.payload)
+    current_context = ExecutionContext(current.job, threading.Event())
+    current_context.fenced_write = lambda write: s.jobs.fenced_write(current.job.id, current.token, write)
+    result = s.handler(current_context, current.job.payload)
     assert s.jobs.complete(current.job.id, current.token, result)
     assert len(s.store.read('ted')) == 1 and state(s, job).result['updated_count'] == 1
+
+
+def test_expired_connector_cannot_overwrite_reclaimed_worker_rows(setup):
+    s = setup
+    entered, release = threading.Event(), threading.Event()
+
+    class PausingSource(FakeSource):
+        async def fetch(self, limit=20):
+            self.calls += 1
+            if self.calls == 1:
+                entered.set()
+                assert release.wait(8)
+                return [notice(title='Old stale equipment')]
+            return [notice(title='Newer correct equipment')]
+
+    source = PausingSource()
+    active_catalog = catalog_for(source)
+    registry = HandlerRegistry()
+    registry.register(JOB_TYPE, ConnectorSyncHandler(active_catalog, s.store))
+    job = enqueue(s)
+    first = Worker(s.jobs, registry, job_types=(JOB_TYPE,))
+    second = Worker(s.jobs, registry, job_types=(JOB_TYPE,))
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(first.run_once)
+        try:
+            assert entered.wait(8)
+            s.clock.value += s.jobs.settings.lease_seconds + 1
+            assert second.run_once()
+            assert s.store.read('ted')[0].title == 'Newer correct equipment'
+        finally:
+            release.set()
+        assert future.result(timeout=8)
+
+    assert state(s, job).state == 'succeeded'
+    assert s.store.read('ted')[0].title == 'Newer correct equipment'
+    with closing(s.database.connect()) as conn:
+        assert conn.execute('SELECT COUNT(*) FROM source_opportunities').fetchone()[0] == 1
 
 
 def test_concurrent_claims_share_one_connector_lane_but_other_jobs_run(setup):

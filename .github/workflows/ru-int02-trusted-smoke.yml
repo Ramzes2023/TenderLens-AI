@@ -31,3 +31,43 @@ jobs:
           git --version
           python3 --version
           echo "RU_INT02_TRUSTED_RUNNER_SMOKE=PASS"
+
+      - name: Observe bounded public RU HTTPS reachability (not tender proof)
+        shell: bash
+        run: |
+          set -euo pipefail
+          temp_dir="$(mktemp -d)"
+          trap 'rm -rf "$temp_dir"' EXIT
+          for source in eis44 eis223 b2b_center; do
+            case "$source" in
+              eis44)
+                url='https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on'
+                ;;
+              eis223)
+                url='https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz223=on'
+                ;;
+              b2b_center)
+                url='https://www.b2b-center.ru/search/'
+                ;;
+            esac
+            file="$temp_dir/${source}.response"
+            if status="$(curl --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 25 --max-filesize 2097152 --output "$file" --write-out '%{http_code}' "$url" 2>/dev/null)"; then
+              size="$(wc -c < "$file" | tr -d ' ')"
+              case "$status" in
+                200)
+                  if test "$size" -gt 0; then
+                    outcome="HTTP_200_NONEMPTY_NOT_TENDER_VERIFIED"
+                  else
+                    outcome="HTTP_200_EMPTY"
+                  fi
+                  ;;
+                30*) outcome="REDIRECT_NOT_FOLLOWED" ;;
+                *) outcome="HTTP_STATUS_NOT_ACCEPTED" ;;
+              esac
+              echo "RU_${source}_PUBLIC_HTTP=${status};BYTES=${size};STATE=${outcome}"
+            else
+              echo "RU_${source}_PUBLIC_HTTP=UNAVAILABLE_OR_LIMIT_EXCEEDED;STATE=NOT_VERIFIED"
+            fi
+          done
+          echo "RU_PUBLIC_TENDER_RECORDS_VERIFIED=NO"
+          echo "PRODUCTION_CHANGED=NO"

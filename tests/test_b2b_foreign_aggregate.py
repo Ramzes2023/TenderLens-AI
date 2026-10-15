@@ -55,3 +55,34 @@ def test_unrecognized_hosts_still_fail_closed(host):
 def test_foreign_only_page_is_not_reported_as_success():
     with pytest.raises(SourceError, match="no usable"):
         parse_b2b_center_listing(extra_card("www.rts-tender.ru"))
+
+
+def test_valid_b2b_card_without_optional_organization_is_not_fabricated():
+    fragment = (
+        '<div class="cards" itemtype="https://schema.org/ListItem">'
+        '<div itemtype="https://schema.org/Demand">'
+        '<meta itemprop="businessFunction" content="http://purl.org/goodrelations/v1#Buy">'
+        '<link itemprop="url" href="https://www.b2b-center.ru/search/number/l99999999-1/">'
+        '<meta itemprop="name" content="Тестовая поставка: карточка без указанного заказчика">'
+        '</div></div>'
+    ).encode("utf-8")
+    notices = parse_b2b_center_listing(inject_inside_listing(fragment), limit=100)
+    found = [n for n in notices if n.external_id == "l99999999-1"]
+    assert len(found) == 1
+    assert found[0].customer is None
+    assert len(notices) == 11
+
+
+def test_multiple_b2b_organizations_remain_rejected():
+    fragment = (
+        '<div class="cards" itemtype="https://schema.org/ListItem">'
+        '<div itemtype="https://schema.org/Organization"></div>'
+        '<div itemtype="https://schema.org/Organization"></div>'
+        '<div itemtype="https://schema.org/Demand">'
+        '<meta itemprop="businessFunction" content="http://purl.org/goodrelations/v1#Buy">'
+        '<link itemprop="url" href="https://www.b2b-center.ru/search/number/l88888888-1/">'
+        '<meta itemprop="name" content="Ambiguous buyer">'
+        '</div></div>'
+    ).encode("utf-8")
+    with pytest.raises(SourceError, match="structure"):
+        parse_b2b_center_listing(inject_inside_listing(fragment), limit=100)

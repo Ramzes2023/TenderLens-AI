@@ -249,6 +249,28 @@ def test_jetro_local_article_format_rejects_wrong_section_and_guessed_numeric_li
         parse_jetro_html(JETRO_LOCAL, source="jp_jetro_national")
 
 
+def test_jetro_real_world_links_with_query_and_nested_title_markup():
+    national = JETRO.replace(
+        b"/en/database/procurement/national/articles/420001/2026101500010000.html",
+        b"https://www.jetro.go.jp/en/database/procurement/national/articles/420001/2026101500010000.html?_page=1",
+    ).replace(
+        b"Procurement of a secure IT system, 1 set",
+        b"Procurement of <span>a secure IT system</span>, 1 set",
+    )
+    n = parse_jetro_html(national, source="jp_jetro_national")[0]
+    assert n.external_id == "420001:2026101500010000"
+    assert n.title == "Procurement of a secure IT system , 1 set" or n.title == "Procurement of a secure IT system, 1 set"
+    assert n.url.startswith("https://www.jetro.go.jp/en/database/procurement/national/articles/")
+    local = JETRO_LOCAL.replace(
+        b"/en/database/procurement/local/articles/b25795fdff1a1aba.html",
+        b"/en/database/procurement/local/articles/b25795fdff1a1aba.html?_page=1",
+    )
+    l = parse_jetro_html(local, source="jp_jetro_local")[0]
+    assert l.external_id == "b25795fdff1a1aba"
+    assert "_page=1" in l.url
+    validate_notice(l, "jp_jetro_local")
+
+
 def test_jetro_disallows_other_host_and_unrelated_non_tender_links():
     bad = JETRO.replace(
         b"/en/database/procurement/national/articles/420001/2026101500010000.html",

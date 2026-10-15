@@ -23,10 +23,14 @@ _ALLOWED_LISTS = {
     "jp_jetro_national": (
         JETRO_LISTS["jp_jetro_national"],
         JETRO_LISTS["jp_jetro_national"] + "?_page=1&deadline=1",
+        JETRO_LISTS["jp_jetro_national"] +
+        "?_page=1&area=&classification1=&classification2=&classification3=&deadline=&entity=&from=&keyword=&to=&type=",
     ),
     "jp_jetro_local": (
         JETRO_LISTS["jp_jetro_local"],
         JETRO_LISTS["jp_jetro_local"] + "?_page=1&local_deadline=1",
+        JETRO_LISTS["jp_jetro_local"] +
+        "?_page=1&local_area=&local_classification1=&local_classification2=&local_classification3=&local_deadline=&local_entity=&local_from=&local_keyword=&local_to=",
     ),
 }
 
@@ -98,7 +102,9 @@ async def main():
     for key, urls in _ALLOWED_LISTS.items():
         for url in urls:
             value = await _one(key, url)
-            value["variant"] = "explicit_active_query" if "?" in url else "base_listing"
+            value["variant"] = ("base_listing" if "?" not in url
+                                else "explicit_full_search" if "classification1=" in url
+                                else "explicit_active_query")
             results.append(value)
     print("ASIA_SAFE_UPSTREAM_DIAGNOSTICS=" + json.dumps(results, sort_keys=True))
     print("ASIA_DIAGNOSTIC_IS_NOT_LIVE_ACCEPTANCE=YES")

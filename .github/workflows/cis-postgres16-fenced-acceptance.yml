@@ -1,0 +1,53 @@
+name: CIS PostgreSQL 16 fenced-ingestion acceptance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "app/sources/**"
+      - "app/jobs/**"
+      - "app/database/**"
+      - "scripts/ci_cis_postgres16_fenced_acceptance.py"
+      - ".github/workflows/cis-postgres16-fenced-acceptance.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cis-postgres16-fenced-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: valyqon_ci
+          POSTGRES_PASSWORD: only-for-disposable-github-cis16
+          POSTGRES_DB: postgres
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U valyqon_ci -d postgres -h 127.0.0.1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+      VALYQON_DATABASE_REQUIRE_POSTGRES: 'true'
+      VALYQON_CIS_PG16_CONTEXT: valyqon-cis-postgres16-ephemeral-ci-v1
+      VALYQON_CIS_PG16_PASSWORD: only-for-disposable-github-cis16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install project test dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Compile PostgreSQL fenced connector acceptance
+        run: python -m compileall -q scripts/ci_cis_postgres16_fenced_acceptance.py
+      - name: Verify PostgreSQL 16 migrations, fenced upsert, stale lease, snapshot and rollback
+        timeout-minutes: 8
+        run: python -B -m scripts.ci_cis_postgres16_fenced_acceptance

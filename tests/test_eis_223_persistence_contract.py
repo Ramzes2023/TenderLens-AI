@@ -68,7 +68,7 @@ def test_eis_223_notice_repository_round_trip(repository, eis_223_notice):
 
     # Desired contract: valid subclass notices must be readable as base notices.
     restored, = repository.read('eis_223')
-    assert type(restored) is TenderNotice
+    assert type(restored) is Eis223Notice
     assert {field.name for field in fields(TenderNotice)} <= stored.keys()
     for field in fields(TenderNotice):
         assert getattr(restored, field.name) == getattr(eis_223_notice, field.name)
@@ -91,10 +91,10 @@ def test_base_notice_repository_round_trip(repository, eis_223_notice):
 
 
 @pytest.mark.parametrize('payload,error', [
-    ('{"external_id":"one","title":"Synthetic","url":"https://example.invalid"}', TypeError),
+    ('{"external_id":"one","title":"Synthetic","url":"https://example.invalid"}', ValueError),
     ('{"source":', json.JSONDecodeError),
-    ('[]', TypeError),
-    ('null', TypeError),
+    ('[]', ValueError),
+    ('null', ValueError),
 ])
 def test_repository_read_rejects_invalid_stored_notice(repository, eis_223_notice, payload, error):
     repository.upsert(eis_223_notice, 'connector-sync-v1:eis_223:adapter-r1')

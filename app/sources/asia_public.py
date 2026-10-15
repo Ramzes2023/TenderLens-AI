@@ -44,7 +44,8 @@ JETRO_SEARCH_URLS = {
 _MAX_BYTES = 1024 * 1024
 _CLEAN = re.compile(r"\s+")
 _JETRO_LINK = re.compile(
-    r"^/en/database/procurement/(national|local)/articles/([0-9]+)/([0-9]+)\.html$"
+    r"^/en/database/procurement/(national|local)/articles/"
+    r"(?:([0-9]+)/([0-9]+)|([0-9a-f]{16}))\.html$"
 )
 _JETRO_DATE = re.compile(r"\b[A-Z][a-z]{2} [0-9]{1,2}, 20[0-9]{2}\b")
 
@@ -220,7 +221,9 @@ class _JetroRows(HTMLParser):
                 )
                 path = urlsplit(url).path
                 match = _JETRO_LINK.fullmatch(path)
-                if match and match.group(1) == self.section:
+                if (match and match.group(1) == self.section
+                        and (match.group(4) is not None if self.section == "local"
+                             else match.group(2) is not None)):
                     self.anchor_href = path
                     self.anchor_parts = []
             except SourceError:
@@ -274,7 +277,11 @@ def parse_jetro_html(payload: bytes, *, source: str, limit: int = 20) -> list[Te
         url = _safe_link(path, frozenset({"www.jetro.go.jp"}), base="https://www.jetro.go.jp")
         if not _JETRO_LINK.fullmatch(urlsplit(url).path):
             continue
-        external_id = urlsplit(url).path.rsplit("/", 2)[-2] + ":" + urlsplit(url).path.rsplit("/", 1)[-1].removesuffix(".html")
+        match = _JETRO_LINK.fullmatch(urlsplit(url).path)
+        if not match or match.group(1) != section:
+            continue
+        external_id = (match.group(4) if section == "local"
+                       else match.group(2) + ":" + match.group(3))
         if external_id in seen:
             continue
         seen.add(external_id)

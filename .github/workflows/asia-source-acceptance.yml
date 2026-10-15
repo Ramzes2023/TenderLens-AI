@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "app/sources/asia_public.py"
+      - "app/sources/asia_enqueue.py"
       - "app/sources/catalog.py"
       - "app/sources/ingestion.py"
       - "tests/test_asia_public_sources.py"

@@ -18,6 +18,7 @@ from app.database.backend import Database, PostgresConnection, postgres_sql
 from app.database.config import DatabaseSettings
 from app.database.migrations import MIGRATIONS
 from app.jobs import HandlerRegistry, JobRepository, JobScope, JobService
+from app.jobs.models import LeaseLostError
 from app.jobs.worker import ExecutionContext, PermanentJobError, ShutdownResult, Worker, main
 from app.monitoring.config import MonitoringSettings
 from app.sources.catalog import SourceCatalog, build_source_catalog
@@ -205,6 +206,25 @@ def test_lease_replay_fences_completion_and_keeps_one_record(setup):
     result = s.handler(current_context, current.job.payload)
     assert s.jobs.complete(current.job.id, current.token, result)
     assert len(s.store.read('ted')) == 1 and state(s, job).result['updated_count'] == 1
+
+
+def test_fenced_notice_write_rolls_back_if_lease_expires_inside_transaction(setup):
+    s = setup
+    job = enqueue(s)
+    owner = claim(s)
+    assert owner and owner.job.id == job.id
+
+    def cross_expiration(write):
+        def run_write(conn, now):
+            write(conn, now)
+            s.clock.value += s.jobs.settings.lease_seconds + 1
+        return s.jobs.fenced_write(owner.job.id, owner.token, run_write)
+
+    with pytest.raises(LeaseLostError):
+        s.store.upsert_fenced(notice(), connector_version('ted'), cross_expiration)
+    assert not s.store.read('ted')
+    with closing(s.database.connect()) as conn:
+        assert conn.execute('SELECT COUNT(*) FROM source_opportunities').fetchone()[0] == 0
 
 
 def test_expired_connector_cannot_overwrite_reclaimed_worker_rows(setup):

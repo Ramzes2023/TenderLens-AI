@@ -152,3 +152,54 @@ def test_223fz_sample_keeps_original_rss_urls_and_respects_request_limit():
     ]
     assert select_diverse_routes(items) == items[:MAX_DETAIL_REQUESTS]
     assert select_diverse_routes(items, limit=0) == []
+
+
+@pytest.mark.parametrize("location,expected_target,expected_path,expected_number", [
+    ("https://zakupki.gov.ru/223/purchase/public/purchase/info/common-info.html?regNumber=0123456789012",
+     "EXACT_OFFICIAL_HTTPS_HOST",
+     "/223/purchase/public/purchase/info/common-info.html", "MATCH"),
+    ("/223/purchase/public/purchase/info/common-info.html?regNumber=0123456789012",
+     "EXACT_OFFICIAL_HTTPS_HOST",
+     "/223/purchase/public/purchase/info/common-info.html", "MATCH"),
+    ("/223/purchase/public/purchase/info/common-info.html?regNumber=9999999999999",
+     "EXACT_OFFICIAL_HTTPS_HOST",
+     "/223/purchase/public/purchase/info/common-info.html", "MISMATCH"),
+    ("/223/purchase/public/purchase/info/common-info.html?foo=bar",
+     "EXACT_OFFICIAL_HTTPS_HOST",
+     "/223/purchase/public/purchase/info/common-info.html", "NOT_IN_RECOGNIZED_QUERY"),
+    ("https://example.invalid/private?id=0123456789012",
+     "NOT_EXACT_OFFICIAL_HTTPS_HOST", "REDACTED", "UNKNOWN"),
+    ("https://zakupki.gov.ru.evil.invalid/223/purchase/public/purchase/info/common-info.html",
+     "NOT_EXACT_OFFICIAL_HTTPS_HOST", "REDACTED", "UNKNOWN"),
+    ("https://evil@zakupki.gov.ru/223/purchase/public/purchase/info/common-info.html",
+     "NOT_EXACT_OFFICIAL_HTTPS_HOST", "REDACTED", "UNKNOWN"),
+    ("http://zakupki.gov.ru/223/purchase/public/purchase/info/common-info.html",
+     "NOT_EXACT_OFFICIAL_HTTPS_HOST", "REDACTED", "UNKNOWN"),
+    ("/223/purchase/private/0123456789012/secret",
+     "EXACT_OFFICIAL_HTTPS_HOST", "/223/purchase/private/{ID}/secret", "NOT_IN_RECOGNIZED_QUERY"),
+    ("https://zakupki.gov.ru/223/purchase/public/purchase/info/common-info.html#fragment",
+     "NOT_EXACT_OFFICIAL_HTTPS_HOST", "REDACTED", "UNKNOWN"),
+    (None, "UNSAFE_OR_MISSING", "REDACTED", "UNKNOWN"),
+    ("https://zakupki.gov.ru/\nsecret", "UNSAFE_OR_MISSING", "REDACTED", "UNKNOWN"),
+])
+def test_223_redirect_shape_is_safe_and_number_is_never_logged(
+        location, expected_target, expected_path, expected_number):
+    from scripts.ci_ru_eis_detail_identity import describe_redirect_target
+
+    origin = ("https://zakupki.gov.ru/223/purchase/public/purchase/info/"
+              "common-info.html?regNumber=0123456789012")
+    observed = describe_redirect_target(origin, location, "0123456789012")
+    assert observed == {"target": expected_target, "path_shape": expected_path,
+                        "number": expected_number}
+    assert "0123456789012" not in str(observed)
+    assert "9999999999999" not in str(observed)
+    assert "evil.invalid" not in str(observed)
+
+
+def test_223_redirect_duplicate_or_malformed_number_cannot_match():
+    from scripts.ci_ru_eis_detail_identity import describe_redirect_target
+    origin = ("https://zakupki.gov.ru/223/purchase/public/purchase/info/"
+              "common-info.html?regNumber=0123456789012")
+    target = ("https://zakupki.gov.ru/223/purchase/public/purchase/info/"
+              "common-info.html?regNumber=0123456789012&regNumber=0123456789012")
+    assert describe_redirect_target(origin, target, "0123456789012")["number"] == "AMBIGUOUS"

@@ -66,7 +66,7 @@ jobs:
               esac
               echo "RU_${source}_PUBLIC_HTTP=${status};BYTES=${size};STATE=${outcome}"
             else
-              echo "RU_${source}_PUBLIC_HTTP=UNAVAILABLE_OR_LIMIT_EXCEEDED;STATE=NOT_VERIFIED"
+              echo "RU_${source}_PUBLIC_HTTP=UNAVAILABLE_OR_LIMIT_EXCEEDED;CURL_EXIT=$?;STATE=NOT_VERIFIED"
             fi
           done
           echo "RU_PUBLIC_TENDER_RECORDS_VERIFIED=NO"

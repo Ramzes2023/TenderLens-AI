@@ -117,6 +117,10 @@ def parse_asia_rss(payload: bytes, *, source: str, limit: int = 20) -> list[Tend
         )
         if not title or not raw_link:
             continue
+        # A published award is not an opportunity to bid. Leasing feeds in
+        # particular can mix tender notices and contract award announcements.
+        if re.search(r"\b(?:contract awards?|tender awards?|award(?:ed|s)?)\b", title, re.I):
+            continue
         try:
             link = _safe_link(
                 _text(raw_link), hosts,
@@ -225,6 +229,16 @@ def parse_jetro_html(payload: bytes, *, source: str, limit: int = 20) -> list[Te
     output: list[TenderNotice] = []
     seen: set[str] = set()
     for cells, path, title in parser.rows:
+        # National results contain several procurement-adjacent announcement
+        # classes (e.g. requests for comments and sole-source notices). Only
+        # send actual competitive tender notices to the tender search index.
+        if section == "national":
+            notice_type = cells[2].casefold() if len(cells) > 2 else ""
+            if not any(term in notice_type for term in (
+                "notice of procurement", "contract notice",
+                "invitation to tender", "tender notice",
+            )):
+                continue
         url = _safe_link(path, frozenset({"www.jetro.go.jp"}), base="https://www.jetro.go.jp")
         if not _JETRO_LINK.fullmatch(urlsplit(url).path):
             continue

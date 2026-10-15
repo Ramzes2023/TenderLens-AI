@@ -11,6 +11,7 @@ import json
 import re
 import ssl
 import sys
+from html.parser import HTMLParser
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPSHandler, HTTPRedirectHandler, ProxyHandler, Request, build_opener
@@ -33,6 +34,58 @@ HOSTS = {"public.mtender.gov.md", "zakupki.gov.kg", "goszakupki.okmot.kg", "publ
 OCID = re.compile(r"^ocds-[a-zA-Z0-9_-]{3,150}$")
 ORDER_LINK = re.compile(r"view/order/view\.xhtml\?id=\d{5,18}")
 NEW_ORDER_ID = re.compile(r"(?:№|&#8470;|&numero;)\s*(20\d{12,20})")
+
+# The 2026 official Kyrgyz portal is JS-backed. Visible HTML listings may
+# appear in cached/server-rendered responses, but script bundles and UI labels
+# are not procurement records. Never infer a functioning feed from HTTP 200.
+class _VisibleText(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self.hidden = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in {"script", "style", "template", "noscript"}:
+            self.hidden += 1
+        elif tag in {"article", "section", "p", "div", "li", "br"} and not self.hidden:
+            self.parts.append(" ")
+
+    def handle_endtag(self, tag):
+        if tag in {"script", "style", "template", "noscript"}:
+            self.hidden = max(0, self.hidden - 1)
+        elif tag in {"article", "section", "p", "div", "li"} and not self.hidden:
+            self.parts.append(" ")
+
+    def handle_data(self, data):
+        if not self.hidden:
+            self.parts.append(data)
+
+
+def extract_kg_notice_evidence(raw):
+    """Require linked number, category, title, customer, amount and both dates.
+
+    This is evidence validation, NOT a production parser or persistence proof.
+    Fail closed on script-only SPAs and avoid retaining personal information.
+    """
+    parser = _VisibleText()
+    parser.feed(raw.decode("utf-8", errors="replace"))
+    visible = re.sub(r"\s+", " ", " ".join(parser.parts))
+    marker = re.compile(r"№\s*(20\d{12,20})\b")
+    positions = list(marker.finditer(visible))
+    confirmed = set()
+    for i, found in enumerate(positions[:100]):
+        block = visible[found.end():positions[i + 1].start() if i + 1 < len(positions) else len(visible)]
+        status = re.search(r"(?:Жарыяланган|Опубликовано|Published)\s+(?:Товары|Работы|Услуги|Goods|Works|Services)\s+(.+?)\s+Организация\s+(.+?)\s+Планируемая сумма\s+([\d\s\u00a0.,]+)\s*(?:Сом|сом|KGS)\b", block)
+        if not status:
+            continue
+        title, customer, amount = status.groups()
+        if (len(title.strip()) < 5 or len(customer.strip()) < 4
+                or not re.search(r"\d", amount)
+                or not re.search(r"Дата публикации\s+\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}", block)
+                or not re.search(r"Дата окончания\s+\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}", block)):
+            continue
+        confirmed.add(found.group(1))
+    return confirmed
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -93,10 +146,10 @@ def describe_payload(name, raw, content_type):
                 "order_links": len(set(links)), "has_jsf": "javax.faces" in html}
     if name == "kg_new_portal":
         ids = set(NEW_ORDER_ID.findall(html))
-        has_description = ("Планируемая сумма" in html or "Организация" in html)
-        return {"verified": bool(ids) and has_description,
-                "kind": "new_portal_tender_listing", "order_ids": len(ids),
-                "has_description": has_description}
+        verified_ids = extract_kg_notice_evidence(raw)
+        return {"verified": bool(verified_ids), "kind": "new_portal_tender_listing",
+                "order_ids": len(ids), "verified_order_count": len(verified_ids),
+                "has_description": bool(verified_ids)}
     return {"verified": bool(re.search(r"(purchase Name|Date of publication|procurement|Наименование закупки|Наименование конкурса)", html, re.I)),
             "kind": "public_detail_html", "html_bytes": len(raw)}
 

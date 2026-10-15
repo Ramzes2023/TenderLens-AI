@@ -51,3 +51,18 @@ jobs:
       - name: Strict Linux system CA EIS network probe (observational only)
         timeout-minutes: 1
         run: python -m scripts.ru_eis_system_ca_probe
+
+  ru-windows-system-ca-observation:
+    runs-on: windows-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install project test dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Windows strict TLS source-to-ephemeral-SQLite diagnostics (observational)
+        timeout-minutes: 4
+        run: python -m scripts.ru_public_live_smoke

@@ -38,6 +38,13 @@ HOSTS = {
     'za_etenders': frozenset({'admin.etenders.gov.za'}),
     'india_cppp': frozenset({'eprocure.gov.in'}),
     'kz_goszakup': frozenset({'ows.goszakup.gov.kz'}),
+    # Staged Asian feeds: host allowlists apply to the actual worker network call.
+    'hk_ha_works': frozenset({'www.housingauthority.gov.hk'}),
+    'hk_ha_leasing': frozenset({'www.housingauthority.gov.hk'}),
+    'hk_emsd_tenders': frozenset({'www.emsd.gov.hk'}),
+    'hk_emsd_consultancy': frozenset({'www.emsd.gov.hk'}),
+    'jp_jetro_national': frozenset({'www.jetro.go.jp'}),
+    'jp_jetro_local': frozenset({'www.jetro.go.jp'}),
 }
 
 

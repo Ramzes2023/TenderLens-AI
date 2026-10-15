@@ -44,20 +44,41 @@ def _text(value: str | None) -> str:
     return _CLEAN.sub(" ", re.sub(r"<[^>]+>", " ", html.unescape(value or ""))).strip()
 
 
-def _safe_link(value: str, hosts: frozenset[str], *, base: str | None = None) -> str:
-    if not value or any(ord(char) < 32 or char == "\\" for char in value):
+def _safe_link(
+    value: str,
+    hosts: frozenset[str],
+    *,
+    base: str | None = None,
+    upgrade_official_http: bool = False,
+) -> str:
+    """Resolve approved public notice links without ever fetching insecure URLs.
+
+    Official feeds can contain historic HTTP notice links. Only upgrade URLs
+    with an *exact* allowlisted hostname to HTTPS; do not issue HTTP requests.
+    """
+    if not value or any(char.isspace() or ord(char) < 32 or char == "\\" for char in value):
         raise SourceError("Asian source provided an unsafe item URL.")
-    candidate = urljoin(base, value) if base else value
     try:
+        candidate = urljoin(base, value) if base else value
         part = urlsplit(candidate)
-        if (part.scheme != "https" or part.hostname not in hosts
-                or part.username or part.password or part.port not in (None, 443)
-                or part.fragment):
+        if (part.hostname not in hosts or not part.netloc or "@" in part.netloc
+                or part.username is not None or part.password is not None
+                or part.fragment or not part.path.startswith("/")
+                or part.port not in (None, 443)):
+            raise ValueError()
+        if part.scheme == "http" and upgrade_official_http:
+            if part.port is not None:
+                raise ValueError()
+            # Strip the insecure scheme before sending notice links to users.
+            candidate = "https://" + part.netloc + part.path
+            if part.query:
+                candidate += "?" + part.query
+            part = urlsplit(candidate)
+        if part.scheme != "https" or len(candidate) > 2000:
             raise ValueError()
     except ValueError:
         raise SourceError("Asian source provided an unsafe item URL.") from None
     return candidate
-
 
 def _published(value: str | None) -> str | None:
     if not _text(value):
@@ -96,7 +117,11 @@ def parse_asia_rss(payload: bytes, *, source: str, limit: int = 20) -> list[Tend
         if not title or not raw_link:
             continue
         try:
-            link = _safe_link(_text(raw_link), hosts)
+            link = _safe_link(
+                _text(raw_link), hosts,
+                base=ASIA_RSS_FEEDS[source],
+                upgrade_official_http=True,
+            )
         except SourceError:
             continue
         guid = _text(item.findtext("guid") if root.tag == "rss" else item.findtext(f"{atom}id"))

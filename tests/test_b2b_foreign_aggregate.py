@@ -16,6 +16,7 @@ def extra_card(host, *, duplicate_organization=False):
     return (f'<div class="cards" itemtype="https://schema.org/ListItem">'
             f'{organization}'
             f'<div itemtype="https://schema.org/Demand">'
+            f'<meta itemprop="businessFunction" content="http://purl.org/goodrelations/v1#Buy">'
             f'<link itemprop="url" href="https://{host}/notices/other-platform">'
             f'</div></div>').encode("utf-8")
 

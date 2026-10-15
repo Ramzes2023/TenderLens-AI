@@ -198,6 +198,56 @@ def test_all_six_sources_fetch_through_safe_single_page_transport(monkeypatch):
     assert all(timeout == 30.0 for _, timeout, _ in calls)
 
 
+def test_six_source_catalog_connects_to_real_worker_and_sqlite(monkeypatch, tmp_path):
+    """Exercise the actual connector queue, worker handler and snapshot search.
+
+    HTTP is fixture-backed in this test; this is *not* a live network claim.
+    """
+    from app.database.backend import Database
+    from app.database.config import DatabaseSettings
+    from app.jobs import HandlerRegistry, JobRepository, JobService
+    from app.jobs.worker import Worker
+    from app.sources.ingestion import JOB_TYPE, ConnectorSyncHandler, ConnectorSyncService
+    from app.sources.opportunities import OpportunityRepository
+    from app.sources.snapshots import snapshot_catalog
+
+    monkeypatch.setenv("VALYQON_ASIA_SOURCES_ENABLED", "1")
+
+    async def fake_fetch(url, timeout, accept):
+        assert url == ASIA_RSS_FEEDS["hk_emsd_consultancy"]
+        return RSS.replace(
+            b"www.housingauthority.gov.hk/en/tenders/example-123.html",
+            b"www.emsd.gov.hk/en/tenders/example-123.html",
+        )
+
+    monkeypatch.setattr("app.sources.asia_public._fetch", fake_fetch)
+    db = Database(DatabaseSettings("", tmp_path / "asia-worker.sqlite"))
+    try:
+        jobs = JobRepository(db)
+        jobs.initialize()
+        opportunities = OpportunityRepository(db)
+        opportunities.initialize()
+        catalog = build_source_catalog(_settings())
+        source = "hk_emsd_consultancy"
+        service = ConnectorSyncService(JobService(jobs), catalog)
+        handlers = HandlerRegistry()
+        handlers.register(JOB_TYPE, ConnectorSyncHandler(catalog, opportunities))
+        service.enqueue(source)
+        assert Worker(jobs, handlers, job_types=(JOB_TYPE,)).run_once() is True
+        stored = opportunities.read(source, search_terms=("engineering",))
+        assert len(stored) == 1
+        assert stored[0].source == source
+        assert stored[0].title == "Public contract for engineering services"
+        report = asyncio.run(snapshot_catalog(catalog, opportunities).fetch(
+            source_keys=(source,), search_terms=("engineering",)
+        ))
+        assert not report.failures
+        assert len(report.notices) == 1
+        assert report.notices[0].identity == stored[0].identity
+    finally:
+        db.close()
+
+
 def test_bounded_timeout_and_unknown_source_fail_closed():
     with pytest.raises(ValueError):
         AsiaPublicSource("private_webhook")

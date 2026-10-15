@@ -180,8 +180,16 @@ def parse_b2b_center_listing(payload: bytes, *, limit=100) -> list[TenderNotice]
         upstream, number = None, None
         if references:
             raw, label = next(iter(references))
-            upstream = _safe_url(raw)
-            number = label.removeprefix('Закупка №').removesuffix(' в ЕИС')
+            # Aggregate cross-platform references are OPTIONAL provenance.
+            # Some real cards include tracker fragments from third parties.
+            # Do not accept unsafe external URLs or infer EIS identity from
+            # them; retain the authoritative validated B2B detail URL.
+            try:
+                upstream = _safe_url(raw)
+            except SourceError:
+                upstream = None
+            if upstream is not None:
+                number = label.removeprefix('Закупка №').removesuffix(' в ЕИС')
         host = urlsplit(upstream).hostname if upstream else None
         origin = 'aggregated' if host and host not in B2B_CENTER_HOSTS else 'unknown'
         # Original reference is retained in the base contract as well as provenance,

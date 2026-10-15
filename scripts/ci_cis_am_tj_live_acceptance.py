@@ -57,10 +57,20 @@ def verify(source_id):
 
             final = jobs.get(claimable.id, scope=SYSTEM_SCOPE)
             if final is None or final.state != "succeeded" or not isinstance(final.result, dict):
-                return {"source": source_id, "passed": False,
-                        "failed_at": "lease_or_live_acquisition",
-                        "job_state": final.state if final else "missing",
-                        "safe_failure_code": final.failure_code if final else None}
+                diagnostics = {"source": source_id, "passed": False,
+                               "failed_at": "lease_or_live_acquisition",
+                               "job_state": final.state if final else "missing",
+                               "safe_failure_code": final.failure_code if final else None}
+                # A one-notice direct official HTTPS probe diagnoses transport
+                # versus HTML schema without logging a response, URL query,
+                # exception body, credentials, or disabling TLS verification.
+                try:
+                    probe_rows = asyncio.run(registration.source.fetch(1))
+                except Exception as exc:
+                    diagnostics["source_probe_error_type"] = type(exc).__name__
+                else:
+                    diagnostics["source_probe_rows"] = len(probe_rows)
+                return diagnostics
 
             stored = notices.read(source_id, limit=100)
             if not stored or len(stored) != len({n.identity for n in stored}):

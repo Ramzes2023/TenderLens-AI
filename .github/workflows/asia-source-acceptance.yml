@@ -16,25 +16,6 @@ permissions:
   contents: read
 
 jobs:
-  asia-runner-readiness:
-    # Dedicated diagnostic: do not run untrusted PR scripts or touch AWS.
-    runs-on: [self-hosted, valyqon-ru]
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - name: Read-only runner readiness (no secrets)
-        run: |
-          python --version
-          git --version
-          python -c "import platform; print('VALYQON_RUNNER_OS=' + platform.system()); print('VALYQON_RUNNER_ARCH=' + platform.machine())"
-      - name: Repository checkout availability
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Confirm staged adapter files
-        run: python -c "from pathlib import Path; assert all(Path(p).is_file() for p in ('app/sources/asia_public.py', 'scripts/asia_six_live_acceptance.py', 'tests/test_asia_public_sources.py')); print('ASIA_FILES_PRESENT=YES')"
-
   asia-six-offline-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 12

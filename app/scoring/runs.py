@@ -7,7 +7,7 @@ import json
 import re
 import sqlite3
 from contextlib import closing
-from dataclasses import asdict
+from dataclasses import asdict, fields
 
 from pydantic import ValidationError
 
@@ -27,7 +27,7 @@ MAX_SOURCES = 5
 MAX_PER_SOURCE = 100
 SCAN_PER_SOURCE = 1000
 MAX_RESULTS = MAX_SOURCES * MAX_PER_SOURCE
-SOURCE_IDS = frozenset({'eis', 'ted', 'sam_gov', 'uk_fts', 'canada_buys', 'austender',
+SOURCE_IDS = frozenset({'eis_223', 'b2b_center', 'eis', 'ted', 'sam_gov', 'uk_fts', 'canada_buys', 'austender',
                         'nz_gets', 'india_cppp', 'kz_goszakup', 'za_etenders'})
 
 
@@ -51,6 +51,20 @@ def profile_digest(profile):
     return digest(profile.model_dump(mode='json'))
 
 
+def _restore_notice(encoded, source):
+    """Drop unverified adapter-only provenance for scoring, retain strict base validation.
+
+    The original full notice stays in the source repository and is not mutated.
+    """
+    stored = json.loads(encoded)
+    if not isinstance(stored, dict):
+        raise TypeError('Stored notice must be a JSON object.')
+    base_fields = {field.name for field in fields(TenderNotice)}
+    notice = TenderNotice(**{name: value for name, value in stored.items()
+                             if name in base_fields})
+    return validate_notice(notice, source)
+
+
 def validate_configuration(sources, limit):
     if (type(sources) not in (list, tuple) or not 1 <= len(sources) <= MAX_SOURCES
             or any(type(source) is not str or source not in SOURCE_IDS for source in sources)
@@ -69,7 +83,8 @@ def validate_payload(payload):
 
 
 class ScoringRunService:
-    def __init__(self, jobs):
+    def __init__(self, jobs, *, catalog=None):
+        self.catalog = catalog
         self.jobs = jobs
         self.database = jobs.repository.database
 
@@ -102,6 +117,10 @@ class ScoringRunService:
 
     def enqueue(self, *, scope, sources=('ted',), limit_per_source=20):
         config = validate_configuration(sources, limit_per_source)
+        # Russian adapters must be explicitly enabled in the actual catalog.
+        for source in ('eis_223', 'b2b_center'):
+            if source in config['sources'] and (self.catalog is None or source not in self.catalog.enabled_keys):
+                raise ScoringInputError(f'{source} must be explicitly configured.')
         # Short bounded transaction freezes the selected public revisions together.
         # Existing adapter's transaction lock serializes snapshot reads with ingestion.
         with closing(self.database.connect()) as conn:
@@ -117,7 +136,7 @@ class ScoringRunService:
                     counts[source] = len(rows)
                     taken = 0
                     for row in rows:
-                        notice = validate_notice(TenderNotice(**json.loads(row['notice_json'])), source)
+                        notice = _restore_notice(row['notice_json'], source)
                         revision = digest([asdict(notice), row['connector_version']])
                         examined.append([source, notice.external_id, revision])
                         # Same source snapshot keyword semantics as OpportunityRepository.read.
@@ -203,11 +222,11 @@ class ScoringRunService:
                         'storage_state': 'available'}
                 try:
                     body = json.loads(row['notice_json'])
-                    notice = validate_notice(TenderNotice(**body), row['source_id'])
+                    notice = _restore_notice(row['notice_json'], row['source_id'])
                     if (notice.external_id != row['external_id'] or
                             digest([asdict(notice), row['connector_version']]) != row['revision']):
                         raise ValueError()
-                    item.update(notice=body, connector_version=row['connector_version'])
+                    item.update(notice=asdict(notice), connector_version=row['connector_version'])
                 except (ValueError, TypeError):
                     item['storage_state'] = 'missing_or_corrupt_revision'
                 bodies.append(item)
@@ -277,7 +296,7 @@ class ScoringRunHandler:
             for row in rows:
                 if context.should_stop:
                     raise RetryableJobError()
-                notice = validate_notice(TenderNotice(**json.loads(row['notice_json'])), row['source_id'])
+                notice = _restore_notice(row['notice_json'], row['source_id'])
                 if digest([asdict(notice), row['connector_version']]) != row['revision']:
                     raise ScoringInputError('Invalid public revision.')
                 if prefilter_notice(notice, profile) is None:

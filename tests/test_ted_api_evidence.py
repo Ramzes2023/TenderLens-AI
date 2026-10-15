@@ -20,15 +20,45 @@ def sample():
 
 
 def test_pinned_capture_equals_sanitized_fixture():
+    """Verify immutable committed evidence, and full raw provenance when available.
+
+    The three raw TED captures are NOT in Git: a fresh CI runner cannot
+    independently attest those upstream bytes. Do not silently substitute
+    fabricated raw API replies or imply full original-source verification.
+    """
+    import hashlib
+    import warnings
+    raw_fixture = FIXTURE.read_bytes()
+    blob = b'blob ' + str(len(raw_fixture)).encode('ascii') + b'\\0' + raw_fixture
+    assert hashlib.sha1(blob).hexdigest() == '448b008588086cd03bf2ff50c8fa375e6d6ae5a8'
+    data = json.loads(raw_fixture)
+    assert data == sample()
+    assert data['openapi_sha256'] == 'e0cfe4e84123c3b62118ca99e07e8b9a09467494846280b8c7e60d700fbd2ff8'
+    assert data['response_sha256'] == '8246a105bea0e0603a2669bbc99a2098df704870449060c827bf7973c6585b81'
+    assert data['request_sha256'] == '5a9f4cbd84cf8d2a5d384a858fdcfe03ac563738868073a26e4831abc69d8c0f'
+    assert data['extraction_status'] == 'blocked_entity_scope'
+    assert data['context_binding'] == 'unproven; aggregate across Procedure/Part/Lot'
+    assert data['removed_fields'] == ['notices[].links']
+    tampered = raw_fixture.replace(b'392803-2016', b'392803-2017', 1)
+    assert tampered != raw_fixture
+    assert hashlib.sha1(b'blob ' + str(len(tampered)).encode('ascii') + b'\\0' + tampered).hexdigest() != '448b008588086cd03bf2ff50c8fa375e6d6ae5a8'
+
     directory = Path('.cache/phase24p33-ted-evidence')
-    raw = [directory.joinpath(name).read_bytes() for name in
-           ('ted-api-v3.yaml', 'request.json', 'public-search-response.json')]
-    assert inspect(*raw) == sample()
-    for index in (0, 2):
-        changed = raw.copy()
-        changed[index] += b'changed'
-        with pytest.raises(ValueError, match='checksum'):
-            inspect(*changed)
+    names = ('ted-api-v3.yaml', 'request.json', 'public-search-response.json')
+    if directory.is_dir():
+        raw = [directory.joinpath(name).read_bytes() for name in names]
+        assert inspect(*raw) == data
+        for index in (0, 2):
+            changed = raw.copy()
+            changed[index] += b'changed'
+            with pytest.raises(ValueError, match='checksum'):
+                inspect(*changed)
+    else:
+        warnings.warn(
+            'Raw TED capture not present: committed sanitized fixture verified, '
+            'but original upstream bytes need independent provenance review before merge.',
+            RuntimeWarning, stacklevel=2,
+        )
 
 
 def test_nonempty_actual_values_prove_only_aggregate_shape():
@@ -86,7 +116,8 @@ def test_capture_fetch_uses_one_existing_request_and_never_follows_links(monkeyp
         def raise_for_status(self):
             pass
         def json(self):
-            return json.loads(Path('.cache/phase24p33-ted-evidence/public-search-response.json').read_bytes())
+            # Exercise the pinned public sample without requiring local-only .cache.
+            return sample()['response']
     class Client:
         def __init__(self, **kwargs):
             pass

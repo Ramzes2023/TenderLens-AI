@@ -87,14 +87,49 @@ class PublicProbeTests(unittest.TestCase):
         self.assertFalse(describe_payload("kg_new_portal", b"<html>menu only</html>", "text/html")["verified"])
         self.assertFalse(describe_payload("kg_new_portal", b"202610122560014988", "text/html")["verified"])
 
-    def test_official_moldova_agency_index_not_empty_page(self):
-        document = ('<table><tr><td>AP LP MTender</td>'
-                    '<td>ocds-b3wdp1-MD-1780470314481</td>'
-                    '<td>Lucrări de reabilitare</td></tr></table>')
-        out = describe_payload("md_agency_listing", document.encode(), "text/html")
-        self.assertTrue(out["verified"])
-        self.assertEqual(out["ocid_count"], 1)
-        self.assertFalse(describe_payload("md_agency_listing", b"<table>No notices</table>", "text/html")["verified"])
+    def test_official_moldova_agency_requires_complete_tender_row(self):
+        columns = [
+            "1199821", "202632593", "03.09.2026", "",
+            "Gimnaziul M Eminescu Telenesti", "LP MTender",
+            "Procurarea produselor alimentare pentru semestrul 2 al anului 2026",
+            "ocds-b3wdp1-MD-1783499242986", "15800000-6", "", "",
+            "LP MTender",
+        ]
+        make_row = lambda parts: "<tr>" + "".join("<td>" + p + "</td>" for p in parts) + "</tr>"
+        document = ("<table>" + make_row(columns) + "</table>").encode()
+        for kind in ("md_agency_listing", "md_agency_ro_listing"):
+            out = describe_payload(kind, document, "text/html")
+            self.assertTrue(out["verified"])
+            self.assertEqual(out["ocid_count"], 1)
+            self.assertEqual(out["kind"], "official_agency_structured_ocid_rows")
+            self.assertFalse(describe_payload(kind, b"<table>No notices</table>", "text/html")["verified"])
+            for index, replacement in [
+                (2, ""), (5, "Contract decision"), (6, ""), (7, "12345"), (8, ""),
+            ]:
+                changed = columns.copy()
+                changed[index] = replacement
+                self.assertFalse(
+                    describe_payload(kind, make_row(changed).encode(), "text/html")["verified"],
+                    (kind, index),
+                )
+
+    def test_moldova_agency_does_not_borrow_fields_between_rows(self):
+        complete = [
+            "1199821", "202632593", "03.09.2026", "",
+            "Gimnaziul M Eminescu Telenesti", "LP MTender",
+            "Procurarea produselor alimentare pentru semestrul 2 al anului 2026",
+            "ocds-b3wdp1-MD-1783499242986", "15800000-6",
+        ]
+        missing_title = complete.copy()
+        missing_title[6] = ""
+        missing_date = complete.copy()
+        missing_date[2] = ""
+        html_rows = "".join(
+            "<tr>" + "".join("<td>" + part + "</td>" for part in columns) + "</tr>"
+            for columns in (missing_title, missing_date)
+        )
+        self.assertFalse(describe_payload(
+            "md_agency_ro_listing", html_rows.encode(), "text/html")["verified"])
 
     def test_public_mtender_portal_only_counts_structured_ocids(self):
         data = b'<article>ocds-b3wdp1-MD-1787565971866 Public bulletin</article>'

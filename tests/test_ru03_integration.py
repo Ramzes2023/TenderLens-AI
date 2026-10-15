@@ -94,7 +94,7 @@ def test_full_offline_path(system, monkeypatch):
     assert report.notices[0].identity == ('eis_223', 'ru03-notice-1')
     with closing(s.database.connect()) as conn:
         encoded = conn.execute("SELECT notice_json FROM source_opportunities WHERE source_id='eis_223'").fetchone()[0]
-        assert conn.execute('SELECT COUNT(*) FROM source_notice_observations').fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM source_notice_observations WHERE source_id='eis_223'").fetchone()[0] == 1
     stored = json.loads(encoded)
     assert stored['requested_law'] == '223-FZ'
     assert stored['independently_verified_law'] is None
@@ -153,7 +153,7 @@ def test_observation_changes_and_replay(system):
     assert changes['status'] == 'changed'
     assert {change['field'] for change in changes['changes']} == {'title', 'price', 'deadline'}
     # Equal external IDs from another source remain separate identities.
-    s.store.upsert(replace(first, source='eis'), 'connector-sync-v1:eis:adapter-r1')
+    s.store.upsert(replace(first, source='eis', enrichment=None), 'connector-sync-v1:eis:adapter-r1')
     assert s.store.read('eis')[0].identity != s.store.read('eis_223')[0].identity
 
 

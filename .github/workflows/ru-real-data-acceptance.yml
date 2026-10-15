@@ -1,0 +1,34 @@
+name: Russian real-data user scoring acceptance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/ci_ru_b2b_user_scoring.py"
+      - ".github/workflows/ru-real-data-acceptance.yml"
+      - "app/sources/b2b_center.py"
+      - "app/sources/snapshots.py"
+      - "app/scoring/**"
+      - "app/api/organization_workflow_routes.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-b2b-authenticated-scoring:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install application dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Compile isolated authenticated live acceptance
+        run: python -m compileall -q scripts/ci_ru_b2b_user_scoring.py
+      - name: Real public B2B notice to ephemeral SQLite to signed-in scoring and tenant isolation
+        timeout-minutes: 3
+        run: python -B scripts/ci_ru_b2b_user_scoring.py

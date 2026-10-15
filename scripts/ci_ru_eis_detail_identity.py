@@ -142,7 +142,12 @@ def strict_acceptance(data: bytes) -> bool:
                 raise ValueError("REQUIRED_SOURCE_DISABLED")
             verified = True
             for key in SOURCES:
-                outcome = asyncio.run(inspect_source(catalog, key))
+                try:
+                    outcome = asyncio.run(inspect_source(catalog, key))
+                except Exception as error:
+                    outcome = {"rss": 0, "eligible": 0, "requested": 0,
+                               "verified": 0, "http_ok": 0,
+                               "blocked": "FETCH_OR_TRANSPORT_" + type(error).__name__}
                 print("EIS_DETAIL_SOURCE=" + key
                       + "; RSS=" + str(outcome["rss"])
                       + "; ELIGIBLE=" + str(outcome["eligible"])
@@ -173,7 +178,9 @@ def main():
         print("SYSTEM_TRUST_CHANGED=NO; PRODUCTION_CHANGED=NO", flush=True)
         return 2
     print("EIS_DETAIL_IDENTITY=" + ("PASS" if result else "BLOCKED"), flush=True)
-    print("EIS_DETAIL_RESULT_IS_INDEPENDENT_HTML_NUMBER_CHECK=YES", flush=True)
+    print("EIS_DETAIL_MATCH_CONFIDENCE=" +
+          ("OFFICIAL_HTML_EXACT_NOTICE_NUMBER" if result else "NOT_VERIFIED"),
+          flush=True)
     print("DOCUMENT_DOWNLOAD_VERIFIED=NO; GENERATIVE_AI_VERIFIED=NO", flush=True)
     print("SYSTEM_TRUST_CHANGED=NO; PRODUCTION_CHANGED=NO", flush=True)
     return 0 if result else 3

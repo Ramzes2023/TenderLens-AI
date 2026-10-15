@@ -34,6 +34,12 @@ from test_scoring_workers import system as synthetic_system, run as run_job
 
 SOURCE = "mikroton_tender"
 VERSION = "connector-sync-v1:mikroton_tender:adapter-r1"
+STAGE = "BEFORE_API_PROOF"
+
+
+def set_stage(value):
+    global STAGE
+    STAGE = value
 
 
 def isolated_catalog():
@@ -58,24 +64,29 @@ async def exact_db_keyword(catalog, store, notice):
 
 
 def integration():
+    set_stage("LIVE_API_PROOF")
     proof = asyncio.run(live_api_proof())
     if not (proof["listing_200"] == 2 and proof["real_notice_count"] > 0
             and proof["detail_http_200"] and proof["detail_identity_verified"]):
         raise AssertionError("Real independent source API proof unavailable")
 
+    set_stage("BUILD_ISOLATED_CATALOG")
     catalog = isolated_catalog()
     if SOURCE not in catalog.enabled_keys:
         raise AssertionError("Source not enabled in isolated catalog")
+    set_stage("REAL_SOURCE_NORMALIZATION")
     notices = asyncio.run(catalog.registry.get(SOURCE).source.fetch(limit=10))
     if not notices or len(notices) > 10:
         raise AssertionError("No real normalized procurement notices")
     for notice in notices:
         validate_notice(notice, SOURCE)
 
+    set_stage("TEMP_DB_SETUP")
     with tempfile.TemporaryDirectory(prefix="valyqon-ru-mikroton-auth-") as directory:
         fixture = synthetic_system.__wrapped__(Path(directory))
         state = next(fixture)
         try:
+            set_stage("DB_KEYWORD_ROUNDTRIP")
             state.service.catalog = catalog
             found = 0
             for notice in notices:
@@ -84,6 +95,7 @@ def integration():
             if found != len(notices):
                 raise AssertionError("Actual source-to-DB and search roundtrip failed")
 
+            set_stage("SYNTHETIC_PROFILE")
             keyword = next((s for s in notices[0].title.split()
                             if len(s) >= 3), notices[0].title[:20])
             profile = state.profile.model_copy(update={
@@ -109,6 +121,7 @@ def integration():
             ))
             url = (f"/api/v1/organizations/{state.org.id}/companies/"
                    f"{state.company.id}/scoring/runs")
+            set_stage("AUTHENTICATED_HTTP_SCORING")
             with TestClient(app) as client:
                 if client.post(url, json={"sources": [SOURCE]}).status_code != 401:
                     raise AssertionError("Unauthenticated access unexpectedly accepted")
@@ -140,6 +153,7 @@ def integration():
                 client.cookies.set(SESSION_COOKIE, state.auth.create_session(state.accounts[4]))
                 if client.get(url + "/" + job_id).status_code != 403:
                     raise AssertionError("Cross-tenant data exposure")
+            set_stage("SIX_CRITERION_PREVIEW")
             score = score_metadata_preview(analysis_from_notice(notices[0]), profile)
             if len(score.criteria) != 6:
                 raise AssertionError("Missing metadata based scoring criteria")
@@ -166,6 +180,18 @@ def main():
         # Fixed failure class only, no customer, source, secret, HTTP body or URL.
         print("RU_MIKROTON_REAL_AUTH=BLOCKED", flush=True)
         print("FAILURE_CLASS=" + type(error).__name__, flush=True)
+        print("FAILURE_STAGE=" + STAGE, flush=True)
+        known = {
+            "Invalid public text": "PUBLIC_TEXT_INVALID",
+            "Invalid price": "PUBLIC_PRICE_INVALID",
+            "Date missing source timezone": "PUBLIC_DATE_MISSING_OFFSET",
+            "Invalid customer object": "PUBLIC_CUSTOMER_SHAPE",
+            "Invalid or duplicate procurement identity": "PUBLIC_IDENTITY_AMBIGUOUS",
+            "Unexpected public API response contract": "PUBLIC_SCHEMA_MISMATCH",
+            "Portal notice URL does not match source identity": "PUBLIC_URL_MISMATCH",
+        }
+        if type(error) is ValueError:
+            print("FAILURE_REASON=" + known.get(str(error), "OTHER_VALUE_ERROR"), flush=True)
         print("PRODUCTION_CHANGED=NO", flush=True)
         return 1
     print("RU_MIKROTON_REAL_AUTH_EVIDENCE=" +

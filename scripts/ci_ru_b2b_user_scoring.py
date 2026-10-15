@@ -35,8 +35,33 @@ VERSION = "connector-sync-v1:b2b_center:adapter-r1"
 
 
 async def public_notices(catalog):
+    from unittest.mock import patch
+    from app.sources import b2b_center
+    from app.sources.b2b_center import _Document, _Node
     source = catalog.registry.get(SOURCE).source
-    return await asyncio.wait_for(source.fetch(limit=10), timeout=30)
+    original = b2b_center.parse_b2b_center_listing
+
+    def observed_parse(payload, *, limit=100):
+        # Structural counts only; no raw HTML, tender identifiers or content.
+        doc = _Document()
+        doc.feed(payload.decode("utf-8-sig"))
+        doc.close()
+        profiles = []
+        for node in doc.root.walk():
+            if (node.tag == "div" and "cards" in (node.attrs.get("class") or "").split()
+                and node.attrs.get("itemtype") == "https://schema.org/ListItem"):
+                children = list(node.walk())
+                org = sum(c.attrs.get("itemtype") == "https://schema.org/Organization"
+                          for c in children)
+                demand = sum(c.attrs.get("itemtype") == "https://schema.org/Demand"
+                             for c in children)
+                profiles.append((org, demand))
+        print("B2B_LIVE_CARD_SHAPES=" + str(profiles[:12]), flush=True)
+        print("B2B_TOTAL_LISTITEM_CARDS=" + str(len(profiles)), flush=True)
+        return original(payload, limit=limit)
+
+    with patch.object(b2b_center, "parse_b2b_center_listing", observed_parse):
+        return await asyncio.wait_for(source.fetch(limit=10), timeout=30)
 
 
 async def keyword_roundtrip(catalog, repository, notice):

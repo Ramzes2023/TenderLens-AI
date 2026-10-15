@@ -307,10 +307,13 @@ def test_all_six_sources_fetch_through_safe_single_page_transport(monkeypatch):
     assert all(timeout == 30.0 for _, timeout, _ in calls)
 
 
-def test_six_source_catalog_connects_to_real_worker_and_sqlite(monkeypatch, tmp_path):
-    """Exercise the actual connector queue, worker handler and snapshot search.
+@pytest.mark.parametrize("source", [*ASIA_RSS_FEEDS, *JETRO_LISTS])
+def test_each_asia_source_uses_real_queue_worker_sqlite_and_snapshot(
+    monkeypatch, tmp_path, source,
+):
+    """Exercise six complete queue/storage/search paths using fixture HTTP.
 
-    HTTP is fixture-backed in this test; this is *not* a live network claim.
+    Real network acquisition is separately gated by asia_six_live_acceptance.
     """
     from app.database.backend import Database
     from app.database.config import DatabaseSettings
@@ -321,40 +324,53 @@ def test_six_source_catalog_connects_to_real_worker_and_sqlite(monkeypatch, tmp_
     from app.sources.snapshots import snapshot_catalog
 
     monkeypatch.setenv("VALYQON_ASIA_SOURCES_ENABLED", "1")
+    requests = []
 
     async def fake_fetch(url, timeout, accept):
-        assert url == ASIA_RSS_FEEDS["hk_emsd_consultancy"]
-        return RSS.replace(
-            b"www.housingauthority.gov.hk/en/tenders/example-123.html",
-            b"www.emsd.gov.hk/en/tenders/example-123.html",
-        )
+        requests.append(url)
+        if source in ASIA_RSS_FEEDS:
+            assert url == ASIA_RSS_FEEDS[source]
+            if source.startswith("hk_emsd_"):
+                return RSS.replace(
+                    b"www.housingauthority.gov.hk/en/tenders/example-123.html",
+                    b"www.emsd.gov.hk/en/tenders/example-123.html",
+                )
+            return RSS
+        assert url == JETRO_LISTS[source]
+        return JETRO_LOCAL if source == "jp_jetro_local" else JETRO
 
     monkeypatch.setattr("app.sources.asia_public._fetch", fake_fetch)
-    db = Database(DatabaseSettings("", tmp_path / "asia-worker.sqlite"))
+    database = Database(DatabaseSettings("", tmp_path / "asia-worker.sqlite"))
     try:
-        jobs = JobRepository(db)
+        jobs = JobRepository(database)
         jobs.initialize()
-        opportunities = OpportunityRepository(db)
+        opportunities = OpportunityRepository(database)
         opportunities.initialize()
         catalog = build_source_catalog(_settings())
-        source = "hk_emsd_consultancy"
         service = ConnectorSyncService(JobService(jobs), catalog)
         handlers = HandlerRegistry()
         handlers.register(JOB_TYPE, ConnectorSyncHandler(catalog, opportunities))
-        service.enqueue(source)
+        job = service.enqueue(source)
+        assert job.id
         assert Worker(jobs, handlers, job_types=(JOB_TYPE,)).run_once() is True
-        stored = opportunities.read(source, search_terms=("engineering",))
+
+        term = "engineering" if source in ASIA_RSS_FEEDS else "procurement"
+        stored = opportunities.read(source, search_terms=(term,))
         assert len(stored) == 1
         assert stored[0].source == source
-        assert stored[0].title == "Public contract for engineering services"
+        validate_notice(stored[0], source)
         report = asyncio.run(snapshot_catalog(catalog, opportunities).fetch(
-            source_keys=(source,), search_terms=("engineering",)
+            source_keys=(source,), search_terms=(term,),
         ))
         assert not report.failures
         assert len(report.notices) == 1
         assert report.notices[0].identity == stored[0].identity
+        assert requests == [
+            ASIA_RSS_FEEDS[source] if source in ASIA_RSS_FEEDS
+            else JETRO_LISTS[source]
+        ]
     finally:
-        db.close()
+        database.close()
 
 
 def test_jetro_fallback_performs_only_two_fixed_official_requests(monkeypatch):

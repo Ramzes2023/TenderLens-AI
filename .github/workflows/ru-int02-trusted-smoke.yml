@@ -71,3 +71,23 @@ jobs:
           done
           echo "RU_PUBLIC_TENDER_RECORDS_VERIFIED=NO"
           echo "PRODUCTION_CHANGED=NO"
+      - name: Diagnose EIS certificate metadata without trusting certificates
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          if timeout 15s openssl s_client -showcerts -connect zakupki.gov.ru:443 -servername zakupki.gov.ru </dev/null > "$tmp/handshake" 2> "$tmp/diag"; then
+            echo "RU_EIS_TLS_HANDSHAKE=CONNECTED"
+          else
+            echo "RU_EIS_TLS_HANDSHAKE=FAILED_OR_NOT_VERIFIED"
+          fi
+          sed -n '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/p' "$tmp/handshake" | sed -n '/-----BEGIN CERTIFICATE-----/,/-----END CERTIFICATE-----/p' > "$tmp/chain"
+          awk '/-----BEGIN CERTIFICATE-----/{n++; if(n>1)exit} n==1{print}' "$tmp/chain" > "$tmp/leaf"
+          if openssl x509 -in "$tmp/leaf" -noout -subject -issuer -dates -fingerprint -sha256; then
+            echo "RU_EIS_TLS_LEAF_METADATA=OBSERVED_UNTRUSTED"
+          else
+            echo "RU_EIS_TLS_LEAF_METADATA=NOT_VERIFIED"
+          fi
+          grep -E '^Verify return code:' "$tmp/handshake" || true
+          echo "RU_EIS_TRUST_FIX_APPLIED=NO"

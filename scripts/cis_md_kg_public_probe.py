@@ -23,8 +23,11 @@ TARGETS = {
     "kg_portal_home": "https://zakupki.gov.kg/popp/home.xhtml",
     "kg_known_detail": "https://zakupki.gov.kg/popp/view/order/view.xhtml?id=561794973",
     "kg_new_portal": "https://goszakupki.okmot.kg/public/?locale=ky",
+    "md_index_no_slash": "https://public.mtender.gov.md/tenders?offset=",
+    "md_public_get_index": "https://public.mtender.gov.md/get/tenders?offset=",
+    "md_alternative_index": "https://public.eprocurement.systems/get/tenders?offset=",
 }
-HOSTS = {"public.mtender.gov.md", "zakupki.gov.kg", "goszakupki.okmot.kg"}
+HOSTS = {"public.mtender.gov.md", "zakupki.gov.kg", "goszakupki.okmot.kg", "public.eprocurement.systems"}
 OCID = re.compile(r"^ocds-[a-zA-Z0-9_-]{3,150}$")
 ORDER_LINK = re.compile(r"view/order/view\.xhtml\?id=\d{5,18}")
 NEW_ORDER_ID = re.compile(r"(?:№|&#8470;|&numero;)\s*(20\d{12,20})")
@@ -49,7 +52,7 @@ def describe_payload(name, raw, content_type):
             data = json.loads(raw.decode("utf-8-sig"))
         except (UnicodeError, ValueError):
             return {"verified": False, "reason": "no_json"}
-        if name == "md_mtender_index":
+        if name.endswith("_index") or name == "md_mtender_index":
             rows = data if isinstance(data, list) else data.get("data", []) if isinstance(data, dict) else []
             valid = [row.get("ocid") for row in rows if isinstance(row, dict)
                      and isinstance(row.get("ocid"), str) and OCID.fullmatch(row["ocid"])]
@@ -59,8 +62,13 @@ def describe_payload(name, raw, content_type):
         records = data.get("records") if isinstance(data, dict) else None
         releases = data.get("releases") if isinstance(data, dict) else None
         rows = records if isinstance(records, list) else releases if isinstance(releases, list) else []
-        titles = [r.get("tender", {}).get("title") for r in rows if isinstance(r, dict)
-                  and isinstance(r.get("tender"), dict)]
+        titles = []
+        for record in rows:
+            if not isinstance(record, dict):
+                continue
+            release = record.get("compiledRelease", record)
+            if isinstance(release, dict) and isinstance(release.get("tender"), dict):
+                titles.append(release["tender"].get("title"))
         return {"verified": any(isinstance(t, str) and bool(t.strip()) for t in titles),
                 "kind": "ocds_detail", "records_with_title": sum(
                     isinstance(t, str) and bool(t.strip()) for t in titles)}
@@ -118,8 +126,10 @@ def main(argv=None):
     opener = build_opener(ProxyHandler({}), HTTPSHandler(context=ssl.create_default_context()), NoRedirect())
     results = [probe(name, url, opener) for name, url in TARGETS.items()]
     summary = {"kind": "observational_public_cis_probe", "results": results,
-               "md_index_verified": results[0]["verified"],
-               "kg_listing_verified": results[2]["verified"] or results[4]["verified"],
+               "md_index_verified": any(row["verified"] for row in results if row["target"] in {
+                   "md_mtender_index", "md_index_no_slash", "md_public_get_index", "md_alternative_index"}),
+               "kg_listing_verified": any(row["verified"] for row in results if row["target"] in {
+                   "kg_portal_home", "kg_new_portal"}),
                "end_to_end_storage_verified": False,
                "production_activation_allowed": False}
     print(json.dumps(summary, ensure_ascii=False, sort_keys=True, indent=2))

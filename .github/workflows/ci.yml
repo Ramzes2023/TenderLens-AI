@@ -83,7 +83,7 @@ jobs:
       - name: Compile
         run: python -m compileall -q app tests scripts
       - name: Test (Linux-compatible suite)
-        run: python -m pytest -vv --maxfail=1 --durations=15 --ignore=tests/test_p39e_local_preview.py
+        run: python -m pytest -q --durations=15 --ignore=tests/test_p39e_local_preview.py
 
   windows-offline-fixture:
     runs-on: windows-latest

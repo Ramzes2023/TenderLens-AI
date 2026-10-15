@@ -58,6 +58,18 @@ async def public_notices(catalog):
                 profiles.append((org, demand))
         print("B2B_LIVE_CARD_SHAPES=" + str(profiles[:12]), flush=True)
         print("B2B_TOTAL_LISTITEM_CARDS=" + str(len(profiles)), flush=True)
+        from urllib.parse import urljoin, urlsplit
+        hosts = {}
+        for card in doc.root.walk():
+            if (card.tag == "div" and "cards" in (card.attrs.get("class") or "").split()
+                and card.attrs.get("itemtype") == "https://schema.org/ListItem"):
+                for demand in card.walk():
+                    if demand.attrs.get("itemtype") == "https://schema.org/Demand":
+                        raw = b2b_center._property(demand, "url", "link")
+                        if raw:
+                            host = urlsplit(urljoin(b2b_center.B2B_CENTER_LIST_URL, raw)).hostname
+                            hosts[host or "(missing)"] = hosts.get(host or "(missing)", 0) + 1
+        print("B2B_LIVE_CARD_HOST_COUNTS=" + repr(hosts), flush=True)
         return original(payload, limit=limit)
 
     with patch.object(b2b_center, "parse_b2b_center_listing", observed_parse):

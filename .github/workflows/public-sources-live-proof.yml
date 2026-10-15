@@ -1,0 +1,30 @@
+name: Public source real HTTPS acceptance
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/public-sources-live-proof.yml"
+      - "scripts/ci_public_sources_live_proof.py"
+      - "tests/test_public_sources_live_proof.py"
+      - "app/sources/**"
+
+permissions:
+  contents: read
+
+jobs:
+  official-public-source-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install anonymous source-adapter transport dependencies only
+        run: python -m pip install "httpx==0.28.1" "anyio>=4,<5"
+      - name: Prove fail-closed behavior with offline synthetic fixtures
+        run: python -B -m unittest discover -s tests -p test_public_sources_live_proof.py -v
+      - name: Validate nonempty notices from eight real official public endpoints
+        env:
+          PYTHON_DOTENV_DISABLED: "1"
+        run: python -B -m scripts.ci_public_sources_live_proof --live --require-all

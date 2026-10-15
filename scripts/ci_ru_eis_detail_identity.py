@@ -66,6 +66,35 @@ def detail_candidate(notice, key):
     return raw, candidates[0]
 
 
+def detail_failure_code(error: Exception) -> str:
+    """Fixed error classes only: no URL, response body, cookie or stack trace."""
+    from app.sources.http import ConnectorTransportError
+    if isinstance(error, ConnectorTransportError):
+        return "CONNECTOR_TRANSPORT"
+    allowed = {"TimeoutError", "ConnectTimeout", "ReadTimeout", "PoolTimeout",
+               "ConnectError", "ReadError", "RemoteProtocolError", "HTTPStatusError",
+               "SSLError", "ValueError"}
+    name = type(error).__name__
+    return name if name in allowed else "OTHER_FAILURE"
+
+
+def detail_blocker(records: dict) -> str | None:
+    if records["verified"]:
+        return None
+    statuses = records["statuses"]
+    if any(300 <= status < 400 for status in statuses):
+        return "REDIRECT_NOT_FOLLOWED"
+    if any(status in (401, 403) for status in statuses):
+        return "ACCESS_RESTRICTED"
+    if any(status in (408, 429) or 500 <= status <= 599 for status in statuses):
+        return "REMOTE_RATE_LIMIT_OR_SERVER_ERROR"
+    if records["failures"]:
+        return "HTTP_TRANSPORT_OR_BODY_FAILURE"
+    if any(status == 200 for status in statuses):
+        return "HTML_CONTENT_OR_NUMBER_MISMATCH"
+    return "NO_HTTP_RESPONSE_OBSERVED"
+
+
 def detail_page_has_identity(body: bytes, number: str, content_type: str) -> bool:
     """One matching number in independently fetched HTML; no HTML alone = proof."""
     if not (isinstance(body, bytes) and 0 < len(body) <= MAX_HTML_BYTES
@@ -98,7 +127,8 @@ async def inspect_source(catalog, key):
             candidates.append((link, number))
             seen.add((link, number))
     records = {"rss": len(notices), "eligible": len(candidates), "requested": 0,
-               "verified": 0, "http_ok": 0, "blocked": None}
+               "verified": 0, "http_ok": 0, "blocked": None,
+               "statuses": [], "failures": []}
     if not candidates:
         records["blocked"] = "NO_SAFE_NUMBERED_DETAIL"
         return records
@@ -106,11 +136,19 @@ async def inspect_source(catalog, key):
     # Reuse the audited public-IP/direct-only adapter transport; the trust file
     # can only be scoped to EIS in the catalog. No redirects or proxy transport.
     ssl_verify = str(adapter.ca_bundle_file)
+
+    async def capture_response(response):
+        # Called by the existing audited transport *before* it rejects a
+        # non-2xx status. Capture status integers only, no headers or URLs.
+        if len(records["statuses"]) < MAX_DETAIL_REQUESTS:
+            records["statuses"].append(int(response.status_code))
+
     with bounded_fetch(FetchPolicy(frozenset({"zakupki.gov.ru"}),
                                    MAX_DETAIL_REQUESTS, max_bytes=MAX_HTML_BYTES)):
         async with source_client(
             verify=ssl_verify, timeout=15, trust_env=False,
             follow_redirects=False, headers={"Accept": "text/html"},
+            event_hooks={"response": [capture_response]},
         ) as client:
             for link, number in candidates[:MAX_DETAIL_REQUESTS]:
                 records["requested"] += 1
@@ -121,11 +159,10 @@ async def inspect_source(catalog, key):
                         if detail_page_has_identity(response.content, number,
                                                     response.headers.get("content-type", "")):
                             records["verified"] += 1
-                except Exception:
-                    # Do not log URL, exception text or page contents.
-                    pass
-    if not records["verified"]:
-        records["blocked"] = "NO_INDEPENDENT_MATCH"
+                except Exception as error:
+                    if len(records["failures"]) < MAX_DETAIL_REQUESTS:
+                        records["failures"].append(detail_failure_code(error))
+    records["blocked"] = detail_blocker(records)
     return records
 
 
@@ -154,6 +191,8 @@ def strict_acceptance(data: bytes) -> bool:
                       + "; REQUESTED=" + str(outcome["requested"])
                       + "; HTTP_OK=" + str(outcome["http_ok"])
                       + "; VERIFIED=" + str(outcome["verified"])
+                      + "; HTTP_STATUSES=" + str(outcome.get("statuses", []))
+                      + "; ERROR_CODES=" + str(outcome.get("failures", []))
                       + "; BLOCKER=" + str(outcome["blocked"]), flush=True)
                 if outcome["verified"] < 1:
                     verified = False

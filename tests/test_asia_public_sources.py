@@ -74,7 +74,7 @@ def test_hong_kong_feed_has_real_tender_fields():
 
 
 @pytest.mark.parametrize("url", [
-    "http://www.housingauthority.gov.hk/en/notice",
+    "http://evil.example/en/notice",
     "https://evil.example/notice",
     "https://www.housingauthority.gov.hk.evil.example/tender",
     "https://www.housingauthority.gov.hk:444/tenders/a",
@@ -86,6 +86,43 @@ def test_rss_rejects_unsafe_item_url_without_persisting(url):
     payload = RSS.replace(b"https://www.housingauthority.gov.hk/en/tenders/example-123.html", url.encode())
     with pytest.raises(SourceError, match="no verifiable"):
         parse_asia_rss(payload, source="hk_ha_works")
+
+
+def test_official_legacy_http_notice_links_upgrade_to_https():
+    legacy = RSS.replace(
+        b"https://www.housingauthority.gov.hk/en/tenders/example-123.html",
+        b"http://www.housingauthority.gov.hk/en/tenders/example-123.html",
+    )
+    notice = parse_asia_rss(legacy, source="hk_ha_works")[0]
+    assert notice.url == "https://www.housingauthority.gov.hk/en/tenders/example-123.html"
+    validate_notice(notice, "hk_ha_works")
+
+
+def test_official_relative_notice_link_is_resolved_against_feed():
+    relative = RSS.replace(
+        b"https://www.housingauthority.gov.hk/en/tenders/example-123.html",
+        b"/en/tenders/example-123.html",
+    )
+    notice = parse_asia_rss(relative, source="hk_ha_works")[0]
+    assert notice.url == "https://www.housingauthority.gov.hk/en/tenders/example-123.html"
+
+
+@pytest.mark.parametrize("url", [
+    "http://www.housingauthority.gov.hk.evil.example/en/tenders/item",
+    "http://username@www.housingauthority.gov.hk/en/tenders/item",
+    "http://www.housingauthority.gov.hk:80/en/tenders/item",
+    "https://www.housingauthority.gov.hk/en/tenders/item#injected",
+    "//evil.example/en/tenders/item",
+    "/en/tenders/item\\evil",
+    "https://www.housingauthority.gov.hk/en/tenders/item%0Aevil",
+])
+def test_rss_unsafe_notice_hosts_and_link_syntax_fail_closed(url):
+    xml = RSS.replace(
+        b"https://www.housingauthority.gov.hk/en/tenders/example-123.html",
+        url.encode(),
+    )
+    with pytest.raises(SourceError):
+        parse_asia_rss(xml, source="hk_ha_works")
 
 
 def test_rss_fails_closed_on_markup_entity_and_empty_entries():

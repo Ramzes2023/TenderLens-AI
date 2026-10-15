@@ -24,7 +24,14 @@ def test_readme_states_safety_boundary():
 
 def test_ci_runs_tests_and_docker_build():
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    assert "python -m pytest -q" in workflow
+    # Python tests run across Linux and Windows (process-isolation-only tests
+    # need the latter), and Docker must depend on BOTH passing suites.
+    assert "run: python -m pytest" in workflow
+    assert "--ignore=tests/test_p39e_local_preview.py" in workflow
+    assert "windows-offline-fixture:" in workflow
+    assert "runs-on: windows-latest" in workflow
+    assert "tests/test_p39e_local_preview.py" in workflow
+    assert "needs: [tests, windows-offline-fixture]" in workflow
     assert "python -m compileall" in workflow
     assert "docker build -t tenderlens-ai:ci ." in workflow
 

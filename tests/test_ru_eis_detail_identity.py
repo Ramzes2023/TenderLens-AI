@@ -18,7 +18,7 @@ def notice(source="eis", url=None, number="0123456789012"):
 
 def test_exact_official_44_and_223_identity_candidates():
     assert SOURCES == ("eis", "eis_223")
-    assert MAX_DETAIL_REQUESTS == 2
+    assert MAX_DETAIL_REQUESTS == 6
     assert detail_candidate(notice(), "eis")[1] == "0123456789012"
     n = notice(source="eis_223", number=None,
                url=("https://zakupki.gov.ru/223/purchase/public/purchase/"

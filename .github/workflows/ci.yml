@@ -1,8 +1,14 @@
 name: CI
 
 on:
+  # Validate feature branches as PR merge commits, not as divergent raw HEADs.
+  # Keep a separate verification on main after each actual merge.
   push:
+    branches:
+      - main
   pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read

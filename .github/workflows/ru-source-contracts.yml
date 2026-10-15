@@ -1,7 +1,10 @@
 name: Russian source contracts
 
 on:
+  # Avoid duplicating red raw-head checks for the same PR. Retain PR and main checks.
   push:
+    branches:
+      - main
     paths:
       - "app/sources/**"
       - "app/monitoring/config.py"

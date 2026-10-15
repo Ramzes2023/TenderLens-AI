@@ -87,6 +87,9 @@ class FakeConnection:
             return FakeCursor(3)
         if "lease_expires_at <=" in sql:
             return FakeCursor(1)
+        if "MIN(available_at)" in sql:
+            # Already eligible for 1200 seconds; scheduled-future rows excluded.
+            return FakeCursor(params[0] - 1200 * 1_000_000)
         if "source_id=?" in sql:
             return FakeCursor("2026-10-15T08:00:00+00:00" if params == ("ted",) else None)
         raise AssertionError("Unexpected SQL")
@@ -107,8 +110,10 @@ def test_readonly_aggregates_and_source_validation():
     now = datetime(2026, 10, 15, 10, 0, tzinfo=timezone.utc).timestamp()
     result = alerts.inspect_database(db, ("ted", "empty"), now=now)
     assert result == {"recent_failed_jobs": 3, "expired_worker_leases": 1,
+                      "oldest_ready_queue_seconds": 1200,
                       "source_last_seen_seconds": {"ted": 7200, "empty": None}}
-    assert len(db.conn.queries) == 4 and db.conn.closed
+    assert len(db.conn.queries) == 5 and db.conn.closed
+    assert alerts.evaluate(result, {"status": "not_configured"})[1][0] == "queue_ready_stalled"
     assert all(sql.strip().upper().startswith("SELECT ") for sql, _ in db.conn.queries)
     with pytest.raises(ValueError):
         alerts.inspect_database(DB(), ("ted';DROP TABLE",), now=now)
@@ -146,3 +151,16 @@ def test_once_per_hour_state_tracks_only_codes(monkeypatch, tmp_path):
     persisted = json.loads(state.read_text("utf8"))
     assert set(persisted) == {"jobs_recently_failed"}
     assert "Jobs failed" not in state.read_text("utf8")
+
+
+def test_ready_backlog_alert_does_not_confuse_delayed_jobs():
+    base = snapshot()
+    base["oldest_ready_queue_seconds"] = None
+    assert alerts.evaluate(base, {"status": "not_configured"}) == []
+    base["oldest_ready_queue_seconds"] = 899
+    assert alerts.evaluate(base, {"status": "not_configured"}) == []
+    base["oldest_ready_queue_seconds"] = 900
+    assert alerts.evaluate(base, {"status": "not_configured"}) == [
+        ("queue_ready_stalled",
+         "Ready jobs have waited at least 15 minutes; inspect worker health and queue capacity.")
+    ]

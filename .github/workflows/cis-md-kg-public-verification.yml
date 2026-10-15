@@ -25,7 +25,7 @@ jobs:
       - name: Check safety and payload contracts without network
         run: python -m unittest discover -s tests -p 'test_cis_md_kg_probe.py' -v
 
-  public-source-observation:
+  moldova-public-ocid:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -33,5 +33,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Verify official public listings without bypassing TLS or redirects
-        run: python -B scripts/cis_md_kg_public_probe.py --require-live
+      - name: Verify Moldovan public OCIDs without bypassing TLS or redirects
+        run: python -B scripts/cis_md_kg_public_probe.py --require-md
+
+  kyrgyzstan-public-listings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify Kyrgyz public listing IDs and titles via official portal
+        run: python -B scripts/cis_md_kg_public_probe.py --require-kg

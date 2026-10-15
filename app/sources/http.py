@@ -180,7 +180,7 @@ class BoundedClient(_PublicIPClient):
                 if not response.is_closed:
                     await _close_live_response(response, suppress_errors=False)
         except (httpx.TransportError, OSError) as error:
-            raise ConnectorTransportError(retryable=not _is_public_ip_error(error)) from None
+            raise ConnectorTransportError(retryable=not _is_public_ip_error(error)) from error
 
 
 def _validate_live_url(value):

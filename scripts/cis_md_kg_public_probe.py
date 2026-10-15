@@ -27,8 +27,9 @@ TARGETS = {
     "md_public_get_index": "https://public.mtender.gov.md/get/tenders?offset=",
     "md_alternative_index": "https://public.eprocurement.systems/get/tenders?offset=",
     "md_agency_listing": "https://www.tender.gov.md/en/documente-in-curs-de-examinare",
+    "md_public_portal": "https://mtender.gov.md/tenders",
 }
-HOSTS = {"public.mtender.gov.md", "zakupki.gov.kg", "goszakupki.okmot.kg", "public.eprocurement.systems", "www.tender.gov.md"}
+HOSTS = {"public.mtender.gov.md", "zakupki.gov.kg", "goszakupki.okmot.kg", "public.eprocurement.systems", "www.tender.gov.md", "mtender.gov.md"}
 OCID = re.compile(r"^ocds-[a-zA-Z0-9_-]{3,150}$")
 ORDER_LINK = re.compile(r"view/order/view\.xhtml\?id=\d{5,18}")
 NEW_ORDER_ID = re.compile(r"(?:№|&#8470;|&numero;)\s*(20\d{12,20})")
@@ -48,6 +49,11 @@ def check_url(url):
 
 
 def describe_payload(name, raw, content_type):
+    if name == "md_public_portal":
+        html = raw.decode("utf-8", errors="replace")
+        ocids = set(re.findall(r"ocds-b3wdp1-MD-\d{10,18}", html))
+        return {"verified": bool(ocids), "kind": "public_mtender_portal_ocid_listing",
+                "ocid_count": len(ocids)}
     if name == "md_agency_listing":
         html = raw.decode("utf-8", errors="replace")
         ocids = set(re.findall(r"ocds-b3wdp1-MD-\d{10,18}", html))
@@ -133,7 +139,7 @@ def main(argv=None):
     results = [probe(name, url, opener) for name, url in TARGETS.items()]
     summary = {"kind": "observational_public_cis_probe", "results": results,
                "md_index_verified": any(row["verified"] for row in results if row["target"] in {
-                   "md_mtender_index", "md_index_no_slash", "md_public_get_index", "md_alternative_index", "md_agency_listing"}),
+                   "md_mtender_index", "md_index_no_slash", "md_public_get_index", "md_alternative_index", "md_agency_listing", "md_public_portal"}),
                "md_detail_verified": any(row["verified"] for row in results if row["target"] == "md_mtender_known_detail"),
                "kg_listing_verified": any(row["verified"] for row in results if row["target"] in {
                    "kg_portal_home", "kg_new_portal"}),

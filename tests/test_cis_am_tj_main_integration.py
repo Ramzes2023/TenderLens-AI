@@ -94,7 +94,18 @@ def test_defaults_preserve_main():
 
 
 @pytest.mark.parametrize('key', KEYS)
-def test_actual_ingestion_budget_and_provenance(monkeypatch, key):
+def test_actual_ingestion_budget_and_provenance(monkeypatch, tmp_path, key):
+    # The HTTP transport is mocked; the job lease, database transactions,
+    # opportunity persistence and saved-search snapshot are all REAL.
+    import threading
+    import uuid
+    from app.database.backend import Database
+    from app.database.config import DatabaseSettings
+    from app.jobs import JobRepository, JobService
+    from app.jobs.worker import ExecutionContext
+    from app.sources.opportunities import OpportunityRepository
+    from app.sources.snapshots import snapshot_catalog
+    from app.sources.ingestion import JOB_TYPE
     module = am if key == KEYS[0] else tj
     calls = []
     def handle(request):
@@ -105,12 +116,33 @@ def test_actual_ingestion_budget_and_provenance(monkeypatch, key):
         return httpx.Response(200, text=html(key, len(calls)), headers={'content-type': 'text/html'})
     monkeypatch.setattr(module, 'source_client', lambda **kw: source_client(**kw, transport=httpx.MockTransport(handle)))
     cat = catalog(key, True)
-    store = Mock(); store.upsert.return_value = True
-    result = ConnectorSyncHandler(cat, store, max_records=100)(context(), payload(key))
-    assert calls == ([am.ARMEPS_LISTING_URL, am.ARMEPS_PAGE_TWO_URL] if key == KEYS[0] else [tj.LISTING_URL])
-    assert result['accepted_count'] == len(calls)
-    assert all(c.args[1] == connector_version(key) for c in store.upsert.call_args_list)
-    assert _policy.get() is None
+    database = Database(DatabaseSettings('', tmp_path / (key + '.db')))
+    jobs = JobRepository(database)
+    jobs.initialize()
+    store = OpportunityRepository(database)
+    store.initialize()
+    try:
+        queued = ConnectorSyncService(JobService(jobs), cat).enqueue(key)
+        claim = jobs.claim_next('worker-' + uuid.uuid4().hex, job_types=(JOB_TYPE,))
+        assert claim is not None and claim.job.id == queued.id
+        ctx = ExecutionContext(claim.job, threading.Event())
+        ctx.fenced_write = lambda write: jobs.fenced_write(claim.job.id, claim.token, write)
+        result = ConnectorSyncHandler(cat, store, max_records=100)(ctx, claim.job.payload)
+        assert jobs.complete(claim.job.id, claim.token, result)
+        expected_calls = [am.ARMEPS_LISTING_URL, am.ARMEPS_PAGE_TWO_URL] if key == KEYS[0] else [tj.LISTING_URL]
+        assert calls == expected_calls
+        assert result['accepted_count'] == len(calls)
+        rows = store.read(key, 100)
+        assert len(rows) == len(calls)
+        assert len({n.identity for n in rows}) == len(rows)
+        assert all(n.source == key for n in rows)
+        term = 'Պոմպ' if key == KEYS[0] else 'Таҷҳизот'
+        report = asyncio.run(snapshot_catalog(cat, store).fetch(source_keys=[key], search_terms=(term,), limit_per_source=100))
+        assert len(report.notices) == len(rows)
+        assert not report.failures
+        assert _policy.get() is None
+    finally:
+        database.close()
 
 
 @pytest.mark.parametrize('key', KEYS)
@@ -132,6 +164,7 @@ def test_transport_and_parser_fail_closed(monkeypatch, key, failure):
     with pytest.raises(expected) as caught:
         ConnectorSyncHandler(catalog(key, True), store)(context(), payload(key))
     assert 'sensitive' not in str(caught.value)
+    store.upsert_fenced.assert_not_called()
     store.upsert.assert_not_called()
     assert _policy.get() is None
 
@@ -143,6 +176,7 @@ def test_payload_validation(key, change):
     store = Mock()
     with pytest.raises(PermanentJobError):
         ConnectorSyncHandler(catalog(key, True), store)(context(), dict(payload(key), **change))
+    store.upsert_fenced.assert_not_called()
     store.upsert.assert_not_called()
 
 

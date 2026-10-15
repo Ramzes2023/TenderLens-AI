@@ -105,7 +105,7 @@ async def inspect_source(catalog, key):
 
     # Reuse the audited public-IP/direct-only adapter transport; the trust file
     # can only be scoped to EIS in the catalog. No redirects or proxy transport.
-    ssl_verify = str(catalog.settings.ca_bundle_file)
+    ssl_verify = str(adapter.ca_bundle_file)
     with bounded_fetch(FetchPolicy(frozenset({"zakupki.gov.ru"}),
                                    MAX_DETAIL_REQUESTS, max_bytes=MAX_HTML_BYTES)):
         async with source_client(

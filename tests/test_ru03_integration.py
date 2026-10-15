@@ -153,7 +153,12 @@ def test_observation_changes_and_replay(system):
     assert changes['status'] == 'changed'
     assert {change['field'] for change in changes['changes']} == {'title', 'price', 'deadline'}
     # Equal external IDs from another source remain separate identities.
-    s.store.upsert(replace(first, source='eis', enrichment=None), 'connector-sync-v1:eis:adapter-r1')
+    # A 223-specific subclass cannot be relabelled as a 44-FZ source: project
+    # only the shared normalized fields and discard mismatched enrichment.
+    from dataclasses import fields
+    from app.sources.models import TenderNotice
+    base = TenderNotice(**{field.name: getattr(first, field.name) for field in fields(TenderNotice)})
+    s.store.upsert(replace(base, source='eis', enrichment=None), 'connector-sync-v1:eis:adapter-r1')
     assert s.store.read('eis')[0].identity != s.store.read('eis_223')[0].identity
 
 

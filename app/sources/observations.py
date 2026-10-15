@@ -43,7 +43,14 @@ def _observation(stored, instant):
 
 def record_observation(conn, notice, encoded, now, connector_version):
     stored = json.loads(encoded)
-    canonical = json.dumps(stored, sort_keys=True, ensure_ascii=False, separators=(',', ':'))
+    # The metadata observation clock changes on every RSS poll; it is not a
+    # procurement revision. Keep the complete original JSON in evidence history,
+    # but exclude only this volatile observation timestamp from revision identity.
+    fingerprint = {**stored}
+    if isinstance(stored.get('enrichment'), dict):
+        fingerprint['enrichment'] = {key: value for key, value in stored['enrichment'].items()
+                                     if key != 'observed_at'}
+    canonical = json.dumps(fingerprint, sort_keys=True, ensure_ascii=False, separators=(',', ':'))
     revision = hashlib.sha256(canonical.encode('utf-8')).hexdigest()
     if conn.execute('''SELECT 1 FROM source_notice_observations
         WHERE source_id=? AND external_id=? AND revision=?''',

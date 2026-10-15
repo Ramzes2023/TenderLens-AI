@@ -70,8 +70,11 @@ def test_eis_223_notice_repository_round_trip(repository, eis_223_notice):
     restored, = repository.read('eis_223')
     assert type(restored) is Eis223Notice
     assert {field.name for field in fields(TenderNotice)} <= stored.keys()
+    # Persisted enrichment also carries the connector version assigned on write.
+    from app.sources.enrichment import with_connector
+    expected = with_connector(eis_223_notice, 'connector-sync-v1:eis_223:adapter-r1')
     for field in fields(TenderNotice):
-        assert getattr(restored, field.name) == getattr(eis_223_notice, field.name)
+        assert getattr(restored, field.name) == getattr(expected, field.name)
     with closing(repository.database.connect()) as conn:
         unchanged, = conn.execute(
             'SELECT notice_json FROM source_opportunities WHERE source_id=? AND external_id=?',

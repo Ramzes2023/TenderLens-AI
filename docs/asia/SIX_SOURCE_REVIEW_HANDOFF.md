@@ -1,0 +1,63 @@
+# VALYQON AI — Asian public procurement six-source staging
+
+**15 October 2026. Review only. Do not merge or enable in production.**
+
+## Scope
+
+Branch: `feat/asia-public-procurement-six-20261015`
+PR: [#36](https://github.com/Ramzes2023/TenderLens-AI/pull/36)
+
+| Key | Country | Official upstream | Initial GitHub live observation |
+| --- | --- | --- | --- |
+| `hk_ha_works` | HK | Housing Authority tender RSS | BLOCKED |
+| `hk_ha_leasing` | HK | Housing Authority commercial tender RSS | BLOCKED |
+| `hk_emsd_tenders` | HK | EMSD tender RSS | BLOCKED |
+| `hk_emsd_consultancy` | HK | EMSD consultancy invitation RSS | **FETCH_SQLITE_SEARCH_VERIFIED** (1 item) |
+| `jp_jetro_national` | JP | JETRO national listing | BLOCKED |
+| `jp_jetro_local` | JP | JETRO local listing | BLOCKED |
+
+The first GitHub-runner job on `8846c023d6e397fcab1a7f464aaa60d5d12ca228` finished with
+**1 of 6** sources having at least one actual notice, validated and saved to an isolated SQLite
+database and retrieved through the source snapshot search. This is **NOT** six-source live
+acceptance, proof of ongoing fresh tenders, complete detail-page verification, AWS
+reachability, authenticated AI search, or production readiness.
+
+The later diagnostic commit `fae8b2a82ae7091c22b470e76e61119f0921f6d3`
+made transport/parse failures distinguishable, but GitHub Actions runs created for
+that commit failed *without any job steps or runner allocation*; a second attempt
+of the Asian job had the same runnerless outcome. Do not interpret these as an
+adapter regression or a successful live check. The external CI infrastructure
+must work before repeat evidence is available.
+
+## Architecture and safeguards
+
+- Integrated into `SourceCatalog` and `MultiSourceFetcher`; normalized
+  `TenderNotice` can be stored in `OpportunityRepository` and searched through
+  `snapshot_catalog`.
+- Six server-owned host entries in `app/sources/ingestion.py::HOSTS`
+  permit standard connector-worker routing; existing per-source bounded HTTPS
+  transport and public-IP/SSRF enforcement remain in place.
+- `VALYQON_ASIA_SOURCES_ENABLED` defaults to **off**. Setting it to
+  exactly `1` stages the registrations, but is not a release approval.
+- 1 MiB max per listing, fixed upstream official HTTPS URLs, no third-party
+  redirects, no login, passwords, custom CA, CAPTCHA bypass or dynamic targets.
+- A source without demonstrable linked tenders raises `SourceError` instead
+  of returning an empty successful result.
+
+## Release acceptance (ALL required)
+
+1. Re-run `Asian public procurement acceptance` on the latest head. Both
+   `asia-six-offline-contracts` and `asia-six-real-live-sqlite` must pass;
+   the live step must print `ASIA_SIX_SOURCE_FETCH_SQLITE_QUERY_VERIFIED=6/6`.
+2. Verify all branch `CI`, Russian source contracts and any relevant full
+   PostgreSQL acceptance jobs are green on the **same current PR HEAD**.
+3. Confirm the data represents genuine tender notices (not awards / news /
+   merely 200 HTML pages). Check individual detail URL, title, source identity
+   and deadlines where actually supplied. Do not manufacture missing fields.
+4. Execute the worker and database replay tests on an isolated test instance
+   with concurrent lease fencing and crash/retry guarantees.
+5. Obtain evidence of accepted use/rate limiting and reachability from the
+   eventual AWS production environment. Retain source health alerts.
+6. Review changed files for regressions and approve activation/merge separately.
+
+**Until then: leave PR #36 draft, sources off, production and `main` unchanged.**

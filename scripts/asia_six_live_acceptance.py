@@ -75,6 +75,11 @@ def main():
                 except Exception as exc:
                     # Never dump scraped document bodies, client URLs or secrets.
                     item["error_type"] = type(exc).__name__
+                    # SourceError messages are fixed, public, code-owned messages
+                    # without response bodies, URLs, credentials or query strings.
+                    from app.sources.eis_rss import SourceError
+                    if isinstance(exc, SourceError):
+                        item["reason"] = str(exc)
                     item["live"] = "BLOCKED"
         finally:
             database.close()

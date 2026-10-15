@@ -112,6 +112,13 @@ def main() -> int:
     if any(key.startswith("PG") for key in os.environ):
         print("RESTORE_DRILL=REFUSED: inherited libpq settings")
         return 2
+    # scripts/*.py executes with scripts/ on sys.path; add the exact repo root.
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    if not (root / "app" / "database" / "backend.py").is_file():
+        print("RESTORE_DRILL=REFUSED: project root not verified")
+        return 2
+    sys.path.insert(0, str(root))
     from psycopg import connect, sql
 
     params = dict(host="127.0.0.1", port=5432, dbname="postgres", user="valyqon_ci",
@@ -120,6 +127,7 @@ def main() -> int:
     conn = None
     owned = {}
     succeeded = False
+    stage = "connect"
     cleanup = True
     try:
         conn = connect(**params, autocommit=True)
@@ -130,12 +138,14 @@ def main() -> int:
             raise RuntimeError("Unexpected disposable service identity")
         source_name = PREFIX + uuid.uuid4().hex
         restore_name = PREFIX + uuid.uuid4().hex
+        stage = "create_test_databases"
         for name in (source_name, restore_name):
             conn.execute(sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(sql.Identifier(name)))
             row = conn.execute("SELECT oid FROM pg_database WHERE datname=%s", (name,)).fetchone()
             if row is None:
                 raise RuntimeError("Created database lost")
             owned[name] = row[0]
+        stage = "seed_source"
         source = _database(params, source_name)
         try:
             _seed(source)
@@ -143,6 +153,7 @@ def main() -> int:
         finally:
             source.close()
         print("RESTORE_DRILL=SOURCE_MIGRATIONS_AND_DATA_VERIFIED")
+        stage = "archive"
         archive = _run_docker(container_id, [
             "pg_dump", "-U", "valyqon_ci", "-d", source_name, "--format=custom",
             "--no-owner", "--no-acl", "--compress=6",
@@ -153,10 +164,12 @@ def main() -> int:
         if not re.fullmatch(r"[0-9a-f]{64}", digest):
             raise RuntimeError("Archive hash invalid")
         print("RESTORE_DRILL=PG_DUMP_CUSTOM_ARCHIVE_SHA256_VERIFIED")
+        stage = "restore_archive"
         _run_docker(container_id, [
             "pg_restore", "-U", "valyqon_ci", "-d", restore_name,
             "--single-transaction", "--exit-on-error", "--no-owner", "--no-acl",
         ], data=archive)
+        stage = "verify_restored"
         restored = _database(params, restore_name)
         try:
             assert _snapshot(restored) == source_snapshot
@@ -171,7 +184,7 @@ def main() -> int:
         print("RESTORE_DRILL=RESTORED_SCHEMA_TENANTS_QUOTAS_JOBS_AND_WRITE_VERIFIED")
         succeeded = True
     except BaseException:
-        print("RESTORE_DRILL=FAILED: diagnostics intentionally redacted")
+        print("RESTORE_DRILL=FAILED_STAGE:" + stage + "; DETAILS_REDACTED")
     finally:
         if conn is not None:
             for name, oid in reversed(list(owned.items())):

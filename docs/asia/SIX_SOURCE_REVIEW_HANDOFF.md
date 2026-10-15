@@ -99,3 +99,48 @@ account settings or a trusted manual execution pathway must be resolved
 before any claim of green acceptance.
 
 **Main/production unchanged; PR #36 remains draft and unmerged.**
+
+
+## Operator-only ingestion path (added after pipeline review)
+
+The shared worker queue intentionally has **no automatic per-source scheduler**:
+`python -m app.sources.enqueue --source <key>` enqueues one explicitly
+configured source. Six independently configured adapters in the registry do
+**not** imply that scheduled background downloads, saved-notice searches, or
+notifications have been enabled. Do not describe registry registration alone
+as production delivery.
+
+To reduce manual error, the PR adds `app/sources/asia_enqueue.py`, which
+validates all six routes and can queue a same-hour idempotent batch through the
+existing `ConnectorSyncService`. The dry run is safe:
+
+```sh
+python -m app.sources.asia_enqueue
+```
+
+Only **after** six-source live checks, full current-head CI, isolated real
+database and worker/lease checks, network/rate-limit review, and operator
+approval, the execution path would be:
+
+```sh
+VALYQON_ASIA_SOURCES_ENABLED=1 python -m app.sources.asia_enqueue --enqueue
+```
+
+This is an explicit operator command, not a new daemon, no AWS change, and
+not an action to run during an unreviewed pull request. The existing worker
+must be running and configured to accept `connector.sync.v1`; a separate,
+approved operator scheduler is required for recurring hourly delivery.
+All requests use the established host allowlist and bounded transport.
+Local keyword queries operate on persisted opportunity snapshots; dry-run
+and registration alone create **zero searchable tenders**.
+
+## Current external CI blocker
+
+The repository's screenshot of the failed GitHub-hosted job gives the
+specific GitHub annotation: *The job was not started because recent account
+payments have failed or your spending limit needs to be increased.*
+Therefore rerunning unmodified hosted jobs cannot produce green CI before
+the account owner resolves GitHub Actions billing/spending limits. The
+`VALYQON-RU-01` self-hosted runner must not execute unreviewed PR code.
+We must not bypass this release gate or pretend a fixture-only test verifies
+the live supply.

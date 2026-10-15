@@ -1,0 +1,30 @@
+name: RU MikroTon strict real public API acceptance
+
+on:
+  pull_request:
+    paths:
+      - "scripts/ci_ru_mikroton_real_api.py"
+      - "tests/test_ru_mikroton_real_api.py"
+      - ".github/workflows/ru-mikroton-real-api.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ru-real-public-notice-and-detail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Offline strict shape and provenance tests
+        run: python -m pytest -q tests/test_ru_mikroton_real_api.py
+      - name: Strict live API notice and official detail identity
+        timeout-minutes: 2
+        run: python -B -m scripts.ci_ru_mikroton_real_api

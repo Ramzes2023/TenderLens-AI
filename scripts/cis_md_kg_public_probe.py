@@ -7,6 +7,7 @@ against official/public endpoints to establish current network accessibility.
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import re
 import ssl
@@ -28,8 +29,9 @@ TARGETS = {
     "md_alternative_index": "https://public.eprocurement.systems/get/tenders?offset=",
     "md_agency_listing": "https://www.tender.gov.md/en/documente-in-curs-de-examinare",
     "md_public_portal": "https://mtender.gov.md/tenders",
+    "md_agency_ro_listing": "https://tender.gov.md/ro/documente-in-curs-de-examinare",
 }
-HOSTS = {"public.mtender.gov.md", "zakupki.gov.kg", "goszakupki.okmot.kg", "public.eprocurement.systems", "www.tender.gov.md", "mtender.gov.md"}
+HOSTS = {"public.mtender.gov.md", "zakupki.gov.kg", "goszakupki.okmot.kg", "public.eprocurement.systems", "www.tender.gov.md", "mtender.gov.md", "tender.gov.md"}
 OCID = re.compile(r"^ocds-[a-zA-Z0-9_-]{3,150}$")
 ORDER_LINK = re.compile(r"view/order/view\.xhtml\?id=\d{5,18}")
 NEW_ORDER_ID = re.compile(r"(?:№|&#8470;|&numero;)\s*(20\d{12,20})")
@@ -54,11 +56,25 @@ def describe_payload(name, raw, content_type):
         ocids = set(re.findall(r"ocds-b3wdp1-MD-\d{10,18}", html))
         return {"verified": bool(ocids), "kind": "public_mtender_portal_ocid_listing",
                 "ocid_count": len(ocids)}
-    if name == "md_agency_listing":
-        html = raw.decode("utf-8", errors="replace")
-        ocids = set(re.findall(r"ocds-b3wdp1-MD-\d{10,18}", html))
-        return {"verified": bool(ocids) and "MTender" in html,
-                "kind": "official_agency_ocid_listing", "ocid_count": len(ocids)}
+    if name in {"md_agency_listing", "md_agency_ro_listing"}:
+        document = raw.decode("utf-8", errors="replace")
+        confirmed = set()
+        for row in re.findall(r"<tr\b[^>]*>(.*?)</tr\s*>", document, flags=re.I | re.S)[:100]:
+            cells = re.findall(r"<t[dh]\b[^>]*>(.*?)</t[dh]\s*>", row, flags=re.I | re.S)
+            if len(cells) < 9:
+                continue
+            cleaned = [re.sub(r"\s+", " ", html.unescape(
+                re.sub(r"<[^>]+>", " ", cell))).strip() for cell in cells]
+            document_type, title = cleaned[5], cleaned[6]
+            ocid, cpv, received = cleaned[7], cleaned[8], cleaned[2]
+            if (not re.fullmatch(r"ocds-b3wdp1-MD-\d{10,18}", ocid, flags=re.I)
+                    or "mtender" not in document_type.casefold()
+                    or len(title) < 6 or not re.fullmatch(r"\d{8}-\d", cpv)
+                    or not re.fullmatch(r"\d{2}\.\d{2}\.20\d{2}", received)):
+                continue
+            confirmed.add(ocid.lower())
+        return {"verified": bool(confirmed), "kind": "official_agency_structured_ocid_rows",
+                "ocid_count": len(confirmed)}
     if name.startswith("md_"):
         try:
             data = json.loads(raw.decode("utf-8-sig"))
@@ -139,7 +155,7 @@ def main(argv=None):
     results = [probe(name, url, opener) for name, url in TARGETS.items()]
     summary = {"kind": "observational_public_cis_probe", "results": results,
                "md_index_verified": any(row["verified"] for row in results if row["target"] in {
-                   "md_mtender_index", "md_index_no_slash", "md_public_get_index", "md_alternative_index", "md_agency_listing", "md_public_portal"}),
+                   "md_mtender_index", "md_index_no_slash", "md_public_get_index", "md_alternative_index", "md_agency_listing", "md_public_portal", "md_agency_ro_listing"}),
                "md_detail_verified": any(row["verified"] for row in results if row["target"] == "md_mtender_known_detail"),
                "kg_listing_verified": any(row["verified"] for row in results if row["target"] in {
                    "kg_portal_home", "kg_new_portal"}),

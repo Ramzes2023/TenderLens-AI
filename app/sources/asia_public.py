@@ -41,7 +41,7 @@ _JETRO_DATE = re.compile(r"\b[A-Z][a-z]{2} [0-9]{1,2}, 20[0-9]{2}\b")
 
 
 def _text(value: str | None) -> str:
-    return _CLEAN.sub(" ", html.unescape(value or "")).strip()
+    return _CLEAN.sub(" ", re.sub(r"<[^>]+>", " ", html.unescape(value or ""))).strip()
 
 
 def _safe_link(value: str, hosts: frozenset[str], *, base: str | None = None) -> str:
@@ -151,11 +151,18 @@ class _JetroRows(HTMLParser):
             self.cell_parts = []
         elif self.in_row and tag == "a":
             href = dict(attrs).get("href", "")
-            path = urlsplit(href).path
-            match = _JETRO_LINK.fullmatch(path)
-            if match and match.group(1) == self.section:
-                self.anchor_href = path
-                self.anchor_parts = []
+            try:
+                url = _safe_link(
+                    href, frozenset({"www.jetro.go.jp"}),
+                    base=JETRO_LISTS["jp_jetro_" + self.section],
+                )
+                path = urlsplit(url).path
+                match = _JETRO_LINK.fullmatch(path)
+                if match and match.group(1) == self.section:
+                    self.anchor_href = path
+                    self.anchor_parts = []
+            except SourceError:
+                pass
 
     def handle_data(self, data):
         if self.in_cell:

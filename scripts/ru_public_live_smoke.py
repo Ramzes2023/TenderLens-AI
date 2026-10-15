@@ -46,7 +46,7 @@ def _settings():
         eis_223_profile_feeds_enabled=False,
         b2b_center_enabled=True,
         eis_direct_enabled=True,
-        eis_system_trust_enabled=False,  # GitHub/Linux verifies its normal trusted CAs.
+        eis_system_trust_enabled=(os.name == "nt"),  # Windows: strict system CA store.
     )
 
 
@@ -132,7 +132,12 @@ def main():
     print(f"RU_GITHUB_PUBLIC_FETCH_SQLITE_QUERY_VERIFIED={count}/3", flush=True)
     print("AUTHENTICATED_AI_SEARCH_VERIFIED=NO", flush=True)
     print("NOTICE_DETAIL_IDENTITY_VERIFIED=NO", flush=True)
-    print("WINDOWS_TRUSTED_CA_VERIFIED_BY_THIS_RUN=NO", flush=True)
+    windows_ca_verified = (os.name == "nt" and all(
+        result[key]["state"] == "PUBLIC_FETCH_SQLITE_KEYWORD_VERIFIED"
+        for key in ("eis", "eis_223")
+    ))
+    print("WINDOWS_TRUSTED_CA_VERIFIED_BY_THIS_RUN=" +
+          ("YES" if windows_ca_verified else "NO"), flush=True)
     print("PRODUCTION_CHANGED=NO", flush=True)
 
     summary = os.environ.get("GITHUB_STEP_SUMMARY")

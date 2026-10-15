@@ -32,6 +32,15 @@ JETRO_LISTS = {
     "jp_jetro_national": "https://www.jetro.go.jp/en/database/procurement/national/list.html",
     "jp_jetro_local": "https://www.jetro.go.jp/en/database/procurement/local/list.html",
 }
+# Explicit, anonymous official JETRO search-form parameters. A default GET may
+# render an empty form rather than a submitted search result; the bounded
+# fallback is accepted only if it yields verifiable linked procurement notices.
+JETRO_SEARCH_URLS = {
+    "jp_jetro_national": JETRO_LISTS["jp_jetro_national"]
+    + "?_page=1&area=&classification1=&classification2=&classification3=&deadline=&entity=&from=&keyword=&to=&type=",
+    "jp_jetro_local": JETRO_LISTS["jp_jetro_local"]
+    + "?_page=1&local_area=&local_classification1=&local_classification2=&local_classification3=&local_deadline=&local_entity=&local_from=&local_keyword=&local_to=",
+}
 _MAX_BYTES = 1024 * 1024
 _CLEAN = re.compile(r"\s+")
 _JETRO_LINK = re.compile(
@@ -328,5 +337,12 @@ class AsiaPublicSource:
         if self.name in ASIA_RSS_FEEDS:
             payload = await _fetch(ASIA_RSS_FEEDS[self.name], self.timeout, "application/rss+xml,application/xml,text/xml")
             return parse_asia_rss(payload, source=self.name, limit=limit)
-        payload = await _fetch(JETRO_LISTS[self.name], self.timeout, "text/html")
-        return parse_jetro_html(payload, source=self.name, limit=limit)
+        try:
+            payload = await _fetch(JETRO_LISTS[self.name], self.timeout, "text/html")
+            return parse_jetro_html(payload, source=self.name, limit=limit)
+        except SourceError:
+            # JETRO's default listing route can return only an empty search
+            # form; retry once using the fixed, official full-form query.
+            # Never accept an HTTP 200 or a generic news page as a tender.
+            payload = await _fetch(JETRO_SEARCH_URLS[self.name], self.timeout, "text/html")
+            return parse_jetro_html(payload, source=self.name, limit=limit)

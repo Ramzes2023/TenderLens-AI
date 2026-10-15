@@ -56,7 +56,8 @@ def _safe_link(
     Official feeds can contain historic HTTP notice links. Only upgrade URLs
     with an *exact* allowlisted hostname to HTTPS; do not issue HTTP requests.
     """
-    if not value or any(char.isspace() or ord(char) < 32 or char == "\\" for char in value):
+    if (not value or any(char.isspace() or ord(char) < 32 or char == "\\" for char in value)
+            or re.search(r"%(?:0[0-9a-f]|1[0-9a-f]|7f)", value, re.IGNORECASE)):
         raise SourceError("Asian source provided an unsafe item URL.")
     try:
         candidate = urljoin(base, value) if base else value

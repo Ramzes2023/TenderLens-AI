@@ -8,6 +8,8 @@ from .registry import SourceRegistry
 
 
 class SnapshotSource:
+    local_keyword_search = True  # Local snapshots filter terms even if live profile feeds are disabled.
+
     def __init__(self, repository, name, terms=()):
         self.repository, self.name, self.terms = repository, name, terms
 

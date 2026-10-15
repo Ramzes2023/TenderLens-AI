@@ -132,6 +132,71 @@ def test_rss_fails_closed_on_markup_entity_and_empty_entries():
             parse_asia_rss(payload, source="hk_ha_works")
 
 
+def test_standard_rss1_rdf_notice_parses_with_utc_timestamp():
+    payload = b"""<?xml version="1.0"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+ xmlns="http://purl.org/rss/1.0/"
+ xmlns:dc="http://purl.org/dc/elements/1.1/">
+ <item rdf:about="https://www.emsd.gov.hk/en/tender/123">
+  <title>Public ventilation maintenance services</title>
+  <link>https://www.emsd.gov.hk/en/tender/123</link>
+  <dc:date>2026-10-15T08:00:00Z</dc:date>
+  <description>Invitation to tender</description>
+ </item>
+</rdf:RDF>"""
+    notice = parse_asia_rss(payload, source="hk_emsd_tenders")[0]
+    assert notice.published_at == "2026-10-15T08:00:00+00:00"
+    assert notice.source == "hk_emsd_tenders"
+    validate_notice(notice, notice.source)
+
+
+def test_atom_updated_timestamp_and_safe_relative_link():
+    payload = b"""<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>tag:emsd.gov.hk,2026:abc123</id>
+    <title>Public servicing of ventilation systems</title>
+    <link href="/en/tender/notices/abc123" rel="alternate"/>
+    <updated>2026-10-15T08:00:00+08:00</updated>
+    <summary>Annual servicing procurement</summary>
+  </entry>
+</feed>"""
+    notice = parse_asia_rss(payload, source="hk_emsd_tenders")[0]
+    assert notice.published_at == "2026-10-15T08:00:00+08:00"
+    assert notice.url == "https://www.emsd.gov.hk/en/tender/notices/abc123"
+    validate_notice(notice, notice.source)
+
+
+def test_asia_diagnostic_does_not_log_untrusted_html(monkeypatch):
+    from app.sources import asia_public
+    from scripts import asia_six_upstream_diagnostic as diag
+
+    async def fake_fetch(*args):
+        return b'<html><table><tr><td>PRIVATE-UNTRUSTED-PAGE</td></tr></table></html>'
+
+    monkeypatch.setattr(diag, "_fetch", fake_fetch)
+    result = asyncio.run(diag._one(
+        "jp_jetro_national", asia_public.JETRO_LISTS["jp_jetro_national"],
+    ))
+    assert result["stage"] == "HTML_VALID_BUT_NO_QUALIFIED_NOTICES"
+    assert "PRIVATE-UNTRUSTED-PAGE" not in repr(result)
+    assert result["records"] == 0
+
+
+def test_asia_diagnostic_classifies_safe_http_error(monkeypatch):
+    from scripts import asia_six_upstream_diagnostic as diag
+
+    async def fake_fetch(*args):
+        raise SourceError("Asian procurement upstream HTTP 403.")
+
+    monkeypatch.setattr(diag, "_fetch", fake_fetch)
+    result = asyncio.run(diag._one(
+        "hk_ha_works", ASIA_RSS_FEEDS["hk_ha_works"],
+    ))
+    assert result["stage"] == "UPSTREAM_HTTP_403"
+    assert result["response_bytes"] == 0
+
+
 def test_jetro_national_link_and_date_retain_no_fabricated_deadline():
     notice = parse_jetro_html(JETRO, source="jp_jetro_national")[0]
     validate_notice(notice, "jp_jetro_national")

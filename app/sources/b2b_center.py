@@ -160,7 +160,10 @@ def parse_b2b_center_listing(payload: bytes, *, limit=100) -> list[TenderNotice]
                 and parts.port in (None, 443) and not parts.fragment)
         if demands and all(foreign):
             continue
-        if len(organizations) != 1 or len(demands) != 1:
+        # Some genuine public B2B cards omit the Organization entity. Keep
+        # customer unknown; never fabricate one or infer it from other cards.
+        # Multiple organizations/demands still fail closed as ambiguous.
+        if len(organizations) > 1 or len(demands) != 1:
             raise SourceError('B2B-Center unexpected procurement card structure.')
         demand = demands[0]
         if _property(demand, 'businessFunction') != 'http://purl.org/goodrelations/v1#Buy':
@@ -203,7 +206,8 @@ def parse_b2b_center_listing(payload: bytes, *, limit=100) -> list[TenderNotice]
         price = next(iter(prices)) if len(prices) == 1 and 0 not in prices else None
         notice = B2BCenterNotice(
             source='b2b_center', external_id=external_id, title=title, url=url,
-            tender_number=number, customer=_property(organizations[0], 'name'),
+            tender_number=number,
+            customer=(_property(organizations[0], 'name') if organizations else None),
             published_at=_date(_property(demand, 'validFrom')),
             deadline=_date(_property(demand, 'validThrough')),
             initial_price=price, currency='RUB' if price is not None else None,

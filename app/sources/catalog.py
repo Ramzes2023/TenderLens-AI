@@ -97,7 +97,8 @@ class SourceCatalog:
             if (
                 registration.key in {"eis", "eis_223"}
                 and registration.enabled
-                and (registration.key == "eis" or registration.capabilities.keyword_search)
+                and (registration.key == "eis" or registration.capabilities.keyword_search
+                     or getattr(source, "local_keyword_search", False))
                 and hasattr(
                     source,
                     "for_search_terms",

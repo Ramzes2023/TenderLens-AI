@@ -25,7 +25,7 @@ TARGETS = {
 }
 HOSTS = {"public.mtender.gov.md", "zakupki.gov.kg"}
 OCID = re.compile(r"^ocds-[a-zA-Z0-9_-]{3,150}$")
-ORDER_LINK = re.compile(r"view/order/view\\.xhtml\\?id=\\d{5,18}")
+ORDER_LINK = re.compile(r"view/order/view\.xhtml\?id=\d{5,18}")
 
 
 class NoRedirect(HTTPRedirectHandler):

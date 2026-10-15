@@ -241,8 +241,13 @@ async def _fetch(url: str, timeout: float, accept: str) -> bytes:
             return payload
     except SourceError:
         raise
+    except httpx.HTTPStatusError as exc:
+        # Expose only numeric public HTTP status for diagnostic gates.
+        raise SourceError(
+            f"Asian procurement upstream HTTP {exc.response.status_code}."
+        ) from None
     except (httpx.HTTPError, OSError):
-        raise SourceError("Asian procurement endpoint is currently unavailable.") from None
+        raise SourceError("Asian procurement network/TLS unavailable.") from None
 
 
 @dataclass(frozen=True)

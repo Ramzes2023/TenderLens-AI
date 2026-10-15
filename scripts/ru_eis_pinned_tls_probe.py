@@ -22,11 +22,31 @@ MAX_CERT_BYTES = 65536
 
 
 def verify_root(data: bytes) -> str:
+    """Accept PEM or DER transport, pin SHA-256 of the canonical DER certificate.
+
+    An official .cer can be distributed as PEM text. Hashing PEM transport
+    bytes against a DER fingerprint incorrectly rejects the exact same root.
+    No certificate is trusted unless the canonical DER fingerprint matches.
+    """
     if not isinstance(data, bytes) or len(data) > MAX_CERT_BYTES or len(data) < 200:
         raise ValueError("Invalid root CA certificate size")
-    if hashlib.sha256(data).hexdigest() != ROOT_SHA256:
+
+    der = data
+    if b"-----BEGIN CERTIFICATE-----" in data:
+        try:
+            pem = data.decode("ascii").strip()
+            if (not pem.startswith("-----BEGIN CERTIFICATE-----")
+                    or not pem.endswith("-----END CERTIFICATE-----")
+                    or pem.count("-----BEGIN CERTIFICATE-----") != 1
+                    or pem.count("-----END CERTIFICATE-----") != 1):
+                raise ValueError("Invalid PEM certificate wrapper")
+            der = ssl.PEM_cert_to_DER_cert(pem)
+        except (ValueError, UnicodeError) as error:
+            raise ValueError("Invalid PEM certificate format") from None
+
+    if hashlib.sha256(der).hexdigest() != ROOT_SHA256:
         raise ValueError("Official root CA fingerprint mismatch; nothing trusted")
-    return ssl.DER_cert_to_PEM_cert(data)
+    return ssl.DER_cert_to_PEM_cert(der)
 
 
 def official_download() -> bytes:
@@ -72,9 +92,19 @@ def main():
     try:
         return run(args.root_cer)
     except Exception as error:
-        # Do not print URLs, transport exceptions, file paths, secrets or body bytes.
+        # Never print arbitrary exceptions, URLs, file paths, secrets or bodies.
+        # Print only allowlisted fixed-format certificate errors.
         print("EIS_SCOPED_ROOT_PROBE=BLOCKED", flush=True)
         print("FAILURE_TYPE=" + type(error).__name__, flush=True)
+        known = {
+            "Invalid root CA certificate size": "CERT_SIZE_OR_RESPONSE_INVALID",
+            "Invalid PEM certificate wrapper": "CERT_FORMAT_INVALID",
+            "Invalid PEM certificate format": "CERT_FORMAT_INVALID",
+            "Official root CA fingerprint mismatch; nothing trusted": "CERT_DER_SHA256_MISMATCH",
+            "Official CA download origin/status mismatch": "OFFICIAL_DOWNLOAD_ORIGIN_REJECTED",
+        }
+        reason = known.get(str(error), "OTHER_FAILURE") if type(error) is ValueError else "OTHER_FAILURE"
+        print("FAILURE_STAGE=" + reason, flush=True)
         return 2
 
 

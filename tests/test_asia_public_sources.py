@@ -1,0 +1,155 @@
+"""Strict, network-free tests for six staged Asian procurement adapters."""
+import asyncio
+
+import pytest
+
+from app.monitoring.config import MonitoringSettings
+from app.sources.asia_public import (
+    ASIA_RSS_FEEDS, JETRO_LISTS, AsiaPublicSource,
+    parse_asia_rss, parse_jetro_html,
+)
+from app.sources.catalog import build_source_catalog
+from app.sources.eis_rss import SourceError
+from app.sources.ingestion import HOSTS, validate_payload, connector_version
+from app.sources.opportunities import validate_notice
+from app.jobs.worker import PermanentJobError
+
+
+RSS = b"""<?xml version="1.0"?><rss version="2.0"><channel>
+<title>Tender notices</title>
+<item><title> Public contract for engineering services </title>
+<link>https://www.housingauthority.gov.hk/en/tenders/example-123.html</link>
+<guid>hk-123</guid><pubDate>Thu, 15 Oct 2026 08:00:00 +0800</pubDate>
+<description>Engineering tender</description></item>
+</channel></rss>"""
+
+JETRO = b"""<html><table>
+<tr><th>Publishing date</th><th>Procurement entity</th><th>Type</th><th>Title</th></tr>
+<tr><td>Oct 15, 2026</td><td>Ministry of Finance</td>
+<td>Notice of Procurement (Goods &amp; Services)</td>
+<td><a href="/en/database/procurement/national/articles/420001/2026101500010000.html">
+Procurement of a secure IT system, 1 set</a></td></tr>
+</table></html>"""
+
+
+def _settings():
+    return MonitoringSettings(
+        enabled=False, interval_seconds=600, max_items=20,
+        max_notifications_per_cycle=5, request_timeout=15.0,
+        eis_rss_urls=(), ca_bundle_file=None, profile_feeds_enabled=False,
+        profile_feed_limit=5,
+    )
+
+
+def test_important_sources_remain_disabled_by_default(monkeypatch):
+    monkeypatch.delenv("VALYQON_ASIA_SOURCES_ENABLED", raising=False)
+    catalog = build_source_catalog(_settings())
+    assert all(key not in catalog.registry.keys()
+               for key in (*ASIA_RSS_FEEDS, *JETRO_LISTS))
+
+
+def test_exact_six_sources_opt_in_to_existing_catalog_and_worker(monkeypatch):
+    monkeypatch.setenv("VALYQON_ASIA_SOURCES_ENABLED", "1")
+    catalog = build_source_catalog(_settings())
+    assert set((*ASIA_RSS_FEEDS, *JETRO_LISTS)) <= set(catalog.enabled_keys)
+    for key in (*ASIA_RSS_FEEDS, *JETRO_LISTS):
+        registration = catalog.registry.get(key)
+        assert registration.official is True
+        assert registration.jurisdictions == (("HK",) if key.startswith("hk_") else ("JP",))
+        assert registration.source.name == key
+        assert key in HOSTS
+        assert len(HOSTS[key]) == 1
+        assert connector_version(key) == f"connector-sync-v1:{key}:adapter-r1"
+
+
+def test_hong_kong_feed_has_real_tender_fields():
+    notice = parse_asia_rss(RSS, source="hk_ha_works")[0]
+    assert notice.source == "hk_ha_works"
+    assert notice.title == "Public contract for engineering services"
+    assert notice.published_at == "2026-10-15T08:00:00+08:00"
+    assert notice.deadline is None
+    assert notice.initial_price is None
+    validate_notice(notice, "hk_ha_works")
+    assert parse_asia_rss(RSS, source="hk_ha_works")[0].identity == notice.identity
+
+
+@pytest.mark.parametrize("url", [
+    "http://www.housingauthority.gov.hk/en/notice",
+    "https://evil.example/notice",
+    "https://www.housingauthority.gov.hk.evil.example/tender",
+    "https://www.housingauthority.gov.hk:444/tenders/a",
+    "https://secret@www.housingauthority.gov.hk/tenders/a",
+    "https://127.0.0.1/tenders/a",
+    "file:///etc/passwd",
+])
+def test_rss_rejects_unsafe_item_url_without_persisting(url):
+    payload = RSS.replace(b"https://www.housingauthority.gov.hk/en/tenders/example-123.html", url.encode())
+    with pytest.raises(SourceError, match="no verifiable"):
+        parse_asia_rss(payload, source="hk_ha_works")
+
+
+def test_rss_fails_closed_on_markup_entity_and_empty_entries():
+    for payload in (b"<html>Access denied</html>", b'<rss><channel></channel></rss>',
+                    b'<!DOCTYPE rss [<!ENTITY x "secret">]><rss/>', b"<rss"):
+        with pytest.raises(SourceError):
+            parse_asia_rss(payload, source="hk_ha_works")
+
+
+def test_jetro_national_link_and_date_retain_no_fabricated_deadline():
+    notice = parse_jetro_html(JETRO, source="jp_jetro_national")[0]
+    validate_notice(notice, "jp_jetro_national")
+    assert notice.external_id == "420001:2026101500010000"
+    assert notice.published_at == "2026-10-15"
+    assert notice.customer == "Ministry of Finance"
+    assert notice.deadline is None
+
+
+def test_jetro_local_is_separate_feed_and_rejects_national_rows():
+    with pytest.raises(SourceError, match="no verifiable"):
+        parse_jetro_html(JETRO, source="jp_jetro_local")
+    local = JETRO.replace(b"/national/articles/", b"/local/articles/")
+    assert parse_jetro_html(local, source="jp_jetro_local")[0].source == "jp_jetro_local"
+
+
+def test_jetro_disallows_other_host_and_unrelated_non_tender_links():
+    bad = JETRO.replace(
+        b"/en/database/procurement/national/articles/420001/2026101500010000.html",
+        b"https://evil.example/en/database/procurement/national/articles/420001/2026101500010000.html",
+    )
+    with pytest.raises(SourceError, match="no verifiable"):
+        parse_jetro_html(bad, source="jp_jetro_national")
+
+
+def test_all_six_sources_fetch_through_safe_single_page_transport(monkeypatch):
+    calls = []
+    async def fake_fetch(url, timeout, accept):
+        calls.append((url, timeout, accept))
+        if url in ASIA_RSS_FEEDS.values():
+            payload = RSS.replace(
+                b"www.housingauthority.gov.hk/en/tenders/example-123.html",
+                (b"www.emsd.gov.hk/en/tenders/example-123.html"
+                 if "emsd" in url else b"www.housingauthority.gov.hk/en/tenders/example-123.html"))
+            return payload
+        section = b"local" if "local" in url else b"national"
+        return JETRO.replace(b"/national/articles/", b"/" + section + b"/articles/")
+
+    monkeypatch.setattr("app.sources.asia_public._fetch", fake_fetch)
+    async def run():
+        results = []
+        for key in (*ASIA_RSS_FEEDS, *JETRO_LISTS):
+            notices = await AsiaPublicSource(key).fetch(limit=5)
+            assert notices and notices[0].source == key
+            validate_notice(notices[0], key)
+            results.extend(notices)
+        return results
+    notices = asyncio.run(run())
+    assert len(notices) == 6
+    assert len(calls) == 6
+    assert all(timeout == 30.0 for _, timeout, _ in calls)
+
+
+def test_bounded_timeout_and_unknown_source_fail_closed():
+    with pytest.raises(ValueError):
+        AsiaPublicSource("private_webhook")
+    with pytest.raises(ValueError):
+        AsiaPublicSource("jp_jetro_local", timeout=-2)

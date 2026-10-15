@@ -9,6 +9,7 @@ on:
       - "app/sources/ingestion.py"
       - "tests/test_asia_public_sources.py"
       - "scripts/asia_six_live_acceptance.py"
+      - "scripts/asia_six_upstream_diagnostic.py"
       - ".github/workflows/asia-source-acceptance.yml"
   workflow_dispatch:
 
@@ -28,7 +29,7 @@ jobs:
       - name: Install pinned project development dependencies
         run: python -m pip install -r requirements-dev.txt
       - name: Compile source, runner and regression contracts
-        run: python -m compileall -q app/sources tests/test_asia_public_sources.py scripts/asia_six_live_acceptance.py
+        run: python -m compileall -q app/sources tests/test_asia_public_sources.py scripts/asia_six_live_acceptance.py scripts/asia_six_upstream_diagnostic.py
       - name: Test six official source contracts and existing orchestration
         run: python -m pytest -q tests/test_asia_public_sources.py tests/test_source_catalog.py tests/test_connector_workers.py tests/test_source_http.py tests/test_source_http_transport.py
   asia-six-real-live-sqlite:
@@ -43,6 +44,9 @@ jobs:
           cache: pip
       - name: Install pinned project development dependencies
         run: python -m pip install -r requirements-dev.txt
+      - name: Classify public endpoint and parsing failures (observational only)
+        continue-on-error: true
+        run: python -m scripts.asia_six_upstream_diagnostic
       - name: Real six-feed ingestion to ephemeral SQLite and keyword query
         env:
           VALYQON_ASIA_SOURCES_ENABLED: "1"

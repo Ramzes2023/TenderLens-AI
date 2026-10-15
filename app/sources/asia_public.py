@@ -82,16 +82,19 @@ def _safe_link(
     return candidate
 
 def _published(value: str | None) -> str | None:
-    if not _text(value):
+    cleaned = _text(value)
+    if not cleaned:
         return None
     try:
-        parsed = parsedate_to_datetime(_text(value))
-        if parsed.tzinfo is None:
+        parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            parsed = parsedate_to_datetime(cleaned)
+        except (TypeError, ValueError, IndexError, OverflowError):
             return None
-        return parsed.isoformat()
-    except (TypeError, ValueError, IndexError):
+    if parsed.tzinfo is None:
         return None
-
+    return parsed.isoformat()
 
 def parse_asia_rss(payload: bytes, *, source: str, limit: int = 20) -> list[TenderNotice]:
     if source not in ASIA_RSS_FEEDS or len(payload) > _MAX_BYTES:
@@ -102,19 +105,43 @@ def parse_asia_rss(payload: bytes, *, source: str, limit: int = 20) -> list[Tend
         root = ET.fromstring(payload)
     except ET.ParseError:
         raise SourceError("Asian procurement RSS is malformed.") from None
-    if root.tag not in ("rss", "{http://www.w3.org/2005/Atom}feed"):
+    atom = "{http://www.w3.org/2005/Atom}"
+    rdf = "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}"
+    rss1 = "{http://purl.org/rss/1.0/}"
+    dc = "{http://purl.org/dc/elements/1.1/}"
+    if root.tag not in ("rss", atom + "feed", rdf + "RDF"):
         raise SourceError("Asian procurement endpoint did not return RSS/Atom.")
     hosts = frozenset({"www.housingauthority.gov.hk", "housingauthority.gov.hk"}) if source.startswith("hk_ha_") else frozenset({"www.emsd.gov.hk", "emsd.gov.hk"})
     output: list[TenderNotice] = []
     seen: set[str] = set()
-    atom = "{http://www.w3.org/2005/Atom}"
-    items = root.findall("./channel/item") if root.tag == "rss" else root.findall(f"./{atom}entry")
+    if root.tag == "rss":
+        items = root.findall("./channel/item")
+    elif root.tag == atom + "feed":
+        items = root.findall(f"./{atom}entry")
+    else:
+        items = root.findall(f"./{rss1}item")
     for item in items:
-        title = _text(item.findtext("title") if root.tag == "rss" else item.findtext(f"{atom}title"))
-        raw_link = item.findtext("link") if root.tag == "rss" else next(
-            (link.get("href", "") for link in item.findall(f"{atom}link") if link.get("rel", "alternate") == "alternate"),
-            "",
-        )
+        if root.tag == "rss":
+            raw_title = item.findtext("title")
+            raw_link = item.findtext("link")
+            raw_date = item.findtext("pubDate")
+            guid = item.findtext("guid")
+            description = item.findtext("description")
+        elif root.tag == atom + "feed":
+            raw_title = item.findtext(f"{atom}title")
+            raw_link = next(
+                (link.get("href", "") for link in item.findall(f"{atom}link")
+                 if link.get("rel", "alternate") == "alternate"), "")
+            raw_date = item.findtext(f"{atom}published") or item.findtext(f"{atom}updated")
+            guid = item.findtext(f"{atom}id")
+            description = item.findtext(f"{atom}summary")
+        else:
+            raw_title = item.findtext(f"{rss1}title")
+            raw_link = item.findtext(f"{rss1}link")
+            raw_date = item.findtext(f"{dc}date")
+            guid = item.get(rdf + "about")
+            description = item.findtext(f"{rss1}description")
+        title = _text(raw_title)
         if not title or not raw_link:
             continue
         # A published award is not an opportunity to bid. Leasing feeds in
@@ -129,15 +156,11 @@ def parse_asia_rss(payload: bytes, *, source: str, limit: int = 20) -> list[Tend
             )
         except SourceError:
             continue
-        guid = _text(item.findtext("guid") if root.tag == "rss" else item.findtext(f"{atom}id"))
-        identity = guid or link
+        identity = _text(guid) or link
         external_id = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:40]
         if external_id in seen:
             continue
         seen.add(external_id)
-        raw_date = item.findtext("pubDate") if root.tag == "rss" else item.findtext(f"{atom}published")
-        description = (item.findtext("description") if root.tag == "rss"
-                       else item.findtext(f"{atom}summary"))
         output.append(TenderNotice(
             source=source, external_id=external_id,
             title=title[:1000], url=link[:2000],

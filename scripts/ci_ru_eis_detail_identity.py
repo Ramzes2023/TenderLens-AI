@@ -15,7 +15,7 @@ import re
 import sys
 import tempfile
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -64,6 +64,50 @@ def detail_candidate(notice, key):
     if len(set(candidates)) != 1:
         raise ValueError("AMBIGUOUS_NOTICE_NUMBER")
     return raw, candidates[0]
+
+
+def describe_redirect_target(origin_url: str, location: str | None,
+                             expected_number: str) -> dict:
+    """Only redacted route metadata. Never follow this redirect.
+
+    A Location header is untrusted: do not print its raw value, query values,
+    path tokens, or userinfo. Host/path classification does NOT authorize a
+    request, even when the target is an official site.
+    """
+    invalid = {"target": "UNSAFE_OR_MISSING", "path_shape": "REDACTED",
+               "number": "UNKNOWN"}
+    if not location or not isinstance(location, str) or len(location) > 2000:
+        return invalid
+    if "\\" in location or any(ord(ch) <= 32 or ch.isspace() for ch in location):
+        return invalid
+    try:
+        target = urlsplit(urljoin(origin_url, location))
+        if (target.scheme != "https" or target.netloc != "zakupki.gov.ru"
+                or target.username is not None or target.password is not None
+                or target.port is not None or bool(target.fragment)):
+            return {"target": "NOT_EXACT_OFFICIAL_HTTPS_HOST",
+                    "path_shape": "REDACTED", "number": "UNKNOWN"}
+        path = target.path
+        # Show only an ASCII route shape on the verified official host.
+        if not re.fullmatch(r"/[A-Za-z0-9_./-]{1,155}", path):
+            shape = "REDACTED_NONSTANDARD_PATH"
+        else:
+            shape = re.sub(r"[0-9]{6,}", "{ID}", path)[:160]
+        params = parse_qs(target.query, keep_blank_values=True)
+        numbers = [val for key in ("regNumber", "purchaseNumber", "registrationNumber")
+                   for val in params.get(key, [])]
+        if not numbers:
+            status = "NOT_IN_RECOGNIZED_QUERY"
+        elif len(numbers) != 1:
+            status = "AMBIGUOUS"
+        elif numbers[0] == expected_number:
+            status = "MATCH"
+        else:
+            status = "MISMATCH"
+        return {"target": "EXACT_OFFICIAL_HTTPS_HOST", "path_shape": shape,
+                "number": status}
+    except ValueError:
+        return invalid
 
 
 def detail_failure_code(error: Exception) -> str:
@@ -152,7 +196,7 @@ async def inspect_source(catalog, key):
             seen.add((link, number))
     records = {"rss": len(notices), "eligible": len(candidates), "requested": 0,
                "verified": 0, "http_ok": 0, "blocked": None,
-               "statuses": [], "failures": []}
+               "statuses": [], "failures": [], "redirects": []}
     if not candidates:
         records["blocked"] = "NO_SAFE_NUMBERED_DETAIL"
         return records
@@ -164,11 +208,20 @@ async def inspect_source(catalog, key):
     # can only be scoped to EIS in the catalog. No redirects or proxy transport.
     ssl_verify = str(adapter.ca_bundle_file)
 
+    current_number = None
+
     async def capture_response(response):
-        # Called by the existing audited transport *before* it rejects a
-        # non-2xx status. Capture status integers only, no headers or URLs.
+        # Called before audited transport rejects non-2xx. Capture only
+        # status and redacted Location structure. Never follow redirects.
         if len(records["statuses"]) < MAX_DETAIL_REQUESTS:
             records["statuses"].append(int(response.status_code))
+        if (response.status_code in (301, 302, 303, 307, 308)
+                and len(records["redirects"]) < MAX_DETAIL_REQUESTS):
+            records["redirects"].append(describe_redirect_target(
+                str(response.request.url),
+                response.headers.get("location"),
+                current_number or "",
+            ))
 
     with bounded_fetch(FetchPolicy(frozenset({"zakupki.gov.ru"}),
                                    MAX_DETAIL_REQUESTS, max_bytes=MAX_HTML_BYTES)):
@@ -179,6 +232,7 @@ async def inspect_source(catalog, key):
         ) as client:
             for link, number in candidates:
                 records["requested"] += 1
+                current_number = number
                 try:
                     response = await asyncio.wait_for(client.get(link), timeout=20)
                     if response.status_code == 200:
@@ -220,6 +274,7 @@ def strict_acceptance(data: bytes) -> bool:
                       + "; HTTP_OK=" + str(outcome["http_ok"])
                       + "; VERIFIED=" + str(outcome["verified"])
                       + "; HTTP_STATUSES=" + str(outcome.get("statuses", []))
+                      + "; REDIRECT_TARGET_SHAPES=" + repr(outcome.get("redirects", []))
                       + "; ERROR_CODES=" + str(outcome.get("failures", []))
                       + "; BLOCKER=" + str(outcome["blocked"]), flush=True)
                 if outcome["verified"] < 1:

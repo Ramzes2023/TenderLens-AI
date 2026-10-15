@@ -2,7 +2,7 @@
 import asyncio
 from dataclasses import replace
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 import socket
 from contextvars import ContextVar
 import ssl
@@ -215,3 +215,50 @@ def test_saved_keyword_search_is_request_local(key):
     repo.reset_mock()
     asyncio.run(cat.fetch(source_keys=[key], limit_per_source=2))
     repo.read.assert_called_once_with(key, 2, ())
+
+
+def test_tenant_authenticated_discovery_reads_am_tj_persisted_snapshots_without_live_http():
+    """Real API route/session/org checks, actual disposable SQLite, no network.
+
+    Fixture announcements are NOT fresh official live evidence; that is an
+    independent CI gate in ci_cis_am_tj_live_acceptance.py.
+    """
+    from tests.test_organization_workflows import OrganizationWorkflowTests
+    from app.database.backend import Database
+    from app.database.config import DatabaseSettings
+    from app.sources.opportunities import OpportunityRepository
+
+    helper = OrganizationWorkflowTests()
+    with patch('app.jobs.worker.WorkerPool.start', side_effect=AssertionError('Web must not start workers')):
+        helper.setUp()
+    try:
+        helper.as_account(helper.owner)
+        helper.create_company('CIS procurement acceptance')
+        database = Database(DatabaseSettings('', helper.path))
+        database.migrate()
+        store = OpportunityRepository(database)
+        store.initialize()
+        for key, identifier in (('am_armeps', 101), ('tj_eprocurement', 102)):
+            normalized = (am.parse_armeps_listing if key == KEYS[0] else tj.parse_tj_listing)(html(key, identifier))
+            assert len(normalized) == 1
+            assert store.upsert(normalized[0], connector_version(key))
+        canonical = catalog()
+        registry = SourceRegistry([replace(canonical.registry.get(key), enabled=True) for key in KEYS])
+        cat = SourceCatalog(registry, MultiSourceFetcher(registry, concurrency=1))
+        runtime = helper.client.app.state.runtime
+        runtime.database = database
+        runtime.source_catalog = cat
+        endpoint = helper.base('/discover/tenders') + '?snapshots=true'
+        response = helper.client.post(endpoint)
+        assert response.status_code == 200, response.text
+        assert response.headers['X-Valyqon-Discovery-Mode'] == 'snapshots'
+        items = response.json()['items']
+        assert {row['source'] for row in items} == set(KEYS)
+        assert len(items) == 2
+        assert helper.client.post(endpoint, headers={'Origin': 'https://evil.invalid'}).status_code == 403
+        helper.client.cookies.clear()
+        assert helper.client.post(endpoint).status_code == 401
+        helper.as_account(helper.outsider)
+        assert helper.client.post(endpoint).status_code == 403
+    finally:
+        helper.doCleanups()

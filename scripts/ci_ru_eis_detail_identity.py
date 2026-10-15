@@ -27,7 +27,7 @@ from scripts.ru_public_live_smoke import _settings
 
 SOURCES = ("eis", "eis_223")
 MAX_FEED_ITEMS = 10
-MAX_DETAIL_REQUESTS = 2
+MAX_DETAIL_REQUESTS = 6
 MAX_HTML_BYTES = 1024 * 1024
 NOTICE_NUMBER_RE = re.compile(r"(?<![0-9])[0-9]{11,20}(?![0-9])")
 ALLOWED_PATH_PREFIXES = ("/epz/order/notice/", "/223/purchase/public/purchase/info/")
@@ -82,6 +82,13 @@ def detail_blocker(records: dict) -> str | None:
     if records["verified"]:
         return None
     statuses = records["statuses"]
+    # BoundedClient rejects non-2xx responses with ConnectorTransportError,
+    # but the response hook has captured the actual 404. A known HTTP status
+    # must take precedence over the generic transport-wrapper exception.
+    if statuses and all(status == 404 for status in statuses):
+        return "OFFICIAL_DETAIL_HTTP_404"
+    if 404 in statuses:
+        return "SOME_OFFICIAL_DETAILS_HTTP_404"
     if any(300 <= status < 400 for status in statuses):
         return "REDIRECT_NOT_FOLLOWED"
     if any(status in (401, 403) for status in statuses):
@@ -110,6 +117,23 @@ def detail_page_has_identity(body: bytes, number: str, content_type: str) -> boo
     return re.search(r"(?<![0-9])" + re.escape(number) + r"(?![0-9])", text) is not None
 
 
+def select_diverse_routes(candidates, limit=MAX_DETAIL_REQUESTS):
+    """Probe one URL per real procedure first, then other distinct notices.
+
+    This preserves RSS-provided URLs; no guessing or fabrication of other
+    procurement routes. No requests are made by the selector.
+    """
+    first, remainder, paths_seen = [], [], set()
+    for link, number in candidates:
+        route = urlsplit(link).path
+        if route not in paths_seen:
+            paths_seen.add(route)
+            first.append((link, number))
+        else:
+            remainder.append((link, number))
+    return (first + remainder)[:limit]
+
+
 async def inspect_source(catalog, key):
     adapter = catalog.registry.get(key).source
     notices = await asyncio.wait_for(adapter.fetch(limit=MAX_FEED_ITEMS), timeout=35)
@@ -133,6 +157,9 @@ async def inspect_source(catalog, key):
         records["blocked"] = "NO_SAFE_NUMBERED_DETAIL"
         return records
 
+    candidates = select_diverse_routes(candidates)
+    records["sampled_route_families"] = len({urlsplit(link).path for link, _ in candidates})
+
     # Reuse the audited public-IP/direct-only adapter transport; the trust file
     # can only be scoped to EIS in the catalog. No redirects or proxy transport.
     ssl_verify = str(adapter.ca_bundle_file)
@@ -150,7 +177,7 @@ async def inspect_source(catalog, key):
             follow_redirects=False, headers={"Accept": "text/html"},
             event_hooks={"response": [capture_response]},
         ) as client:
-            for link, number in candidates[:MAX_DETAIL_REQUESTS]:
+            for link, number in candidates:
                 records["requested"] += 1
                 try:
                     response = await asyncio.wait_for(client.get(link), timeout=20)
@@ -188,6 +215,7 @@ def strict_acceptance(data: bytes) -> bool:
                 print("EIS_DETAIL_SOURCE=" + key
                       + "; RSS=" + str(outcome["rss"])
                       + "; ELIGIBLE=" + str(outcome["eligible"])
+                      + "; ROUTE_FAMILIES=" + str(outcome.get("sampled_route_families", 0))
                       + "; REQUESTED=" + str(outcome["requested"])
                       + "; HTTP_OK=" + str(outcome["http_ok"])
                       + "; VERIFIED=" + str(outcome["verified"])

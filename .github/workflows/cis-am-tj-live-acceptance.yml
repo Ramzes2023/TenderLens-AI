@@ -36,4 +36,4 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: "1"
           PYTHON_DOTENV_DISABLED: "1"
-        run: python -B scripts/ci_cis_am_tj_live_acceptance.py --source "${{ matrix.source }}"
+        run: python -B -m scripts.ci_cis_am_tj_live_acceptance --source "${{ matrix.source }}"

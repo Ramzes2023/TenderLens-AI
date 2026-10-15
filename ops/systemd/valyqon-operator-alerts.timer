@@ -1,0 +1,13 @@
+# Template only. Enable exclusively after host acceptance and Telegram probe.
+[Unit]
+Description=VALYQON AI operator alert check every five minutes
+
+[Timer]
+OnCalendar=*:0/5
+AccuracySec=30s
+RandomizedDelaySec=0
+Persistent=true
+Unit=valyqon-operator-alerts.service
+
+[Install]
+WantedBy=timers.target

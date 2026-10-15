@@ -87,6 +87,12 @@ def inspect_database(database, expected_sources=(), now=None):
             "SELECT COUNT(*) FROM durable_jobs WHERE state='running' AND lease_expires_at <= ?",
             (now_us,),
         ).fetchone()[0]
+        # A worker may be down without an expired running lease. Measure only
+        # work that is already eligible to run, not future scheduled jobs.
+        first_ready = conn.execute(
+            "SELECT MIN(available_at) FROM durable_jobs "
+            "WHERE state='queued' AND available_at<=?", (now_us,)
+        ).fetchone()[0]
         for source in expected_sources:
             if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]{0,63}", source):
                 raise ValueError("Invalid configured source identifier")
@@ -97,7 +103,9 @@ def inspect_database(database, expected_sources=(), now=None):
             parsed = _utc(latest) if latest else None
             sources[source] = None if parsed is None else max(0, now - parsed.timestamp())
     return {"recent_failed_jobs": int(failed), "expired_worker_leases": int(expired),
-            "source_last_seen_seconds": sources}
+            "oldest_ready_queue_seconds": (
+                None if first_ready is None else max(0, (now_us - first_ready) / 1_000_000)
+            ), "source_last_seen_seconds": sources}
 
 
 def evaluate(snapshot, http, *, source_stale_seconds=86400, failed_threshold=1):
@@ -109,6 +117,12 @@ def evaluate(snapshot, http, *, source_stale_seconds=86400, failed_threshold=1):
     alerts = []
     if snapshot["expired_worker_leases"] > 0:
         alerts.append(("worker_lease_expired", "Worker lease expired; investigate stopped or stuck workers."))
+    # A stuck worker might leave no running lease to expire. Sustained
+    # *eligible* backlog is a complementary indicator, not proof of a dead process.
+    queued_age = snapshot.get("oldest_ready_queue_seconds")
+    if queued_age is not None and queued_age >= 900:
+        alerts.append(("queue_ready_stalled",
+                       "Ready jobs have waited at least 15 minutes; inspect worker health and queue capacity."))
     if snapshot["recent_failed_jobs"] >= failed_threshold:
         alerts.append(("jobs_recently_failed", "Durable jobs failed in the last 15 minutes."))
     for source, age in sorted(snapshot["source_last_seen_seconds"].items()):

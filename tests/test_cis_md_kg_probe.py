@@ -87,6 +87,15 @@ class PublicProbeTests(unittest.TestCase):
         self.assertFalse(describe_payload("kg_new_portal", b"<html>menu only</html>", "text/html")["verified"])
         self.assertFalse(describe_payload("kg_new_portal", b"202610122560014988", "text/html")["verified"])
 
+    def test_official_moldova_agency_index_not_empty_page(self):
+        document = ('<table><tr><td>AP LP MTender</td>'
+                    '<td>ocds-b3wdp1-MD-1780470314481</td>'
+                    '<td>Lucrări de reabilitare</td></tr></table>')
+        out = describe_payload("md_agency_listing", document.encode(), "text/html")
+        self.assertTrue(out["verified"])
+        self.assertEqual(out["ocid_count"], 1)
+        self.assertFalse(describe_payload("md_agency_listing", b"<table>No notices</table>", "text/html")["verified"])
+
     def test_probe_is_bounded_and_has_no_fallback(self):
         opener = Opener(json.dumps({"data": [{"ocid": "ocds-b3wdp1-MD-1770204825070"}]}).encode())
         result = probe("md_mtender_index", "https://public.mtender.gov.md/tenders/", opener)

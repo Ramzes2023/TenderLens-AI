@@ -30,7 +30,7 @@ MAX_FEED_ITEMS = 10
 MAX_DETAIL_REQUESTS = 2
 MAX_HTML_BYTES = 1024 * 1024
 NOTICE_NUMBER_RE = re.compile(r"(?<![0-9])[0-9]{11,20}(?![0-9])")
-ALLOWED_PATH_PREFIXES = ("/epz/", "/223/")
+ALLOWED_PATH_PREFIXES = ("/epz/order/notice/", "/223/purchase/public/purchase/info/")
 
 
 def detail_candidate(notice, key):

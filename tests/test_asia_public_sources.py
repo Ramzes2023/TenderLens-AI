@@ -32,6 +32,15 @@ Procurement of a secure IT system, 1 set</a></td></tr>
 </table></html>"""
 
 
+JETRO_LOCAL = JETRO.replace(
+    b"/national/articles/420001/2026101500010000.html",
+    b"/local/articles/b25795fdff1a1aba.html",
+).replace(
+    b"Notice of Procurement (Goods &amp; Services)",
+    b"Kanagawa",
+)
+
+
 def _settings():
     return MonitoringSettings(
         enabled=False, interval_seconds=600, max_items=20,
@@ -222,8 +231,22 @@ def test_awards_and_noncompetitive_jetro_notices_do_not_create_tenders():
 def test_jetro_local_is_separate_feed_and_rejects_national_rows():
     with pytest.raises(SourceError, match="no verifiable"):
         parse_jetro_html(JETRO, source="jp_jetro_local")
-    local = JETRO.replace(b"/national/articles/", b"/local/articles/")
-    assert parse_jetro_html(local, source="jp_jetro_local")[0].source == "jp_jetro_local"
+    local_notice = parse_jetro_html(JETRO_LOCAL, source="jp_jetro_local")[0]
+    assert local_notice.source == "jp_jetro_local"
+    assert local_notice.external_id == "b25795fdff1a1aba"
+    assert local_notice.url == "https://www.jetro.go.jp/en/database/procurement/local/articles/b25795fdff1a1aba.html"
+    validate_notice(local_notice, local_notice.source)
+
+
+def test_jetro_local_article_format_rejects_wrong_section_and_guessed_numeric_link():
+    misleading = JETRO.replace(
+        b"/national/articles/420001/2026101500010000.html",
+        b"/local/articles/420001/2026101500010000.html",
+    )
+    with pytest.raises(SourceError, match="no verifiable"):
+        parse_jetro_html(misleading, source="jp_jetro_local")
+    with pytest.raises(SourceError, match="no verifiable"):
+        parse_jetro_html(JETRO_LOCAL, source="jp_jetro_national")
 
 
 def test_jetro_disallows_other_host_and_unrelated_non_tender_links():
@@ -245,8 +268,7 @@ def test_all_six_sources_fetch_through_safe_single_page_transport(monkeypatch):
                 (b"www.emsd.gov.hk/en/tenders/example-123.html"
                  if "emsd" in url else b"www.housingauthority.gov.hk/en/tenders/example-123.html"))
             return payload
-        section = b"local" if "local" in url else b"national"
-        return JETRO.replace(b"/national/articles/", b"/" + section + b"/articles/")
+        return JETRO_LOCAL if "local" in url else JETRO
 
     monkeypatch.setattr("app.sources.asia_public._fetch", fake_fetch)
     async def run():

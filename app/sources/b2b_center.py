@@ -17,6 +17,13 @@ from .opportunities import validate_notice
 
 B2B_CENTER_LIST_URL = 'https://www.b2b-center.ru/search/'
 B2B_CENTER_HOSTS = frozenset({'www.b2b-center.ru'})
+# The public aggregate search mixes other procurement platforms into its feed.
+# These are NOT B2B-Center notices; do not fetch, normalize or store them as B2B.
+# All other external hosts, including lookalikes, remain fail-closed.
+KNOWN_FOREIGN_AGGREGATE_HOSTS = frozenset({
+    'www.rosatom.rts-tender.ru', 'www.rts-tender.ru', 'otc.ru', 'www.otc.ru',
+    'zakupki.gov.ru',
+})
 MAX_BYTES = 2 * 1024 * 1024
 
 
@@ -138,7 +145,25 @@ def parse_b2b_center_listing(payload: bytes, *, limit=100) -> list[TenderNotice]
                          if node.attrs.get('itemtype') == 'https://schema.org/Organization']
         demands = [node for node in card.walk()
                    if node.attrs.get('itemtype') == 'https://schema.org/Demand']
-        if len(organizations) != 1 or len(demands) != 1:
+        # Ignore explicitly known *other platforms* in the aggregate listing.
+        # No HTTP requests to foreign hosts; never label their cards as B2B.
+        foreign = []
+        for candidate in demands:
+            raw_detail = _property(candidate, 'url', 'link')
+            if not raw_detail or '\\' in raw_detail or any(ord(ch) <= 32 for ch in raw_detail):
+                foreign.append(False)
+                continue
+            parts = urlsplit(urljoin(B2B_CENTER_LIST_URL, raw_detail))
+            foreign.append(parts.scheme == 'https'
+                and parts.hostname in KNOWN_FOREIGN_AGGREGATE_HOSTS
+                and parts.username is None and parts.password is None
+                and parts.port in (None, 443) and not parts.fragment)
+        if demands and all(foreign):
+            continue
+        # Some genuine public B2B cards omit the Organization entity. Keep
+        # customer unknown; never fabricate one or infer it from other cards.
+        # Multiple organizations/demands still fail closed as ambiguous.
+        if len(organizations) > 1 or len(demands) != 1:
             raise SourceError('B2B-Center unexpected procurement card structure.')
         demand = demands[0]
         if _property(demand, 'businessFunction') != 'http://purl.org/goodrelations/v1#Buy':
@@ -155,8 +180,16 @@ def parse_b2b_center_listing(payload: bytes, *, limit=100) -> list[TenderNotice]
         upstream, number = None, None
         if references:
             raw, label = next(iter(references))
-            upstream = _safe_url(raw)
-            number = label.removeprefix('Закупка №').removesuffix(' в ЕИС')
+            # Aggregate cross-platform references are OPTIONAL provenance.
+            # Some real cards include tracker fragments from third parties.
+            # Do not accept unsafe external URLs or infer EIS identity from
+            # them; retain the authoritative validated B2B detail URL.
+            try:
+                upstream = _safe_url(raw)
+            except SourceError:
+                upstream = None
+            if upstream is not None:
+                number = label.removeprefix('Закупка №').removesuffix(' в ЕИС')
         host = urlsplit(upstream).hostname if upstream else None
         origin = 'aggregated' if host and host not in B2B_CENTER_HOSTS else 'unknown'
         # Original reference is retained in the base contract as well as provenance,
@@ -181,7 +214,8 @@ def parse_b2b_center_listing(payload: bytes, *, limit=100) -> list[TenderNotice]
         price = next(iter(prices)) if len(prices) == 1 and 0 not in prices else None
         notice = B2BCenterNotice(
             source='b2b_center', external_id=external_id, title=title, url=url,
-            tender_number=number, customer=_property(organizations[0], 'name'),
+            tender_number=number,
+            customer=(_property(organizations[0], 'name') if organizations else None),
             published_at=_date(_property(demand, 'validFrom')),
             deadline=_date(_property(demand, 'validThrough')),
             initial_price=price, currency='RUB' if price is not None else None,

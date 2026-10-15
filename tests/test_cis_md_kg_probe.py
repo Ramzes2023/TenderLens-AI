@@ -68,6 +68,9 @@ class PublicProbeTests(unittest.TestCase):
         out = describe_payload("md_mtender_known_detail", json.dumps(doc).encode(), "application/json")
         self.assertTrue(out["verified"])
         self.assertEqual(out["records_with_title"], 1)
+        compiled = {"records": [{"compiledRelease": {"tender": {"title": "Servicii medicale"}}}]}
+        self.assertTrue(describe_payload("md_mtender_known_detail", json.dumps(compiled).encode(), "application/json")["verified"])
+        self.assertTrue(describe_payload("md_alternative_index", json.dumps({"data": [{"ocid": "ocds-b3wdp1-MD-1770204825070"}]}).encode(), "application/json")["verified"])
         self.assertFalse(describe_payload("md_mtender_known_detail", b"<html></html>", "text/html")["verified"])
 
     def test_kg_listing_needs_actual_tender_links(self):

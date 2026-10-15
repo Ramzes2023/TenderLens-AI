@@ -69,7 +69,7 @@ async def _one(key: str, url: str) -> dict:
             # Aggregate evidence only; never dump raw untrusted page content.
             needle = rf"/en/database/procurement/{section}/articles/"
             item["tender_links"] = len(re.findall(needle, text))
-            item["table_rows"] = len(re.findall(r"<tr\\b", text, re.IGNORECASE))
+            item["table_rows"] = len(re.findall(r"<tr\b", text, re.IGNORECASE))
             try:
                 item["records"] = len(parse_jetro_html(payload, source=key, limit=5))
                 item["stage"] = "PARSER_RETURNED_NOTICES"
@@ -79,7 +79,7 @@ async def _one(key: str, url: str) -> dict:
         item["stage"] = "TIMEOUT"
     except SourceError as error:
         message = str(error)
-        match = re.fullmatch(r"Asian procurement upstream HTTP ([1-5][0-9][0-9])\\.", message)
+        match = re.fullmatch(r"Asian procurement upstream HTTP ([1-5][0-9][0-9])\.", message)
         if match:
             item["stage"] = "UPSTREAM_HTTP_" + match.group(1)
         elif message == "Asian procurement network/TLS unavailable.":

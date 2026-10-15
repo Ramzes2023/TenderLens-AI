@@ -233,7 +233,15 @@ def test_tenant_authenticated_discovery_reads_am_tj_persisted_snapshots_without_
         helper.setUp()
     try:
         helper.as_account(helper.owner)
-        helper.create_company('CIS procurement acceptance')
+        # The real company pre-filter must match both notice titles. Its
+        # default test keyword is "aluminium", which correctly excludes both.
+        profile = helper.profile('CIS procurement acceptance', 'Pump')
+        profile['product_keywords'] = ['Pump', 'Насос']
+        profile['search_keywords'] = ['Pump', 'Насос']
+        created = helper.client.post(helper.base('/companies'), json={
+            'name': 'CIS procurement acceptance', 'profile': profile,
+        })
+        assert created.status_code == 201, created.text
         database = Database(DatabaseSettings('', helper.path))
         database.migrate()
         store = OpportunityRepository(database)

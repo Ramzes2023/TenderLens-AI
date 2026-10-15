@@ -18,7 +18,7 @@ def notice(source="eis", url=None, number="0123456789012"):
 
 def test_exact_official_44_and_223_identity_candidates():
     assert SOURCES == ("eis", "eis_223")
-    assert MAX_DETAIL_REQUESTS == 2
+    assert MAX_DETAIL_REQUESTS == 6
     assert detail_candidate(notice(), "eis")[1] == "0123456789012"
     n = notice(source="eis_223", number=None,
                url=("https://zakupki.gov.ru/223/purchase/public/purchase/"
@@ -83,6 +83,8 @@ def test_no_detail_proof_from_rss_or_empty_body():
 
 
 @pytest.mark.parametrize("statuses,failures,expected", [
+    ([404, 404], ["CONNECTOR_TRANSPORT"], "OFFICIAL_DETAIL_HTTP_404"),
+    ([404, 200], ["CONNECTOR_TRANSPORT"], "SOME_OFFICIAL_DETAILS_HTTP_404"),
     ([302], ["CONNECTOR_TRANSPORT"], "REDIRECT_NOT_FOLLOWED"),
     ([403], ["CONNECTOR_TRANSPORT"], "ACCESS_RESTRICTED"),
     ([429], ["CONNECTOR_TRANSPORT"], "REMOTE_RATE_LIMIT_OR_SERVER_ERROR"),
@@ -112,3 +114,41 @@ def test_detail_failure_codes_exclude_exception_messages_and_urls():
     assert detail_failure_code(RuntimeError(secret)) == "OTHER_FAILURE"
     assert secret not in detail_failure_code(RuntimeError(secret))
     assert detail_failure_code(TimeoutError(secret)) == "TimeoutError"
+
+
+def test_diverse_44fz_routes_checked_before_repeated_ea20():
+    from scripts.ci_ru_eis_detail_identity import (
+        select_diverse_routes, MAX_DETAIL_REQUESTS,
+    )
+
+    def route(name, number):
+        return (f"https://zakupki.gov.ru/epz/order/notice/{name}/view/"
+                f"common-info.html?regNumber={number}", number)
+
+    items = [
+        route("ea20", "0123456789012"),
+        route("ea20", "0123456789013"),
+        route("zk20", "0123456789014"),
+        route("ea20", "0123456789015"),
+        route("ok20", "0123456789016"),
+        route("zk20", "0123456789017"),
+        route("ea20", "0123456789018"),
+    ]
+    sample = select_diverse_routes(items)
+    assert len(sample) == MAX_DETAIL_REQUESTS == 6
+    assert [url.split("/notice/")[1].split("/")[0]
+            for url, _ in sample[:3]] == ["ea20", "zk20", "ok20"]
+    assert sample[3:] == [items[1], items[3], items[5]]
+
+
+def test_223fz_sample_keeps_original_rss_urls_and_respects_request_limit():
+    from scripts.ci_ru_eis_detail_identity import (
+        select_diverse_routes, MAX_DETAIL_REQUESTS,
+    )
+    items = [
+        (f"https://zakupki.gov.ru/223/purchase/public/purchase/info/"
+         f"common-info.html?regNumber={i:013d}", str(i))
+        for i in range(1, 11)
+    ]
+    assert select_diverse_routes(items) == items[:MAX_DETAIL_REQUESTS]
+    assert select_diverse_routes(items, limit=0) == []

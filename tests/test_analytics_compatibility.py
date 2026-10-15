@@ -93,7 +93,7 @@ def test_fresh_schema_and_unknown_upgrade_fail_without_mutation(tmp_path):
     database = Database(DatabaseSettings('', tmp_path / 'fresh.db'))
     database.migrate()
     with closing(database.connect()) as conn, conn:
-        assert conn.execute('SELECT COUNT(*) FROM app_schema_migrations').fetchone()[0] == 13
+        assert conn.execute('SELECT COUNT(*) FROM app_schema_migrations').fetchone()[0] == 14
         conn.execute("UPDATE schema_meta SET value='future' WHERE key='schema_version'")
         before = conn.execute('SELECT * FROM app_schema_migrations').fetchall()
     with pytest.raises(StorageError, match='Unsupported legacy'):

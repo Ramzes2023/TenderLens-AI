@@ -12,7 +12,7 @@ from dataclasses import replace
 import httpx
 
 from app.database.backend import StorageError, StorageIntegrityError
-from app.jobs.models import JobScope
+from app.jobs.models import JobScope, LeaseLostError
 from app.jobs.worker import PermanentJobError, RetryableJobError
 from .eis_rss import SourceError
 from .transport_errors import SourceTransportError
@@ -171,7 +171,10 @@ class ConnectorSyncHandler:
                 continue
             seen.add(notice.identity)
             try:
-                inserted = self.opportunities.upsert(notice, payload['connector_version'])
+                inserted = self.opportunities.upsert_fenced(
+                    notice, payload['connector_version'], getattr(context, 'fenced_write', None))
+            except LeaseLostError:
+                raise RetryableJobError('Connector lease lost.') from None
             except (StorageIntegrityError, sqlite3.IntegrityError):
                 raise PermanentJobError('Invalid connector storage data.') from None
             except (StorageError, sqlite3.OperationalError):

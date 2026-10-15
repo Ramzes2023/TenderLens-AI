@@ -141,6 +141,19 @@ def test_jetro_national_link_and_date_retain_no_fabricated_deadline():
     assert notice.deadline is None
 
 
+def test_awards_and_noncompetitive_jetro_notices_do_not_create_tenders():
+    award = RSS.replace(b"Public contract for engineering services",
+                        b"Contract Award for engineering services")
+    with pytest.raises(SourceError, match="no verifiable"):
+        parse_asia_rss(award, source="hk_ha_leasing")
+    comment = JETRO.replace(
+        b"Notice of Procurement (Goods &amp; Services)",
+        b"Notice of request for comments",
+    )
+    with pytest.raises(SourceError, match="no verifiable"):
+        parse_jetro_html(comment, source="jp_jetro_national")
+
+
 def test_jetro_local_is_separate_feed_and_rejects_national_rows():
     with pytest.raises(SourceError, match="no verifiable"):
         parse_jetro_html(JETRO, source="jp_jetro_local")

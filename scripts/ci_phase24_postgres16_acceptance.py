@@ -38,6 +38,14 @@ def main() -> int:
         print("PG_CI=REFUSED: inherited libpq overrides")
         return 2
 
+    # Running a scripts/*.py file sets sys.path[0] to scripts/, not repo root.
+    # Keep imports anchored to this exact checked-out repository.
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    if not (root / "tests" / "postgresql_phase24s2b3_cases.py").is_file():
+        print("PG_CI=REFUSED: expected in-repository integration cases missing")
+        return 2
+    sys.path.insert(0, str(root))
     from psycopg import connect, sql
     from tests.postgresql_phase24s2b3_cases import run_cases
 

@@ -410,6 +410,37 @@ def test_jetro_fallback_fails_closed_when_both_queries_are_empty(monkeypatch):
                      JETRO_SEARCH_URLS["jp_jetro_local"]]
 
 
+def test_asia_queue_batch_is_dry_run_by_default(monkeypatch, capsys):
+    from app.sources import asia_enqueue
+
+    monkeypatch.delenv("VALYQON_ASIA_SOURCES_ENABLED", raising=False)
+    assert asia_enqueue.main([]) == 0
+    import json
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["mode"] == "dry_run"
+    assert payload["enqueued"] == 0
+    assert len(payload["source_ids"]) == 6
+    assert payload["production_changed"] is False
+
+
+def test_asia_queue_batch_requires_explicit_flag_before_database(monkeypatch):
+    from app.sources import asia_enqueue
+    monkeypatch.delenv("VALYQON_ASIA_SOURCES_ENABLED", raising=False)
+    with pytest.raises(ValueError, match="not explicitly enabled"):
+        asia_enqueue.validate_batch(build_source_catalog(_settings()))
+
+
+def test_asia_queue_batch_validates_six_worker_routes(monkeypatch):
+    from app.sources import asia_enqueue
+    monkeypatch.setenv("VALYQON_ASIA_SOURCES_ENABLED", "1")
+    catalog = build_source_catalog(_settings())
+    sources = asia_enqueue.validate_batch(catalog)
+    assert len(sources) == len(set(sources)) == 6
+    assert set(sources) == {*ASIA_RSS_FEEDS, *JETRO_LISTS}
+    assert all(key in HOSTS for key in sources)
+
+
 def test_bounded_timeout_and_unknown_source_fail_closed():
     with pytest.raises(ValueError):
         AsiaPublicSource("private_webhook")

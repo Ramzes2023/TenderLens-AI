@@ -1,0 +1,49 @@
+name: CIS trusted self-hosted runner diagnostic
+
+# This is an OWNER-CONTROLLED push branch, NEVER pull_request or pull_request_target.
+# No checkout or untrusted repository code runs in this diagnostic.
+on:
+  push:
+    branches:
+      - fix/cis-postgres16-fencing-gate-20261015
+    paths:
+      - .github/workflows/cis-selfhosted-trusted-probe.yml
+
+permissions: {}
+
+concurrency:
+  group: valyqon-cis-trusted-runner-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  inspect-runner:
+    name: Trusted runner environment only (no PR code)
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 5
+    steps:
+      - name: Verify Linux tools without checkout or secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "CIS_RUNNER_PROBE=START"
+          echo "OS=$(uname -s)"
+          echo "ARCH=$(uname -m)"
+          if command -v python3 >/dev/null; then python3 --version; else echo "PYTHON3=MISSING"; fi
+          if command -v git >/dev/null; then git --version; else echo "GIT=MISSING"; fi
+          if command -v docker >/dev/null; then
+            docker --version
+            if docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; then
+              echo "DOCKER_DAEMON=READY"
+            else
+              echo "DOCKER_DAEMON=UNAVAILABLE"
+            fi
+          else echo "DOCKER_CLI=MISSING"; fi
+          if command -v psql >/dev/null; then psql --version; else echo "PSQL_CLIENT=MISSING"; fi
+          if command -v python3 >/dev/null; then
+            python3 - <<'PY'
+          import importlib.util
+          for name in ("pytest", "psycopg", "httpx", "fastapi"):
+              print("PYTHON_MODULE_" + name.upper() + "=" + ("PRESENT" if importlib.util.find_spec(name) else "MISSING"))
+          PY
+          fi
+          echo "CIS_RUNNER_PROBE=PASS"

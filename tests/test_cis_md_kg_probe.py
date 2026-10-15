@@ -96,6 +96,13 @@ class PublicProbeTests(unittest.TestCase):
         self.assertEqual(out["ocid_count"], 1)
         self.assertFalse(describe_payload("md_agency_listing", b"<table>No notices</table>", "text/html")["verified"])
 
+    def test_public_mtender_portal_only_counts_structured_ocids(self):
+        data = b'<article>ocds-b3wdp1-MD-1787565971866 Public bulletin</article>'
+        out = describe_payload("md_public_portal", data, "text/html")
+        self.assertTrue(out["verified"])
+        self.assertEqual(out["ocid_count"], 1)
+        self.assertFalse(describe_payload("md_public_portal", b'<html>empty</html>', "text/html")["verified"])
+
     def test_probe_is_bounded_and_has_no_fallback(self):
         opener = Opener(json.dumps({"data": [{"ocid": "ocds-b3wdp1-MD-1770204825070"}]}).encode())
         result = probe("md_mtender_index", "https://public.mtender.gov.md/tenders/", opener)

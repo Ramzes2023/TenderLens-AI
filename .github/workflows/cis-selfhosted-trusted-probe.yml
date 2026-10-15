@@ -13,7 +13,7 @@ permissions: {}
 
 concurrency:
   group: valyqon-cis-trusted-runner-diagnostic
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   inspect-runner:

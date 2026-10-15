@@ -1,0 +1,62 @@
+"""One strictly verified EIS public request with GitHub Linux system CA roots.
+
+Operator Windows system-store trust is a separate, unproven environment.
+This script never relaxes certificates, redirects, network policy or identity.
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import ssl
+
+from app.sources.eis_rss import (
+    SourceError, build_eis_rss_url, parse_eis_feed, verify_eis_feed_law,
+)
+from app.sources.http import FetchPolicy, bounded_fetch, source_client
+
+
+async def run():
+    status = {"state": "BLOCKED", "http_status": None, "records": 0,
+              "error_type": None, "strict_tls": True, "hostname_check": True}
+    context = ssl.create_default_context()
+    status["strict_tls"] = context.verify_mode == ssl.CERT_REQUIRED
+    status["hostname_check"] = context.check_hostname
+    if not status["strict_tls"] or not status["hostname_check"]:
+        status["state"] = "INVALID_CA_CONFIGURATION"
+        return status
+
+    async def capture(response):
+        status["http_status"] = response.status_code
+
+    try:
+        with bounded_fetch(FetchPolicy(frozenset({"zakupki.gov.ru"}), 1,
+                                       max_bytes=5 * 1024 * 1024)):
+            async with source_client(
+                verify=context, trust_env=False, follow_redirects=False,
+                timeout=12, event_hooks={"response": [capture]},
+            ) as client:
+                response = await asyncio.wait_for(
+                    client.get(build_eis_rss_url("поставка")), timeout=18)
+                response.raise_for_status()
+                verify_eis_feed_law(response.content, "44-FZ")
+                status["records"] = len(parse_eis_feed(response.content))
+                status["state"] = (
+                    "PUBLIC_LAW_VERIFIED_NOTICE_FEED" if status["records"]
+                    else "EMPTY_OR_UNVERIFIED"
+                )
+    except Exception as error:
+        status["error_type"] = type(error).__name__
+    return status
+
+
+def main():
+    print("RU_EIS_LINUX_SYSTEM_CA=" + json.dumps(
+        asyncio.run(run()), ensure_ascii=False, separators=(",", ":"
+    )), flush=True)
+    print("WINDOWS_CA_VERIFIED=NO")
+    print("NO_TLS_VERIFICATION_BYPASS=YES")
+    print("PRODUCTION_CHANGED=NO")
+
+
+if __name__ == "__main__":
+    main()

@@ -6,8 +6,10 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Iterable
 
 from .austender_rss import AusTenderRssSource
+from .b2b_center import B2BCenterSource
 from .canada_buys_dataset import CanadaBuysDatasetSource
 from .eis_rss import EisRssSource, SourceError
+from .eis_223_rss import Eis223RssSource
 from .india_cppp import IndiaCpppSource
 from .kz_goszakup import KazakhstanGoszakupApiSource
 from .multi import MultiSourceFetcher, MultiSourceFetchReport
@@ -93,8 +95,10 @@ class SourceCatalog:
                 registration = replace(registration, source=source.for_search_terms(terms))
 
             if (
-                registration.key == "eis"
+                registration.key in {"eis", "eis_223"}
                 and registration.enabled
+                and (registration.key == "eis" or registration.capabilities.keyword_search
+                     or getattr(source, "local_keyword_search", False))
                 and hasattr(
                     source,
                     "for_search_terms",
@@ -157,6 +161,8 @@ def build_source_catalog(
         timeout=timeout,
         ca_bundle_file=settings.ca_bundle_file,
         name="eis",
+        direct=settings.eis_direct_enabled,
+        system_trust=settings.eis_system_trust_enabled,
     )
 
     sam_source = (
@@ -384,6 +390,42 @@ def build_source_catalog(
             ),
         ]
     )
+
+    # Russian connectors are opt-in. Do not enable unverified live adapters.
+    if settings.eis_223_configured:
+        registry.register(SourceRegistration(
+            key="eis_223",
+            display_name="EIS 223-FZ",
+            source=Eis223RssSource(
+                urls=settings.eis_223_rss_urls,
+                timeout=timeout,
+                ca_bundle_file=settings.ca_bundle_file,
+                direct=settings.eis_direct_enabled,
+                system_trust=settings.eis_system_trust_enabled,
+            ),
+            transport=SourceTransport.RSS,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url="https://zakupki.gov.ru/",
+            official=True,
+            enabled=True,
+            capabilities=SourceCapabilities(
+                keyword_search=settings.eis_223_profile_feeds_enabled
+            ),
+        ))
+    if settings.b2b_center_enabled:
+        registry.register(SourceRegistration(
+            key="b2b_center",
+            display_name="B2B-Center",
+            source=B2BCenterSource(timeout=timeout),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url="https://www.b2b-center.ru/",
+            official=False,
+            enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
 
     return SourceCatalog(
         registry=registry,

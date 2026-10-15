@@ -17,6 +17,13 @@ from .opportunities import validate_notice
 
 B2B_CENTER_LIST_URL = 'https://www.b2b-center.ru/search/'
 B2B_CENTER_HOSTS = frozenset({'www.b2b-center.ru'})
+# The public aggregate search mixes other procurement platforms into its feed.
+# These are NOT B2B-Center notices; do not fetch, normalize or store them as B2B.
+# All other external hosts, including lookalikes, remain fail-closed.
+KNOWN_FOREIGN_AGGREGATE_HOSTS = frozenset({
+    'www.rosatom.rts-tender.ru', 'www.rts-tender.ru', 'otc.ru', 'www.otc.ru',
+    'zakupki.gov.ru',
+})
 MAX_BYTES = 2 * 1024 * 1024
 
 
@@ -138,6 +145,21 @@ def parse_b2b_center_listing(payload: bytes, *, limit=100) -> list[TenderNotice]
                          if node.attrs.get('itemtype') == 'https://schema.org/Organization']
         demands = [node for node in card.walk()
                    if node.attrs.get('itemtype') == 'https://schema.org/Demand']
+        # Ignore explicitly known *other platforms* in the aggregate listing.
+        # No HTTP requests to foreign hosts; never label their cards as B2B.
+        foreign = []
+        for candidate in demands:
+            raw_detail = _property(candidate, 'url', 'link')
+            if not raw_detail or '\\' in raw_detail or any(ord(ch) <= 32 for ch in raw_detail):
+                foreign.append(False)
+                continue
+            parts = urlsplit(urljoin(B2B_CENTER_LIST_URL, raw_detail))
+            foreign.append(parts.scheme == 'https'
+                and parts.hostname in KNOWN_FOREIGN_AGGREGATE_HOSTS
+                and parts.username is None and parts.password is None
+                and parts.port in (None, 443) and not parts.fragment)
+        if demands and all(foreign):
+            continue
         if len(organizations) != 1 or len(demands) != 1:
             raise SourceError('B2B-Center unexpected procurement card structure.')
         demand = demands[0]

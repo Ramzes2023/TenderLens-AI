@@ -1,0 +1,37 @@
+name: CIS Moldova and Kyrgyzstan public source verification
+
+on:
+  push:
+    branches:
+      - research/cis-md-kg-live-probes-20261015
+    paths:
+      - scripts/cis_md_kg_public_probe.py
+      - tests/test_cis_md_kg_probe.py
+      - .github/workflows/cis-md-kg-public-verification.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check safety and payload contracts without network
+        run: python -m unittest discover -s tests -p 'test_cis_md_kg_probe.py' -v
+
+  public-source-observation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify official public listings without bypassing TLS or redirects
+        run: python -B scripts/cis_md_kg_public_probe.py --require-live

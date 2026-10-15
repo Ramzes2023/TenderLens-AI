@@ -9,6 +9,7 @@ from __future__ import annotations
 from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime
+from html.parser import HTMLParser
 import json
 import math
 import re
@@ -37,6 +38,38 @@ def _str(value, *, max_length: int = 1000, required: bool = False):
     if "\x00" in value or re.search(r"<\s*/?\s*[a-zA-Z][^>]*>", value):
         raise ValueError("Invalid public text")
     return value.strip()
+
+
+class _PlainDescription(HTMLParser):
+    """Convert public explanatory markup to inert text, excluding active tags."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self.blocked = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() in {"script", "style", "iframe", "object", "svg", "template"}:
+            self.blocked += 1
+
+    def handle_endtag(self, tag):
+        if tag.lower() in {"script", "style", "iframe", "object", "svg", "template"}:
+            self.blocked = max(0, self.blocked - 1)
+
+    def handle_data(self, data):
+        if self.blocked == 0:
+            self.parts.append(data)
+
+
+def _summary(value):
+    if value is None:
+        return None
+    if type(value) is not str or len(value) > 20000 or "\\x00" in value:
+        raise ValueError("Invalid public description")
+    parser = _PlainDescription()
+    parser.feed(value)
+    parser.close()
+    text = " ".join(" ".join(parser.parts).split())
+    return _str(text[:4000], max_length=4000) if text else None
 
 
 def _date(value):
@@ -99,7 +132,7 @@ def parse_listing(payload: bytes) -> list[TenderNotice]:
             customer=customer,
             initial_price=amount,
             currency=currency,
-            summary=_str(row.get("description"), max_length=4000),
+            summary=_summary(row.get("description")),
         )
         validate_notice(notice, SOURCE_ID)
         out.append(notice)

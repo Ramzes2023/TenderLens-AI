@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from datetime import datetime, timezone
 
 from .asia_public import ASIA_RSS_FEEDS, JETRO_LISTS
 from .ingestion import connector_version, sync_window, validate_payload
@@ -16,11 +17,11 @@ from .ingestion import connector_version, sync_window, validate_payload
 SOURCES = (*ASIA_RSS_FEEDS, *JETRO_LISTS)
 
 
-def validate_batch(catalog) -> tuple[str, ...]:
+def validate_batch(catalog, *, now=None) -> tuple[str, ...]:
     """Validate all six source IDs before opening the job queue for writes."""
     if os.environ.get("VALYQON_ASIA_SOURCES_ENABLED", "").strip() != "1":
         raise ValueError("Asian procurement sources are not explicitly enabled.")
-    window = sync_window()
+    window = sync_window(now)
     for source_id in SOURCES:
         validate_payload(
             {"schema": 1, "source_id": source_id, "sync_window": window,
@@ -58,14 +59,16 @@ def main(argv=None) -> int:
         # Fail closed BEFORE opening the DB if source activation/registry
         # does not match the exact operator-approved six-source contract.
         catalog = build_source_catalog(load_monitoring_settings())
-        validated = validate_batch(catalog)
+        # Pin a single UTC instant to prevent a mid-batch UTC-hour rollover.
+        now = datetime.now(timezone.utc)
+        validated = validate_batch(catalog, now=now)
         database = Database(load_database_settings())
         jobs = JobRepository(database, load_job_settings())
         jobs.initialize()
         service = ConnectorSyncService(JobService(jobs), catalog)
         queued = []
         for source_id in validated:
-            job = service.enqueue(source_id)
+            job = service.enqueue(source_id, now=now)
             queued.append({"source_id": source_id, "job_id": job.id})
         print(json.dumps({
             "mode": "enqueue", "source_count": len(queued),

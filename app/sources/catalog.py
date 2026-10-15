@@ -5,6 +5,7 @@ import os
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Iterable
 
+from .asia_public import ASIA_RSS_FEEDS, JETRO_LISTS, AsiaPublicSource
 from .austender_rss import AusTenderRssSource
 from .b2b_center import B2BCenterSource
 from .canada_buys_dataset import CanadaBuysDatasetSource
@@ -390,6 +391,31 @@ def build_source_catalog(
             ),
         ]
     )
+
+    # Staged Asian sources are intentionally excluded from default operations.
+    # Enable only after live network → normalized notice → isolated DB acceptance.
+    if os.environ.get("VALYQON_ASIA_SOURCES_ENABLED", "").strip() == "1":
+        for key, url in (*ASIA_RSS_FEEDS.items(), *JETRO_LISTS.items()):
+            hong_kong = key.startswith("hk_")
+            registry.register(SourceRegistration(
+                key=key,
+                display_name={
+                    "hk_ha_works": "Hong Kong Housing Authority — works and services",
+                    "hk_ha_leasing": "Hong Kong Housing Authority — property tenders",
+                    "hk_emsd_tenders": "Hong Kong EMSD — tender notices",
+                    "hk_emsd_consultancy": "Hong Kong EMSD — consultancy invitations",
+                    "jp_jetro_national": "JETRO Japan — national procurement",
+                    "jp_jetro_local": "JETRO Japan — local procurement",
+                }[key],
+                source=AsiaPublicSource(name=key, timeout=timeout),
+                transport=SourceTransport.RSS if hong_kong else SourceTransport.HTML,
+                jurisdictions=("HK",) if hong_kong else ("JP",),
+                languages=("en",),
+                homepage_url=url,
+                official=True,
+                enabled=True,
+                capabilities=SourceCapabilities(),
+            ))
 
     # Russian connectors are opt-in. Do not enable unverified live adapters.
     if settings.eis_223_configured:

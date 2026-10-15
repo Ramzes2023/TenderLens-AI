@@ -1,0 +1,59 @@
+name: Phase 24 PostgreSQL 16 Acceptance
+
+on:
+  push:
+    branches:
+      - test/phase24-postgres16-acceptance-20261015
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/postgresql-16-acceptance.yml'
+      - 'scripts/ci_phase24_postgres16_acceptance.py'
+      - 'tests/postgresql_phase24s2b3_cases.py'
+      - 'scripts/validate_phase24s2b3_postgresql.py'
+      - 'app/database/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase24-postgres16-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  real-postgresql-16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: valyqon_ci
+          POSTGRES_PASSWORD: only-for-disposable-github-postgres16-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U valyqon_ci -d postgres -h 127.0.0.1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+      VALYQON_DATABASE_REQUIRE_POSTGRES: 'true'
+      VALYQON_PG_CI_CONTEXT: valyqon-phase24-postgres16-ephemeral-ci-v1
+      VALYQON_PG_CI_TEST_PASSWORD: only-for-disposable-github-postgres16-ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Verify acceptance runner compiles
+        run: python -m compileall -q scripts/ci_phase24_postgres16_acceptance.py tests/postgresql_phase24s2b3_cases.py
+      - name: Real PostgreSQL 16 migrations, quotas, concurrency, tenant isolation and jobs
+        run: python -B scripts/ci_phase24_postgres16_acceptance.py

@@ -37,9 +37,9 @@ JETRO_LISTS = {
 # fallback is accepted only if it yields verifiable linked procurement notices.
 JETRO_SEARCH_URLS = {
     "jp_jetro_national": JETRO_LISTS["jp_jetro_national"]
-    + "?_page=1&area=&classification1=&classification2=&classification3=&deadline=&entity=&from=&keyword=&to=&type=",
+    + "?_page=1&area=&classification1=&classification2=&classification3=&deadline=1&entity=&from=&keyword=&to=&type=",
     "jp_jetro_local": JETRO_LISTS["jp_jetro_local"]
-    + "?_page=1&local_area=&local_classification1=&local_classification2=&local_classification3=&local_deadline=&local_entity=&local_from=&local_keyword=&local_to=",
+    + "?_page=1&local_area=&local_classification1=&local_classification2=&local_classification3=&local_deadline=1&local_entity=&local_from=&local_keyword=&local_to=",
 }
 _MAX_BYTES = 1024 * 1024
 _CLEAN = re.compile(r"\s+")

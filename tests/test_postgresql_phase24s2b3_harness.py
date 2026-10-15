@@ -210,7 +210,7 @@ def test_close_error_redacted_and_not_success(monkeypatch, capsys):
 
 
 def test_repository_setup_offline_sqlite_smoke(tmp_path, monkeypatch):
-    """Check explicit repository configuration and migration 13 without dotenv."""
+    """Check explicit repository config and all current migrations without dotenv."""
     from app.database.backend import Database
     from app.database.config import DatabaseSettings
     from app.quotas import Limits, QuotaSettings
@@ -229,7 +229,10 @@ def test_repository_setup_offline_sqlite_smoke(tmp_path, monkeypatch):
         scope = JobScope(account.id, org.id)
         assert usage.finish(usage.admit(scope, "rag"))
         with closing(db.connect()) as conn:
-            assert conn.execute("SELECT MAX(version) FROM app_schema_migrations").fetchone()[0] == 13
+            from app.database.migrations import MIGRATIONS
+            assert conn.execute("SELECT MAX(version) FROM app_schema_migrations").fetchone()[0] == MIGRATIONS[-1].version
+            assert MIGRATIONS[12].domain == "synchronous_usage" and MIGRATIONS[12].version == 13
+            assert MIGRATIONS[13].domain == "source_observations" and MIGRATIONS[13].version == 14
     finally:
         db.close()
 

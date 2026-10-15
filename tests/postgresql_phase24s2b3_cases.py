@@ -36,9 +36,11 @@ def run_cases(parameters):
         with closing(db.connect()) as conn:
             rows = conn.execute("SELECT version,domain,checksum FROM app_schema_migrations ORDER BY version").fetchall()
             assert [tuple(row[i] for i in range(3)) for row in rows] == [(m.version, m.domain, m.checksum) for m in MIGRATIONS]
-            assert [m.version for m in MIGRATIONS] == list(range(1, 14))
+            assert [m.version for m in MIGRATIONS] == list(range(1, len(MIGRATIONS) + 1))
+            assert MIGRATIONS[12].version == 13 and MIGRATIONS[12].domain == "synchronous_usage"
+            assert MIGRATIONS[13].version == 14 and MIGRATIONS[13].domain == "source_observations"
             assert conn.execute("SELECT COUNT(*) FROM synchronous_usage").fetchone()[0] == 0
-        print("PASS: migrations 1-13, checksums and idempotent replay.")
+        print(f"PASS: migrations 1-{len(MIGRATIONS)}, checksums and idempotent replay.")
 
         def tenant():
             account = AuthRepository(db).create_account(uuid.uuid4().hex + "@example.test", "synthetic")

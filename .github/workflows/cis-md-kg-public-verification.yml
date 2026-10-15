@@ -8,6 +8,11 @@ on:
       - scripts/cis_md_kg_public_probe.py
       - tests/test_cis_md_kg_probe.py
       - .github/workflows/cis-md-kg-public-verification.yml
+  pull_request:
+    paths:
+      - scripts/cis_md_kg_public_probe.py
+      - tests/test_cis_md_kg_probe.py
+      - .github/workflows/cis-md-kg-public-verification.yml
   workflow_dispatch:
 
 permissions:

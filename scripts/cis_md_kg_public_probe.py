@@ -20,7 +20,7 @@ MAX_BODY = 512 * 1024
 TARGETS = {
     "md_mtender_index": "https://public.mtender.gov.md/tenders/",
     "md_mtender_known_detail": "https://public.mtender.gov.md/tenders/ocds-b3wdp1-MD-1770204825070",
-    "kg_portal_home": "https://zakupki.gov.kg/popp/",
+    "kg_portal_home": "https://zakupki.gov.kg/popp/home.xhtml",
     "kg_known_detail": "https://zakupki.gov.kg/popp/view/order/view.xhtml?id=561794973",
 }
 HOSTS = {"public.mtender.gov.md", "zakupki.gov.kg"}

@@ -100,3 +100,22 @@ def test_invalid_source_config_rejected():
         MikrotonTenderSource(name="eis")
     with pytest.raises(ValueError):
         asyncio.run(MikrotonTenderSource().fetch(limit=0))
+
+
+def test_public_description_html_becomes_safe_plain_text():
+    record = item()
+    record["description"] = (
+        '<p>Поставка листового алюминия</p><script>steal_secret()</script>'
+        '<div>Для предприятия &amp; цеха</div>'
+    )
+    result = parse_listing(envelope([record]))[0]
+    assert result.summary == "Поставка листового алюминия Для предприятия & цеха"
+    assert "steal_secret" not in result.summary
+    assert "<" not in result.summary
+
+
+def test_public_html_title_is_not_accepted_as_procurement_name():
+    record = item()
+    record["title"] = "<b>Закупка</b>"
+    with pytest.raises(ValueError):
+        parse_listing(envelope([record]))

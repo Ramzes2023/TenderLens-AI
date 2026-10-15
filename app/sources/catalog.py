@@ -13,6 +13,7 @@ from .eis_223_rss import Eis223RssSource
 from .india_cppp import IndiaCpppSource
 from .kz_goszakup import KazakhstanGoszakupApiSource
 from .multi import MultiSourceFetcher, MultiSourceFetchReport
+from .mikroton_tender import MikrotonTenderSource
 from .nz_gets_rss import NzGetsRssSource
 from .registry import (
     SourceCapabilities,
@@ -425,6 +426,23 @@ def build_source_catalog(
             official=False,
             enabled=True,
             capabilities=SourceCapabilities(),
+        ))
+
+    if settings.mikroton_tender_enabled:
+        registry.register(SourceRegistration(
+            key="mikroton_tender",
+            display_name="MikroTon Tender — public procurement API",
+            source=MikrotonTenderSource(timeout=min(timeout, 30)),
+            transport=SourceTransport.API,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url="https://tender.mt52.ru/",
+            official=False,
+            enabled=True,
+            capabilities=SourceCapabilities(
+                pagination=False, documents=False, keyword_search=False,
+                authentication_required=False,
+            ),
         ))
 
     return SourceCatalog(

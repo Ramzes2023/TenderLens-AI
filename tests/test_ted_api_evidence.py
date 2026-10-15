@@ -29,7 +29,7 @@ def test_pinned_capture_equals_sanitized_fixture():
     import hashlib
     import warnings
     raw_fixture = FIXTURE.read_bytes()
-    blob = b'blob ' + str(len(raw_fixture)).encode('ascii') + b'\\0' + raw_fixture
+    blob = b'blob ' + str(len(raw_fixture)).encode('ascii') + b'\0' + raw_fixture
     assert hashlib.sha1(blob).hexdigest() == '448b008588086cd03bf2ff50c8fa375e6d6ae5a8'
     data = json.loads(raw_fixture)
     assert data == sample()
@@ -41,7 +41,7 @@ def test_pinned_capture_equals_sanitized_fixture():
     assert data['removed_fields'] == ['notices[].links']
     tampered = raw_fixture.replace(b'392803-2016', b'392803-2017', 1)
     assert tampered != raw_fixture
-    assert hashlib.sha1(b'blob ' + str(len(tampered)).encode('ascii') + b'\\0' + tampered).hexdigest() != '448b008588086cd03bf2ff50c8fa375e6d6ae5a8'
+    assert hashlib.sha1(b'blob ' + str(len(tampered)).encode('ascii') + b'\0' + tampered).hexdigest() != '448b008588086cd03bf2ff50c8fa375e6d6ae5a8'
 
     directory = Path('.cache/phase24p33-ted-evidence')
     names = ('ted-api-v3.yaml', 'request.json', 'public-search-response.json')

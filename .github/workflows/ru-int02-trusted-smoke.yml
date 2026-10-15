@@ -1,0 +1,33 @@
+name: RU trusted INT-02 runner smoke
+
+# Never execute pull_request or pull_request_target code on this laptop.
+# This job deliberately does not check out any repository code.
+on:
+  push:
+    branches:
+      - infra/ru-int02-trusted-smoke-20261015
+    paths:
+      - .github/workflows/ru-int02-trusted-smoke.yml
+
+permissions: {}
+
+jobs:
+  ru-int02-trusted-connectivity:
+    if: github.repository == 'Ramzes2023/TenderLens-AI' && github.ref == 'refs/heads/infra/ru-int02-trusted-smoke-20261015'
+    runs-on: valyqon-int
+    timeout-minutes: 3
+    steps:
+      - name: Verify selected host without checkout, secrets or source execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = "VALYQON-INT-02"
+          test "$(id -un)" = "valyqon"
+          test "$(uname -s)" = "Linux"
+          if mountpoint -q /mnt/c; then
+            echo "SECURITY_FAIL: Windows C mounted"
+            exit 1
+          fi
+          git --version
+          python3 --version
+          echo "RU_INT02_TRUSTED_RUNNER_SMOKE=PASS"

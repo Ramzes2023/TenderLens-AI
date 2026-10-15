@@ -57,9 +57,13 @@ def run_acceptance(database_url):
     db = Database(parse_database_settings(database_url, require_postgres=True,
                                           pool_min=1, pool_max=5, pool_timeout=10))
 
+    from dataclasses import dataclass
+
+    @dataclass(frozen=True)
     class LocalFixtureSource:
-        def __init__(self, key, host):
-            self.name, self.host = key, host
+        name: str
+        host: str
+        max_pages: int = 2
 
         async def fetch(self, limit=20):
             return [TenderNotice(

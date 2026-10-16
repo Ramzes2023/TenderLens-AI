@@ -122,6 +122,8 @@ def inspect_index(raw, *, hostname=HOST):
                 "linked_detail_routes": len(approved),
                 "sample_cell_lengths": [min(300, len(v)) for v in cells[:12]],
                 "first_header": [v[:80] for v in table[0][0][:12]],
+                "public_date_values": [v[:90] for v in cells[3:5]],
+                "public_date_codepoints": [[ord(ch) for ch in v[:24]] for v in cells[3:5]],
                 "first_record_field_shapes": [{"date": bool(KZ_DATE.search(v)), "contains_organizer": "Организатор" in v, "notice_id": bool(ANNOUNCE_NUMBER.search(v)), "numeric": bool(re.fullmatch(r"[0-9\s,.]+", v.strip()))} for v in cells[:12]],
                 "sample_detail_paths": approved[:2],
             })

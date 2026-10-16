@@ -92,10 +92,14 @@ class SourceCatalog:
         for registration in self.registry.registrations():
             source = registration.source
 
-            if registration.key == 'ted' and registration.enabled and hasattr(source, 'for_search_terms'):
+            # Pass tenant search terms only to local stored snapshots; never
+            # send private profile keywords to uncontrolled source endpoints.
+            if registration.enabled and getattr(source, 'local_keyword_search', False) and hasattr(source, 'for_search_terms'):
+                registration = replace(registration, source=source.for_search_terms(terms))
+            elif registration.key == 'ted' and registration.enabled and hasattr(source, 'for_search_terms'):
                 registration = replace(registration, source=source.for_search_terms(terms))
 
-            if (
+            elif (
                 registration.key in {"eis", "eis_223"}
                 and registration.enabled
                 and (registration.key == "eis" or registration.capabilities.keyword_search

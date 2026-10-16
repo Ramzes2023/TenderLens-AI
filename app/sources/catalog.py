@@ -433,7 +433,7 @@ def build_source_catalog(
     if settings.tektorg_public_enabled:
         registry.register(SourceRegistration(
             key="tektorg",
-            display_name="TEK-Torg — public 223-FZ procurement",
+            display_name="TEK-Torg — public tenders (law not independently verified)",
             source=TekTorgPublicSource(timeout=min(timeout, 30)),
             transport=SourceTransport.HTML,
             jurisdictions=("RU",),

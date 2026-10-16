@@ -11,6 +11,7 @@ import pytest
 
 from app.database.backend import Database
 from app.database.config import DatabaseSettings
+from app.jobs import JobRepository
 from app.jobs.models import JobScope
 from app.jobs.worker import PermanentJobError
 from app.monitoring.config import MonitoringSettings
@@ -74,9 +75,15 @@ def test_worker_preserves_exact_two_list_requests_and_sqlite_query(tmp_path, mon
     try:
         opportunities = OpportunityRepository(db)
         opportunities.initialize()
+        jobs = JobRepository(db)
+        jobs.initialize()
+        jobs.enqueue('connector.sync.v1', _payload(), scope=JobScope())
+        claim = jobs.claim_next('mikroton-offline-lease-test')
+        assert claim is not None
         worker = ConnectorSyncHandler(catalog, opportunities, max_records=10)
         context = SimpleNamespace(
-            job=SimpleNamespace(scope=JobScope()), should_stop=False,
+            job=claim.job, should_stop=False,
+            fenced_write=lambda write: jobs.fenced_write(claim.job.id, claim.token, write),
         )
         first = worker(context, _payload())
         assert first["fetched_count"] == 1

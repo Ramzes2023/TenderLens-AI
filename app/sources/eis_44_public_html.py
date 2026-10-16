@@ -7,7 +7,7 @@ Uses only vetted application-scoped CA, strict official HTTPS, no TLS bypass.
 from __future__ import annotations
 
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from html.parser import HTMLParser
 from pathlib import Path
 import re
@@ -130,20 +130,30 @@ def parse_official_44_listing(payload, limit=MAX_RECORDS):
         if price_match:
             price = float(price_match.group(1).replace(" ", "").replace("\u00a0", "").replace(",", "."))
         date_match = re.search(r"\bРазмещено\s+([0-9]{2}\.[0-9]{2}\.[0-9]{4})(?:\s|$)", text)
-        # Do not invent a deadline, procurement object or independent detail.
-        notice = TenderNotice(
+        # Core law/ID/link are mandatory. Optional fields may be omitted on
+        # a malformed card, but can never invalidate the verified notice.
+        core = TenderNotice(
             source=SOURCE_ID,
             external_id=identity,
             tender_number=identity,
             title=title,
             url=url,
+        )
+        validate_notice(core, SOURCE_ID)
+        notice = replace(
+            core,
             customer=customer,
             initial_price=price,
             currency="RUB" if price is not None else None,
             published_at=date_match.group(1) if date_match else None,
             summary=text[:1400],
         )
-        validate_notice(notice, SOURCE_ID)
+        try:
+            validate_notice(notice, SOURCE_ID)
+        except (ValueError, TypeError, OverflowError):
+            # Fail closed on core provenance, never guess optional dates,
+            # amounts or buyer names from an inconsistent public card.
+            notice = core
         if identity in seen:
             if seen[identity] != notice:
                 raise ValueError("Conflicting EIS 44-FZ procurement identity")

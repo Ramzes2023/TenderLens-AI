@@ -50,6 +50,14 @@ class KazakhstanPublicHTMLContracts(unittest.TestCase):
         with self.assertRaises(SourceError):
             parse_kz_public_html(fixture().replace("2026-10-16 09:00", "2026-99-16 09:00"))
 
+    def test_real_official_dom_adjacent_date_and_time_text_nodes(self):
+        html = (fixture()
+                .replace("2026-10-16 09:00", "2026-10-1609:00:00")
+                .replace("2026-10-19 17:00", "2026-10-1917:00:00"))
+        notices = parse_kz_public_html(html)
+        self.assertEqual(len(notices), 5)
+        self.assertEqual(notices[0].deadline, "2026-10-19T17:00:00")
+
     def test_no_html_or_partial_fields_never_count_as_tenders(self):
         for bad in ("<html>Loading</html>", "<script>var tender=17804133;</script>",
                     "<table><tr><td>17804133-1</td></tr></table>"):

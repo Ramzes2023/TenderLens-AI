@@ -51,25 +51,25 @@ jobs:
               printf 'RU3_%s_HTTP=%s MIME=%s BYTES=%s\n' "$source" "$status" "$mime" "$size"
               if test "$source" = b2b && test "$status" = 200; then
                 python3 - "$path" <<'PY'
-import sys
-from html.parser import HTMLParser
-class Shape(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.listitems = 0
-        self.demands = 0
-    def handle_starttag(self, tag, attrs):
-        a = dict(attrs)
-        if tag == 'div' and a.get('itemtype') == 'https://schema.org/ListItem':
-            self.listitems += 1
-        if a.get('itemtype') == 'https://schema.org/Demand':
-            self.demands += 1
-p = Shape()
-with open(sys.argv[1], encoding='utf-8-sig') as f:
-    for line in f:
-        p.feed(line)
-print(f'RU3_B2B_HTML_SHAPES=LISTITEMS:{p.listitems},DEMANDS:{p.demands}')
-PY
+          import sys
+          from html.parser import HTMLParser
+          class Shape(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.listitems = 0
+                  self.demands = 0
+              def handle_starttag(self, tag, attrs):
+                  a = dict(attrs)
+                  if tag == 'div' and a.get('itemtype') == 'https://schema.org/ListItem':
+                      self.listitems += 1
+                  if a.get('itemtype') == 'https://schema.org/Demand':
+                      self.demands += 1
+          p = Shape()
+          with open(sys.argv[1], encoding='utf-8-sig') as f:
+              for line in f:
+                  p.feed(line)
+          print(f'RU3_B2B_HTML_SHAPES=LISTITEMS:{p.listitems},DEMANDS:{p.demands}')
+          PY
               fi
             else
               rc="$?"

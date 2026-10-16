@@ -6,7 +6,7 @@ mode="${1:-}"
 if [[ "$mode" != "postgres" && "$mode" != "regression" ]]; then
   echo "CIS_INT02=INVALID_MODE"; exit 2
 fi
-if [[ "${RUNNER_NAME:-}" != "VALYQON-INT-02" || "${GITHUB_ACTIONS:-}" != "true" || "${GITHUB_REPOSITORY:-}" != "Ramzes2023/TenderLens-AI" || "${GITHUB_EVENT_NAME:-}" != "push" || "${GITHUB_REF:-}" != "refs/heads/fix/cis-postgres16-fencing-gate-20261015" ]]; then
+if [[ "${RUNNER_NAME:-}" != "VALYQON-INT-02" || "${GITHUB_ACTIONS:-}" != "true" || "${GITHUB_REPOSITORY:-}" != "Ramzes2023/TenderLens-AI" || "${GITHUB_EVENT_NAME:-}" != "push" || "${GITHUB_REF:-}" != "refs/heads/integration/cis-am-tj-mainline-20261016" ]]; then
   echo "CIS_INT02=UNTRUSTED_RUN_CONTEXT"; exit 3
 fi
 if [[ -z "${GITHUB_WORKSPACE:-}" || ! -d "$GITHUB_WORKSPACE" ]]; then
@@ -60,7 +60,7 @@ docker run --rm --network "$network" --memory 4g --cpus 2 --pids-limit 256 \
   --env CI=true --env GITHUB_ACTIONS=true \
   --env GITHUB_REPOSITORY=Ramzes2023/TenderLens-AI \
   --env GITHUB_EVENT_NAME=push \
-  --env GITHUB_REF=refs/heads/fix/cis-postgres16-fencing-gate-20261015 \
+  --env GITHUB_REF=refs/heads/integration/cis-am-tj-mainline-20261016 \
   --env RUNNER_NAME=VALYQON-INT-02 \
   --env PYTHON_DOTENV_DISABLED=1 \
   --env PYTHONDONTWRITEBYTECODE=1 \

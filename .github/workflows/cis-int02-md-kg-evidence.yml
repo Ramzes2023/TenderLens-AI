@@ -1,0 +1,78 @@
+name: CIS INT-02 Moldova and Kyrgyzstan evidence
+on:
+  push:
+    branches:
+      - integration/cis-md-kg-evidence-20261016
+    paths:
+      - ".github/workflows/cis-int02-md-kg-evidence.yml"
+      - "scripts/cis_md_kg_public_probe.py"
+      - "tests/test_cis_md_kg_probe.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: valyqon-cis-md-kg-int02-evidence
+  cancel-in-progress: true
+
+jobs:
+  strict-offline-contract:
+    name: MD/KG strict offline evidence parser
+    runs-on: valyqon-int
+    timeout-minutes: 8
+    steps:
+      - name: Verify trusted branch and owner runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${RUNNER_NAME:-}" == "VALYQON-INT-02" ]]
+          [[ "${GITHUB_EVENT_NAME:-}" == "push" ]]
+          [[ "${GITHUB_REF:-}" == "refs/heads/integration/cis-md-kg-evidence-20261016" ]]
+          [[ -w /var/run/docker.sock ]]
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Offline strict source evidence tests (no network)
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth_dir=$(mktemp -d)
+          trap 'rm -rf "$auth_dir"' EXIT
+          chmod 700 "$auth_dir"
+          printf '%s\\n' '{"auths":{}}' > "$auth_dir/config.json"
+          chmod 600 "$auth_dir/config.json"
+          export DOCKER_CONFIG="$auth_dir"
+          docker pull --quiet python:3.12-slim >/dev/null
+          docker run --rm --network none --memory 512m --pids-limit 64 --cpus 1 \\
+            --cap-drop ALL --security-opt no-new-privileges \\
+            --mount "type=bind,source=${GITHUB_WORKSPACE},target=/workspace,readonly" \\
+            --workdir /workspace python:3.12-slim \\
+            python -B -m unittest discover -s tests -p test_cis_md_kg_probe.py -v
+
+  official-live-observation:
+    name: MD/KG official live listing evidence (fail closed)
+    needs: strict-offline-contract
+    runs-on: valyqon-int
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read-only official HTTPS listing probe
+        shell: bash
+        timeout-minutes: 7
+        run: |
+          set -euo pipefail
+          [[ "${RUNNER_NAME:-}" == "VALYQON-INT-02" ]]
+          [[ "${GITHUB_REF:-}" == "refs/heads/integration/cis-md-kg-evidence-20261016" ]]
+          auth_dir=$(mktemp -d)
+          trap 'rm -rf "$auth_dir"' EXIT
+          chmod 700 "$auth_dir"
+          printf '%s\\n' '{"auths":{}}' > "$auth_dir/config.json"
+          chmod 600 "$auth_dir/config.json"
+          export DOCKER_CONFIG="$auth_dir"
+          docker run --rm --network bridge --memory 512m --pids-limit 64 --cpus 1 \\
+            --cap-drop ALL --security-opt no-new-privileges \\
+            --mount "type=bind,source=${GITHUB_WORKSPACE},target=/workspace,readonly" \\
+            --workdir /workspace python:3.12-slim \\
+            python -B scripts/cis_md_kg_public_probe.py --require-live

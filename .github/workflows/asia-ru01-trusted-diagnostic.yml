@@ -219,3 +219,105 @@ jobs:
           print('ASIA_CANDIDATES_ARE_DISCOVERY_ONLY=YES')
           print('PRODUCTION_CHANGED=NO')
           PY
+
+      - name: Six public RSS to isolated SQLite and keyword search (not app integration)
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          for source in hk_ha_works hk_ha_leasing hk_emsd_tenders hk_emsd_consultancy hk_dsd_current hk_cedd_tenders; do
+            case "$source" in
+              hk_ha_works) url="https://www.housingauthority.gov.hk/en/rss/tenders.xml" ;;
+              hk_ha_leasing) url="https://www.housingauthority.gov.hk/en/rss/tender-notices-and-awards.xml" ;;
+              hk_emsd_tenders) url="https://www.emsd.gov.hk/filemanager/tendernotice/en/tender_notices.xml" ;;
+              hk_emsd_consultancy) url="https://www.emsd.gov.hk/filemanager/tendernotice/en/consultancy.xml" ;;
+              hk_dsd_current) url="https://www.dsd.gov.hk/Menu/EN/RSS/Current_Tenders.xml" ;;
+              hk_cedd_tenders) url="https://www.cedd.gov.hk/eng/rss/tender_notices_rss.xml" ;;
+            esac
+            status="$(curl --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 25 --max-filesize 1048576 --output "$tmp/$source" --write-out '%{http_code}' "$url")"
+            if test "$status" != 200; then
+              echo "ASIA_LIVE_GATE_${source}=HTTP_${status}"
+              exit 1
+            fi
+          done
+          python3 - "$tmp" <<'PY'
+          import hashlib
+          import re
+          import sqlite3
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          from urllib.parse import urljoin,urlsplit
+          root=Path(sys.argv[1])
+          official={
+            'hk_ha_works':('https://www.housingauthority.gov.hk/en/rss/tenders.xml','www.housingauthority.gov.hk'),
+            'hk_ha_leasing':('https://www.housingauthority.gov.hk/en/rss/tender-notices-and-awards.xml','www.housingauthority.gov.hk'),
+            'hk_emsd_tenders':('https://www.emsd.gov.hk/filemanager/tendernotice/en/tender_notices.xml','www.emsd.gov.hk'),
+            'hk_emsd_consultancy':('https://www.emsd.gov.hk/filemanager/tendernotice/en/consultancy.xml','www.emsd.gov.hk'),
+            'hk_dsd_current':('https://www.dsd.gov.hk/Menu/EN/RSS/Current_Tenders.xml','www.dsd.gov.hk'),
+            'hk_cedd_tenders':('https://www.cedd.gov.hk/eng/rss/tender_notices_rss.xml','www.cedd.gov.hk'),
+          }
+          def normalize(link,base,host):
+              if not link or any(ch.isspace() or ord(ch)<32 or ch=='\\' for ch in link):
+                  return None
+              if re.search(r'%(?:0[0-9a-f]|1[0-9a-f]|7f)',link,re.I):
+                  return None
+              try:
+                  parsed=urlsplit(urljoin(base,link))
+                  if parsed.hostname!=host or parsed.username or parsed.password or parsed.fragment or parsed.port not in (None,443):
+                      return None
+                  if parsed.scheme=='http' and parsed.port is None:
+                      normalized='https://'+parsed.netloc+parsed.path+('?' + parsed.query if parsed.query else '')
+                  elif parsed.scheme=='https':
+                      normalized=parsed.geturl()
+                  else:
+                      return None
+                  return normalized if len(normalized)<=2000 else None
+              except ValueError:
+                  return None
+          conn=sqlite3.connect(root/'asia-six.sqlite')
+          conn.execute('CREATE TABLE opportunities (source TEXT, external_id TEXT, title TEXT, url TEXT, PRIMARY KEY(source,external_id))')
+          passed=0
+          for source,(base,host) in official.items():
+              payload=(root/source).read_bytes()
+              if len(payload)>1048576 or b'<!DOCTYPE' in payload.upper() or b'<!ENTITY' in payload.upper():
+                  print('ASIA_LIVE_GATE_'+source+'=UNSAFE_XML')
+                  continue
+              try:
+                  doc=ET.fromstring(payload)
+              except ET.ParseError:
+                  print('ASIA_LIVE_GATE_'+source+'=MALFORMED_XML')
+                  continue
+              atom='{http://www.w3.org/2005/Atom}'
+              if doc.tag=='rss':
+                  items=[(x.findtext('title'),x.findtext('link')) for x in doc.findall('./channel/item')]
+              elif doc.tag==atom+'feed':
+                  items=[(x.findtext(atom+'title'),next((link.get('href') for link in x.findall(atom+'link') if link.get('rel','alternate')=='alternate'),None)) for x in doc.findall(atom+'entry')]
+              else:
+                  print('ASIA_LIVE_GATE_'+source+'=UNSUPPORTED_XML')
+                  continue
+              accepted=0
+              searched=0
+              for title,raw_url in items[:80]:
+                  title=' '.join((title or '').split())[:1000]
+                  url=normalize(raw_url,base,host)
+                  if not title or not url or re.search(r'\\b(?:contract awards?|tender awards?|awarded)\\b',title,re.I):
+                      continue
+                  identity=hashlib.sha256(url.encode()).hexdigest()[:40]
+                  conn.execute('INSERT OR IGNORE INTO opportunities VALUES(?,?,?,?)',(source,identity,title,url))
+                  token=next(iter(re.findall(r'[^\\W_]{3,}',title,flags=re.UNICODE)),title[:5])
+                  found=conn.execute('SELECT 1 FROM opportunities WHERE source=? AND external_id=? AND title LIKE ? AND url=?',(source,identity,'%'+token+'%',url)).fetchone()
+                  accepted+=1
+                  searched+=bool(found)
+              conn.commit()
+              saved=conn.execute('SELECT COUNT(*) FROM opportunities WHERE source=?',(source,)).fetchone()[0]
+              correct=saved>0 and searched==accepted
+              print('ASIA_LIVE_GATE_'+source+f'=NORM_{accepted};STORED_{saved};QUERIED_{searched};'+('PASS' if correct else 'FAIL'))
+              passed+=bool(correct)
+          print(f'ASIA_TRUSTED_6_LIVE_SQLITE_QUERY_VERIFIED={passed}/6')
+          print('APP_CONNECTOR_WORKER_NOT_EXECUTED=YES')
+          print('PRODUCTION_CHANGED=NO')
+          if passed!=6:
+              raise SystemExit(3)
+          PY

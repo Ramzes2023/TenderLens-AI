@@ -1,0 +1,37 @@
+name: RU-03 pinned GPB real worker acceptance
+on:
+  push:
+    branches: [ops/ru3-trusted-source-probe-20261016]
+    paths: [.github/workflows/ru03-pinned-gpb-worker.yml]
+permissions:
+  contents: read
+jobs:
+  gpb-live:
+    runs-on: valyqon-ru3
+    timeout-minutes: 13
+    steps:
+      - name: Confirm trusted isolated runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          test "$(id -un)" = valyqon
+          ! mountpoint -q /mnt/c
+      - name: Checkout reviewed immutable GPB adapter commit
+        uses: actions/checkout@v4
+        with:
+          ref: 5eecaf951f05a470495056cbb52584636951e1da
+          persist-credentials: false
+      - name: Offline source contracts and live worker-to-SQLite gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 5eecaf951f05a470495056cbb52584636951e1da
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          python3 -m venv "$dir/venv"
+          "$dir/venv/bin/python" -m pip install --disable-pip-version-check -r requirements-dev.txt >/dev/null
+          "$dir/venv/bin/python" -m pytest -q tests/test_ru_gpb_public.py
+          "$dir/venv/bin/python" -B -m scripts.ci_ru_gpb_public_worker
+          echo 'RU3_GPB_REAL_WORKER=PASS'
+          echo 'PRODUCTION_CHANGED=NO'

@@ -30,6 +30,23 @@ jobs:
           python3 --version
           curl --version | head -n 1
           echo "ASIA_TRUSTED_HOST_ONLY=PASS"
+      - name: Confirm Docker WSL integration on approved Asia runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = "VALYQON-RU-01"
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "ASIA_DOCKER_WSL_INTEGRATION=NOT_AVAILABLE"
+            exit 2
+          fi
+          if ! docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; then
+            echo "ASIA_DOCKER_WSL_INTEGRATION=ENGINE_UNREACHABLE"
+            exit 3
+          fi
+          docker version --format 'ASIA_DOCKER_CLIENT={{.Client.Version}};ASIA_DOCKER_SERVER={{.Server.Version}}'
+          docker info --format 'ASIA_DOCKER_OS={{.OSType}};ASIA_DOCKER_ARCH={{.Architecture}}'
+          echo "ASIA_DOCKER_WSL_INTEGRATION=PASS"
+          echo "ASIA_DOCKER_CONTAINER_EXECUTED=NO"
       - name: Preflight local isolation before any approved application tests
         shell: bash
         run: |

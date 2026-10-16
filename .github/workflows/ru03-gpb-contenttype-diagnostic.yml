@@ -29,7 +29,10 @@ jobs:
               NoRedirect())
           for headers in (
               {'Accept': 'text/html'},
-              {'Accept': 'text/html,application/xhtml+xml'},
+              {'Accept': '*/*'},
+              {'Accept': '*/*', 'User-Agent': 'curl/8.5.0'},
+              {'Accept': 'text/html', 'User-Agent': 'curl/8.5.0'},
+              {'Accept': '*/*', 'User-Agent': 'Mozilla/5.0'},
           ):
               try:
                   req=urllib.request.Request(URL,headers=headers)
@@ -39,6 +42,7 @@ jobs:
                           raise ValueError('noncanonical origin or response')
                       data=resp.read(LIMIT+1)
                       head=data[:200].lstrip().lower()
+                      print('RU3_GPB_HEADERS='+repr(headers))
                       print('RU3_GPB_URL_CANONICAL=YES')
                       print('RU3_GPB_STATUS=200')
                       print('RU3_GPB_CONTENT_TYPE='+repr(resp.headers.get('Content-Type','')[:100]))
@@ -51,6 +55,7 @@ jobs:
           dir="$(mktemp -d)"
           trap 'rm -rf "$dir"' EXIT
           curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 20 --max-filesize 1800000 --output "$dir/listing" --write-out 'RU3_GPB_CURL_HTTP=%{http_code};CTYPE=%{content_type};BYTES=%{size_download}\n' 'https://etpgpb.ru/procedures/'
+          curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 20 --max-filesize 1800000 -H 'Accept: text/html' --output "$dir/listing-html-accept" --write-out 'RU3_GPB_CURL_HTML_ACCEPT_HTTP=%{http_code};CTYPE=%{content_type};BYTES=%{size_download}\n' 'https://etpgpb.ru/procedures/'
           python3 - "$dir/listing" <<'PY'
           import sys
           payload=open(sys.argv[1],'rb').read()

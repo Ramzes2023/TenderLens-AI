@@ -3,7 +3,7 @@ name: RU B2B verified real worker acceptance
 on:
   push:
     branches:
-      - feat/ru-b2b-real-worker-acceptance-20261015
+      - integration/ru-b2b-on-public-main-20261016
     paths:
       - scripts/ci_ru_b2b_real_worker.py
       - .github/workflows/ru-b2b-real-worker.yml

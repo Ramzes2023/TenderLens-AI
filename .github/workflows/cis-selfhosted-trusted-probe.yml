@@ -87,3 +87,21 @@ jobs:
           PY
           fi
           echo "CIS_RUNNER_PROBE=PASS"
+
+      - name: Pull public Python image with empty isolated Docker credentials
+        shell: bash
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          [[ "${RUNNER_NAME:-}" == "VALYQON-INT-02" ]]
+          authless_dir=$(mktemp -d)
+          trap 'rm -rf -- "$authless_dir"' EXIT
+          chmod 700 "$authless_dir"
+          printf '{"auths":{}}\\n' > "$authless_dir/config.json"
+          chmod 600 "$authless_dir/config.json"
+          if timeout 180s env DOCKER_CONFIG="$authless_dir" docker pull --quiet python:3.12-slim; then
+            echo "CIS_PUBLIC_IMAGE_PULL=PASS"
+          else
+            echo "::error::Public Docker pull failed even with isolated empty credentials; inspect WSL networking and daemon."
+            exit 1
+          fi

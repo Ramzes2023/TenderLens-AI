@@ -18,7 +18,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  trusted-docker-preflight:
+    name: INT-02 trusted Docker preflight (no repository code)
+    runs-on: valyqon-int
+    timeout-minutes: 3
+    permissions: {}
+    steps:
+      - name: Confirm designated runner and Docker daemon availability
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${RUNNER_NAME:-}" != "VALYQON-INT-02" ]]; then
+            echo "::error::Unrecognized runner; aborting isolated acceptance"
+            exit 1
+          fi
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "::error::Docker CLI is missing in VALYQON-INT-Runner WSL; enable Docker Desktop WSL integration before running isolated source code."
+            exit 1
+          fi
+          if ! docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; then
+            echo "::error::Docker daemon is unreachable from VALYQON-INT-Runner WSL; start Docker Desktop and enable integration."
+            exit 1
+          fi
+          echo "CIS_INT02_DOCKER=READY"
+
   cis-postgres16-fenced-worker:
+    needs: trusted-docker-preflight
     name: INT-02 disposable PG16 worker/fencing
     runs-on: valyqon-int
     timeout-minutes: 25
@@ -71,6 +96,7 @@ jobs:
         run: python -B -m scripts.ci_cis_postgres16_fenced_acceptance
 
   cis-offline-compatibility:
+    needs: trusted-docker-preflight
     name: INT-02 CIS and Russian platform regression
     runs-on: valyqon-int
     timeout-minutes: 25

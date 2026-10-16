@@ -378,17 +378,38 @@ def test_each_asia_source_uses_real_queue_worker_sqlite_and_snapshot(
         assert job.id
         assert Worker(jobs, handlers, job_types=(JOB_TYPE,)).run_once() is True
 
-        term = "engineering"
+        # Two distinct stored notices prove that a search really filters;
+        # a single-row database would mask ignored keyword parameters.
+        term = "Public contract for engineering services"
         stored = opportunities.read(source, search_terms=(term,))
         assert len(stored) == 1
         assert stored[0].source == source
         validate_notice(stored[0], source)
-        report = asyncio.run(snapshot_catalog(catalog, opportunities).fetch(
+        from dataclasses import replace
+        unrelated = replace(
+            stored[0],
+            external_id="other-" + source,
+            title="Office stationery purchasing opportunity",
+            url=stored[0].url + "?item=other",
+            summary="Office supplies and stationery",
+        )
+        opportunities.upsert(unrelated, connector_version(source))
+        assert len(opportunities.read(source)) == 2
+        assert len(opportunities.read(source, search_terms=(term,))) == 1
+
+        snapshot = snapshot_catalog(catalog, opportunities)
+        report = asyncio.run(snapshot.fetch(
             source_keys=(source,), search_terms=(term,),
         ))
         assert not report.failures
         assert len(report.notices) == 1
         assert report.notices[0].identity == stored[0].identity
+
+        missing = asyncio.run(snapshot.fetch(
+            source_keys=(source,), search_terms=("zzzz-impossible-rss-keyword-999",),
+        ))
+        assert not missing.failures
+        assert missing.notices == []
         assert requests == [ASIA_RSS_FEEDS[source]]
     finally:
         database.close()

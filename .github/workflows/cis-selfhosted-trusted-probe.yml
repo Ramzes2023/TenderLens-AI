@@ -97,7 +97,7 @@ jobs:
           authless_dir=$(mktemp -d)
           trap 'rm -rf -- "$authless_dir"' EXIT
           chmod 700 "$authless_dir"
-          printf '{"auths":{}}\\n' > "$authless_dir/config.json"
+          printf '%s\n' '{"auths":{}}' > "$authless_dir/config.json"
           chmod 600 "$authless_dir/config.json"
           if timeout 180s env DOCKER_CONFIG="$authless_dir" docker pull --quiet python:3.12-slim; then
             echo "CIS_PUBLIC_IMAGE_PULL=PASS"

@@ -103,3 +103,17 @@ def test_bounded_payload_and_conflicting_links():
     with pytest.raises(ValueError):
         parse_roseltorg_links(listing().replace(b"</body>", 
             f"<a href='https://{HOST}/procedure/{ID}/1/'>Duplicate</a></body>".encode()), limit=3)
+
+
+def test_real_job_lease_fenced_sql_roundtrip_offline(monkeypatch):
+    """Synthetic Roseltorg HTML; genuine Worker and JobRepository lease/fence."""
+    async def fixture_fetch(self, limit=20):
+        return [parse_roseltorg_detail(detail(), identity=ID, url=URL)]
+
+    monkeypatch.setattr(RoseltorgPublicSource, "fetch", fixture_fetch)
+    from scripts.ci_ru_roseltorg_real_worker import acceptance
+    evidence = acceptance()
+    assert evidence["real_official_details"] == 1
+    assert evidence["worker_inserted"] == 1
+    assert evidence["sqlite_search_verified"] == 1
+    assert evidence["idempotent"]

@@ -25,11 +25,13 @@ TARGETS = {
     "kg_portal_home": "https://zakupki.gov.kg/popp/home.xhtml",
     "kg_known_detail": "https://zakupki.gov.kg/popp/view/order/view.xhtml?id=561794973",
     "kg_new_portal": "https://goszakupki.okmot.kg/public/?locale=ky",
+    "kg_public_no_locale": "https://goszakupki.okmot.kg/public/",
     "md_index_no_slash": "https://public.mtender.gov.md/tenders?offset=",
     "md_public_get_index": "https://public.mtender.gov.md/get/tenders?offset=",
     "md_alternative_index": "https://public.eprocurement.systems/get/tenders?offset=",
     "md_agency_listing": "https://www.tender.gov.md/en/documente-in-curs-de-examinare",
     "md_public_portal": "https://mtender.gov.md/tenders",
+    "md_public_portal_ru": "https://mtender.gov.md/ru/tenders",
     "md_agency_ro_listing": "https://tender.gov.md/ro/documente-in-curs-de-examinare",
 }
 HOSTS = {"public.mtender.gov.md", "zakupki.gov.kg", "goszakupki.okmot.kg", "public.eprocurement.systems", "www.tender.gov.md", "mtender.gov.md", "tender.gov.md"}
@@ -104,7 +106,7 @@ def check_url(url):
 
 
 def describe_payload(name, raw, content_type):
-    if name == "md_public_portal":
+    if name in {"md_public_portal", "md_public_portal_ru"}:
         html = raw.decode("utf-8", errors="replace")
         ocids = set(re.findall(r"ocds-b3wdp1-MD-\d{10,18}", html))
         return {"verified": bool(ocids), "kind": "public_mtender_portal_ocid_listing",
@@ -160,7 +162,7 @@ def describe_payload(name, raw, content_type):
         links = ORDER_LINK.findall(html)
         return {"verified": bool(links), "kind": "html_listing_with_detail_links",
                 "order_links": len(set(links)), "has_jsf": "javax.faces" in html}
-    if name == "kg_new_portal":
+    if name in {"kg_new_portal", "kg_public_no_locale"}:
         ids = set(NEW_ORDER_ID.findall(html))
         verified_ids = extract_kg_notice_evidence(raw)
         return {"verified": bool(verified_ids), "kind": "new_portal_tender_listing",
@@ -208,10 +210,10 @@ def main(argv=None):
     results = [probe(name, url, opener) for name, url in TARGETS.items()]
     summary = {"kind": "observational_public_cis_probe", "results": results,
                "md_index_verified": any(row["verified"] for row in results if row["target"] in {
-                   "md_mtender_index", "md_index_no_slash", "md_public_get_index", "md_alternative_index", "md_agency_listing", "md_public_portal", "md_agency_ro_listing"}),
+                   "md_mtender_index", "md_index_no_slash", "md_public_get_index", "md_alternative_index", "md_agency_listing", "md_public_portal", "md_public_portal_ru", "md_agency_ro_listing"}),
                "md_detail_verified": any(row["verified"] for row in results if row["target"] == "md_mtender_known_detail"),
                "kg_listing_verified": any(row["verified"] for row in results if row["target"] in {
-                   "kg_portal_home", "kg_new_portal"}),
+                   "kg_portal_home", "kg_new_portal", "kg_public_no_locale"}),
                "end_to_end_storage_verified": False,
                "production_activation_allowed": False}
     print(json.dumps(summary, ensure_ascii=False, sort_keys=True, indent=2))

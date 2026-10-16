@@ -34,6 +34,9 @@ def check_environment():
         and os.environ.get("VALYQON_DATABASE_REQUIRE_POSTGRES") == "true"
         and os.environ.get("VALYQON_CIS_PG16_CONTEXT") == CONTEXT
         and os.environ.get("VALYQON_CIS_PG16_PASSWORD") == PASSWORD
+        and os.environ.get("VALYQON_CIS_PG16_HOST") == "postgres"
+        and os.environ.get("RUNNER_NAME") == "VALYQON-INT-02"
+        and os.path.exists("/.dockerenv")
         and not any(key.startswith("PG") for key in os.environ)
     )
 
@@ -211,7 +214,7 @@ def main():
     from psycopg import connect, sql
     logging.disable(logging.CRITICAL)
     args = dict(
-        host="127.0.0.1", port=5432, dbname="postgres", user="valyqon_ci",
+        host="postgres", port=5432, dbname="postgres", user="valyqon_ci",
         password=PASSWORD, connect_timeout=5,
         application_name="valyqon-cis-pg16-ci",
         options="-c statement_timeout=30000 -c lock_timeout=15000",
@@ -233,16 +236,17 @@ def main():
                 or not 160000 <= identity[2] < 170000 or not identity[3]
                 or identity[4] != 5432 or not re.fullmatch(r"[0-9]+", identity[5] or "")):
             raise RuntimeError("Unrecognized disposable PostgreSQL service")
-        # Docker-published localhost ports are NATed: inside PostgreSQL the
-        # observed client address can be the bridge gateway (172.x), not
-        # 127.0.0.1. The client DSN itself is pinned to 127.0.0.1:5432;
-        # still require the expected version, user, bootstrap DB and port.
+        # This runner-specific workflow uses Docker job/service containers.
+        # The PostgreSQL service is only available at "postgres:5432" on
+        # the private Docker network, with NO ports published on the laptop.
+        # PostgreSQL may observe a container/gateway client IP. Require the
+        # designated user, server version, bootstrap database and port.
         print("CIS_PG16=SERVER_IDENTITY_VERIFIED")
         connection.execute(sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(sql.Identifier(database)))
         created = True
         oid = connection.execute("SELECT oid FROM pg_database WHERE datname=%s", (database,)).fetchone()[0]
         import urllib.parse
-        url = "postgresql://valyqon_ci:" + urllib.parse.quote(PASSWORD, safe="") + "@127.0.0.1:5432/" + database
+        url = "postgresql://valyqon_ci:" + urllib.parse.quote(PASSWORD, safe="") + "@postgres:5432/" + database
         run_acceptance(url)
         complete = True
     except BaseException as exc:

@@ -79,6 +79,13 @@ class UzexProbeContracts(unittest.TestCase):
             damaged.pop(key)
             self.assertFalse(validate_notice(damaged), key)
 
+    def test_uzex_public_schema_uses_seller_name_for_publishing_entity(self):
+        observed = dict(VALID)
+        observed["seller_name"] = observed.pop("customer_name")
+        self.assertTrue(validate_notice(observed))
+        observed["seller_name"] = ""
+        self.assertFalse(validate_notice(observed))
+
     def test_reject_incomplete_spa_banner_or_fake_json(self):
         for candidate in ([], ["loading"], {"data": [{"id": 510591}]},
                           {"data": "loading"}, {"data": [{"id": 1111, "name": "Loading"}]}):

@@ -59,10 +59,10 @@ jobs:
                       value=getattr(notice,field)
                       if value is None:continue
                       if (type(value) is not str or not value.strip() or len(value)>limit
-                              or "\\x00" in value or re.search(r"<\\s*/?\\s*[a-zA-Z][^>]*>",value)):
+                              or chr(0) in value or re.search(r"<\s*/?\s*[a-zA-Z][^>]*>",value)):
                           invalid.append((field,0 if type(value) is not str else len(value),
                                           bool(type(value) is str and len(value)>limit),
-                                          bool(type(value) is str and re.search(r"<\\s*/?\\s*[a-zA-Z][^>]*>",value))))
+                                          bool(type(value) is str and re.search(r"<\s*/?\s*[a-zA-Z][^>]*>",value))))
                   print("RU_B2B_INVALID_NOTICE_FIELD_SHAPES="+repr(invalid))
                   raise
           b2b_center.validate_notice=inspect_notice

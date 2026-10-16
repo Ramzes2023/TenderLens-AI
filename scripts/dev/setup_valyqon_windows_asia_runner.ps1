@@ -53,6 +53,11 @@ try {
 } catch {
     Write-Host "WINDOWS_SANDBOX=NOT_QUERYABLE (check Windows Sandbox installation manually)"
 }
+if (-not (Test-Path (Join-Path $env:SystemRoot 'System32\WindowsSandbox.exe'))) {
+    Write-Host 'WINDOWS_SANDBOX=NOT_ENABLED_OR_UNSUPPORTED'
+    Write-Host 'Windows Pro/Enterprise/Education with enabled Windows Sandbox is required; Windows Home cannot run this gate.'
+    return
+}
 if (-not $Install) {
     Write-Host "MODE=PREFLIGHT_ONLY; REGISTRATION=NOT_STARTED"
     return
@@ -93,7 +98,9 @@ try {
     Write-Host "WINDOWS_ASIA_RUNNER=REGISTERED"
     Write-Host "SECURITY=Only allow trusted exact-branch diagnostic jobs. Never run PR source directly on Windows host."
     Write-Host "START_COMMAND=$Directory\run.cmd"
-    Write-Host "Start run.cmd as the dedicated low-privilege Windows account; do not install as SYSTEM."
+    Write-Host "RUNNER_PROCESS=STARTING_INTERACTIVE_NO_SERVICE"
+    Start-Process -FilePath $env:ComSpec -ArgumentList @('/k', ('"' + (Join-Path $Directory 'run.cmd') + '"')) -WorkingDirectory $Directory
+    Write-Host "Keep the new runner console open until Windows acceptance completes; no SYSTEM service installed."
 } finally {
     Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
 }

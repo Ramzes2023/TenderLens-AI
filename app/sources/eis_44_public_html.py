@@ -118,18 +118,18 @@ def parse_official_44_listing(payload, limit=MAX_RECORDS):
             raise ValueError("Invalid EIS procurement title")
         # Extract only explicitly labelled public facts from this same result.
         customer_match = re.search(
-            r"\\bЗаказчик\\s+(.+?)\\s+Начальная цена\\b", text
+            r"\bЗаказчик\s+(.+?)\s+Начальная цена\b", text
         )
         customer = customer_match.group(1).strip() if customer_match else None
         if customer is not None and not 3 <= len(customer) <= 500:
             customer = None
         price_match = re.search(
-            r"Начальная цена\\s+([0-9][0-9 \\u00a0]*(?:[,.][0-9]{2})?)\\s*₽", text
+            r"Начальная цена\s+([0-9][0-9 \u00a0]*(?:[,.][0-9]{2})?)\s*₽", text
         )
         price = None
         if price_match:
-            price = float(price_match.group(1).replace(" ", "").replace("\\u00a0", "").replace(",", "."))
-        date_match = re.search(r"\\bРазмещено\\s+([0-9]{2}\\.[0-9]{2}\\.[0-9]{4})(?:\\s|$)", text)
+            price = float(price_match.group(1).replace(" ", "").replace("\u00a0", "").replace(",", "."))
+        date_match = re.search(r"\bРазмещено\s+([0-9]{2}\.[0-9]{2}\.[0-9]{4})(?:\s|$)", text)
         # Do not invent a deadline, procurement object or independent detail.
         notice = TenderNotice(
             source=SOURCE_ID,

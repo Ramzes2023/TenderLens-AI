@@ -102,3 +102,74 @@ def test_optional_cross_platform_url_fragment_does_not_drop_genuine_b2b_notice()
     )
     assert notice.upstream_url is None
     assert notice.tender_number is None
+
+
+def test_bounded_b2b_office_fallback_is_real_provenance_not_full_coverage(monkeypatch):
+    """Fallback only when unrestricted listing transport fails non-retryably."""
+    import asyncio
+    import json
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    from app.sources.b2b_center import (
+        B2B_CENTER_LIST_URL, B2B_CENTER_OFFICE_LIST_URL, B2BCenterSource,
+    )
+    from app.sources.http import ConnectorTransportError, _policy
+    import app.sources.b2b_center as module
+
+    calls = []
+
+    class Client:
+        async def get(self, url):
+            calls.append(url)
+            if url == B2B_CENTER_LIST_URL:
+                raise ConnectorTransportError(retryable=False)
+            assert url == B2B_CENTER_OFFICE_LIST_URL
+            return SimpleNamespace(content=CAPTURE, status_code=200,
+                                   raise_for_status=lambda: None)
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        assert not kwargs["follow_redirects"]
+        assert not kwargs["trust_env"]
+        assert _policy.get().hosts == frozenset({"www.b2b-center.ru"})
+        assert _policy.get().max_requests == 2
+        assert _policy.get().max_bytes == module.MAX_BYTES
+        yield Client()
+
+    monkeypatch.setattr(module, "source_client", client)
+    notices = asyncio.run(B2BCenterSource().fetch(limit=2))
+    assert calls == [B2B_CENTER_LIST_URL, B2B_CENTER_OFFICE_LIST_URL]
+    assert len(notices) == 2
+    for notice in notices:
+        metadata = json.loads(notice.summary)
+        assert metadata["listing_url"] == B2B_CENTER_OFFICE_LIST_URL
+        assert metadata["coverage_scope"] == "office_only"
+        assert notice.url.startswith("https://www.b2b-center.ru/search/number/")
+
+
+def test_retryable_b2b_error_not_masked_by_fallback(monkeypatch):
+    import asyncio
+    from contextlib import asynccontextmanager
+    from app.sources.b2b_center import B2B_CENTER_LIST_URL, B2BCenterSource
+    from app.sources.http import ConnectorTransportError
+    import app.sources.b2b_center as module
+
+    class Client:
+        async def get(self, url):
+            assert url == B2B_CENTER_LIST_URL
+            raise ConnectorTransportError(retryable=True)
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        yield Client()
+
+    monkeypatch.setattr(module, "source_client", client)
+    with pytest.raises(ConnectorTransportError) as exc:
+        asyncio.run(B2BCenterSource().fetch(limit=2))
+    assert exc.value.retryable is True
+
+
+def test_unapproved_listing_origin_cannot_be_injected():
+    from app.sources.b2b_center import parse_b2b_center_listing
+    with pytest.raises(SourceError, match="Unapproved"):
+        parse_b2b_center_listing(CAPTURE, listing_url="https://attacker.invalid/list")

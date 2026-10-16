@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from html.parser import HTMLParser
 import math
+import httpx
 import re
 from urllib.parse import urljoin, urlsplit
 
@@ -159,15 +160,22 @@ class TekTorgPublicSource:
                 public = parse_public_listing(listing.content, limit=cap)
                 notices = []
                 for identity, url, title in public:
-                    detail = await client.get(url)
-                    detail.raise_for_status()
-                    if "html" not in detail.headers.get("content-type", "").lower():
-                        raise ValueError("TEK-Torg detail not HTML")
-                    validate_public_detail(detail.content, identity=identity, title=title)
+                    try:
+                        detail = await client.get(url)
+                        detail.raise_for_status()
+                        if "html" not in detail.headers.get("content-type", "").lower():
+                            raise ValueError("TEK-Torg detail not HTML")
+                        validate_public_detail(detail.content, identity=identity, title=title)
+                    except (ValueError, httpx.HTTPStatusError):
+                        # A changed/removed public card is not reliable tender data.
+                        # Drop only that card; do not ingest it or bypass redirects.
+                        continue
                     notice = TenderNotice(
                         source=SOURCE_ID, external_id=identity,
                         title=title, url=url,
                     )
                     validate_notice(notice, SOURCE_ID)
                     notices.append(notice)
+                if not notices:
+                    raise ValueError("No independently verified public TEK-Torg notice")
                 return notices

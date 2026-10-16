@@ -1,23 +1,30 @@
-name: CIS PostgreSQL 16 fenced-ingestion acceptance
+name: CIS INT-02 isolated PostgreSQL and source acceptance
 
+# Only maintainer-controlled branch pushes. Never run PR event code on a
+# self-hosted runner. No production databases, tokens, or host ports.
 on:
-  pull_request:
-    branches: [main, integration/cis-am-tj-20261015]
+  push:
+    branches:
+      - fix/cis-postgres16-fencing-gate-20261015
     paths:
-      - "app/sources/**"
-      - "app/jobs/**"
-      - "app/database/**"
       - "scripts/ci_cis_postgres16_fenced_acceptance.py"
       - ".github/workflows/cis-postgres16-fenced-acceptance.yml"
-  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: valyqon-cis-int02-isolated-acceptance
+  cancel-in-progress: true
+
 jobs:
   cis-postgres16-fenced-worker:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    name: INT-02 disposable PG16 worker/fencing
+    runs-on: [self-hosted, valyqon-int]
+    timeout-minutes: 25
+    container:
+      image: python:3.12-slim
+      options: --cpus 2 --memory 4g --pids-limit 256 --security-opt no-new-privileges
     services:
       postgres:
         image: postgres:16-alpine
@@ -25,51 +32,72 @@ jobs:
           POSTGRES_USER: valyqon_ci
           POSTGRES_PASSWORD: only-for-disposable-github-cis16
           POSTGRES_DB: postgres
-        ports:
-          - 127.0.0.1:5432:5432
         options: >-
           --health-cmd "pg_isready -U valyqon_ci -d postgres -h 127.0.0.1"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
+        # Deliberately no ports: never bind to the laptop's PostgreSQL.
     env:
       CI: 'true'
       PYTHON_DOTENV_DISABLED: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
       VALYQON_DATABASE_REQUIRE_POSTGRES: 'true'
       VALYQON_CIS_PG16_CONTEXT: valyqon-cis-postgres16-ephemeral-ci-v1
       VALYQON_CIS_PG16_PASSWORD: only-for-disposable-github-cis16
+      VALYQON_CIS_PG16_HOST: postgres
     steps:
+      - name: Verify designated runner and isolated Docker network
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${RUNNER_NAME:-}" == "VALYQON-INT-02" ]]
+          test -e /.dockerenv
+          getent hosts postgres >/dev/null
+          echo 'CIS_RUNNER=VALYQON-INT-02'
+          echo 'CIS_POSTGRES_ACCESS=CONTAINER_NETWORK_ONLY'
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-          cache: pip
-      - name: Install project test dependencies
-        run: python -m pip install -r requirements-dev.txt
-      - name: Compile PostgreSQL fenced connector acceptance
-        run: python -m compileall -q scripts/ci_cis_postgres16_fenced_acceptance.py
-      - name: Verify PostgreSQL 16 migrations, fenced upsert, stale lease, snapshot and rollback
-        timeout-minutes: 8
+          persist-credentials: false
+      - name: Install Python dependencies inside ephemeral job container
+        shell: bash
+        run: |
+          set -euo pipefail
+          python --version
+          python -m pip install --no-cache-dir -r requirements-dev.txt
+      - name: Run PostgreSQL 16 migration, claim, stale lease and rollback proof
+        shell: bash
+        timeout-minutes: 10
         run: python -B -m scripts.ci_cis_postgres16_fenced_acceptance
 
   cis-offline-compatibility:
-    name: CIS worker and platform regression
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    name: INT-02 CIS and Russian platform regression
+    runs-on: [self-hosted, valyqon-int]
+    timeout-minutes: 25
+    container:
+      image: python:3.12-slim
+      options: --cpus 2 --memory 4g --pids-limit 256 --security-opt no-new-privileges
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
     steps:
+      - name: Verify designated runner and container isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${RUNNER_NAME:-}" == "VALYQON-INT-02" ]]
+          test -e /.dockerenv
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-          cache: pip
-      - name: Install project test dependencies
-        run: python -m pip install -r requirements-dev.txt
-      - name: Exercise Russian, international and CIS worker contracts
-        timeout-minutes: 10
-        env:
-          PYTHON_DOTENV_DISABLED: '1'
-          PYTHONDONTWRITEBYTECODE: '1'
-          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+          persist-credentials: false
+      - name: Install test dependencies in ephemeral container
+        shell: bash
+        run: python -m pip install --no-cache-dir -r requirements-dev.txt
+      - name: Prove worker and API compatibility with disposable databases
+        shell: bash
+        timeout-minutes: 15
         run: >-
           python -B -m pytest -p no:cacheprovider -q
           tests/test_connector_workers.py

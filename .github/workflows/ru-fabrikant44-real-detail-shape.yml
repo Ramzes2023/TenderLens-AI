@@ -74,8 +74,11 @@ jobs:
           for href,text in page.links:
               u=urlsplit(urljoin(BASE,href))
               match=pattern.fullmatch(u.path)
-              if u.scheme=="https" and u.netloc==HOST and match and not u.query and not u.fragment and u.port is None:
-                  unique.setdefault(match.group(2),(u.geturl(),match.group(1),text))
+              # Official public links contain a navigation-only backurl query.
+              # Discard it rather than forwarding parameters to the detail URL.
+              if (u.scheme=="https" and u.netloc==HOST and match and not u.fragment
+                      and u.port is None and (not u.query or u.query.startswith("backurl="))):
+                  unique.setdefault(match.group(2),("https://"+HOST+u.path,match.group(1),text))
           print("RU_FABRIKANT_44_PUBLIC_LIST_UNIQUE="+str(len(unique)))
           print("RU_FABRIKANT_44_ANCHOR_TEXT_LENGTHS="+repr([len(x[2]) for x in list(unique.values())[:4]]))
           verified=0

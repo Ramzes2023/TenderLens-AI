@@ -26,7 +26,13 @@ if ($RunnerName -cne "VALYQON-WIN-ASIA-01" -or $RunnerLabel -cne "valyqon-asia-w
     throw "Runner identity is pinned for isolation from other teams."
 }
 $existing = @('VALYQON-Runner','VALYQON-INT-Runner','VALYQON-ASIA-Runner')
-if ($existing -contains $Directory) { throw "Existing runner directory cannot be overwritten." }
+$fullTarget = [System.IO.Path]::GetFullPath($Directory)
+if ($fullTarget -match '(?i)\\(VALYQON-Runner|VALYQON-INT-Runner|VALYQON-ASIA-Runner)(\\|$)') {
+    throw 'Existing runner directory cannot be overwritten.'
+}
+if ($existing -contains (Split-Path -Leaf $fullTarget)) {
+    throw 'Existing runner directory cannot be overwritten.'
+}
 Write-Host "VALYQON_WINDOWS_ASIA_SETUP=CHECKING"
 Write-Host "RUNNER_IDENTITY=$RunnerName"
 Write-Host "EXISTING_WSL_RUNNERS=UNCHANGED"
@@ -78,7 +84,7 @@ try {
     try {
         Push-Location $Directory
         try {
-            & (Join-Path $Directory 'config.cmd') --unattended --url "https://github.com/$Repository" --token $registration.Trim() --name $RunnerName --labels $RunnerLabel --work '_work' --replace
+            & (Join-Path $Directory 'config.cmd') --unattended --url "https://github.com/$Repository" --token $registration.Trim() --name $RunnerName --labels $RunnerLabel --work '_work'
             if ($LASTEXITCODE -ne 0) { throw "Official runner registration failed." }
         } finally { Pop-Location }
     } finally {

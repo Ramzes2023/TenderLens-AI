@@ -24,7 +24,7 @@ jobs:
       - name: Checkout immutable B2B adapter and real worker acceptance
         uses: actions/checkout@v4
         with:
-          ref: 70ae2cf085ea7b5731662503a811fa6c257e67e9
+          ref: 84ce2f38a3fc64ece66c1a56c302c39c1f8a95f0
           persist-credentials: false
       - name: Real public B2B -> production worker -> ephemeral database -> keyword query
         shell: bash
@@ -36,7 +36,7 @@ jobs:
           OUTBOUND_PROXY_URL: ""
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 70ae2cf085ea7b5731662503a811fa6c257e67e9
+          test "$(git rev-parse HEAD)" = 84ce2f38a3fc64ece66c1a56c302c39c1f8a95f0
           temp="$(mktemp -d)"
           trap 'rm -rf "$temp"' EXIT
           python3 -m venv "$temp/venv"

@@ -1,15 +1,16 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Installs a fourth, separate GitHub Actions runner for trusted VALYQON Asia
-  Windows-only tests. Does not touch the three existing WSL/Linux runners.
+  Registers a fourth, separate GitHub Actions runner for trusted VALYQON Asia
+  native Windows 11 Home-compatible tests. Existing WSL runners remain untouched.
 .DESCRIPTION
   Requires an authenticated GitHub CLI with repository admin permission.
   Downloads the official Windows x64 runner release after verifying the SHA256
   published by GitHub's release asset API, obtains a short-lived repository
   registration token, and registers ONE custom-labelled runner.
   It never stores registration tokens, starts a Windows service, or modifies CI.
-  Run in a dedicated non-admin Windows account without personal credentials.
+  Native Windows fixture comes from reviewed main. Registration is not a sandbox.
+  Run under a dedicated non-admin Windows account wherever possible.
 #>
 [CmdletBinding()]
 param(
@@ -21,6 +22,11 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne "Windows_NT") { throw "Run in native Windows PowerShell, not WSL." }
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = [Security.Principal.WindowsPrincipal]::new($identity)
+if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    throw "Start PowerShell without Run as Administrator; this runner must stay non-elevated."
+}
 if ($Repository -cne "Ramzes2023/TenderLens-AI") { throw "Unexpected repository." }
 if ($RunnerName -cne "VALYQON-WIN-ASIA-01" -or $RunnerLabel -cne "valyqon-asia-windows") {
     throw "Runner identity is pinned for isolation from other teams."
@@ -54,9 +60,10 @@ try {
     Write-Host "WINDOWS_SANDBOX=NOT_QUERYABLE (check Windows Sandbox installation manually)"
 }
 if (-not (Test-Path (Join-Path $env:SystemRoot 'System32\WindowsSandbox.exe'))) {
-    Write-Host 'WINDOWS_SANDBOX=NOT_ENABLED_OR_UNSUPPORTED'
-    Write-Host 'Windows Pro/Enterprise/Education with enabled Windows Sandbox is required; Windows Home cannot run this gate.'
-    return
+    Write-Host 'WINDOWS_SANDBOX=UNAVAILABLE'
+    Write-Host 'WINDOWS_HOME_COMPATIBLE=YES (native test runs only protected-main-reviewed fixture as non-admin)'
+} else {
+    Write-Host 'WINDOWS_SANDBOX=OPTIONAL_NOT_REQUIRED'
 }
 if (-not $Install) {
     Write-Host "MODE=PREFLIGHT_ONLY; REGISTRATION=NOT_STARTED"
@@ -96,7 +103,12 @@ try {
         $registration = $null
     }
     Write-Host "WINDOWS_ASIA_RUNNER=REGISTERED"
-    Write-Host "SECURITY=Only allow trusted exact-branch diagnostic jobs. Never run PR source directly on Windows host."
+    Write-Host "SECURITY=Windows process test uses protected main files, not PR source; non-admin host test, no VM sandbox."
+    # Remove the newly-created gh CLI login before starting the runner, so
+    # runner jobs do not inherit a reusable GitHub CLI token from this user.
+    & gh auth logout --hostname github.com 2>$null
+    if ($LASTEXITCODE -ne 0) { throw "GH CLI credentials were not cleared; do not start runner." }
+    Write-Host "GITHUB_CLI_CREDENTIALS=LOGGED_OUT_AFTER_REGISTRATION"
     Write-Host "START_COMMAND=$Directory\run.cmd"
     Write-Host "RUNNER_PROCESS=STARTING_INTERACTIVE_NO_SERVICE"
     Start-Process -FilePath $env:ComSpec -ArgumentList @('/k', ('"' + (Join-Path $Directory 'run.cmd') + '"')) -WorkingDirectory $Directory

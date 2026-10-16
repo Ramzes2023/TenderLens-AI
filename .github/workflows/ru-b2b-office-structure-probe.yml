@@ -1,0 +1,76 @@
+name: RU B2B office real schema and source transport diagnosis
+on:
+  push:
+    branches: [diag/ru-final-gates-20261016]
+    paths: [.github/workflows/ru-b2b-office-structure-probe.yml]
+permissions:
+  contents: read
+jobs:
+  b2b-official-office-schema:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: c24c2a90fc00d598861049b35776a5ddea29143e
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify independent official office HTML and fail reason safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = c24c2a90fc00d598861049b35776a5ddea29143e
+          python -m pip install -r requirements-dev.txt >/dev/null
+          python - <<'PY'
+          import asyncio
+          from app.sources.b2b_center import (
+              B2B_CENTER_OFFICE_LIST_URL,B2B_CENTER_LIST_URL,
+              B2BCenterSource,parse_b2b_center_listing,
+          )
+          from app.sources.http import source_client
+          from app.sources.eis_rss import SourceError
+          safe_reasons={
+              'B2B-Center unexpected procurement card structure.',
+              'B2B-Center returned no usable procurement records.',
+              'B2B-Center procurement title missing.',
+              'B2B-Center returned unsafe notice URL.',
+              'B2B-Center invalid HTML encoding.',
+              'B2B-Center empty or oversized HTML.',
+              'B2B-Center returned conflicting structured properties.',
+              'B2B-Center returned invalid structured date.',
+              'B2B-Center conflicting original notice references.',
+          }
+          async def run():
+              async with source_client(
+                  timeout=25,trust_env=False,follow_redirects=False,
+                  headers={"Accept":"text/html"},
+              ) as client:
+                  try:
+                      response=await client.get(B2B_CENTER_OFFICE_LIST_URL)
+                      print('RU_B2B_OFFICE_CLIENT_STATUS='+str(response.status_code))
+                      print('RU_B2B_OFFICE_CLIENT_BYTES='+str(len(response.content)))
+                      print('RU_B2B_OFFICE_CLIENT_CTYPE='+repr(response.headers.get('content-type','')[:60]))
+                      try:
+                          items=parse_b2b_center_listing(
+                              response.content,limit=5,
+                              listing_url=B2B_CENTER_OFFICE_LIST_URL,
+                          )
+                          print('RU_B2B_OFFICE_VERIFIED_NOTICE_COUNT='+str(len(items)))
+                      except Exception as e:
+                          print('RU_B2B_OFFICE_PARSE_CLASS='+type(e).__name__)
+                          if str(e) in safe_reasons:
+                              print('RU_B2B_OFFICE_PARSE_STAGE='+str(e))
+                  except Exception as e:
+                      print('RU_B2B_OFFICE_HTTP_CLASS='+type(e).__name__)
+              try:
+                  items=await B2BCenterSource().fetch(limit=5)
+                  print('RU_B2B_BOUNDED_SOURCE_REAL_NOTICES='+str(len(items)))
+              except Exception as e:
+                  print('RU_B2B_BOUNDED_SOURCE_FAILURE_CLASS='+type(e).__name__)
+                  if str(e) in safe_reasons:
+                      print('RU_B2B_BOUNDED_SOURCE_FAILURE_STAGE='+str(e))
+          asyncio.run(run())
+          print('PRODUCTION_CHANGED=NO')
+          PY

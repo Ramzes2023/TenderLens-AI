@@ -6,14 +6,16 @@ import asyncio
 import json
 import tempfile
 from pathlib import Path
-from types import SimpleNamespace
 
 from app.database.backend import Database
 from app.database.config import DatabaseSettings
+from app.jobs import HandlerRegistry, JobRepository, JobSettings
 from app.jobs.models import JobScope
+from app.jobs.worker import Worker
 from app.monitoring.config import MonitoringSettings
 from app.sources.catalog import build_source_catalog
-from app.sources.ingestion import ConnectorSyncHandler, connector_version, sync_window
+from app.sources.ingestion import (ConnectorSyncHandler, ConnectorSyncService,
+                                   JOB_TYPE, connector_version)
 from app.sources.opportunities import OpportunityRepository
 from app.sources.snapshots import snapshot_catalog
 
@@ -33,13 +35,24 @@ def proof():
     with tempfile.TemporaryDirectory(prefix="valyqon-gpb-real-") as tmp:
         db = Database(DatabaseSettings("ru-gpb-proof", Path(tmp)/"real.sqlite"))
         try:
+            # Exercise the production durable queue, actual lease claim and
+            # fenced SQL writes; a fake context cannot validate connector sync.
+            jobs = JobRepository(db, JobSettings(lease_seconds=240, heartbeat_seconds=10))
+            jobs.initialize()
             store = OpportunityRepository(db)
             store.initialize()
-            worker = ConnectorSyncHandler(catalog, store, max_records=3)
-            ctx = SimpleNamespace(job=SimpleNamespace(scope=JobScope()), should_stop=False)
-            params = {"schema":1, "source_id":SOURCE,
-                      "sync_window":sync_window(), "connector_version":connector_version(SOURCE)}
-            stats = worker(ctx, params)
+            handler = ConnectorSyncHandler(catalog, store, max_records=3)
+            queue = ConnectorSyncService(jobs, catalog)
+            queued = queue.enqueue(SOURCE)
+            handlers = HandlerRegistry()
+            handlers.register(JOB_TYPE, handler)
+            if not Worker(jobs, handlers, job_types=(JOB_TYPE,)).run_once():
+                raise AssertionError("GPB durable connector job was not claimed")
+            completed = jobs.get(queued.id, scope=JobScope())
+            if completed is None or completed.state != "succeeded":
+                raise AssertionError("GPB durable connector job not succeeded: "
+                                     + str(completed.failure_code if completed else "missing"))
+            stats = completed.result
             if not 1 <= stats["fetched_count"] <= 3:
                 raise AssertionError("No independently verified live GPB notices")
             if (stats["fetched_count"] != stats["accepted_count"]

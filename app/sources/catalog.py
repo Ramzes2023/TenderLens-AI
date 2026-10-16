@@ -10,6 +10,7 @@ from .tj_eprocurement import TajikistanEprocurementSource
 from .uz_uzex import UzbekistanUzexSource
 from .asia_public import ASIA_RSS_FEEDS, AsiaPublicSource
 from .jp_jetro_bid_rss import JetroBidRssSource, RSS_URL as JETRO_BID_RSS_URL
+from .hk_hyd_tenders import HighwaysTendersSource, RSS_URL as HYD_TENDERS_RSS_URL
 from .austender_rss import AusTenderRssSource
 from .b2b_center import B2BCenterSource
 from .tektorg_public_html import TekTorgPublicSource
@@ -485,6 +486,20 @@ def build_source_catalog(
             homepage_url=JETRO_BID_RSS_URL,
             official=True,
             enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    # Hong Kong Highways Department has an independent official RSS gate.
+    # It is not included in the six existing HK sources or JETRO source.
+    if os.environ.get("VALYQON_ASIA_HYD_ENABLED", "").strip() == "1":
+        registry.register(SourceRegistration(
+            key="hk_hyd_tenders",
+            display_name="Hong Kong Highways Department — tender notices",
+            source=HighwaysTendersSource(timeout=min(timeout, 30.0)),
+            transport=SourceTransport.RSS,
+            jurisdictions=("HK",), languages=("en",),
+            homepage_url=HYD_TENDERS_RSS_URL,
+            official=True, enabled=True,
             capabilities=SourceCapabilities(),
         ))
 

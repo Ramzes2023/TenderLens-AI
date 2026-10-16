@@ -203,11 +203,16 @@ def parse_marketplace_detail(html, *, url):
     proposals = tokens.index("Propunerea ofertelor") if "Propunerea ofertelor" in tokens else -1
     if proposals < 0:
         raise SourceError("MD bid deadline stage unavailable.")
-    until_index = next((i for i in range(proposals+1, min(proposals+12, len(tokens)))
-                        if tokens[i] == "până la"), None)
-    if until_index is None or until_index+1 >= len(tokens):
+    # The official page often renders "până la DD.MM.YYYY HH:MM" as
+    # one visible text node; locate the label and bounded date together.
+    stage_text = " ".join(tokens[proposals + 1:proposals + 16])
+    until = re.search(
+        r"până\s+la\s+(\d{2}\.\d{2}\.20\d{2}\s+\d{2}:\d{2}|\d{1,2}\s+[a-zăîșț]{3,12}\s+20\d{2},?\s+\d{1,2}:\d{2})\b",
+        stage_text, flags=re.I,
+    )
+    if until is None:
         raise SourceError("MD proposal submission deadline not observed.")
-    deadline_raw = tokens[until_index+1]
+    deadline_raw = until.group(1)
     # Some pages use dd.mm.yyyy in the stage, others Romanian short month.
     if re.fullmatch(r"\d{2}\.\d{2}\.20\d{2} \d{2}:\d{2}", deadline_raw):
         deadline = datetime.strptime(deadline_raw, "%d.%m.%Y %H:%M")

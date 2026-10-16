@@ -1,0 +1,36 @@
+name: RU pinned corrected TEK-Torg real worker to SQLite proof
+on:
+  push:
+    branches: [diag/ru-final-gates-20261016]
+    paths: [.github/workflows/ru-final-tektorg-ua-live.yml]
+permissions:
+  contents: read
+jobs:
+  tektorg-real:
+    runs-on: valyqon-ru3
+    timeout-minutes: 14
+    steps:
+      - name: Confirm known isolated runner only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          test "$(id -un)" = valyqon
+          ! mountpoint -q /mnt/c
+      - uses: actions/checkout@v4
+        with:
+          ref: 66b03ba0142755294d13051d28e3f08704e3a9ef
+          persist-credentials: false
+      - name: Require real official public cards with independent detail to SQL and local keyword query
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 66b03ba0142755294d13051d28e3f08704e3a9ef
+          temp="$(mktemp -d)"
+          trap 'rm -rf "$temp"' EXIT
+          python3 -m venv "$temp/venv"
+          "$temp/venv/bin/python" -m pip install --disable-pip-version-check -r requirements-dev.txt >/dev/null
+          "$temp/venv/bin/python" -m pytest -q tests/test_ru_tektorg_public.py
+          "$temp/venv/bin/python" -B -m scripts.ci_ru_tektorg_fenced_acceptance
+          echo 'RU_TEK_PINNED_LIVE=PASS'
+          echo 'PRODUCTION_CHANGED=NO'

@@ -1,0 +1,70 @@
+name: RU-03 isolated EIS 44-223 verified CA live RSS
+
+on:
+  push:
+    branches: [ops/ru3-trusted-source-probe-20261016]
+    paths: [.github/workflows/ru03-eis-verified-CA.yml]
+
+permissions: {}
+
+jobs:
+  eis44-eis223:
+    runs-on: valyqon-ru3
+    timeout-minutes: 5
+    steps:
+      - name: Verify official Ministry chain and live EIS feeds with TLS fully enabled
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          test "$(id -un)" = valyqon
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          for part in root sub; do
+            if test "$part" = root; then
+              file=russian_trusted_root_ca
+              expected=d26d2d0231b7c39f92cc738512ba54103519e4405d68b5bd703e9788ca8ecf31
+            else
+              file=russian_trusted_sub_ca
+              expected=bbbde2103e790b999ec62bd03cf625a5a2e7c316e10afe6a490eedead8b3fd9b
+            fi
+            curl --noproxy '*' --fail --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 20 --max-filesize 65536 \
+              "https://gu-st.ru/content/Other/doc/$file.cer" -o "$dir/$file.cer"
+            openssl x509 -inform DER -in "$dir/$file.cer" -out "$dir/$part.pem"
+            thumb="$(openssl x509 -in "$dir/$part.pem" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+            test "$thumb" = "$expected"
+            echo "RU3_EIS_CA_${part}_SHA256=PASS"
+          done
+          openssl verify -CAfile "$dir/root.pem" "$dir/sub.pem"
+          cat "$dir/root.pem" "$dir/sub.pem" > "$dir/eis-only.pem"
+          for law in 44 223; do
+            case "$law" in
+              44) filter=fz44 ;;
+              223) filter=fz223 ;;
+            esac
+            url="https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?searchString=%D0%BF%D0%BE%D1%81%D1%82%D0%B0%D0%B2%D0%BA%D0%B0&${filter}=on"
+            code="$(curl --noproxy '*' --silent --show-error --proto '=https' --cacert "$dir/eis-only.pem" --max-redirs 0 --connect-timeout 8 --max-time 25 --max-filesize 5242880 --output "$dir/law$law" --write-out '%{http_code}' "$url")" && rc=0 || rc=$?
+            bytes=0
+            test -f "$dir/law$law" && bytes="$(wc -c < "$dir/law$law" | tr -d ' ')"
+            echo "RU3_EIS_${law}_SOURCE_HTTPS_CODE=$code;CURL_EXIT=$rc;BYTES=$bytes"
+            if test "$rc" = 0 && test "$code" = 200; then
+              python3 - "$dir/law$law" "$law" <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          filename, law = sys.argv[1:]
+          payload = open(filename, 'rb').read()
+          if b'<!DOCTYPE' in payload.upper() or b'<!ENTITY' in payload.upper():
+              raise ValueError('DTD forbidden')
+          try:
+              root = ET.fromstring(payload)
+              kind = root.tag.split('}')[-1].lower()
+              count = sum(x.tag.split('}')[-1].lower() in {'item', 'entry'} for x in root.iter())
+          except ET.ParseError:
+              kind, count = 'NOT_XML', 0
+          print(f'RU3_EIS_{law}_RSS_ROOT={kind};RSS_ENTRIES={count}')
+          PY
+            fi
+          done
+          echo "RU3_CA_SCOPE=EIS_ONLY"
+          echo "TLS_VERIFICATION_DISABLED=NO"
+          echo "PRODUCTION_CHANGED=NO"

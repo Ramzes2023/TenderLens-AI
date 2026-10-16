@@ -51,6 +51,7 @@ jobs:
           submodules: false
           lfs: false
           clean: true
+          fetch-depth: 0
       - name: Verify branch and dependency manifest are unchanged from main
         shell: bash
         run: |

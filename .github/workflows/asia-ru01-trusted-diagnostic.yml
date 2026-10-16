@@ -14,7 +14,7 @@ permissions: {}
 jobs:
   asia-ru01-trusted-public:
     if: github.repository == 'Ramzes2023/TenderLens-AI' && github.ref == 'refs/heads/feat/asia-public-procurement-six-20261015'
-    runs-on: [self-hosted, valyqon-ru]
+    runs-on: valyqon-ru
     timeout-minutes: 8
     steps:
       - name: Verify trusted RU-01 host without checkout

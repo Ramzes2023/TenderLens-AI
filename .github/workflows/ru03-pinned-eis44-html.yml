@@ -39,7 +39,7 @@ jobs:
       - name: Checkout reviewed immutable official 44-FZ adapter
         uses: actions/checkout@v4
         with:
-          ref: fc64e331a5471fa31b6c70b4f737905ebd62f09d
+          ref: 738f0794a3a928610114cbbfd53514dff831b05d
           persist-credentials: false
       - name: Offline official law contract + real procurement listing -> worker -> SQLite
         shell: bash
@@ -48,7 +48,7 @@ jobs:
           VALYQON_EMAIL_MODE: "disabled"
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "fc64e331a5471fa31b6c70b4f737905ebd62f09d"
+          test "$(git rev-parse HEAD)" = "738f0794a3a928610114cbbfd53514dff831b05d"
           cert_dir="$(cat "$RUNNER_TEMP/ru-eis44-cert-dir")"
           trap 'rm -rf "$cert_dir"' EXIT
           export VALYQON_RU_EIS_CA_CERT="$cert_dir/eis-only.pem"

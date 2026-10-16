@@ -116,13 +116,32 @@ def parse_official_44_listing(payload, limit=MAX_RECORDS):
         title = match.group(1).strip()
         if len(title) < 5 or len(title) > 800:
             raise ValueError("Invalid EIS procurement title")
-        # All values below come from that same official search-result card.
+        # Extract only explicitly labelled public facts from this same result.
+        customer_match = re.search(
+            r"\\bЗаказчик\\s+(.+?)\\s+Начальная цена\\b", text
+        )
+        customer = customer_match.group(1).strip() if customer_match else None
+        if customer is not None and not 3 <= len(customer) <= 500:
+            customer = None
+        price_match = re.search(
+            r"Начальная цена\\s+([0-9][0-9 \\u00a0]*(?:[,.][0-9]{2})?)\\s*₽", text
+        )
+        price = None
+        if price_match:
+            price = float(price_match.group(1).replace(" ", "").replace("\\u00a0", "").replace(",", "."))
+        date_match = re.search(r"\\bРазмещено\\s+([0-9]{2}\\.[0-9]{2}\\.[0-9]{4})(?:\\s|$)", text)
+        # Do not invent a deadline, procurement object or independent detail.
         notice = TenderNotice(
             source=SOURCE_ID,
             external_id=identity,
             tender_number=identity,
             title=title,
             url=url,
+            customer=customer,
+            initial_price=price,
+            currency="RUB" if price is not None else None,
+            published_at=date_match.group(1) if date_match else None,
+            summary=text[:1400],
         )
         validate_notice(notice, SOURCE_ID)
         if identity in seen:

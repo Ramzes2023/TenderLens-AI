@@ -42,6 +42,30 @@ jobs:
               'B2B-Center returned invalid structured date.',
               'B2B-Center conflicting original notice references.',
           }
+          from app.sources import b2b_center
+          from app.sources.opportunities import validate_notice as original_validate
+          def inspect_notice(notice, source_id):
+              try:
+                  return original_validate(notice, source_id)
+              except ValueError:
+                  import re
+                  bounds = {
+                      "source":64,"external_id":500,"title":1000,"url":2000,
+                      "published_at":120,"deadline":120,"tender_number":500,
+                      "customer":2000,"currency":3,"region":2000,"summary":4000,
+                  }
+                  invalid=[]
+                  for field,limit in bounds.items():
+                      value=getattr(notice,field)
+                      if value is None:continue
+                      if (type(value) is not str or not value.strip() or len(value)>limit
+                              or "\\x00" in value or re.search(r"<\\s*/?\\s*[a-zA-Z][^>]*>",value)):
+                          invalid.append((field,0 if type(value) is not str else len(value),
+                                          bool(type(value) is str and len(value)>limit),
+                                          bool(type(value) is str and re.search(r"<\\s*/?\\s*[a-zA-Z][^>]*>",value))))
+                  print("RU_B2B_INVALID_NOTICE_FIELD_SHAPES="+repr(invalid))
+                  raise
+          b2b_center.validate_notice=inspect_notice
           async def run():
               async with source_client(
                   timeout=25,trust_env=False,follow_redirects=False,

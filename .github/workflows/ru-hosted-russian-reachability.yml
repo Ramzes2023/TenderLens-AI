@@ -1,0 +1,27 @@
+name: RU hosted direct HTTPS test for Fabrikant and B2B
+on:
+  push:
+    branches: [diag/ru-final-gates-20261016]
+    paths: [.github/workflows/ru-hosted-russian-reachability.yml]
+permissions: {}
+jobs:
+  hosted-live-reachability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Direct official HTTPS without proxy or redirects
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(mktemp -d)"
+          trap 'rm -rf "$d"' EXIT
+          for name in fabrikant44 b2b_office rosel; do
+            case "$name" in
+              fabrikant44) url='https://44.fabrikant.ru/44/catalog/procedure' ;;
+              b2b_office) url='https://www.b2b-center.ru/search/industry/ofis/' ;;
+              rosel) url='https://www.roseltorg.ru/procedures/search' ;;
+            esac
+            res="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 9 --max-time 20 --max-filesize 1800000 -H 'Accept: text/html' -H 'User-Agent: Mozilla/5.0' --output "$d/$name" --write-out '%{http_code} %{content_type} %{size_download}' "$url" 2>/dev/null)" && rc=0 || rc=$?
+            echo "RU_HOSTED_HTTPS_${name}_HTTP=$res;CURL_EXIT=$rc"
+          done
+          echo 'PRODUCTION_CHANGED=NO'

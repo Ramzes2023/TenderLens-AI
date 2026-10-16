@@ -52,7 +52,7 @@ def test_listing_rejects_invalid_or_external_card(bad):
 
 @pytest.mark.parametrize("body", [
     detail(number="35217483"),
-    b"<html><script>35217482</script><h1>Поставка компьютерной техники и расходных материалов</h1></html>",
+    " <html><script>35217482</script><h1>Поставка компьютерной техники и расходных материалов</h1></html>".strip().encode("utf-8"),
     detail(title="Совершенно другой предмет закупки"),
     "<html>Группа 35217482, но нет заголовка</html>".encode("utf-8"),
     b"",

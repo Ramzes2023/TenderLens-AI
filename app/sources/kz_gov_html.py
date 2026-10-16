@@ -38,7 +38,7 @@ def _date(value):
     # Real official HTML emits adjacent date and time text nodes with NO
     # separator: "2026-10-1909:00:00". Pin this exact observed DOM contract.
     text = " ".join(value.split())
-    match = re.fullmatch(r"(20\\d{2}-\\d{2}-\\d{2})\\s*(\\d{1,2}:\\d{2}(?::\\d{2})?)", text)
+    match = re.fullmatch(r"(20\d{2}-\d{2}-\d{2})\s*(\d{1,2}:\d{2}(?::\d{2})?)", text)
     if match is None:
         raise SourceError("KZ start/end procurement date missing.")
     canonical = match.group(1) + " " + match.group(2)

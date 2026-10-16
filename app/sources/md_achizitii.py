@@ -110,10 +110,19 @@ def _plain_tokens(raw):
 
 
 def _after(tokens, label, *, limit=5):
+    boundaries = {
+        "datele achizitiei", "datele achiziției", "codul fiscal/idno",
+        "adresa", "web site", "persoana de contact", "data publicării",
+        "data ultimilor modificări", "achizitii.md id", "mtender id",
+        "informaţia despre solicitant", "informația despre solicitant",
+        "valorea estimată", "valoarea estimată fără tva",
+    }
     for i, token in enumerate(tokens):
         if token.casefold() == label.casefold():
             for candidate in tokens[i+1:i+1+limit]:
                 if candidate.strip() and candidate.casefold() != label.casefold():
+                    if candidate.strip().casefold() in boundaries:
+                        raise SourceError("MD detail field ended without a value.")
                     return candidate.strip()
     raise SourceError("MD mandatory detail field missing.")
 

@@ -1,85 +1,90 @@
-# VALYQON Asia: fully self-hosted, no GitHub-hosted minutes
+# VALYQON Asia: free testing and native Windows 11 Home completion
 
-## Completed in this branch
+## Already verified on the user's self-hosted Linux runner
 
-The dedicated Linux runner `VALYQON-RU-01` (WSL2) has already run the
-full Linux pytest suite in read-only, non-root disposable Docker containers,
-six **real** official Hong Kong procurement RSS adapters, SQLite storage and
-keyword searches, and six actual `connector.sync.v1` worker tasks.
-The true release `Dockerfile` also built on the same runner.
+- `VALYQON-RU-01` handles this PR's Linux checks at no hosted-runner cost.
+- A full Linux test run passed (2,877 passed; 85 skipped; 1 expected xfail).
+- Real official Hong Kong tender feeds passed 6/6 using both direct adapters
+  and the actual `connector.sync.v1` worker into temporary SQLite/search.
+- The real production `Dockerfile` built successfully.
+- The three separately assigned WSL/Linux runners belong to their existing
+  development teams; do not repurpose them.
 
-- Green Linux proof: https://github.com/Ramzes2023/TenderLens-AI/actions/runs/38909142631
-- Green release build: https://github.com/Ramzes2023/TenderLens-AI/actions/runs/38909688659
+Previous evidence (not a substitute for rechecking the final commit):
+[Linux/live-worker proof](https://github.com/Ramzes2023/TenderLens-AI/actions/runs/38909142631) and
+[production Docker build](https://github.com/Ramzes2023/TenderLens-AI/actions/runs/38909688659).
 
-There is no requirement to purchase GitHub-hosted runner minutes for
-these tests. **Older failed hosted workflows are not a Python CI verdict.**
+## One pending native Windows-specific check
 
-## Native Windows-only fixture is a separate security domain
+`tests/test_p39e_local_preview.py` uses real Win32 Job Objects and cannot
+be tested with a Linux/WSL runner.
 
-A Linux WSL2 runner cannot prove `tests/test_p39e_local_preview.py`,
-which calls Win32 Job Objects and kernel32 functions. Even a Linux Docker
-container cannot reproduce Win32 process-isolation semantics. The trusted
-`VALYQON-RU-01` probe confirms no `powershell.exe` / `cmd.exe`
-interop, so remote GitHub/WSL workflow execution cannot register a native
-Windows runner on the physical host.
+The user's **Windows 11 Home** has no Windows Sandbox. Do not recommend
+purchasing Windows Pro, fake the test under Wine, or require GitHub-hosted
+Windows Actions for this particular integration.
 
-A **fourth separate, low-privilege, repo-scoped native Windows runner** is
-staged for this direction only:
+A separate **free native Windows self-hosted runner** is prepared:
 
 - Runner name: `VALYQON-WIN-ASIA-01`
-- Dedicated label: `valyqon-asia-windows`
-- Registration: `scripts/dev/setup_valyqon_windows_asia_runner.ps1`
-- Native Windows acceptance:
-  `.github/workflows/asia-windows-selfhosted.yml`
-- Sandbox-only test entry point:
-  `scripts/dev/asia_windows_sandbox_guest.ps1`
+- Single custom label: `valyqon-asia-windows`, no generic/default labels.
+- Installer: `scripts/dev/setup_valyqon_windows_asia_runner.ps1`
+- CI: `.github/workflows/asia-windows-selfhosted.yml`
 
-Only an authenticated GitHub repository administrator on Windows can
-request the short-lived registration token and start the new runner.
-The connector cannot access that Windows desktop or GitHub's runner
-registration-token creation endpoint. **Do not include the token in chat,
-a commit, PR comment or CI output.**
+The Windows Home workflow checks runner identity and requires the shell to be
+**non-elevated**. It checks that the fixture source files, dependency manifests
+and relevant supporting modules have no changes relative to protected `main`.
+It then executes **only source from an independent detached checkout of
+protected `main`** in a temporary local Python 3.12 virtual environment.
+The Windows runner never executes unreviewed pull-request application code.
+It cleans the temporary worktree and dependencies afterward. The fixture
+itself exercises actual native Win32 APIs, so this is a real Windows result.
 
-The Windows runner must not run as SYSTEM, must not reuse the existing
-three WSL runner folders, and must not run a PR's Python code directly on
-the host. The staged workflow checks out the pinned branch
-without persisted GitHub credentials, verifies relevant Windows test and
-dependency files against `main`, then launches a disposable Windows
-Sandbox with source/cache folders **read-only**, networking **disabled**,
-clipboard/audio/printer redirection disabled and only a minimal result
-directory writable. Python 3.12.10's official Windows installer is
-signature-checked; binary-only wheels are prefetched in advance, and
-the native Win32 pytest suite runs in the disposable guest, not the host.
+**Important:** this is *not* VM isolation; code from the trusted protected
+`main` branch runs as an ordinary non-admin Windows process. GitHub Actions
+self-hosted runners still have access to files of the OS account running the
+runner. For stronger isolation, a distinct low-privilege Windows user and/or
+a licensed Windows VM is recommended. Avoid sharing personal credentials with
+the runner account. There is no claim of sandbox isolation on Windows Home.
 
-**Windows Sandbox requires a supported Windows Pro, Enterprise or
-Education edition. Windows Home is not supported.** If Windows Sandbox
-cannot be enabled, use an isolated, licensed Windows VM as an equivalent
-gate. The Windows test is not to be skipped or passed using Wine/Linux.
+The installer obtains a short-lived registration token through the
+authenticated GitHub CLI, checks the official GitHub Actions runner release
+asset's published SHA256, configures the fourth dedicated runner (without
+overwriting any prior WSL runner), **logs out the GitHub CLI after
+registration**, and starts the runner interactively (not a Windows service).
+Keep the runner window open for the test.
 
-Run the setup script locally after reviewing it:
+A **one-time browser login in native Windows** is unavoidable: the connected
+GitHub API cannot operate on the user's Windows desktop and must not expose
+a runner registration token in chat. No GitHub billing purchase is needed.
 
-```powershell
-# In a native, non-elevated Windows PowerShell, with an authenticated gh CLI:
-.\scripts\dev\setup_valyqon_windows_asia_runner.ps1
-.\scripts\dev\setup_valyqon_windows_asia_runner.ps1 -Install
-# In the newly-created runner folder, launch run.cmd as a dedicated account.
-```
+### Fastest one-time local setup
 
-The registration script is designed to fail closed for unexpected release
-assets, missing published SHA256 or a runner already configured in that
-folder. **Running this script is an explicit local administrative action,
-not something the GitHub connector can perform silently.**
+In native Windows PowerShell, *not* Run as Administrator:
 
-## Release / merge policy
+1. Install the free GitHub CLI (`winget install --id GitHub.cli -e`).
+2. Sign in using `gh auth login --web -h github.com -p https`.
+3. Obtain the pinned `setup_valyqon_windows_asia_runner.ps1` via authenticated
+   GitHub and run it with `-Install`.
 
-- Verify full Linux CI, six real adapters, six real worker jobs and Docker
-  build on the **final commit SHA**, not an earlier SHA.
-- Verify native Windows Sandbox job passed on the final SHA.
-- Review changes against the current `main` HEAD and all concurrent
-  Russia/CIS/source PRs; never clobber another developer's branch.
-- Verify no AWS / production changes and default opt-in flags remain off.
-- Do not merge PR #36 while any required gate is not proven.
+Never paste the resulting registration token into chat. The setup command
+should be run only from a specific, reviewed commit of this PR.
 
-The three existing WSL runner installations are untouched. The original
-`ci.yml` and Russia/CIS workflow triggers remain unmodified in this
-branch until coordinated adoption of the tested self-hosted equivalents.
+## Final release gate
+
+The last **same** branch commit must have successful free self-hosted:
+
+1. Full Linux CI, including source contracts and official reference checks.
+2. Real six-source app adapters → queue/Worker → isolated SQLite → search.
+3. Production Dockerfile build.
+4. Native Windows Win32 process-isolation fixture.
+5. Compatibility/conflict review with current main and other open PRs.
+
+Older GitHub-hosted checks may fail before runner allocation because the
+account has no billing capacity. They are NOT proof that the source code
+fails. The shared default workflows and branch-protection requirements need
+coordinated adoption of safe equivalent self-hosted jobs; no check should
+be deceptively marked as passed or silently skipped.
+
+**No merge until each necessary gate is genuine and green.**
+No AWS/production changes, and Asian sources remain opt-in disabled
+by default pending deployment decision.

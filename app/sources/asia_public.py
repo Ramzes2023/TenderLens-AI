@@ -1,4 +1,4 @@
-"""Conservative Asian procurement adapters: four Hong Kong RSS feeds, two JETRO lists.
+"""Conservative Asian procurement adapters: six Hong Kong RSS feeds; JETRO research-only.
 
 All endpoints are hard-coded official HTTPS sources.  No login, crawling of
 detail pages, redirects, or speculative deadlines.  Registration is staged
@@ -27,6 +27,8 @@ ASIA_RSS_FEEDS = {
     "hk_ha_leasing": "https://www.housingauthority.gov.hk/en/rss/tender-notices-and-awards.xml",
     "hk_emsd_tenders": "https://www.emsd.gov.hk/filemanager/tendernotice/en/tender_notices.xml",
     "hk_emsd_consultancy": "https://www.emsd.gov.hk/filemanager/tendernotice/en/consultancy.xml",
+    "hk_dsd_current": "https://www.dsd.gov.hk/Menu/EN/RSS/Current_Tenders.xml",
+    "hk_cedd_tenders": "https://www.cedd.gov.hk/eng/rss/tender_notices_rss.xml",
 }
 JETRO_LISTS = {
     "jp_jetro_national": "https://www.jetro.go.jp/en/database/procurement/national/list.html",
@@ -121,7 +123,16 @@ def parse_asia_rss(payload: bytes, *, source: str, limit: int = 20) -> list[Tend
     dc = "{http://purl.org/dc/elements/1.1/}"
     if root.tag not in ("rss", atom + "feed", rdf + "RDF"):
         raise SourceError("Asian procurement endpoint did not return RSS/Atom.")
-    hosts = frozenset({"www.housingauthority.gov.hk", "housingauthority.gov.hk"}) if source.startswith("hk_ha_") else frozenset({"www.emsd.gov.hk", "emsd.gov.hk"})
+    official_hosts = {
+        "hk_ha_works": "www.housingauthority.gov.hk",
+        "hk_ha_leasing": "www.housingauthority.gov.hk",
+        "hk_emsd_tenders": "www.emsd.gov.hk",
+        "hk_emsd_consultancy": "www.emsd.gov.hk",
+        "hk_dsd_current": "www.dsd.gov.hk",
+        "hk_cedd_tenders": "www.cedd.gov.hk",
+    }
+    host = official_hosts[source]
+    hosts = frozenset({host})
     output: list[TenderNotice] = []
     seen: set[str] = set()
     if root.tag == "rss":
@@ -175,8 +186,14 @@ def parse_asia_rss(payload: bytes, *, source: str, limit: int = 20) -> list[Tend
             source=source, external_id=external_id,
             title=title[:1000], url=link[:2000],
             published_at=_published(raw_date),
-            customer=("Hong Kong Housing Authority" if source.startswith("hk_ha")
-                      else "Hong Kong Electrical and Mechanical Services Department"),
+            customer=({
+                "hk_ha_works": "Hong Kong Housing Authority",
+                "hk_ha_leasing": "Hong Kong Housing Authority",
+                "hk_emsd_tenders": "Hong Kong Electrical and Mechanical Services Department",
+                "hk_emsd_consultancy": "Hong Kong Electrical and Mechanical Services Department",
+                "hk_dsd_current": "Hong Kong Drainage Services Department",
+                "hk_cedd_tenders": "Hong Kong Civil Engineering and Development Department",
+            }[source]),
             summary=_text(description)[:4000] or None,
             region="Hong Kong",
         ))

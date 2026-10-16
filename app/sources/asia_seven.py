@@ -40,7 +40,8 @@ def validate_sources(catalog, *, now=None) -> tuple[str, ...]:
 
 def search_stored(opportunities, query: str, *, limit: int = 20, source: str | None = None) -> list[dict]:
     """Bounded local keyword search; never send the user's words upstream."""
-    if not isinstance(query, str) or not _QUERY.fullmatch(query.strip()):
+    if (not isinstance(query, str) or any(ord(ch) < 32 or ord(ch) == 127 for ch in query)
+            or not _QUERY.fullmatch(query.strip())):
         raise ValueError("Search query must be 2-120 printable characters.")
     if type(limit) is not int or not 1 <= limit <= MAX_RETURNED:
         raise ValueError("Invalid search limit.")
@@ -93,7 +94,9 @@ def main(argv=None) -> int:
         if args.source and args.search is None:
             raise ValueError("Source filter requires search mode.")
         if args.search is not None:
-            if not _QUERY.fullmatch(args.search.strip()) or not 1 <= args.limit <= MAX_RETURNED:
+            if (any(ord(ch) < 32 or ord(ch) == 127 for ch in args.search)
+                    or not _QUERY.fullmatch(args.search.strip())
+                    or not 1 <= args.limit <= MAX_RETURNED):
                 raise ValueError("Invalid search input.")
         from app.database.backend import Database
         from app.database.config import load_database_settings

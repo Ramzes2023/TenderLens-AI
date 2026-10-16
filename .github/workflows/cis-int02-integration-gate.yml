@@ -12,6 +12,10 @@ on:
       - "scripts/ci_cis_int02_live_docker.sh"
       - "scripts/ci_cis_postgres16_fenced_acceptance.py"
       - "scripts/ci_cis_am_tj_live_acceptance.py"
+      - "app/sources/**"
+      - "app/jobs/**"
+      - "app/database/**"
+      - "tests/**"
   workflow_dispatch:
 
 permissions:

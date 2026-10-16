@@ -15,10 +15,10 @@ from app.database.backend import StorageError, StorageIntegrityError
 from app.jobs.models import JobScope, LeaseLostError
 from app.jobs.worker import PermanentJobError, RetryableJobError
 from .eis_rss import SourceError
-from .transport_errors import SourceTransportError
 from .http import ConnectorTransportError, FetchPolicy, bounded_fetch, _is_public_ip_error
 from .opportunities import validate_notice
 from .registry import SourceRegistryError
+from .transport_errors import SourceTransportError
 from .world_bank import WorldBankSourceError
 
 JOB_TYPE = 'connector.sync.v1'
@@ -29,6 +29,7 @@ HOSTS = {
     'am_armeps': frozenset({'eauction.armeps.am'}),
     'tj_eprocurement': frozenset({'eprocurement.gov.tj'}),
     'b2b_center': frozenset({'www.b2b-center.ru'}),
+    'tektorg': frozenset({'www.tektorg.ru'}),
     'eis_223': frozenset({'zakupki.gov.ru'}),
     'eis': frozenset({'zakupki.gov.ru', 'www.zakupki.gov.ru'}),
     'ted': frozenset({'api.ted.europa.eu'}),
@@ -41,6 +42,16 @@ HOSTS = {
     'za_etenders': frozenset({'admin.etenders.gov.za'}),
     'india_cppp': frozenset({'eprocure.gov.in'}),
     'kz_goszakup': frozenset({'ows.goszakup.gov.kz'}),
+    'mikroton_tender': frozenset({'tender.mt52.ru'}),
+    # Staged Asian feeds: host allowlists apply to the actual worker network call.
+    'hk_ha_works': frozenset({'www.housingauthority.gov.hk'}),
+    'hk_ha_leasing': frozenset({'www.housingauthority.gov.hk'}),
+    'hk_emsd_tenders': frozenset({'www.emsd.gov.hk'}),
+    'hk_emsd_consultancy': frozenset({'www.emsd.gov.hk'}),
+    'hk_dsd_current': frozenset({'www.dsd.gov.hk'}),
+    'hk_cedd_tenders': frozenset({'www.cedd.gov.hk'}),
+    'jp_jetro_national': frozenset({'www.jetro.go.jp'}),
+    'jp_jetro_local': frozenset({'www.jetro.go.jp'}),
 }
 
 
@@ -130,7 +141,11 @@ class ConnectorSyncHandler:
         request_limit = (4 if source_id in {'ted', 'uk_fts', 'world_bank'}
                          else 2 if source_id == 'am_armeps'
                          else self.max_records + 1 if source_id == 'austender'
-                         else 5 if source_id in {'eis', 'eis_223', 'india_cppp', 'kz_goszakup'} else 1)
+                         else 5 if source_id in {'eis', 'eis_223', 'india_cppp', 'kz_goszakup'}
+                         else 2 if source_id in {'jp_jetro_national', 'jp_jetro_local'}
+                         else min(self.max_records, 5) + 1 if source_id == 'tektorg'
+                         else 2 if source_id == 'mikroton_tender'
+                         else 1)
         async def fetch():
             with bounded_fetch(FetchPolicy(HOSTS[source_id], request_limit)):
                 return await asyncio.wait_for(source.fetch(self.max_records), timeout=180)
@@ -147,7 +162,7 @@ class ConnectorSyncHandler:
             kind = PermanentJobError if _is_public_ip_error(error) else RetryableJobError
             raise kind('Connector unavailable.') from None
         except SourceTransportError:
-            raise RetryableJobError("Connector unavailable.") from None
+            raise RetryableJobError('Connector unavailable.') from None
         except (SourceError, WorldBankSourceError, ValueError, TypeError) as error:
             if source_id in {'ted', 'uk_fts', 'world_bank'} and getattr(error, 'retryable', False):
                 raise RetryableJobError('International connector temporarily unavailable.') from None

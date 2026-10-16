@@ -1,0 +1,59 @@
+name: RU Fabrikant223 official public procurement catalog discovery
+on:
+  push:
+    branches: [diag/ru-final-gates-20261016]
+    paths: [.github/workflows/ru-fabrikant223-official-discovery.yml]
+permissions: {}
+jobs:
+  public-fabrikant223:
+    runs-on: valyqon-ru3
+    timeout-minutes: 6
+    steps:
+      - name: Inspect public 223-FZ official listing and independently linked details
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          d="$(mktemp -d)"
+          trap 'rm -rf "$d"' EXIT
+          for src in soap2 soap2published bonus bonuspublished; do
+            case "$src" in
+              soap2) url='https://soap2.fabrikant.ru/223/catalog/procedure' ;;
+              soap2published) url='https://soap2.fabrikant.ru/223/catalog/procedure/published' ;;
+              bonus) url='https://bonus.fabrikant.ru/223/catalog/procedure' ;;
+              bonuspublished) url='https://bonus.fabrikant.ru/223/catalog/procedure/published' ;;
+            esac
+            response="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 7 --max-time 20 --max-filesize 1500000 -H 'User-Agent: Mozilla/5.0' -H 'Accept: text/html' --output "$d/$src" --write-out '%{http_code} %{content_type} %{size_download}' "$url" 2>/dev/null)" && rc=0 || rc=$?
+            echo "RU_FAB223_${src}_HTTP=$response;EXIT=$rc"
+            if test "$rc" = 0 && test "${response%% *}" = 200; then
+              python3 - "$d/$src" "$src" <<'PY'
+          import re,sys
+          from html.parser import HTMLParser
+          from urllib.parse import urljoin,urlsplit
+          data=open(sys.argv[1],"rb").read()
+          class Reader(HTMLParser):
+              def __init__(self):super().__init__(convert_charrefs=True);self.links=[];self.current=None
+              def handle_starttag(self,tag,attrs):
+                  if tag=="a":
+                      href=dict(attrs).get("href")
+                      if href:self.current=[href,[]]
+              def handle_data(self,text):
+                  if self.current is not None:self.current[1].append(text)
+              def handle_endtag(self,tag):
+                  if tag=="a" and self.current is not None:
+                      self.links.append((self.current[0]," ".join(" ".join(self.current[1]).split())))
+                      self.current=None
+          reader=Reader();reader.feed(data.decode("utf-8-sig","replace"))
+          source=sys.argv[2]
+          exact=[(h,t) for h,t in reader.links if re.search(r'/223/(?:procedure|catalog/procedure|trade)/',h)]
+          print("RU_FAB223_"+source+"_ALL_ANCHORS="+str(len(reader.links)))
+          print("RU_FAB223_"+source+"_PROCURE_ANCHORS="+str(len(exact)))
+          print("RU_FAB223_"+source+"_REGNUMBER_11="+str(len(set(re.findall(rb'(?<![0-9])3[0-9]{10}(?![0-9])',data)))))
+          print("RU_FAB223_"+source+"_SAMPLE_PATHS="+repr([re.sub(r'[0-9]{8,19}','<ID>',urlsplit(urljoin("https://soap2.fabrikant.ru",h)).path)[:110] for h,_ in exact[:5]]))
+          print("RU_FAB223_"+source+"_ANCHOR_TITLE_LENGTHS="+repr([len(t) for _,t in exact[:5]]))
+          PY
+            fi
+          done
+          echo 'RU_FAB223_INDEPENDENT_DETAIL_VERIFIED=NO'
+          echo 'RU_FAB223_DB_SEARCH_VERIFIED=NO'
+          echo 'PRODUCTION_CHANGED=NO'

@@ -87,7 +87,7 @@ jobs:
               # Official public links contain a navigation-only backurl query.
               # Discard it rather than forwarding parameters to the detail URL.
               if (u.scheme=="https" and u.netloc==HOST and match and not u.fragment
-                      and u.port is None and (not u.query or u.query.startswith("backurl="))):
+                      and u.port is None and (not u.query or (u.query.removeprefix("&").startswith("backurl=") and "&" not in u.query.removeprefix("&") and len(u.query)<=512))):
                   unique.setdefault(match.group(2),("https://"+HOST+u.path,match.group(1),text))
           print("RU_FABRIKANT_44_PUBLIC_LIST_UNIQUE="+str(len(unique)))
           print("RU_FABRIKANT_44_ANCHOR_TEXT_LENGTHS="+repr([len(x[2]) for x in list(unique.values())[:4]]))

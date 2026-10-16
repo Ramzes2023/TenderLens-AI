@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Iterable
 from .am_armeps import ArmeniaArmepsSource
 from .tj_eprocurement import TajikistanEprocurementSource
 from .uz_uzex import UzbekistanUzexSource
+from .md_achizitii import MoldovaAchizitiiSource
 from .asia_public import ASIA_RSS_FEEDS, AsiaPublicSource
 from .jp_jetro_bid_rss import JetroBidRssSource, RSS_URL as JETRO_BID_RSS_URL
 from .hk_hyd_tenders import HighwaysTendersSource, RSS_URL as HYD_TENDERS_RSS_URL
@@ -445,6 +446,21 @@ def build_source_catalog(
         languages=("uz", "ru"),
         homepage_url="https://etender.uzex.uz/",
         official=True,
+        enabled=False,
+        capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
+    ))
+
+    # Accredited Moldova marketplace is not an official government OCDS API.
+    # Keep the public-source adapter disabled until separate activation.
+    registry.register(SourceRegistration(
+        key="md_achizitii",
+        display_name="Moldova Achizitii.md public procurement marketplace",
+        source=MoldovaAchizitiiSource(timeout=min(timeout, 30)),
+        transport=SourceTransport.HTML,
+        jurisdictions=("MD",),
+        languages=("ro", "ru"),
+        homepage_url="https://achizitii.md/ro/",
+        official=False,
         enabled=False,
         capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
     ))

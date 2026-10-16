@@ -89,6 +89,24 @@ def test_stored_keyword_search_is_local_bounded_seven_source_only():
     assert store.calls == [(source, 7, ("equipment",)) for source in SOURCES]
 
 
+
+def test_source_scoped_search_never_reads_other_sources():
+    class FakeStore:
+        def __init__(self):
+            self.calls = []
+        def read(self, source, limit=20, search_terms=()):
+            self.calls.append(source)
+            return [notice(source, source + "-one")]
+
+    store = FakeStore()
+    found = search_stored(store, "equipment", limit=5, source=JETRO)
+    assert store.calls == [JETRO]
+    assert len(found) == 1 and found[0]["source"] == JETRO
+    with pytest.raises(ValueError):
+        search_stored(store, "equipment", limit=5, source="evil_unknown")
+    assert store.calls == [JETRO]
+
+
 def test_seven_real_queue_and_snapshot_path_offline_fixture(tmp_path, monkeypatch):
     """All seven actual source IDs use the real job/worker/schema/storage/search."""
     from app.database.backend import Database

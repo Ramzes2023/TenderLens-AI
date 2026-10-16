@@ -1,0 +1,53 @@
+name: RU real HTML listing diagnostic and new Fabrikant catalog discovery
+on:
+  push:
+    branches: [diag/ru-final-gates-20261016]
+    paths: [.github/workflows/ru-source-response-shapes.yml]
+permissions: {}
+jobs:
+  trusted-response-shapes:
+    runs-on: valyqon-ru3
+    timeout-minutes: 7
+    steps:
+      - name: Probe exact-host public HTML and count matching procurement links only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          d="$(mktemp -d)"
+          trap 'rm -rf "$d"' EXIT
+          for src in b2b tektorg fabrikant44 fabrikant44published fabrikant223; do
+            case "$src" in
+              b2b) url='https://www.b2b-center.ru/search/' ;;
+              tektorg) url='https://www.tektorg.ru/223-fz/procedures' ;;
+              fabrikant44) url='https://44.fabrikant.ru/44/catalog/procedure' ;;
+              fabrikant44published) url='https://44.fabrikant.ru/44/catalog/procedure/published' ;;
+              fabrikant223) url='https://zmo.fabrikant.ru/223/catalog/procedure/published' ;;
+            esac
+            info="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 7 --max-time 19 --max-filesize 1700000 -H 'Accept: text/html' -H 'User-Agent: Mozilla/5.0' --output "$d/$src" --write-out '%{http_code} %{content_type} %{size_download}' "$url" 2>/dev/null)" && rc=0 || rc=$?
+            echo "RU_RESPONSE_${src}_HTTP=$info;CURL_EXIT=$rc"
+            if test "$rc" != 0 || test "${info%% *}" != 200; then continue; fi
+            python3 - "$d/$src" "$src" <<'PY'
+          import re,sys
+          from html.parser import HTMLParser
+          data=open(sys.argv[1],'rb').read()
+          class Links(HTMLParser):
+              def __init__(self):super().__init__(convert_charrefs=True);self.links=[]
+              def handle_starttag(self,t,a):
+                  if t=='a':
+                      x=dict(a).get('href')
+                      if x:self.links.append(x)
+          p=Links();p.feed(data.decode('utf-8-sig','replace'))
+          source=sys.argv[2]
+          if source=='b2b': pat=r'/search/number/[A-Za-z0-9-]+/'
+          elif source=='tektorg':pat=r'/223-fz/procedures/[0-9]{5,15}/?'
+          else:pat=r'(?:/44/|/223/|/procedure/|/trade/|/catalog/procedure)[^<>" ]{0,140}'
+          matches=[a for a in p.links if re.search(pat,a,re.I)]
+          print("RU_RESPONSE_"+source+"_BYTES="+str(len(data)))
+          print("RU_RESPONSE_"+source+"_ANCHORS="+str(len(p.links)))
+          print("RU_RESPONSE_"+source+"_PROCURE_LINKS="+str(len(matches)))
+          print("RU_RESPONSE_"+source+"_SAMPLE_PATH_SHAPES="+repr([re.sub(r'[0-9]{5,}', '<ID>', x.split('?')[0])[:120] for x in matches[:3]]))
+          PY
+          done
+          echo 'RU_RESPONSE_LIVE_DB_VERIFIED=NO'
+          echo 'PRODUCTION_CHANGED=NO'

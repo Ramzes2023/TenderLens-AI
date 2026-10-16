@@ -26,6 +26,7 @@ SYSTEM_SCOPE = JobScope()
 # discovery; worker ingestion deliberately only permits the official EIS host.
 HOSTS = {
     'b2b_center': frozenset({'www.b2b-center.ru'}),
+    'tektorg': frozenset({'www.tektorg.ru'}),
     'eis_223': frozenset({'zakupki.gov.ru'}),
     'eis': frozenset({'zakupki.gov.ru', 'www.zakupki.gov.ru'}),
     'ted': frozenset({'api.ted.europa.eu'}),
@@ -137,6 +138,7 @@ class ConnectorSyncHandler:
                          else 5 if source_id in {'eis', 'eis_223', 'india_cppp', 'kz_goszakup'}
                          else 2 if source_id in {'jp_jetro_national', 'jp_jetro_local'}
                          else 2 if source_id == 'mikroton_tender'
+                         else min(self.max_records, 5) + 1 if source_id == 'tektorg'
                          else 1)
         async def fetch():
             with bounded_fetch(FetchPolicy(HOSTS[source_id], request_limit)):

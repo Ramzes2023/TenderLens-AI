@@ -47,11 +47,15 @@ class _Listing(_Tables):
 def _value(cell, label):
     if type(cell) is not str:
         raise SourceError("KG malformed field.")
-    data = cell.split()
-    prefix = label.split()
-    if len(data) <= len(prefix) or [p.casefold() for p in data[:len(prefix)]] != [p.casefold() for p in prefix]:
+    data = " ".join(cell.split())
+    # The official JSF source sometimes omits a space before an untranslated
+    # method label (e.g. procurement method???REQUEST_FOR_QUOTATION???).
+    if not data.casefold().startswith(label.casefold()):
         raise SourceError("KG official listing field labels changed.")
-    value = " ".join(data[len(prefix):]).strip()
+    remainder = data[len(label):]
+    if not remainder or not (remainder[0].isspace() or remainder.startswith("???")):
+        raise SourceError("KG official listing field boundary changed.")
+    value = remainder.strip()
     if not value or len(value) > 2000:
         raise SourceError("KG incomplete or oversized official field.")
     return value

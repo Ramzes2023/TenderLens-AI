@@ -121,7 +121,7 @@ jobs:
           set -euo pipefail
           quoted_source="$(printf '%q' "$GITHUB_WORKSPACE")"
           quoted_image="$(printf '%q' "$ASIA_TEST_IMAGE")"
-          timeout 1000s sg docker -c "docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 3g --cpus 2 --user 65534:65534 --tmpfs /tmp:rw,nosuid,nodev,size=768m --tmpfs /workspace:rw,nosuid,nodev,size=768m,mode=1777 --env HOME=/tmp --env PYTHONDONTWRITEBYTECODE=1 --volume $quoted_source:/input:ro --workdir /workspace $quoted_image sh -c 'cp -a /input/. /workspace/ && mkdir -p /workspace/.cache && python -m pytest -q -p no:cacheprovider --durations=15 --ignore=tests/test_p39e_local_preview.py'"
+          timeout 1000s sg docker -c "docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 3g --cpus 2 --user 65534:65534 --tmpfs /tmp:rw,nosuid,nodev,size=768m --tmpfs /workspace:rw,nosuid,nodev,size=768m,mode=1777 --env HOME=/tmp --env PYTHONDONTWRITEBYTECODE=1 --volume $quoted_source:/input:ro --workdir /workspace $quoted_image sh -c 'cp -R /input/. /workspace/ && mkdir -p /workspace/.cache && python -m pytest -q -p no:cacheprovider --durations=15 --ignore=tests/test_p39e_local_preview.py'"
           echo "ASIA_SELF_HOSTED_FULL_LINUX_CI=PASS"
       - name: Real source adapter → disposable SQLite → keyword-search acceptance
         shell: bash

@@ -45,6 +45,7 @@ HOSTS = {
     'india_cppp': frozenset({'eprocure.gov.in'}),
     'kz_goszakup': frozenset({'ows.goszakup.gov.kz'}),
     'mikroton_tender': frozenset({'tender.mt52.ru'}),
+    'roseltorg_public': frozenset({'www.roseltorg.ru'}),
     # Staged Asian feeds: host allowlists apply to the actual worker network call.
     'hk_ha_works': frozenset({'www.housingauthority.gov.hk'}),
     'hk_ha_leasing': frozenset({'www.housingauthority.gov.hk'}),
@@ -147,6 +148,7 @@ class ConnectorSyncHandler:
                          else 5 if source_id in {'eis', 'eis_223', 'india_cppp', 'kz_goszakup'}
                          else 2 if source_id in {'jp_jetro_national', 'jp_jetro_local'}
                          else min(self.max_records, 5) + 1 if source_id == 'tektorg'
+                         else min(self.max_records, 3) + 1 if source_id == 'roseltorg_public'
                          else 2 if source_id == 'mikroton_tender'
                          else 1)
         async def fetch():

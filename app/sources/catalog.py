@@ -21,6 +21,7 @@ from .india_cppp import IndiaCpppSource
 from .kz_goszakup import KazakhstanGoszakupApiSource
 from .multi import MultiSourceFetcher, MultiSourceFetchReport
 from .mikroton_tender import MikrotonTenderSource
+from .roseltorg_public import RoseltorgPublicSource
 from .nz_gets_rss import NzGetsRssSource
 from .registry import (
     SourceCapabilities,
@@ -550,6 +551,20 @@ def build_source_catalog(
             jurisdictions=("RU",),
             languages=("ru",),
             homepage_url="https://www.tektorg.ru/223-fz/procedures",
+            official=False,
+            enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    if settings.roseltorg_public_enabled:
+        registry.register(SourceRegistration(
+            key="roseltorg_public",
+            display_name="Roseltorg — verified public procedure details (classification unverified)",
+            source=RoseltorgPublicSource(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url="https://www.roseltorg.ru/procedures/search",
             official=False,
             enabled=True,
             capabilities=SourceCapabilities(),

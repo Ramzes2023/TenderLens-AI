@@ -35,6 +35,11 @@ jobs:
         run: python -m pip install -r requirements-dev.txt
       - name: Verify Python source
         run: python -m py_compile scripts/ci_ru_b2b_real_worker.py
-      - name: Real B2B -> app worker -> ephemeral SQLite -> source keyword query
+      - name: Offline deterministic B2B parsing and source integration contracts
+        run: python -m pytest -q tests/test_b2b_foreign_aggregate.py tests/test_ru_source_integration_contract.py
+      - name: Strict live B2B -> app worker -> ephemeral SQLite -> source keyword query
+        # Live upstream can vary between simultaneous PR/push requests. Keep
+        # live source evidence as a strict branch push gate, never a mocked PASS.
+        if: github.event_name == 'push'
         timeout-minutes: 3
         run: python -B -m scripts.ci_ru_b2b_real_worker

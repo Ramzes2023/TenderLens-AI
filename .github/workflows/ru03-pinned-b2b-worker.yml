@@ -42,6 +42,6 @@ jobs:
           python3 -m venv "$temp/venv"
           "$temp/venv/bin/python" -m pip install --disable-pip-version-check --no-cache-dir -r requirements-dev.txt >/dev/null
           "$temp/venv/bin/python" -m py_compile scripts/ci_ru_b2b_real_worker.py
-          "$temp/venv/bin/python" -B scripts/ci_ru_b2b_real_worker.py
+          "$temp/venv/bin/python" -B -m scripts.ci_ru_b2b_real_worker
           echo 'RU3_B2B_PINNED_APP_GATE=PASS'
           echo 'PRODUCTION_CHANGED=NO'

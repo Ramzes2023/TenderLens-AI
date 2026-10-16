@@ -1,0 +1,52 @@
+name: RU independent regional procurement public listing discovery
+on:
+  push:
+    branches: [diag/ru-final-gates-20261016]
+    paths: [.github/workflows/ru-independent-regional-discovery.yml]
+permissions: {}
+jobs:
+  regional-public-listings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Read-only official regional listings, no credentials or redirects
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(mktemp -d)"
+          trap 'rm -rf "$d"' EXIT
+          for src in lenobl_requests lenobl_new dagestan_small polyus_active; do
+            case "$src" in
+              lenobl_requests) url='https://zakupki.lenreg.ru/Search/Requests' ;;
+              lenobl_new) url='https://zakupki.lenreg.ru/Search/NewRequests' ;;
+              dagestan_small) url='https://goszakaz.e-dag.ru/smallpurchases/' ;;
+              polyus_active) url='https://tender.polyus.com/procedures/ACTIVE' ;;
+            esac
+            result="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 7 --max-time 18 --max-filesize 2000000 -H 'Accept: text/html' -H 'User-Agent: Mozilla/5.0' --output "$d/$src" --write-out '%{http_code} %{content_type} %{size_download}' "$url" 2>/dev/null)" && rc=0 || rc=$?
+            echo "RU_REGIONAL_${src}_HTTP=$result;CURL_EXIT=$rc"
+            if test "$rc" = 0 && test "${result%% *}" = 200; then
+              python3 - "$d/$src" "$src" <<'PY'
+          import sys,re
+          from html.parser import HTMLParser
+          from urllib.parse import urlsplit,urljoin
+          html=open(sys.argv[1],'rb').read()
+          class Reader(HTMLParser):
+              def __init__(self): super().__init__();self.links=[]
+              def handle_starttag(self,t,a):
+                  if t=='a':
+                      href=dict(a).get('href')
+                      if href:self.links.append(href)
+          reader=Reader();reader.feed(html.decode('utf-8-sig','replace'))
+          cand=[x for x in reader.links if re.search(r'purchase|request|notice|procedure|small|tender|zakup|trade',x,re.I)]
+          # Sample only path shapes; never disclose cookies or query secrets.
+          shapes=[re.sub(r'[0-9]{6,}', '<ID>', urlsplit(urljoin('https://example.invalid',x)).path)[:120] for x in cand[:4]]
+          print('RU_REGIONAL_'+sys.argv[2]+'_HTML_BYTES='+str(len(html)))
+          print('RU_REGIONAL_'+sys.argv[2]+'_ANCHORS='+str(len(reader.links)))
+          print('RU_REGIONAL_'+sys.argv[2]+'_CANDIDATE_LINKS='+str(len(cand)))
+          print('RU_REGIONAL_'+sys.argv[2]+'_CANDIDATE_PATH_SHAPES='+repr(shapes))
+          PY
+            fi
+          done
+          echo 'RU_REGIONAL_INDEPENDENT_NOTICE_DETAILS_VERIFIED=NO'
+          echo 'RU_REGIONAL_APP_SQL_SEARCH=NOT_TESTED'
+          echo 'PRODUCTION_CHANGED=NO'

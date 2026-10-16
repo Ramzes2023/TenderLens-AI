@@ -20,6 +20,12 @@ PAGES = (
     "https://icetrade.by/tenders8000/",
     "https://icetrade.by/tenders8000/search",
 )
+ALTERNATIVE_OFFICIAL_HOSTS = (
+    "https://www.icetrade.by/",
+    "https://goszakupki.by/",
+    "https://www.goszakupki.by/",
+    "https://zakupki.butb.by/",
+)
 MAX_BYTES = 1024 * 1024
 TIMEOUT = 12
 DETAIL = re.compile(r"^/tenders8000/view/([1-9]\d{3,9})$")
@@ -125,6 +131,26 @@ def main():
             if isinstance(e, URLError):
                 item["reason_class"]=type(e.reason).__name__
         output["tested_paths"].append(item)
+    # HTTPS trust diagnostics are not evidence of a functioning procurement
+    # adapter: no redirects, proxies, disabled verification or HTML stand-ins.
+    output["alternative_official_https"] = []
+    for candidate in ALTERNATIVE_OFFICIAL_HOSTS:
+        item = {"hostname": urlsplit(candidate).hostname, "tls_trusted": False}
+        try:
+            request = Request(candidate, headers={"User-Agent": "VALYQON-public-procurement-verifier/1.0",
+                                                  "Accept": "text/html"})
+            with opener.open(request, timeout=TIMEOUT) as response:
+                item["http_status"] = response.status
+                item["tls_trusted"] = response.status == 200
+                item["html_response"] = "html" in response.headers.get("Content-Type", "").lower()
+                response.read(min(4096, MAX_BYTES))
+        except HTTPError as err:
+            item.update({"error_kind": "HTTPError", "http_status": err.code})
+        except URLError as err:
+            item.update({"error_kind": "URLError", "reason_class": type(err.reason).__name__})
+        except (OSError, TimeoutError, ValueError) as err:
+            item["error_kind"] = type(err).__name__
+        output["alternative_official_https"].append(item)
     output["verified"]=any(x.get("verified") for x in output["tested_paths"])
     print(json.dumps(output,ensure_ascii=False,sort_keys=True))
     return 0 if output["verified"] else 1

@@ -1,0 +1,38 @@
+name: RU bounded B2B genuine public listing size and filter alternatives
+on:
+  push:
+    branches: [diag/ru-final-gates-20261016]
+    paths: [.github/workflows/ru-b2b-size-filter-diagnostic.yml]
+permissions: {}
+jobs:
+  b2b-safe-size:
+    runs-on: valyqon-ru3
+    timeout-minutes: 6
+    steps:
+      - name: Compare strictly public B2B listing payload bounds without fetching details
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          d="$(mktemp -d)"
+          trap 'rm -rf "$d"' EXIT
+          for variant in search office; do
+            case "$variant" in
+              search) url='https://www.b2b-center.ru/search/' ;;
+              office) url='https://www.b2b-center.ru/search/industry/ofis/' ;;
+            esac
+            result="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 7 --max-time 22 --max-filesize 9000000 -H 'User-Agent: Mozilla/5.0' -H 'Accept: text/html' --output "$d/$variant" --write-out '%{http_code} %{content_type} %{size_download}' "$url" 2>/dev/null)" && rc=0 || rc=$?
+            echo "RU_B2B_VARIANT_$variant=$result;CURL_EXIT=$rc"
+            if test "$rc" = 0 && test "${result%% *}" = 200; then
+              python3 - "$d/$variant" "$variant" <<'PY'
+          import sys,re
+          data=open(sys.argv[1],'rb').read()
+          print("RU_B2B_"+sys.argv[2]+"_HTML_BYTES="+str(len(data)))
+          print("RU_B2B_"+sys.argv[2]+"_STRUCTURED_CARDS="+str(data.count(b'https://schema.org/ListItem')))
+          print("RU_B2B_"+sys.argv[2]+"_OWN_DETAILS="+str(data.count(b'/search/number/')))
+          print("RU_B2B_"+sys.argv[2]+"_RESPONSE_COMPLETE_HTML="+str(b'</html>' in data[-2000:].lower()))
+          PY
+            fi
+          done
+          echo 'RU_B2B_NO_DATABASE_WRITES=YES'
+          echo 'PRODUCTION_CHANGED=NO'

@@ -14,12 +14,12 @@ from pathlib import Path
 from app.database.backend import Database
 from app.database.config import DatabaseSettings
 from app.monitoring.config import MonitoringSettings
-from app.sources.asia_public import ASIA_RSS_FEEDS, JETRO_LISTS
+from app.sources.asia_public import ASIA_RSS_FEEDS
 from app.sources.catalog import build_source_catalog
 from app.sources.opportunities import OpportunityRepository, validate_notice
 from app.sources.snapshots import snapshot_catalog
 
-KEYS = (*ASIA_RSS_FEEDS, *JETRO_LISTS)
+KEYS = tuple(ASIA_RSS_FEEDS)
 
 
 def settings():

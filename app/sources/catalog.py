@@ -5,6 +5,8 @@ import os
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Iterable
 
+from .am_armeps import ArmeniaArmepsSource
+from .tj_eprocurement import TajikistanEprocurementSource
 from .austender_rss import AusTenderRssSource
 from .b2b_center import B2BCenterSource
 from .canada_buys_dataset import CanadaBuysDatasetSource
@@ -88,6 +90,8 @@ class SourceCatalog:
             SourceRegistration
         ] = []
 
+        from .snapshots import SnapshotSource
+
         for registration in self.registry.registrations():
             source = registration.source
 
@@ -119,6 +123,10 @@ class SourceCatalog:
                     registration,
                     source=source,
                 )
+
+            if (registration.key in {"am_armeps", "tj_eprocurement"}
+                    and registration.enabled and isinstance(source, SnapshotSource)):
+                registration = replace(registration, source=source.for_search_terms(terms))
 
             registrations.append(
                 registration
@@ -390,6 +398,20 @@ def build_source_catalog(
             ),
         ]
     )
+
+    # Reviewed public CIS adapters remain disabled; activation is a separate decision.
+    for key, display, adapter, country, languages, homepage, pagination in (
+        ("am_armeps", "Armenia ARMEPS", ArmeniaArmepsSource, "AM", ("en", "hy"),
+         "https://eauction.armeps.am/en/public/tender/", True),
+        ("tj_eprocurement", "Tajikistan public procurement", TajikistanEprocurementSource,
+         "TJ", ("ru", "tg"), "https://eprocurement.gov.tj/ru/searchanno", False),
+    ):
+        registry.register(SourceRegistration(
+            key=key, display_name=display, source=adapter(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML, jurisdictions=(country,), languages=languages,
+            homepage_url=homepage, official=True, enabled=False,
+            capabilities=SourceCapabilities(pagination=pagination),
+        ))
 
     # Russian connectors are opt-in. Do not enable unverified live adapters.
     if settings.eis_223_configured:

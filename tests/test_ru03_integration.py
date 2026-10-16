@@ -4,6 +4,7 @@ No live EIS coverage. Host test runner must execute this suite independently.
 """
 import asyncio
 import json
+import uuid
 from contextlib import closing
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -21,7 +22,7 @@ from app.sources.catalog import build_source_catalog
 from app.sources.eis_223_rss import build_eis_223_rss_url, parse_eis_223_feed
 from app.sources import eis_223_rss as adapter
 from app.sources.http import source_client, ConnectorTransportError
-from app.sources.ingestion import ConnectorSyncService, ConnectorSyncHandler, SYSTEM_SCOPE
+from app.sources.ingestion import ConnectorSyncService, ConnectorSyncHandler, SYSTEM_SCOPE, JOB_TYPE
 from app.sources.snapshots import snapshot_catalog
 from test_scoring_workers import offline, system, run
 
@@ -74,11 +75,20 @@ def test_profile_terms_and_ca(monkeypatch):
     assert options[0]['verify'] == 'verified-eis.pem' and options[0]['timeout'] == 9
 
 
-def ingest(s, catalog):
+def ingest(s, catalog, *, slot=0):
     service = ConnectorSyncService(JobService(s.jobs), catalog)
-    job = service.enqueue('eis_223', now=datetime(2026, 10, 13, tzinfo=timezone.utc))
+    job = service.enqueue('eis_223', now=datetime(2026, 10, 13 + slot, tzinfo=timezone.utc))
+    claim = s.jobs.claim_next('worker-' + uuid.uuid4().hex, job_types=(JOB_TYPE,))
+    assert claim and claim.job.id == job.id
+    context = SimpleNamespace(
+        job=claim.job,
+        should_stop=False,
+        fenced_write=lambda write: s.jobs.fenced_write(claim.job.id, claim.token, write),
+    )
     handler = ConnectorSyncHandler(catalog, s.store)
-    return handler(SimpleNamespace(job=job, should_stop=False), job.payload)
+    result = handler(context, claim.job.payload)
+    assert s.jobs.complete(claim.job.id, claim.token, result)
+    return result
 
 
 def test_full_offline_path(system, monkeypatch):
@@ -87,7 +97,7 @@ def test_full_offline_path(system, monkeypatch):
     calls, _ = mock_http(monkeypatch, lambda request: httpx.Response(200, content=RSS))
     catalog = enabled(eis_223_profile_feeds_enabled=True)
     assert ingest(s, catalog)['inserted_count'] == 1
-    assert ingest(s, catalog)['updated_count'] == 1
+    assert ingest(s, catalog, slot=1)['updated_count'] == 1
     assert len(calls) == 2
     snapshots = snapshot_catalog(catalog, s.store)
     report = asyncio.run(snapshots.fetch(source_keys=['eis_223'], search_terms=['aluminium']))

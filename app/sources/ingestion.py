@@ -12,9 +12,10 @@ from dataclasses import replace
 import httpx
 
 from app.database.backend import StorageError, StorageIntegrityError
-from app.jobs.models import JobScope
+from app.jobs.models import JobScope, LeaseLostError
 from app.jobs.worker import PermanentJobError, RetryableJobError
 from .eis_rss import SourceError
+from .transport_errors import SourceTransportError
 from .http import ConnectorTransportError, FetchPolicy, bounded_fetch, _is_public_ip_error
 from .opportunities import validate_notice
 from .registry import SourceRegistryError
@@ -25,6 +26,8 @@ SYSTEM_SCOPE = JobScope()
 # Explicit server-owned hosts. EIS custom operator URLs remain supported by live
 # discovery; worker ingestion deliberately only permits the official EIS host.
 HOSTS = {
+    'am_armeps': frozenset({'eauction.armeps.am'}),
+    'tj_eprocurement': frozenset({'eprocurement.gov.tj'}),
     'b2b_center': frozenset({'www.b2b-center.ru'}),
     'eis_223': frozenset({'zakupki.gov.ru'}),
     'eis': frozenset({'zakupki.gov.ru', 'www.zakupki.gov.ru'}),
@@ -121,8 +124,11 @@ class ConnectorSyncHandler:
         source = registration.source
         if source_id == 'austender' and hasattr(source, 'max_concurrency'):
             source = replace(source, max_concurrency=1)
+        if source_id == 'am_armeps':
+            source = replace(source, max_pages=2)
         # At most five listing/feed requests; AusTender adds one detail per notice.
         request_limit = (4 if source_id in {'ted', 'uk_fts', 'world_bank'}
+                         else 2 if source_id == 'am_armeps'
                          else self.max_records + 1 if source_id == 'austender'
                          else 5 if source_id in {'eis', 'eis_223', 'india_cppp', 'kz_goszakup'} else 1)
         async def fetch():
@@ -140,6 +146,8 @@ class ConnectorSyncHandler:
         except (TimeoutError, httpx.TransportError, OSError) as error:
             kind = PermanentJobError if _is_public_ip_error(error) else RetryableJobError
             raise kind('Connector unavailable.') from None
+        except SourceTransportError:
+            raise RetryableJobError("Connector unavailable.") from None
         except (SourceError, WorldBankSourceError, ValueError, TypeError) as error:
             if source_id in {'ted', 'uk_fts', 'world_bank'} and getattr(error, 'retryable', False):
                 raise RetryableJobError('International connector temporarily unavailable.') from None
@@ -163,7 +171,10 @@ class ConnectorSyncHandler:
                 continue
             seen.add(notice.identity)
             try:
-                inserted = self.opportunities.upsert(notice, payload['connector_version'])
+                inserted = self.opportunities.upsert_fenced(
+                    notice, payload['connector_version'], getattr(context, 'fenced_write', None))
+            except LeaseLostError:
+                raise RetryableJobError('Connector lease lost.') from None
             except (StorageIntegrityError, sqlite3.IntegrityError):
                 raise PermanentJobError('Invalid connector storage data.') from None
             except (StorageError, sqlite3.OperationalError):

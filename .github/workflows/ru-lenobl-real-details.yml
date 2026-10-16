@@ -1,0 +1,80 @@
+name: RU Leningrad Oblast official small procurement detail validation
+on:
+  push:
+    branches: [diag/ru-final-gates-20261016]
+    paths: [.github/workflows/ru-lenobl-real-details.yml]
+permissions: {}
+jobs:
+  lenobl-real-details:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Verify real public region tender listings and independent specific details
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re,ssl,urllib.request
+          from html.parser import HTMLParser
+          from urllib.parse import urljoin,urlsplit
+          HOST="zakupki.lenreg.ru"
+          URL="https://"+HOST+"/Search/NewRequests"
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*a,**kw):return None
+          client=urllib.request.build_opener(
+              urllib.request.ProxyHandler({}),
+              urllib.request.HTTPSHandler(context=ssl.create_default_context()),
+              NoRedirect())
+          def get(url):
+              u=urlsplit(url)
+              if u.scheme!="https" or u.netloc!=HOST or u.username or u.password or u.fragment or u.query:
+                  raise ValueError("Invalid public URL")
+              with client.open(urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0","Accept":"text/html"}),timeout=17) as resp:
+                  if resp.status!=200 or "html" not in resp.headers.get("content-type","").lower():raise ValueError("Expected HTML 200")
+                  data=resp.read(1_200_001)
+              if not data or len(data)>1_200_000:raise ValueError("Invalid HTML size")
+              return data.decode("utf-8-sig","replace")
+          class Read(HTMLParser):
+              def __init__(self):
+                  super().__init__();self.links=[];self.cur=None;self.h1=[];self.head=None;self.text=[];self.hidden=0
+              def handle_starttag(self,t,a):
+                  attrs=dict(a)
+                  if t in {"script","style","noscript","svg"}:self.hidden+=1
+                  if t=="a" and attrs.get("href") and not self.hidden:self.cur=[attrs["href"],[]]
+                  if t=="h1" and not self.hidden:self.head=[]
+              def handle_data(self,d):
+                  if self.hidden:return
+                  self.text.append(d)
+                  if self.cur is not None:self.cur[1].append(d)
+                  if self.head is not None:self.head.append(d)
+              def handle_endtag(self,t):
+                  if t=="a" and self.cur is not None:
+                      self.links.append((self.cur[0]," ".join(" ".join(self.cur[1]).split())));self.cur=None
+                  if t=="h1" and self.head is not None:
+                      self.h1.append(" ".join(" ".join(self.head).split()));self.head=None
+                  if t in {"script","style","noscript","svg"} and self.hidden:self.hidden-=1
+          listdoc=Read();listdoc.feed(get(URL))
+          ids={}
+          for href,title in listdoc.links:
+              u=urlsplit(urljoin(URL,href))
+              m=re.fullmatch(r"/ProductRequestGroup/Index/([0-9]{4,16})/?",u.path)
+              if (u.scheme=="https" and u.netloc==HOST and not u.query and not u.fragment and m):
+                  ids.setdefault(m.group(1),("https://"+HOST+u.path,title))
+          print("RU_LENOBL_REAL_LIST_UNIQUE="+str(len(ids)))
+          print("RU_LENOBL_REAL_LIST_TITLE_LENGTHS="+repr([len(title) for _,title in list(ids.values())[:5]]))
+          verified=0
+          for identifier,(url,title) in list(ids.items())[:3]:
+              try:
+                  detail=Read();detail.feed(get(url))
+                  visible=" ".join(" ".join(detail.text).split())
+                  id_visible=identifier in visible
+                  title_visible=bool(title and len(title)>=5 and title in visible)
+                  print("RU_LENOBL_REAL_DETAIL_ID_PRESENT="+str(id_visible)+";LIST_TITLE_VISIBLE="+str(title_visible)+";H1_COUNT="+str(len(detail.h1)))
+                  print("RU_LENOBL_REAL_DETAIL_HEADING_LENGTHS="+repr([len(x) for x in detail.h1[:2]]))
+                  if id_visible and title_visible:verified+=1
+              except Exception as e:
+                  print("RU_LENOBL_REAL_DETAIL_ERROR="+type(e).__name__)
+          print("RU_LENOBL_REAL_DETAILS_INDEPENDENT="+str(verified))
+          print("RU_LENOBL_REAL_APP_SQL_SEARCH=NOT_TESTED")
+          print("PRODUCTION_CHANGED=NO")
+          PY

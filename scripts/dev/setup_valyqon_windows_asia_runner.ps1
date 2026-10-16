@@ -17,7 +17,7 @@ if ($env:OS -ne 'Windows_NT') {
     throw 'Native Windows PowerShell is required; do not run in WSL.'
 }
 $id = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = New-Object Security.Principal.WindowsPrincipal($id)
+$principal = [Security.Principal.WindowsPrincipal]::new($id)
 if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw 'Open standard PowerShell without Run as Administrator.'
 }

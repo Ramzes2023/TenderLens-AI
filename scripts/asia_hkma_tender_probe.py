@@ -5,7 +5,7 @@ never counts as a successful tender integration.
 """
 import json
 import httpx
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, parse_qs
 
 URL = "https://api.hkma.gov.hk/public/tender-invitations"
 def main():
@@ -45,7 +45,9 @@ def main():
                         info["sample"].append({
                             "keys":sorted(x)[:18],"title_present":bool(x.get("title")),
                             "host":url.hostname,"scheme":url.scheme,
-                            "path":url.path[:160],"date_present":bool(x.get("date")),
+                            "path":url.path[:160],"query_keys":sorted(parse_qs(url.query))[:12],
+                            "date_sample":str(x.get("date",""))[:30],
+                            "date_present":bool(x.get("date")),
                         })
             except Exception as exc:
                 info["error_type"]=type(exc).__name__

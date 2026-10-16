@@ -19,7 +19,7 @@ MAX_BYTES = 1024 * 1024
 TIMEOUT = 14
 DETAIL = re.compile(r"^/ro/public/tender/([1-9]\d{6,10})/$")
 OCID = re.compile(r"ocds-b3wdp1-MD-\d{10,18}")
-AMOUNT = re.compile(r"\b\d{1,3}(?:[ ,.\u00a0]\d{3})*[,.]\d{2}\s*MDL\b|\b\d{4,12}\s*MDL\b")
+AMOUNT = re.compile(r"\b(?:\d{1,3}(?:[ ,.\u00a0]\d{3})+|\d{1,12})(?:[,.]\d{2})?\s*MDL\b")
 DATE = re.compile(r"\b\d{1,2}\s+[a-zăîșț]{3,12}\s+20\d{2},?\s+\d{1,2}:\d{2}\b|\b\d{2}\.\d{2}\.20\d{2}\s+\d{2}:\d{2}\b", re.I)
 
 

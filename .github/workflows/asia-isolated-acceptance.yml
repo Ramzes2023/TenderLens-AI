@@ -41,7 +41,16 @@ jobs:
             echo "ASIA_HOST_PRECHECK=DOCKER_CLI_UNAVAILABLE"
             exit 2
           fi
-          if ! timeout 20s sg docker -c "docker info --format '{{.ServerVersion}}' >/dev/null" >/dev/null 2>&1; then
+          ready=0
+          for attempt in 1 2 3; do
+            if timeout 20s sg docker -c "docker info --format '{{.ServerVersion}}' >/dev/null" >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            echo "ASIA_DOCKER_READY_ATTEMPT_${attempt}=RETRY"
+            sleep 5
+          done
+          if test "$ready" != 1; then
             echo "ASIA_HOST_PRECHECK=DOCKER_UNREACHABLE"
             exit 3
           fi

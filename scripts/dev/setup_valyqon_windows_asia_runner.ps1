@@ -78,10 +78,47 @@ if (-not $asset) { throw "Official Windows x64 runner asset not found." }
 if ($asset.browser_download_url -notmatch '^https://github\.com/actions/runner/releases/download/v[0-9.]+/actions-runner-win-x64-[0-9.]+\.zip$') {
     throw "Unexpected runner asset host/path."
 }
-if ($asset.digest -notmatch '^sha256:([0-9a-fA-F]{64})$') {
+$digestMatch = [regex]::Match([string]$asset.digest, '^sha256:([0-9a-fA-F]{64})
+$zip = Join-Path $env:TEMP 'valyqon-asia-runner-verified.zip'
+try {
+    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zip -MaximumRedirection 3 -TimeoutSec 240
+    $actualSha = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualSha -ne $expectedSha) { throw "Runner archive SHA256 mismatch." }
+    New-Item -ItemType Directory -Path $Directory -Force | Out-Null
+    Expand-Archive -LiteralPath $zip -DestinationPath $Directory -Force
+    $registration = & gh api --method POST "repos/$Repository/actions/runners/registration-token" --jq '.token'
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($registration)) {
+        throw "Cannot request registration token from GitHub; verify repository-admin permission."
+    }
+    try {
+        Push-Location $Directory
+        try {
+            & (Join-Path $Directory 'config.cmd') --unattended --url "https://github.com/$Repository" --token $registration.Trim() --name $RunnerName --no-default-labels --labels $RunnerLabel --work '_work'
+            if ($LASTEXITCODE -ne 0) { throw "Official runner registration failed." }
+        } finally { Pop-Location }
+    } finally {
+        $registration = $null
+    }
+    Write-Host "WINDOWS_ASIA_RUNNER=REGISTERED"
+    Write-Host "SECURITY=Windows process test uses protected main files, not PR source; non-admin host test, no VM sandbox."
+    # Remove the newly-created gh CLI login before starting the runner, so
+    # runner jobs do not inherit a reusable GitHub CLI token from this user.
+    & gh auth logout --hostname github.com 2>$null
+    if ($LASTEXITCODE -ne 0) { throw "GH CLI credentials were not cleared; do not start runner." }
+    Write-Host "GITHUB_CLI_CREDENTIALS=LOGGED_OUT_AFTER_REGISTRATION"
+    Write-Host "RUNNER_LABELS=CUSTOM_ONLY_NO_DEFAULT_LABELS"
+    Write-Host "START_COMMAND=$Directory\run.cmd"
+    Write-Host "RUNNER_PROCESS=STARTING_INTERACTIVE_NO_SERVICE"
+    Start-Process -FilePath $env:ComSpec -ArgumentList @('/k', ('"' + (Join-Path $Directory 'run.cmd') + '"')) -WorkingDirectory $Directory
+    Write-Host "Keep the new runner console open until Windows acceptance completes; no SYSTEM service installed."
+} finally {
+    Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+}
+)
+if (-not $digestMatch.Success) {
     throw "Published SHA256 is missing; refusing an unverified runner binary."
 }
-$expectedSha = $Matches[1].ToLowerInvariant()
+$expectedSha = $digestMatch.Groups[1].Value.ToLowerInvariant()
 $zip = Join-Path $env:TEMP 'valyqon-asia-runner-verified.zip'
 try {
     Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zip -MaximumRedirection 3 -TimeoutSec 240

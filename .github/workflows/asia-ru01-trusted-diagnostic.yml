@@ -56,6 +56,7 @@ jobs:
           done
           python3 - "$tmp" <<'PY'
           import hashlib
+          from collections import Counter
           import json
           import re
           import sqlite3
@@ -103,6 +104,23 @@ jobs:
               else:
                   print(f'ASIA_PROBE_{source}=UNSUPPORTED_XML_ROOT')
                   continue
+              # Classify links by public hostname and scheme only (no raw URLs,
+              # full titles, tokens, response bodies or query strings in logs).
+              shape = Counter()
+              hosts = Counter()
+              nonempty_titles = 0
+              for item in items[:50]:
+                  link = item.findtext('link') if root.tag == 'rss' else next(
+                      (l.get('href') for l in item.findall(f'{namespace}link') if l.get('rel','alternate') == 'alternate'), None)
+                  title = item.findtext('title') if root.tag == 'rss' else item.findtext(namespace+'title')
+                  nonempty_titles += bool((title or '').strip())
+                  if not link:
+                      shape['NO_LINK'] += 1
+                  else:
+                      parsed = urlsplit(link.strip())
+                      shape[parsed.scheme.lower() or 'RELATIVE'] += 1
+                      hosts[parsed.hostname or '(relative)'] += 1
+              print(f'ASIA_RSS_SHAPES_{source}=' + json.dumps({'schemes':dict(shape),'hosts':dict(hosts),'titled':nonempty_titles},sort_keys=True))
               print(f'ASIA_PROBE_{source}=XML_ITEMS_{len(items)};HTTPS_ITEM_LINKS_{len(rows)-count_before}')
           for source, section in (('jp_jetro_national','national'),('jp_jetro_local','local')):
               path = directory/source

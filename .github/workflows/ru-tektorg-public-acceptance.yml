@@ -1,0 +1,44 @@
+name: RU TEK-Torg public source acceptance
+
+on:
+  push:
+    branches:
+      - feat/ru-tektorg-real-html-20261016
+    paths:
+      - .github/workflows/ru-tektorg-public-acceptance.yml
+      - app/sources/tektorg_public_html.py
+      - tests/test_ru_tektorg_public.py
+      - scripts/ci_ru_tektorg_real_worker.py
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/ru-tektorg-public-acceptance.yml
+      - app/sources/tektorg_public_html.py
+      - tests/test_ru_tektorg_public.py
+      - scripts/ci_ru_tektorg_real_worker.py
+      - app/sources/catalog.py
+      - app/sources/ingestion.py
+
+permissions:
+  contents: read
+
+jobs:
+  tektorg-source-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install test requirements
+        run: python -m pip install -r requirements-dev.txt
+      - name: Enforce public TEK-Torg URL, card identity, and detail contracts
+        run: python -m pytest -q tests/test_ru_tektorg_public.py
+      - name: Live source -> actual app worker -> SQLite -> local query
+        if: github.event_name == 'push'
+        timeout-minutes: 3
+        run: python -B -m scripts.ci_ru_tektorg_real_worker

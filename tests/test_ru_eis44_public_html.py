@@ -123,3 +123,14 @@ def test_extracts_only_labelled_customer_and_publication_date():
     assert notice.initial_price == 56000.0
     assert notice.published_at == "16.10.2026"
     assert notice.deadline is None
+
+def test_invalid_optional_date_does_not_discard_verified_official_identity():
+    body = fixture().replace(
+        "Начальная цена 56 000,00 ₽".encode(),
+        "Начальная цена 56 000,00 ₽ Размещено 99.99.2026".encode(),
+    )
+    notice = parse_official_44_listing(body)[0]
+    assert notice.identity == (SOURCE_ID, NUMBER)
+    assert notice.url == URL
+    assert notice.published_at is None
+    assert notice.initial_price is None  # all untrusted optional fields discarded

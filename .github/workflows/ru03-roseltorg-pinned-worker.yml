@@ -20,13 +20,13 @@ jobs:
       - name: Checkout reviewed immutable Roseltorg adapter
         uses: actions/checkout@v4
         with:
-          ref: 1a6645e69e96b39c0bb7dedab5e0bb761b6942cb
+          ref: 1b268fed190019c4c6b4bae4ef88cd3a39d8278a
           persist-credentials: false
       - name: Real Roseltorg listing and detail to worker and DB
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 1a6645e69e96b39c0bb7dedab5e0bb761b6942cb
+          test "$(git rev-parse HEAD)" = 1b268fed190019c4c6b4bae4ef88cd3a39d8278a
           dir="$(mktemp -d)"
           trap 'rm -rf "$dir"' EXIT
           python3 -m venv "$dir/venv"

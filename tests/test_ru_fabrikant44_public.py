@@ -54,7 +54,7 @@ def test_invalid_source_cards_rejected(payload):
 @pytest.mark.parametrize("bad", [
     detail(number="0358400002426000047"),
     detail(title="Совсем другое наименование"),
-    b"<html><h1>Сведения о закупке 0358400002426000046</h1></html>",
+    "<html><h1>Сведения о закупке 0358400002426000046</h1></html>".encode("utf-8"),
     b"<html><h1>Wrong</h1></html>",
     b"",
 ])

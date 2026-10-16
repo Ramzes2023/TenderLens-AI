@@ -35,6 +35,8 @@ class _PublicListing(HTMLParser):
     
     def handle_starttag(self, tag, attrs):
         if self.current is not None:
+            if tag.lower() in {"script", "style", "iframe", "svg", "object", "template"}:
+                raise ValueError("Active markup inside public procurement title")
             return
         if tag != "a":
             return

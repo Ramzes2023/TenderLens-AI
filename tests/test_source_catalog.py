@@ -112,6 +112,8 @@ def test_catalog_registers_all_phase23_sources(
         "za_etenders",
         "india_cppp",
         "kz_goszakup",
+        "am_armeps",
+        "tj_eprocurement",
     )
 
     assert catalog.enabled_keys == (

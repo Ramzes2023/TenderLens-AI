@@ -1,0 +1,105 @@
+name: CIS INT-02 complete verified integration gate
+
+# Owner-controlled trusted branch pushes ONLY. Untrusted pull_request payloads
+# must never run on the owner's self-hosted laptop.
+on:
+  push:
+    branches:
+      - integration/cis-am-tj-mainline-20261016
+    paths:
+      - ".github/workflows/cis-int02-integration-gate.yml"
+      - "scripts/ci_cis_int02_isolated_docker.sh"
+      - "scripts/ci_cis_int02_live_docker.sh"
+      - "scripts/ci_cis_postgres16_fenced_acceptance.py"
+      - "scripts/ci_cis_am_tj_live_acceptance.py"
+      - "app/sources/**"
+      - "app/jobs/**"
+      - "app/database/**"
+      - "tests/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: valyqon-cis-int02-full-integration
+  cancel-in-progress: true
+
+jobs:
+  environment:
+    name: CIS INT-02 trusted prerequisites
+    if: github.event_name == 'push' && github.ref == 'refs/heads/integration/cis-am-tj-mainline-20261016'
+    runs-on: valyqon-int
+    permissions: {}
+    timeout-minutes: 5
+    steps:
+      - name: Prove owner runner can use isolated Docker
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${RUNNER_NAME:-}" == "VALYQON-INT-02" ]]
+          [[ -w /var/run/docker.sock ]]
+          # Docker Desktop / WSL sometimes needs extra time to answer an
+          # otherwise valid local socket under parallel runner workload.
+          # Still fail closed if the real Engine cannot be verified.
+          ready=0
+          for attempt in 1 2 3; do
+            if timeout 35s docker info --format '{{.ServerVersion}}'; then
+              ready=1
+              break
+            fi
+            sleep 3
+          done
+          if [[ "$ready" != 1 ]]; then
+            echo "::error::INT-02 Docker Engine did not respond to three bounded requests"
+            exit 1
+          fi
+          echo "CIS_INT02_RELEASE_PREREQUISITES=PASS"
+
+  postgres16:
+    name: CIS INT-02 PostgreSQL 16 lease-fencing
+    needs: environment
+    runs-on: valyqon-int
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Full PostgreSQL 16 worker/database test
+        shell: bash
+        timeout-minutes: 35
+        run: bash scripts/ci_cis_int02_isolated_docker.sh postgres
+
+  regression:
+    name: CIS INT-02 Russian/international regression
+    needs: environment
+    runs-on: valyqon-int
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Full focused source and worker compatibility
+        shell: bash
+        timeout-minutes: 35
+        run: bash scripts/ci_cis_int02_isolated_docker.sh regression
+
+  live:
+    name: CIS INT-02 official live / ${{ matrix.source }}
+    needs: environment
+    runs-on: valyqon-int
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        source: [am_armeps, tj_eprocurement]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Actual HTTPS -> leased worker -> SQLite -> saved search
+        shell: bash
+        timeout-minutes: 25
+        env:
+          CIS_SOURCE: ${{ matrix.source }}
+        run: bash scripts/ci_cis_int02_live_docker.sh "$CIS_SOURCE"

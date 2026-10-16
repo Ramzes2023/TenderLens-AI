@@ -1,0 +1,76 @@
+name: CIS INT-02 isolated PostgreSQL and source acceptance
+
+# Only maintainer-controlled branch pushes. Never run PR event code on a
+# self-hosted runner. No production databases, tokens, or host ports.
+on:
+  push:
+    branches:
+      - fix/cis-postgres16-fencing-gate-20261015
+    paths:
+      - "scripts/ci_cis_postgres16_fenced_acceptance.py"
+      - "scripts/ci_cis_int02_isolated_docker.sh"
+      - ".github/workflows/cis-postgres16-fenced-acceptance.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: valyqon-cis-int02-isolated-acceptance
+  cancel-in-progress: true
+
+jobs:
+  trusted-docker-preflight:
+    name: INT-02 trusted Docker preflight (no repository code)
+    runs-on: valyqon-int
+    timeout-minutes: 3
+    permissions: {}
+    steps:
+      - name: Confirm designated runner and Docker daemon availability
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${RUNNER_NAME:-}" != "VALYQON-INT-02" ]]; then
+            echo "::error::Unrecognized runner; aborting isolated acceptance"
+            exit 1
+          fi
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "::error::Docker CLI is missing in VALYQON-INT-Runner WSL; enable Docker Desktop WSL integration before running isolated source code."
+            exit 1
+          fi
+          if [[ -S /var/run/docker.sock && ! -w /var/run/docker.sock ]]; then
+            echo "::error::The INT-02 runner user lacks permission to write /var/run/docker.sock (root:docker, mode 660). The laptop owner must explicitly approve Docker group access and restart the runner process."
+            exit 1
+          fi
+          if ! timeout 15s docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; then
+            echo "::error::Docker daemon is unreachable or denied access from VALYQON-INT-Runner WSL. Diagnose socket ownership and Engine status first."
+            exit 1
+          fi
+          echo "CIS_INT02_DOCKER=READY"
+
+  cis-postgres16-fenced-worker:
+    needs: trusted-docker-preflight
+    name: INT-02 disposable PG16 worker/fencing
+    runs-on: valyqon-int
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: PostgreSQL 16 migration, claim, fencing and snapshot in isolated containers
+        shell: bash
+        timeout-minutes: 35
+        run: bash scripts/ci_cis_int02_isolated_docker.sh postgres
+
+  cis-offline-compatibility:
+    needs: trusted-docker-preflight
+    name: INT-02 CIS and Russian platform regression
+    runs-on: valyqon-int
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Execute source and worker regression inside isolated Python container
+        shell: bash
+        timeout-minutes: 35
+        run: bash scripts/ci_cis_int02_isolated_docker.sh regression

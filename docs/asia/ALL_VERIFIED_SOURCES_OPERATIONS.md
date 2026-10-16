@@ -1,6 +1,6 @@
-# VALYQON AI · Asian real-source operations, ten verified adapters
+# VALYQON AI · Asian real-source operations, eleven verified adapters
 
-These ten sources were previously independently subjected to **real anonymous official
+These eleven sources were previously independently subjected to **real anonymous official
 HTTPS → lease-fenced durable Worker → disposable SQLite → searchable snapshot** CI
 acceptance. The unified operator CLI adds a safe batch control and search surface,
 **not** a new upstream connector, AWS deployment or customer notifications.
@@ -12,10 +12,11 @@ acceptance. The unified operator CLI adds a safe batch control and search surfac
   `hk_cedd_tenders`.
 - Hong Kong Highways Department: `hk_hyd_tenders`.
 - Japan JETRO's **own** bids, not Japanese nationwide tenders: `jp_jetro_bid`.
+- Hong Kong Monetary Authority public invitation notices from the official HKMA JSON API: `hk_hkma_tender`.
 - Singapore Government GeBIZ official *Business Opportunity* category RSS:
   `sg_gebiz_professional` and `sg_gebiz_misc`.
 
-**Count:** 10 distinct connectors from 3 locations (Hong Kong, Japan,
+**Count:** 11 distinct connectors from 3 locations (Hong Kong, Japan,
 Singapore), not ten countries. All are disabled by default. Availability varies,
 open bid status must be checked on the official website before bidding; archived
 opportunities are not automatically expired or removed from local snapshots.
@@ -35,6 +36,7 @@ VALYQON_ASIA_OPERATIONS_ENABLED=1
 VALYQON_ASIA_SOURCES_ENABLED=1
 VALYQON_ASIA_JETRO_BID_ENABLED=1
 VALYQON_ASIA_HYD_ENABLED=1
+VALYQON_ASIA_HKMA_ENABLED=1
 VALYQON_ASIA_GEBIZ_ENABLED=1
 ```
 
@@ -51,8 +53,8 @@ VALYQON_ASIA_GEBIZ_ENABLED=1
    python -m app.jobs.worker --connectors
    ```
 
-3. Submit ten independently validated, idempotent current-UTC-hour queue jobs.
-   Preflight validates **all ten** before opening the database. A single disabled
+3. Submit eleven independently validated, idempotent current-UTC-hour queue jobs.
+   Preflight validates **all eleven** before opening the database. A single disabled
    source fails the batch, rather than silently lowering expected coverage.
 
    ```sh

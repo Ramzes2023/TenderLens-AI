@@ -1,0 +1,37 @@
+name: RU-03 pinned GPB fixed real ingestion acceptance
+on:
+  push:
+    branches: [diag/ru-gpb-official-html-20261016]
+    paths: [.github/workflows/ru03-gpb-fixed-pinned-live.yml]
+permissions:
+  contents: read
+jobs:
+  gpb-fixed-live:
+    runs-on: valyqon-ru3
+    timeout-minutes: 15
+    steps:
+      - name: Confirm trusted isolated runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          test "$(id -un)" = valyqon
+          ! mountpoint -q /mnt/c
+      - name: Checkout exact reviewed GPB fix commit
+        uses: actions/checkout@v4
+        with:
+          ref: 40e94de01397bb7f3c1beeaa7e16e5ee12af5080
+          persist-credentials: false
+      - name: Verify real GPB HTML to database and query
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 40e94de01397bb7f3c1beeaa7e16e5ee12af5080
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          python3 -m venv "$dir/venv"
+          "$dir/venv/bin/python" -m pip install --disable-pip-version-check -r requirements-dev.txt >/dev/null
+          "$dir/venv/bin/python" -m pytest -q tests/test_ru_gpb_public.py
+          "$dir/venv/bin/python" -B -m scripts.ci_ru_gpb_public_worker
+          echo 'RU3_GPB_FIXED_REAL_WORKER=PASS'
+          echo 'PRODUCTION_CHANGED=NO'

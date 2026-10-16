@@ -1,0 +1,53 @@
+name: Asia HK Highways Department tender RSS acceptance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "app/sources/hk_hyd_tenders.py"
+      - "app/sources/catalog.py"
+      - "app/sources/ingestion.py"
+      - "tests/test_hk_hyd_tenders.py"
+      - "scripts/asia_hyd_real_worker_acceptance.py"
+      - ".github/workflows/asia-hyd-official-worker.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: asia-hyd-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hyd-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pytest -q tests/test_hk_hyd_tenders.py tests/test_asia_public_sources.py tests/test_jp_jetro_bid_rss.py tests/test_connector_workers.py tests/test_source_catalog.py
+  hyd-real-source-to-keyword-search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    needs: [hyd-offline]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Fail-closed real anonymous official RSS→Worker→DB→stored keyword search
+        env:
+          VALYQON_ASIA_HYD_ENABLED: "1"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python -m scripts.asia_hyd_real_worker_acceptance

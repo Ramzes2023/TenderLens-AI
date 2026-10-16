@@ -1,0 +1,62 @@
+name: RU-03 fifth public procurement source candidate probe
+
+on:
+  push:
+    branches: [ops/ru3-trusted-source-probe-20261016]
+    paths: [.github/workflows/ru03-five-source-probe.yml]
+
+permissions: {}
+
+jobs:
+  public-read-only:
+    if: github.repository == 'Ramzes2023/TenderLens-AI'
+    runs-on: valyqon-ru3
+    timeout-minutes: 5
+    steps:
+      - name: Test bounded HTTPS public procurement listings only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          folder="$(mktemp -d)"
+          trap 'rm -rf "$folder"' EXIT
+          for name in fabrikant44 mos_supplier roseltorg_public; do
+            case "$name" in
+              fabrikant44) url="https://bonus.fabrikant.ru/44/catalog/procedure" ;;
+              mos_supplier) url="https://zakupki.mos.ru/" ;;
+              roseltorg_public) url="https://www.roseltorg.ru/procedures/search" ;;
+            esac
+            result="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 22 --max-filesize 1500000 --output "$folder/$name" --write-out '%{http_code} %{content_type}' "$url" 2>"$folder/error")" && rc=0 || rc=$?
+            bytes=0; test ! -f "$folder/$name" || bytes="$(wc -c < "$folder/$name" | tr -d ' ')"
+            echo "RU3_FIFTH_${name}_RESULT=$result;CURL_EXIT=$rc;BYTES=$bytes"
+            if test "$rc" = 0 && test "${result%% *}" = 200; then
+              python3 - "$name" "$folder/$name" <<'PY'
+          import sys,re
+          from html.parser import HTMLParser
+          from urllib.parse import urljoin,urlsplit
+          name,path=sys.argv[1:]
+          class A(HTMLParser):
+              def __init__(self):super().__init__();self.links=[];self.types={}
+              def handle_starttag(self,tag,attrs):
+                  d=dict(attrs)
+                  if tag=='a' and d.get('href'):self.links.append(d['href'])
+                  if tag=='script' and d.get('type')=='application/ld+json':self.types['ldjson']=1
+          data=open(path,'rb').read().decode('utf-8','replace')
+          p=A();p.feed(data)
+          category=[]
+          base={'fabrikant44':'https://bonus.fabrikant.ru/','mos_supplier':'https://zakupki.mos.ru/','roseltorg_public':'https://www.roseltorg.ru/'}[name]
+          host=urlsplit(base).hostname
+          for link in p.links:
+              u=urlsplit(urljoin(base,link))
+              if u.scheme!='https' or u.hostname!=host:continue
+              if re.search(r'procedure|purchase|tender|zakup|quotation|session|offer',u.path,re.I):
+                  category.append(u.path)
+          print('RU3_FIFTH_'+name+'_PUBLIC_ANCHORS='+str(len(p.links)))
+          print('RU3_FIFTH_'+name+'_PROCUREMENT_LINKS='+str(len(set(category))))
+          print('RU3_FIFTH_'+name+'_SAMPLE_PATHS='+repr(sorted(set(category))[:6]))
+          print('RU3_FIFTH_'+name+'_HTML_LDJSON='+str(p.types.get('ldjson',0)))
+          PY
+            fi
+          done
+          echo 'RU3_FIFTH_REAL_TENDER_IDENTITIES_VERIFIED=NO'
+          echo 'RU3_FIFTH_PRODUCTION_CHANGED=NO'

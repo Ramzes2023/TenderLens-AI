@@ -23,7 +23,7 @@ jobs:
       - name: Checkout reviewed immutable Russian TEK-Torg integration candidate
         uses: actions/checkout@v4
         with:
-          ref: 36fc561303ae405a9f700078ac2d30dc50fd90c4
+          ref: e156819ac750c47ca0ab223835556f2240a5e0d7
           persist-credentials: false
       - name: Offline contract tests and real public source durable-worker proof
         shell: bash
@@ -32,11 +32,11 @@ jobs:
           VALYQON_EMAIL_MODE: disabled
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 36fc561303ae405a9f700078ac2d30dc50fd90c4
+          test "$(git rev-parse HEAD)" = e156819ac750c47ca0ab223835556f2240a5e0d7
           temp="$(mktemp -d)"
           trap 'rm -rf "$temp"' EXIT
           python3 -m venv "$temp/venv"
-          "$temp/venv/bin/python" -m pip install --disable-pip-version-check --no-cache-dir -r requirements-dev.txt >/dev/null
+          "$temp/venv/bin/python" -m pip install --disable-pip-version-check -r requirements-dev.txt >/dev/null
           "$temp/venv/bin/python" -m pytest -q tests/test_ru_tektorg_public.py
           "$temp/venv/bin/python" -B -m scripts.ci_ru_tektorg_real_worker
           echo 'RU3_TEKTORG_REAL_APP=PASS'

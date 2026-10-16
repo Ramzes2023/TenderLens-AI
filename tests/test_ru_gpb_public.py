@@ -84,6 +84,8 @@ def test_exact_public_transport_and_bounded_requests(monkeypatch):
     async def source(**kwargs):
         assert kwargs["trust_env"] is False
         assert kwargs["follow_redirects"] is False
+        assert kwargs["headers"]["User-Agent"] == "Mozilla/5.0"
+        assert kwargs["headers"]["Accept"] == "text/html"
         yield Fake()
     import app.sources.gpb_etp_public as module
     monkeypatch.setattr(module, "source_client", source)

@@ -60,7 +60,7 @@ async def public_notices(catalog):
                 print("B2B_UNSAFE_URL_SHAPE=UNPARSEABLE", flush=True)
             raise
 
-    def observed_parse(payload, *, limit=100):
+    def observed_parse(payload, *, limit=100, listing_url=b2b_center.B2B_CENTER_LIST_URL):
         # Structural counts only; no raw HTML, tender identifiers or content.
         doc = _Document()
         doc.feed(payload.decode("utf-8-sig"))
@@ -89,7 +89,7 @@ async def public_notices(catalog):
                             host = urlsplit(urljoin(b2b_center.B2B_CENTER_LIST_URL, raw)).hostname
                             hosts[host or "(missing)"] = hosts.get(host or "(missing)", 0) + 1
         print("B2B_LIVE_CARD_HOST_COUNTS=" + repr(hosts), flush=True)
-        return original(payload, limit=limit)
+        return original(payload, limit=limit, listing_url=listing_url)
 
     with patch.object(b2b_center, "_safe_url", measured_safe_url), \
             patch.object(b2b_center, "parse_b2b_center_listing", observed_parse):

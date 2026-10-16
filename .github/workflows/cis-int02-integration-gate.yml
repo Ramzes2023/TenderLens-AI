@@ -5,7 +5,7 @@ name: CIS INT-02 complete verified integration gate
 on:
   push:
     branches:
-      - fix/cis-postgres16-fencing-gate-20261015
+      - integration/cis-am-tj-mainline-20261016
     paths:
       - ".github/workflows/cis-int02-integration-gate.yml"
       - "scripts/ci_cis_int02_isolated_docker.sh"
@@ -24,7 +24,7 @@ concurrency:
 jobs:
   environment:
     name: CIS INT-02 trusted prerequisites
-    if: github.event_name == 'push' && github.ref == 'refs/heads/fix/cis-postgres16-fencing-gate-20261015'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/integration/cis-am-tj-mainline-20261016'
     runs-on: valyqon-int
     permissions: {}
     timeout-minutes: 5

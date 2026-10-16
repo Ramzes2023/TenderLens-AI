@@ -1,0 +1,49 @@
+name: RU-03 GPB official resolved host public tenders
+on:
+  push:
+    branches: [ops/ru3-trusted-source-probe-20261016]
+    paths: [.github/workflows/ru03-gpb-resolved-host.yml]
+permissions: {}
+jobs:
+  gpb-verified:
+    runs-on: valyqon-ru3
+    timeout-minutes: 4
+    steps:
+      - name: Official same-service HTTPS page structured procurement links
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          temp="$(mktemp)"
+          trap 'rm -f "$temp"' EXIT
+          value="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 28 --max-filesize 1800000 -o "$temp" --write-out '%{http_code} %{content_type}' https://etpgpb.ru/procedures/ 2>/dev/null)" && rc=0 || rc=$?
+          echo "RU3_GPB_CANONICAL_HTTP=$value;CURL_EXIT=$rc;BYTES=$(wc -c < "$temp" | tr -d ' ')"
+          if [ "$rc" -eq 0 ] && [ "${value%% *}" = 200 ]; then
+            python3 - "$temp" <<'PY'
+          import sys,re
+          from html.parser import HTMLParser
+          from urllib.parse import urljoin,urlsplit
+          class H(HTMLParser):
+              def __init__(self):super().__init__();self.links=[];self.title=[];self.t=False
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag=='a' and a.get('href'):self.links.append(a['href'])
+                  if tag=='title':self.t=True
+              def handle_data(self,data):
+                  if self.t:self.title.append(data)
+              def handle_endtag(self,tag):
+                  if tag=='title':self.t=False
+          raw=open(sys.argv[1],'rb').read();h=H();h.feed(raw.decode('utf-8','replace'))
+          urls=set()
+          for href in h.links:
+              u=urlsplit(urljoin('https://etpgpb.ru/procedures/',href))
+              if u.scheme=='https' and u.hostname=='etpgpb.ru' and re.search(r'/procedures?/',u.path,re.I):
+                  urls.add(u.path)
+          print('RU3_GPB_CANONICAL_PUBLIC_LINKS='+str(len(h.links)))
+          print('RU3_GPB_CANONICAL_PROCEDURE_PATHS='+str(len(urls)))
+          print('RU3_GPB_CANONICAL_PATH_SAMPLES='+repr(sorted(urls)[:8]))
+          print('RU3_GPB_CANONICAL_PAGE_TITLE='+repr(' '.join(h.title)[:150]))
+          PY
+          fi
+          echo 'REAL_DETAIL_AND_SQLITE=NOT_YET_VERIFIED'
+          echo 'PRODUCTION_CHANGED=NO'

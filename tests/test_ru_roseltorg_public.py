@@ -22,7 +22,7 @@ def listing(url=URL):
 
 
 def detail(number=ID, title=TITLE):
-    return (f"<html><body><div>Процедура: {number}</div><h1>{title}</h1></body></html>").encode()
+    return (f"<html><body><nav>Главная Закупки {number} Лот 1 {number} Государственные закупки</nav><h1>{title}</h1></body></html>").encode()
 
 
 def test_canonical_discovery_and_verified_notice():
@@ -117,3 +117,18 @@ def test_real_job_lease_fenced_sql_roundtrip_offline(monkeypatch):
     assert evidence["worker_inserted"] == 1
     assert evidence["sqlite_search_verified"] == 1
     assert evidence["idempotent"]
+
+
+def test_false_visible_id_outside_official_breadcrumb_is_rejected():
+    # Identity in arbitrary footer alone is not evidence of the procedure page.
+    html = (f"<html><nav>Главная Закупки OTHER Лот 1 OTHER</nav>"
+            f"<h1>{TITLE}</h1><footer>{ID}</footer></html>").encode()
+    with pytest.raises(ValueError):
+        parse_roseltorg_detail(html, identity=ID, url=URL)
+
+
+def test_different_breadcrumb_lot_or_notice_id_rejected():
+    wrong = (f"<html><nav>Закупки {ID} Лот 1 0318300120826000552</nav>"
+             f"<h1>{TITLE}</h1></html>").encode()
+    with pytest.raises(ValueError):
+        parse_roseltorg_detail(wrong, identity=ID, url=URL)

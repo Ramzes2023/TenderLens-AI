@@ -1,0 +1,59 @@
+name: RU bounded B2B size and Fabrikant official detail proof
+on:
+  push:
+    branches: [diag/ru-final-gates-20261016]
+    paths: [.github/workflows/ru-b2b-fabrikant-real-shape.yml]
+permissions: {}
+jobs:
+  official-data-proof:
+    runs-on: valyqon-ru3
+    timeout-minutes: 6
+    steps:
+      - name: Check public procurement payload envelopes and independent details
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          for src in b2b fabricant44 fabricant44id tektorg223 tektorgmarket; do
+            case "$src" in
+              b2b) url='https://www.b2b-center.ru/search/' ;;
+              fabricant44) url='https://44.fabrikant.ru/44/catalog/procedure' ;;
+              fabricant44id) url='https://44.fabrikant.ru/44/procedure/ea21/0358400002426000046' ;;
+              tektorg223) url='https://www.tektorg.ru/223-fz/procedures' ;;
+              tektorgmarket) url='https://www.tektorg.ru/market/procedures' ;;
+            esac
+            res="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 7 --max-time 20 --max-filesize 3500000 -H 'User-Agent: Mozilla/5.0' -H 'Accept: text/html' --output "$tmp/$src" --write-out '%{http_code} %{content_type} %{size_download}' "$url" 2>/dev/null)" && rc=0 || rc=$?
+            echo "RU_FAB_B2B_${src}_HTTP=$res;EXIT=$rc"
+            if test "$rc" != 0 || test "${res%% *}" != 200; then continue; fi
+            python3 - "$tmp/$src" "$src" <<'PY'
+          import re,sys
+          from html.parser import HTMLParser
+          body=open(sys.argv[1],"rb").read()
+          name=sys.argv[2]
+          class Page(HTMLParser):
+              def __init__(self): super().__init__();self.tags=[];self.h1=[];self.inside=False;self.buf=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag=='h1':self.inside=True;self.buf=[]
+                  if tag=='a':
+                      href=dict(attrs).get('href','')
+                      if href:self.tags.append(href)
+              def handle_data(self,data):
+                  if self.inside:self.buf.append(data)
+              def handle_endtag(self,tag):
+                  if tag=='h1' and self.inside:
+                      self.h1.append(' '.join(' '.join(self.buf).split())[:80]);self.inside=False
+          doc=Page();doc.feed(body.decode('utf-8','replace'))
+          numbers=set(re.findall(rb'(?<![0-9])[0-9]{19}(?![0-9])',body))
+          path44=re.compile(r'/44/procedure/(?:ea21|ezt|ezk21|[a-z0-9-]{2,20})/[0-9]{19}')
+          details=[x.split('?')[0] for x in doc.tags if path44.search(x)]
+          tek=[x for x in doc.tags if re.search(r'/223-fz/procedures/[0-9]{5,15}',x)]
+          identity=b'0358400002426000046' in body
+          print('RU_FAB_B2B_'+name+'_SIZE='+str(len(body))+';NOTICE19_COUNT='+str(len(numbers))+';DETAIL44_LINKS='+str(len(details))+';TEK_DETAIL_LINKS='+str(len(tek))+';KNOWN_DETAIL_ID='+str(identity))
+          print('RU_FAB_B2B_'+name+'_H1_COUNT='+str(len(doc.h1))+';H1_NONEMPTY='+str(any(doc.h1)))
+          print('RU_FAB_B2B_'+name+'_DETAIL_LINK_PATH_SHAPES='+repr([re.sub(r'[0-9]{19}','<NOTICE_ID>',x)[:110] for x in details[:3]]))
+          PY
+          done
+          echo 'RU_FAB_B2B_WORKER_SQL_VERIFIED=NO'
+          echo 'PRODUCTION_CHANGED=NO'

@@ -144,3 +144,53 @@ the account owner resolves GitHub Actions billing/spending limits. The
 `VALYQON-RU-01` self-hosted runner must not execute unreviewed PR code.
 We must not bypass this release gate or pretend a fixture-only test verifies
 the live supply.
+
+
+## 16 October 2026 — superseding six-source acceptance status (RU-01)
+
+**This section supersedes earlier 15 October source selection and counts.**
+JETRO (national/local) was **not** activated: the official server returned HTTP
+**503** from trusted RU-01; the Japanese GSI RSS sources failed a TLS
+connection on this runner. We will not bypass upstream TLS or access policies.
+JETRO HTML parsing remains research-only and its source IDs are not registered.
+
+The selected six official public Hong Kong tender RSS feeds (all HTTPS
+fetches from runner **VALYQON-RU-01**, runner ID 21) are:
+
+| Registered source ID | Agency | Real feed items normalized, SQLite rows, keyword results |
+| --- | --- | --- |
+| `hk_ha_works` | Housing Authority (works & services) | 33 / 33 / 33 |
+| `hk_ha_leasing` | Housing Authority (commercial leasing) | 11 / 11 / 11 |
+| `hk_emsd_tenders` | Electrical & Mechanical Services Department | 5 / 5 / 5 |
+| `hk_emsd_consultancy` | Electrical & Mechanical Services Department (consultancy) | 1 / 1 / 1 |
+| `hk_dsd_current` | Drainage Services Department | 3 / 3 / 3 |
+| `hk_cedd_tenders` | Civil Engineering and Development Department | 4 / 4 / 4 |
+| **TOTAL** | | **57 / 57 / 57** |
+
+Independent trusted public probe: [Actions run 38897821223](https://github.com/Ramzes2023/TenderLens-AI/actions/runs/38897821223),
+`ASIA_TRUSTED_6_LIVE_SQLITE_QUERY_VERIFIED=6/6`, all normalized records
+preserved in a **temporary isolated SQLite** database and found via search.
+
+This is REAL official data rather than a mock, but the trusted script
+deliberately did **not** check out or execute the PR's application code. It is
+**not** yet proof of the actual `ConnectorSyncHandler` worker, production
+PostgreSQL, AI query surface, scheduler or customer notifications. Existing
+fixture-backed regression tests cover catalog, queue, worker and snapshots for
+all six IDs; those tests still require execution in a verified CI environment.
+The app source registrations remain opt-in disabled by default, and
+`app/sources/asia_enqueue.py` requires explicit operator approval.
+
+Official RSS format observations: Housing Authority publishes **relative**
+item URLs (33 + 11), EMSD's tender channel publishes **HTTP** item links (5),
+EMSD consultancy publishes HTTPS, DSD publishes HTTPS (3), and CEDD publishes
+HTTP (4). Strict exact-host canonicalization to HTTPS is implemented in the
+PR adapter; no insecure HTTP detail requests are issued.
+
+**Merge gate still blocked:** GitHub-hosted `CI`, Russian contracts and
+`Asian public procurement acceptance` fail *before executing any steps* as
+GitHub's owner-visible annotation states that recent account payments failed
+or spending limit must be increased. The trusted RU-01 diagnostic is green,
+but does not replace these required CI jobs. Until the owner resolves GitHub
+Actions billing and the **latest head** passes the full application-level
+six-source live database/worker acceptance and other CI, PR #36 must remain
+draft and unmerged. No AWS or production changes.

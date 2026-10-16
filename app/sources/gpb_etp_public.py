@@ -134,7 +134,10 @@ class GpbEtpPublicSource:
         with policy:
             async with source_client(
                 timeout=self.timeout, follow_redirects=False, trust_env=False,
-                headers={"Accept": "text/html"},
+                # Official host answers with a 200/empty binary payload to Python's
+                # default UA; a conventional browser UA returns the real HTML.
+                # Keep normal TLS verification, strict host policy and no redirects.
+                headers={"Accept": "text/html", "User-Agent": "Mozilla/5.0"},
             ) as client:
                 res = await client.get(LIST_URL)
                 res.raise_for_status()

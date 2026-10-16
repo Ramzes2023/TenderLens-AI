@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install pytest
-        run: python -m pip install pytest
+      - name: Install repository test dependencies
+        run: python -m pip install -r requirements-dev.txt
       - name: Validate fail-closed public detail evidence
         run: python -m pytest -q tests/test_ru_roseltorg_public_research.py

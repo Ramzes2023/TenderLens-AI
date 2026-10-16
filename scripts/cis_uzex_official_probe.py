@@ -64,7 +64,7 @@ def validate_notice(row: object) -> bool:
     if not POSITIVE_ID_RE.fullmatch(str(raw_id)):
         return False
     title = _field(row, "name", "trade_name", "title")
-    buyer = _field(row, "customer_name", "customerName", "customer")
+    buyer = _field(row, "customer_name", "customerName", "customer", "seller_name")
     start = _field(row, "start_date", "startDate", "start_at")
     deadline = _field(row, "end_date", "endDate", "end_at")
     if (len(title) < 8 or len(buyer) < 4

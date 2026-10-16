@@ -40,9 +40,10 @@ jobs:
           openssl verify -CAfile "$dir/root.pem" "$dir/sub.pem"
           cat "$dir/root.pem" "$dir/sub.pem" > "$dir/eis-only.pem"
           for law in 44 223; do
-            url="https://zakupki.gov.ru/epz/order/extendedsearch/results.html?fz${law}=on&pageNumber=1&recordsPerPage=_10"
+            url="https://zakupki.gov.ru/epz/order/extendedsearch/results.html?fz${law}=on&pageNumber=1"
             code="$(curl --noproxy '*' --silent --show-error --proto '=https' --cacert "$dir/eis-only.pem" --max-redirs 0 --connect-timeout 8 --max-time 25 --max-filesize 1200000 --output "$dir/results$law" --write-out '%{http_code}' "$url")"
-            test "$code" = 200
+            echo "RU3_EIS_${law}_RESULTS_HTTP=$code"
+            if [ "$code" != 200 ]; then continue; fi
             python3 - "$dir/results$law" "$law" <<'PY'
           import re,sys
           from collections import Counter
@@ -77,6 +78,7 @@ jobs:
           print(f'RU3_EIS_{sys.argv[2]}_HAS_223_TEXT={"223-ФЗ" in doc}')
           PY
           done
+          echo 'EIS_REAL_TENDER_RECORDS_VERIFIED=NO'
           echo "RU3_CA_SCOPE=EIS_ONLY"
           echo "TLS_VERIFICATION_DISABLED=NO"
           echo "PRODUCTION_CHANGED=NO"

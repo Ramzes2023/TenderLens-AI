@@ -122,6 +122,8 @@ def main():
             item.update({"failure_kind":"HTTPError","status":e.code})
         except (URLError, OSError, TimeoutError, ValueError) as e:
             item["failure_kind"]=type(e).__name__
+            if isinstance(e, URLError):
+                item["reason_class"]=type(e.reason).__name__
         output["tested_paths"].append(item)
     output["verified"]=any(x.get("verified") for x in output["tested_paths"])
     print(json.dumps(output,ensure_ascii=False,sort_keys=True))

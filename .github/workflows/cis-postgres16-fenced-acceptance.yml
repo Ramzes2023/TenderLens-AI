@@ -36,8 +36,12 @@ jobs:
             echo "::error::Docker CLI is missing in VALYQON-INT-Runner WSL; enable Docker Desktop WSL integration before running isolated source code."
             exit 1
           fi
-          if ! docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; then
-            echo "::error::Docker daemon is unreachable from VALYQON-INT-Runner WSL; start Docker Desktop and enable integration."
+          if [[ -S /var/run/docker.sock && ! -w /var/run/docker.sock ]]; then
+            echo "::error::The INT-02 runner user lacks permission to write /var/run/docker.sock (root:docker, mode 660). The laptop owner must explicitly approve Docker group access and restart the runner process."
+            exit 1
+          fi
+          if ! timeout 15s docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; then
+            echo "::error::Docker daemon is unreachable or denied access from VALYQON-INT-Runner WSL. Diagnose socket ownership and Engine status first."
             exit 1
           fi
           echo "CIS_INT02_DOCKER=READY"

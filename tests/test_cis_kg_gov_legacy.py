@@ -53,6 +53,13 @@ class KyrgyzGovernmentLegacyContracts(unittest.TestCase):
         self.assertEqual(n.published_at, "2026-10-16T17:56:00")
         self.assertEqual(n.deadline, "2026-10-22T09:00:00")
 
+    def test_jsf_untranslated_method_label_is_a_value_not_a_row_merge(self):
+        columns = list(COLUMNS)
+        columns[5] = "procurement method???REQUEST_FOR_QUOTATION???"
+        result = parse_kg_legacy_list(fixture(columns))
+        self.assertEqual(len(result), 1)
+        self.assertIn("REQUEST_FOR_QUOTATION", result[0].summary)
+
     def test_rejects_incomplete_and_unsafe_fields(self):
         for index, bad in ((0, "number 123"), (1, "Name of company"),
                            (3, "purchase Name"), (6, "Planned amount infinity"),

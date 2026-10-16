@@ -91,10 +91,15 @@ class SourceCatalog:
         for registration in self.registry.registrations():
             source = registration.source
 
-            if registration.key == 'ted' and registration.enabled and hasattr(source, 'for_search_terms'):
+            # A snapshot fetch is always local. Apply profile terms to every
+            # locally-searchable stored source, not just EIS/TED. Never send
+            # these terms to live remote adapters without explicit support.
+            if registration.enabled and getattr(source, 'local_keyword_search', False) and hasattr(source, 'for_search_terms'):
+                registration = replace(registration, source=source.for_search_terms(terms))
+            elif registration.key == 'ted' and registration.enabled and hasattr(source, 'for_search_terms'):
                 registration = replace(registration, source=source.for_search_terms(terms))
 
-            if (
+            elif (
                 registration.key in {"eis", "eis_223"}
                 and registration.enabled
                 and (registration.key == "eis" or registration.capabilities.keyword_search

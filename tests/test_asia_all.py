@@ -15,11 +15,12 @@ def test_roster_unique_approved_and_env_flags_exact():
     from app.sources.asia_public import ASIA_RSS_FEEDS
     from app.sources.hk_hyd_tenders import SOURCE_ID as HYD
     from app.sources.jp_jetro_bid_rss import SOURCE_ID as JETRO
+    from app.sources.hk_hkma_tender import SOURCE_ID as HKMA
     from app.sources.sg_gebiz_rss import FEEDS
     from app.sources.ingestion import HOSTS
 
-    assert SOURCES == (*ASIA_RSS_FEEDS, JETRO, HYD, *FEEDS)
-    assert len(SOURCES) == len(FLAGS) == len(set(SOURCES)) == 10
+    assert SOURCES == (*ASIA_RSS_FEEDS, JETRO, HYD, *FEEDS, HKMA)
+    assert len(SOURCES) == len(FLAGS) == len(set(SOURCES)) == 11
     assert all(key in HOSTS and HOSTS[key] for key in SOURCES)
 
 
@@ -27,7 +28,7 @@ def test_dry_run_never_requires_db_network_or_credentials(monkeypatch, capsys):
     monkeypatch.delenv("VALYQON_ASIA_OPERATIONS_ENABLED", raising=False)
     assert main([]) == 0
     doc=json.loads(capsys.readouterr().out)
-    assert doc["total_sources"] == 10
+    assert doc["total_sources"] == 11
     assert doc["enqueued"] == 0 and doc["production_changed"] is False
     assert doc["mode"] == "dry_run"
 
@@ -84,8 +85,8 @@ def test_source_scoped_query_does_not_expose_other_sources():
     result=stored_search(store,"equipment",source="sg_gebiz_misc")
     assert len(result)==1 and result[0]["source"]=="sg_gebiz_misc"
     assert store.calls==[("sg_gebiz_misc",("equipment",))]
-    assert len(stored_search(store,"equipment",limit=10)) == 10
-    assert len(store.calls)==11
+    assert len(stored_search(store,"equipment",limit=11)) == 11
+    assert len(store.calls)==12
 
 
 def test_all_ten_genuine_queue_worker_db_snapshot_path_with_offline_sole_network_stub(
@@ -132,11 +133,11 @@ def test_all_ten_genuine_queue_worker_db_snapshot_path_with_offline_sole_network
         for _ in queued:
             assert worker.run_once()
         assert all(jobs.get(job.id,scope=SYSTEM_SCOPE).state=="succeeded" for job in queued)
-        assert len(stored_search(store,"equipment",limit=20))==10
+        assert len(stored_search(store,"equipment",limit=20))==11
         assert len(stored_search(store,"nonexistent",limit=20))==0
         snap=snapshot_catalog(cat,store)
         report=asyncio.run(snap.fetch(source_keys=SOURCES,search_terms=("equipment",)))
-        assert len(report.notices)==10 and not report.failures
+        assert len(report.notices)==11 and not report.failures
         assert [service.enqueue(key,now=clock).id for key in SOURCES] == [job.id for job in queued]
     finally:
         db.close()

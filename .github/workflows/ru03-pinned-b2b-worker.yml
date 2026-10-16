@@ -1,0 +1,47 @@
+name: RU-03 pinned B2B-Center real worker acceptance
+
+on:
+  push:
+    branches: [ops/ru3-trusted-source-probe-20261016]
+    paths: [.github/workflows/ru03-pinned-b2b-worker.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  pinned-b2b-real-worker:
+    if: github.repository == 'Ramzes2023/TenderLens-AI' && github.ref == 'refs/heads/ops/ru3-trusted-source-probe-20261016'
+    runs-on: valyqon-ru3
+    timeout-minutes: 20
+    steps:
+      - name: Verify isolated RU3 host
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          test "$(id -un)" = valyqon
+          if mountpoint -q /mnt/c; then exit 1; fi
+      - name: Checkout immutable B2B adapter and real worker acceptance
+        uses: actions/checkout@v4
+        with:
+          ref: 70ae2cf085ea7b5731662503a811fa6c257e67e9
+          persist-credentials: false
+      - name: Real public B2B -> production worker -> ephemeral database -> keyword query
+        shell: bash
+        env:
+          MONITORING_ENABLED: "false"
+          VALYQON_AI_CACHE_ENABLED: "false"
+          RAG_ENABLED: "false"
+          VALYQON_EMAIL_MODE: "disabled"
+          OUTBOUND_PROXY_URL: ""
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 70ae2cf085ea7b5731662503a811fa6c257e67e9
+          temp="$(mktemp -d)"
+          trap 'rm -rf "$temp"' EXIT
+          python3 -m venv "$temp/venv"
+          "$temp/venv/bin/python" -m pip install --disable-pip-version-check --no-cache-dir -r requirements-dev.txt >/dev/null
+          "$temp/venv/bin/python" -m py_compile scripts/ci_ru_b2b_real_worker.py
+          "$temp/venv/bin/python" -B scripts/ci_ru_b2b_real_worker.py
+          echo 'RU3_B2B_PINNED_APP_GATE=PASS'
+          echo 'PRODUCTION_CHANGED=NO'

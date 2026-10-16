@@ -38,6 +38,8 @@ HOSTS = {
     'za_etenders': frozenset({'admin.etenders.gov.za'}),
     'india_cppp': frozenset({'eprocure.gov.in'}),
     'kz_goszakup': frozenset({'ows.goszakup.gov.kz'}),
+    # Opt-in candidate: only the documented public MikroTon API host.
+    'mikroton_tender': frozenset({'tender.mt52.ru'}),
 }
 
 
@@ -124,7 +126,8 @@ class ConnectorSyncHandler:
         # At most five listing/feed requests; AusTender adds one detail per notice.
         request_limit = (4 if source_id in {'ted', 'uk_fts', 'world_bank'}
                          else self.max_records + 1 if source_id == 'austender'
-                         else 5 if source_id in {'eis', 'eis_223', 'india_cppp', 'kz_goszakup'} else 1)
+                         else 5 if source_id in {'eis', 'eis_223', 'india_cppp', 'kz_goszakup'}
+                         else 2 if source_id == 'mikroton_tender' else 1)
         async def fetch():
             with bounded_fetch(FetchPolicy(HOSTS[source_id], request_limit)):
                 return await asyncio.wait_for(source.fetch(self.max_records), timeout=180)

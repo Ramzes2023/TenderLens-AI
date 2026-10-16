@@ -77,6 +77,13 @@ def main():
     except Exception as e:
         print("RU_GPB_REAL_WORKER=BLOCKED")
         print("FAILURE_CLASS="+type(e).__name__)
+        # Only the explicit public source and isolated test DB are accessed.
+        # Keep the failure category/proximal cause visible for actual fixes.
+        cause = e.__cause__ or e.__context__
+        print("FAILURE_REASON="+str(e).replace("\\n", " ")[:350])
+        if cause is not None:
+            print("FAILURE_CAUSE_CLASS="+type(cause).__name__)
+            print("FAILURE_CAUSE="+str(cause).replace("\\n", " ")[:350])
         print("PRODUCTION_CHANGED=NO")
         return 1
     print("RU_GPB_REAL_WORKER_EVIDENCE="+json.dumps(result,sort_keys=True))

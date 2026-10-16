@@ -29,6 +29,7 @@ HOSTS = {
     'am_armeps': frozenset({'eauction.armeps.am'}),
     'tj_eprocurement': frozenset({'eprocurement.gov.tj'}),
     'uz_uzex': frozenset({'apietender.uzex.uz', 'etender.uzex.uz'}),
+    'kg_gov_legacy': frozenset({'zakupki.gov.kg'}),
     'b2b_center': frozenset({'www.b2b-center.ru'}),
     'tektorg': frozenset({'www.tektorg.ru'}),
     'gpb_etp_public': frozenset({'etpgpb.ru'}),

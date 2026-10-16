@@ -52,7 +52,7 @@ def test_unsafe_or_unavailable_listing_is_rejected(bad):
     b"<html><script>Procedure: 0318300120826000550</script><h1>Real title</h1></html>",
     b"<html><div>Number: 0318300120826000550</div><h1>Real title</h1></html>",
     detail(title=""),
-    b"<html><body>Процедура: 0318300120826000550</body></html>",
+    " <html><body>Процедура: 0318300120826000550</body></html>".strip().encode("utf-8"),
     b"",
 ])
 def test_unverified_public_detail_is_rejected(body):

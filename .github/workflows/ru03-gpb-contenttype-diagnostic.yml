@@ -1,0 +1,61 @@
+name: RU-03 GPB content-type and HTML diagnostic
+on:
+  push:
+    branches: [diag/ru-gpb-official-html-20261016]
+    paths: [.github/workflows/ru03-gpb-contenttype-diagnostic.yml]
+permissions: {}
+jobs:
+  gpb-response-shape:
+    runs-on: valyqon-ru3
+    timeout-minutes: 3
+    steps:
+      - name: Check real official listing response without saving tender data
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          python3 - <<'PY'
+          import ssl
+          import urllib.request
+          from urllib.error import HTTPError, URLError
+          from urllib.parse import urlsplit
+          URL = 'https://etpgpb.ru/procedures/'
+          LIMIT = 1_800_000
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, *args, **kwargs): return None
+          opener = urllib.request.build_opener(
+              urllib.request.ProxyHandler({}),
+              urllib.request.HTTPSHandler(context=ssl.create_default_context()),
+              NoRedirect())
+          for headers in (
+              {'Accept': 'text/html'},
+              {'Accept': 'text/html,application/xhtml+xml'},
+          ):
+              try:
+                  req=urllib.request.Request(URL,headers=headers)
+                  with opener.open(req, timeout=16) as resp:
+                      p=urlsplit(resp.geturl())
+                      if p.scheme!='https' or p.netloc!='etpgpb.ru' or resp.status!=200:
+                          raise ValueError('noncanonical origin or response')
+                      data=resp.read(LIMIT+1)
+                      head=data[:200].lstrip().lower()
+                      print('RU3_GPB_URL_CANONICAL=YES')
+                      print('RU3_GPB_STATUS=200')
+                      print('RU3_GPB_CONTENT_TYPE='+repr(resp.headers.get('Content-Type','')[:100]))
+                      print('RU3_GPB_BODY_BYTES='+str(len(data)))
+                      print('RU3_GPB_HTML_PREFIX='+str(head.startswith((b'<!doctype html',b'<html'))))
+                      print('RU3_GPB_PROCEDURE_LINK_MARKER='+str(b'/procedures/etp/' in data))
+              except Exception as e:
+                  print('RU3_GPB_URLOPEN_FAILURE='+type(e).__name__)
+          PY
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 20 --max-filesize 1800000 --output "$dir/listing" --write-out 'RU3_GPB_CURL_HTTP=%{http_code};CTYPE=%{content_type};BYTES=%{size_download}\n' 'https://etpgpb.ru/procedures/'
+          python3 - "$dir/listing" <<'PY'
+          import sys
+          payload=open(sys.argv[1],'rb').read()
+          head=payload[:200].lstrip().lower()
+          print('RU3_GPB_CURL_HTML_PREFIX='+str(head.startswith((b'<!doctype html',b'<html'))))
+          print('RU3_GPB_CURL_PROCEDURE_LINK_MARKER='+str(b'/procedures/etp/' in payload))
+          print('PRODUCTION_CHANGED=NO')
+          PY

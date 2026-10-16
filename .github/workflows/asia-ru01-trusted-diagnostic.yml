@@ -146,3 +146,76 @@ jobs:
           print('ASIA_PROBE_NOT_APPLICATION_WORKER_PROOF=YES')
           print('PRODUCTION_CHANGED=NO')
           PY
+
+      - name: Probe alternative official tender RSS including Japan GSI
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          for source in jp_gsi_goods jp_gsi_survey hk_dsd_current hk_cedd_tenders; do
+            case "$source" in
+              jp_gsi_goods) url="https://www.gsi.go.jp/nyusatu1.rdf" ;;
+              jp_gsi_survey) url="https://www.gsi.go.jp/nyusatu2.rdf" ;;
+              hk_dsd_current) url="https://www.dsd.gov.hk/Menu/EN/RSS/Current_Tenders.xml" ;;
+              hk_cedd_tenders) url="https://www.cedd.gov.hk/eng/rss/tender_notices_rss.xml" ;;
+            esac
+            if code="$(curl --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 25 --max-filesize 1048576 --output "$tmp/$source" --write-out '%{http_code}' "$url" 2>/dev/null)"; then
+              echo "ASIA_CANDIDATE_$source=HTTP_$code;BYTES_$(wc -c < "$tmp/$source" | tr -d ' ')"
+              test "$code" = "200" || rm -f "$tmp/$source"
+            else
+              echo "ASIA_CANDIDATE_$source=FETCH_FAILED;CURL_EXIT=$?"
+              rm -f "$tmp/$source"
+            fi
+          done
+          python3 - "$tmp" <<'PY'
+          from collections import Counter
+          import json
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          from urllib.parse import urlsplit
+          directory=Path(sys.argv[1])
+          atom='{http://www.w3.org/2005/Atom}'
+          rdf='{http://www.w3.org/1999/02/22-rdf-syntax-ns#}'
+          rss1='{http://purl.org/rss/1.0/}'
+          for source in ('jp_gsi_goods','jp_gsi_survey','hk_dsd_current','hk_cedd_tenders'):
+              path=directory/source
+              if not path.exists():
+                  print('ASIA_CANDIDATE_XML_'+source+'=NO_HTTP_200')
+                  continue
+              payload=path.read_bytes()
+              if b'<!DOCTYPE' in payload.upper() or b'<!ENTITY' in payload.upper():
+                  print('ASIA_CANDIDATE_XML_'+source+'=BLOCKED_DTD')
+                  continue
+              try:
+                  root=ET.fromstring(payload)
+              except ET.ParseError:
+                  print('ASIA_CANDIDATE_XML_'+source+'=MALFORMED')
+                  continue
+              if root.tag == 'rss':
+                  items=[(x.findtext('title'),x.findtext('link')) for x in root.findall('./channel/item')]
+              elif root.tag == rdf+'RDF':
+                  items=[(x.findtext(rss1+'title'),x.findtext(rss1+'link')) for x in root.findall(rss1+'item')]
+              elif root.tag == atom+'feed':
+                  items=[(x.findtext(atom+'title'),next((z.get('href') for z in x.findall(atom+'link') if z.get('rel','alternate')=='alternate'),None)) for x in root.findall(atom+'entry')]
+              else:
+                  print('ASIA_CANDIDATE_XML_'+source+'=UNSUPPORTED_FORMAT')
+                  continue
+              counts=Counter()
+              hosts=Counter()
+              for title,link in items[:80]:
+                  if not title or not link:
+                      counts['MISSING_TITLE_OR_LINK']+=1
+                      continue
+                  try:
+                      parts=urlsplit(link.strip())
+                  except ValueError:
+                      counts['INVALID_URL']+=1
+                      continue
+                  counts[parts.scheme or 'RELATIVE']+=1
+                  hosts[parts.hostname or '(relative)']+=1
+              print('ASIA_CANDIDATE_XML_'+source+'='+json.dumps({'records':len(items),'scheme':dict(counts),'host':dict(hosts)},sort_keys=True))
+          print('ASIA_CANDIDATES_ARE_DISCOVERY_ONLY=YES')
+          print('PRODUCTION_CHANGED=NO')
+          PY

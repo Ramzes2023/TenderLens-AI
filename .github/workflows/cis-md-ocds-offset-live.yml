@@ -1,0 +1,32 @@
+name: CIS Moldova MTender live OCDS ISO offset discovery
+
+on:
+  push:
+    branches:
+      - integration/cis-md-ocds-live-offset-20261016
+    paths:
+      - scripts/ci_cis_md_ocds_iso_offset.py
+      - .github/workflows/cis-md-ocds-offset-live.yml
+  pull_request:
+    paths:
+      - scripts/ci_cis_md_ocds_iso_offset.py
+      - .github/workflows/cis-md-ocds-offset-live.yml
+
+permissions:
+  contents: read
+
+jobs:
+  md-official-index-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify real official HTTPS MTender ISO offset index
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -B scripts/ci_cis_md_ocds_iso_offset.py

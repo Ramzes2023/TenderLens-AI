@@ -1,0 +1,84 @@
+name: RU-03 TEK and Roseltorg real public link shape
+
+on:
+  push:
+    branches: [ops/ru3-trusted-source-probe-20261016]
+    paths: [.github/workflows/ru03-russian-market-link-shape.yml]
+
+permissions: {}
+
+jobs:
+  public-link-shape:
+    runs-on: valyqon-ru3
+    timeout-minutes: 5
+    steps:
+      - name: Inspect public procurement anchors without storing or forwarding content
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          python3 - <<'PY'
+          import re
+          import ssl
+          import urllib.request
+          from collections import Counter
+          from html.parser import HTMLParser
+          from urllib.parse import urljoin, urlsplit
+
+          targets = {
+              'tektorg': 'https://www.tektorg.ru/223-fz/procedures',
+              'roseltorg': 'https://www.roseltorg.ru/procedures/search',
+          }
+
+          class Collector(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.links = []
+                  self.json_ld = 0
+                  self.forms = 0
+              def handle_starttag(self, name, attrs):
+                  attrs = dict(attrs)
+                  if name == 'a' and attrs.get('href'):
+                      self.links.append(attrs['href'])
+                  if name == 'script' and attrs.get('type') == 'application/ld+json':
+                      self.json_ld += 1
+                  if name == 'form':
+                      self.forms += 1
+
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, *args, **kwargs):
+                  return None
+
+          client = urllib.request.build_opener(
+              urllib.request.ProxyHandler({}),
+              urllib.request.HTTPSHandler(context=ssl.create_default_context()),
+              NoRedirect(),
+          )
+          for name, url in targets.items():
+              req = urllib.request.Request(url, headers={'Accept': 'text/html'})
+              with client.open(req, timeout=20) as resp:
+                  if resp.status != 200 or 'html' not in resp.headers.get('Content-Type', '').lower():
+                      raise ValueError('Listing not HTML 200')
+                  body = resp.read(1_600_001)
+              if not body or len(body) > 1_600_000:
+                  raise ValueError('Invalid listing bytes')
+              parser = Collector()
+              parser.feed(body.decode('utf-8', 'replace'))
+              names = Counter()
+              candidates = set()
+              base = urlsplit(url)
+              for href in parser.links:
+                  full = urlsplit(urljoin(url, href))
+                  if full.scheme != 'https' or full.hostname != base.hostname:
+                      continue
+                  names[full.path.split('/')[1] if len(full.path.split('/')) > 1 else ''] += 1
+                  if re.search(r'(procedure|tender|trade|notice|zakup|bid)', full.path, re.I):
+                      candidates.add(full.path)
+              print(f'RU3_{name.upper()}_PUBLIC_LINKS={len(parser.links)}')
+              print(f'RU3_{name.upper()}_PROCEDURE_LIKE_UNIQUE_LINKS={len(candidates)}')
+              print(f'RU3_{name.upper()}_JSON_LD={parser.json_ld}')
+              print(f'RU3_{name.upper()}_TOP_PATH_BUCKETS={names.most_common(6)}')
+              print(f'RU3_{name.upper()}_PATH_SAMPLES={sorted(candidates)[:6]}')
+          print('REAL_NOTICE_IDENTITIES_VERIFIED=NO')
+          print('PRODUCTION_CHANGED=NO')
+          PY

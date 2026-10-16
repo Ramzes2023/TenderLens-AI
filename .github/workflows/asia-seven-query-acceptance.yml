@@ -16,6 +16,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: asia-seven-query-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   asia-seven-offline-queue-query:
     runs-on: ubuntu-latest

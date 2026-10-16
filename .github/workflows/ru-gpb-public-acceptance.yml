@@ -1,0 +1,40 @@
+name: RU Gazprombank public real tender acceptance
+on:
+  push:
+    branches: [feat/ru-gpb-public-real-tenders-20261016]
+    paths:
+      - .github/workflows/ru-gpb-public-acceptance.yml
+      - app/sources/gpb_etp_public.py
+      - tests/test_ru_gpb_public.py
+      - scripts/ci_ru_gpb_public_worker.py
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/ru-gpb-public-acceptance.yml
+      - app/sources/gpb_etp_public.py
+      - tests/test_ru_gpb_public.py
+      - scripts/ci_ru_gpb_public_worker.py
+      - app/sources/catalog.py
+      - app/sources/ingestion.py
+permissions:
+  contents: read
+jobs:
+  gpb-source-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Public GPB offline strict source/transport contracts
+        run: python -m pytest -q tests/test_ru_gpb_public.py
+      - name: Real GPB public notice -> detail -> worker -> SQLite
+        if: github.event_name == 'push'
+        timeout-minutes: 3
+        run: python -B -m scripts.ci_ru_gpb_public_worker

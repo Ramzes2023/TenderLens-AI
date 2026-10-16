@@ -92,3 +92,17 @@ def test_exact_public_transport_and_bounded_requests(monkeypatch):
     notices = asyncio.run(GpbEtpPublicSource().fetch(1))
     assert len(notices) == 1
     assert requested == [LIST_URL, URL]
+
+
+def test_real_job_fence_and_sqlite_roundtrip_with_offline_source(monkeypatch):
+    """Synthetic notice exercises real JobRepository lease and Worker, not live network."""
+    async def fixture_fetch(self, limit=20):
+        return [parse_gpb_verified_detail(detail(), "1299761", URL)]
+
+    monkeypatch.setattr(GpbEtpPublicSource, "fetch", fixture_fetch)
+    from scripts.ci_ru_gpb_public_worker import proof
+    evidence = proof()
+    assert evidence["real_detail_verified"] == 1
+    assert evidence["worker_inserted"] == 1
+    assert evidence["sqlite_search_verified"] == 1
+    assert evidence["idempotent_replay"]

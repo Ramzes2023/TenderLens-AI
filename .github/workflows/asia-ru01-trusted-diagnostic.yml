@@ -39,12 +39,12 @@ jobs:
             echo "ASIA_DOCKER_WSL_INTEGRATION=NOT_AVAILABLE"
             exit 2
           fi
-          if ! docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; then
+          if ! timeout 20s docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; then
             echo "ASIA_DOCKER_WSL_INTEGRATION=ENGINE_UNREACHABLE"
             exit 3
           fi
-          docker version --format 'ASIA_DOCKER_CLIENT={{.Client.Version}};ASIA_DOCKER_SERVER={{.Server.Version}}'
-          docker info --format 'ASIA_DOCKER_OS={{.OSType}};ASIA_DOCKER_ARCH={{.Architecture}}'
+          timeout 20s docker version --format 'ASIA_DOCKER_CLIENT={{.Client.Version}};ASIA_DOCKER_SERVER={{.Server.Version}}'
+          timeout 20s docker info --format 'ASIA_DOCKER_OS={{.OSType}};ASIA_DOCKER_ARCH={{.Architecture}}'
           echo "ASIA_DOCKER_WSL_INTEGRATION=PASS"
           echo "ASIA_DOCKER_CONTAINER_EXECUTED=NO"
       - name: Preflight local isolation before any approved application tests
@@ -53,10 +53,10 @@ jobs:
           set -euo pipefail
           echo "ASIA_ISOLATION_PREFLIGHT=START"
           if command -v docker >/dev/null 2>&1; then
-            if docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; then
+            if timeout 20s docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; then
               echo "ASIA_CONTAINER_ENGINE=DOCKER_DAEMON_AVAILABLE"
-              docker info --format 'ASIA_DOCKER_SECURITY={{.SecurityOptions}}'
-              docker images --format 'ASIA_DOCKER_IMAGE={{.Repository}}:{{.Tag}}' | head -n 8 || true
+              timeout 20s docker info --format 'ASIA_DOCKER_SECURITY={{.SecurityOptions}}'
+              timeout 20s docker images --format 'ASIA_DOCKER_IMAGE={{.Repository}}:{{.Tag}}' | head -n 8 || true
             else
               echo "ASIA_CONTAINER_ENGINE=DOCKER_CLI_ONLY_NO_DAEMON"
             fi

@@ -16,6 +16,7 @@ from urllib.error import HTTPError, URLError
 
 HOST = "zakupki.butb.by"
 URLS = (
+    "https://zakupki.butb.by/auctions/index.html",
     "https://zakupki.butb.by/auctions/restrauctions.html",
     "https://zakupki.butb.by/auctions/",
     "https://zakupki.butb.by/",

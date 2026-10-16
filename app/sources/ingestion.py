@@ -27,6 +27,7 @@ SYSTEM_SCOPE = JobScope()
 HOSTS = {
     'b2b_center': frozenset({'www.b2b-center.ru'}),
     'eis_223': frozenset({'zakupki.gov.ru'}),
+    'eis_44_html': frozenset({'zakupki.gov.ru'}),
     'eis': frozenset({'zakupki.gov.ru', 'www.zakupki.gov.ru'}),
     'ted': frozenset({'api.ted.europa.eu'}),
     'sam_gov': frozenset({'api.sam.gov'}),

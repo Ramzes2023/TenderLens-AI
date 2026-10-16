@@ -23,7 +23,7 @@ concurrency:
 jobs:
   windows-offline-fixture:
     if: github.repository == 'Ramzes2023/TenderLens-AI' && github.ref == 'refs/heads/feat/asia-public-procurement-six-20261015'
-    runs-on: [self-hosted, Windows, X64, valyqon-asia-windows]
+    runs-on: valyqon-asia-windows
     timeout-minutes: 30
     steps:
       - name: Verify Windows Home-compatible trusted runner
@@ -65,7 +65,7 @@ jobs:
         timeout-minutes: 20
         run: |
           $ErrorActionPreference = 'Stop'
-          $work = Join-Path $env:RUNNER_TEMP 'asia-trusted-native-windows'
+          $work = Join-Path $env:RUNNER_TEMP ("asia-trusted-native-windows-" + $env:GITHUB_RUN_ID + "-" + $env:GITHUB_RUN_ATTEMPT)
           $trusted = Join-Path $work 'trusted-main'
           $venv = Join-Path $work 'venv'
           if (Test-Path $work) { throw 'Trusted test directory already exists; refusing to overwrite.' }

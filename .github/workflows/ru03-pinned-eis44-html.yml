@@ -1,0 +1,64 @@
+name: RU-03 pinned official EIS 44 HTML source acceptance
+
+on:
+  push:
+    branches: [ops/ru3-trusted-source-probe-20261016]
+    paths: [.github/workflows/ru03-pinned-eis44-html.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  verified-eis44:
+    runs-on: valyqon-ru3
+    timeout-minutes: 19
+    steps:
+      - name: Verify dedicated RU3 runner and official scoped CA
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          test "$(id -un)" = valyqon
+          if mountpoint -q /mnt/c; then exit 1; fi
+          dir="$(mktemp -d)"
+          echo "$dir" > "$RUNNER_TEMP/ru-eis44-cert-dir"
+          for item in root sub; do
+            case "$item" in
+              root) file=russian_trusted_root_ca; pin=d26d2d0231b7c39f92cc738512ba54103519e4405d68b5bd703e9788ca8ecf31 ;;
+              sub) file=russian_trusted_sub_ca; pin=bbbde2103e790b999ec62bd03cf625a5a2e7c316e10afe6a490eedead8b3fd9b ;;
+            esac
+            curl --noproxy '*' --fail --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 20 --max-filesize 65536 -o "$dir/$item.crt" "https://gu-st.ru/content/Other/doc/$file.cer"
+            openssl x509 -in "$dir/$item.crt" -out "$dir/$item.pem"
+            fp="$(openssl x509 -in "$dir/$item.pem" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+            test "$fp" = "$pin"
+          done
+          openssl verify -CAfile "$dir/root.pem" "$dir/sub.pem"
+          cat "$dir/root.pem" "$dir/sub.pem" > "$dir/eis-only.pem"
+          echo 'EIS_44_OFFICIAL_CA_SHA256_VERIFIED=YES'
+          echo 'OS_TRUST_STORE_UNCHANGED=YES'
+      - name: Checkout reviewed immutable official 44-FZ adapter
+        uses: actions/checkout@v4
+        with:
+          ref: fc64e331a5471fa31b6c70b4f737905ebd62f09d
+          persist-credentials: false
+      - name: Offline official law contract + real procurement listing -> worker -> SQLite
+        shell: bash
+        env:
+          MONITORING_ENABLED: "false"
+          VALYQON_EMAIL_MODE: "disabled"
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "fc64e331a5471fa31b6c70b4f737905ebd62f09d"
+          cert_dir="$(cat "$RUNNER_TEMP/ru-eis44-cert-dir")"
+          trap 'rm -rf "$cert_dir"' EXIT
+          export VALYQON_RU_EIS_CA_CERT="$cert_dir/eis-only.pem"
+          test -s "$VALYQON_RU_EIS_CA_CERT"
+          envdir="$(mktemp -d)"
+          trap 'rm -rf "$cert_dir" "$envdir"' EXIT
+          python3 -m venv "$envdir/venv"
+          "$envdir/venv/bin/python" -m pip install --disable-pip-version-check -r requirements-dev.txt >/dev/null
+          "$envdir/venv/bin/python" -m pytest -q tests/test_ru_eis44_public_html.py
+          "$envdir/venv/bin/python" -B -m scripts.ci_ru_eis44_html_worker
+          echo 'RU3_EIS44_OFFICIAL_HTML_APP=PASS'
+          echo 'EIS44_INDEPENDENT_DETAIL_VERIFIED=NO'
+          echo 'PRODUCTION_CHANGED=NO'

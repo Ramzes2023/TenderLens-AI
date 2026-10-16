@@ -1,0 +1,55 @@
+name: RU-03 Gazprombank platform public notice research
+on:
+  push:
+    branches: [ops/ru3-trusted-source-probe-20261016]
+    paths: [.github/workflows/ru03-gpb-public-research.yml]
+permissions: {}
+jobs:
+  gpb-public:
+    if: github.repository == 'Ramzes2023/TenderLens-AI' && github.ref == 'refs/heads/ops/ru3-trusted-source-probe-20261016'
+    runs-on: valyqon-ru3
+    timeout-minutes: 4
+    steps:
+      - name: Read-only verified HTTPS official Gazprombank ETP probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          for source in gpb_public gpb_44; do
+            case "$source" in
+              gpb_public) url=https://new.etpgpb.ru/procedures/ ;;
+              gpb_44) url=https://gos.etpgpb.ru/44/catalog/procedure ;;
+            esac
+            result="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 22 --max-filesize 1800000 --output "$dir/$source" --write-out '%{http_code} %{content_type}' "$url" 2>"$dir/curl-error")" && rc=0 || rc=$?
+            bytes=0
+            test ! -f "$dir/$source" || bytes="$(wc -c < "$dir/$source" | tr -d ' ')"
+            echo "RU3_GPB_${source}_HTTP=$result;CURL_EXIT=$rc;BYTES=$bytes"
+            if test "$rc" = 0 && test "${result%% *}" = 200; then
+              python3 - "$dir/$source" "$source" <<'PY'
+          import sys,re
+          from html.parser import HTMLParser
+          from urllib.parse import urljoin,urlsplit
+          class Audit(HTMLParser):
+              def __init__(self):super().__init__();self.links=[];self.jsonld=0
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag=='a' and a.get('href'):self.links.append(a['href'])
+                  if tag=='script' and a.get('type')=='application/ld+json':self.jsonld+=1
+          raw=open(sys.argv[1],'rb').read()
+          parser=Audit();parser.feed(raw.decode('utf-8','replace'))
+          src=sys.argv[2];host='new.etpgpb.ru' if src=='gpb_public' else 'gos.etpgpb.ru'
+          links=set()
+          for rawlink in parser.links:
+              u=urlsplit(urljoin('https://'+host+'/',rawlink))
+              if u.scheme=='https' and u.hostname==host and re.search(r'/(procedure|tender|trade|view)/',u.path,re.I):
+                  links.add(u.path)
+          print(f'RU3_GPB_{src}_VALID_LINKS={len(links)}')
+          print(f'RU3_GPB_{src}_PATH_SHAPES={sorted(links)[:8]}')
+          print(f'RU3_GPB_{src}_JSON_LD={parser.jsonld}')
+          PY
+            fi
+          done
+          echo 'NEW_SOURCE_REAL_DETAIL_VALIDATED=NO'
+          echo 'PRODUCTION_CHANGED=NO'

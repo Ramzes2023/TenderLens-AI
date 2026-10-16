@@ -63,7 +63,7 @@ class UzexProbeContracts(unittest.TestCase):
         self.assertEqual(request.full_url, API_URL)
         self.assertEqual(request.get_method(), "POST")
         self.assertEqual(json.loads(request.data), {
-            "TypeId": 1, "From": 0, "To": 20, "System_Id": 0,
+            "TypeId": 1, "From": 1, "To": 20, "System_Id": 0,
         })
         self.assertTrue(request.full_url.startswith("https://"))
         self.assertFalse(request.has_header("Authorization"))

@@ -4,7 +4,7 @@
 set -euo pipefail
 source_id="${1:-}"
 case "$source_id" in am_armeps|tj_eprocurement) ;; *) echo "CIS_LIVE=INVALID_SOURCE"; exit 2;; esac
-if [[ "${RUNNER_NAME:-}" != "VALYQON-INT-02" || "${GITHUB_ACTIONS:-}" != "true" || "${GITHUB_REPOSITORY:-}" != "Ramzes2023/TenderLens-AI" || "${GITHUB_EVENT_NAME:-}" != "push" || "${GITHUB_REF:-}" != "refs/heads/fix/cis-postgres16-fencing-gate-20261015" ]]; then
+if [[ "${RUNNER_NAME:-}" != "VALYQON-INT-02" || "${GITHUB_ACTIONS:-}" != "true" || "${GITHUB_REPOSITORY:-}" != "Ramzes2023/TenderLens-AI" || "${GITHUB_EVENT_NAME:-}" != "push" || "${GITHUB_REF:-}" != "refs/heads/integration/cis-am-tj-mainline-20261016" ]]; then
   echo "CIS_LIVE=UNTRUSTED_RUN_CONTEXT"; exit 3
 fi
 if [[ -z "${GITHUB_WORKSPACE:-}" || ! -d "$GITHUB_WORKSPACE" || ! -w /var/run/docker.sock ]]; then

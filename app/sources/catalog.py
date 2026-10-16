@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Iterable
 from .am_armeps import ArmeniaArmepsSource
 from .tj_eprocurement import TajikistanEprocurementSource
 from .asia_public import ASIA_RSS_FEEDS, AsiaPublicSource
+from .jp_jetro_bid_rss import JetroBidRssSource, RSS_URL as JETRO_BID_RSS_URL
 from .austender_rss import AusTenderRssSource
 from .b2b_center import B2BCenterSource
 from .tektorg_public_html import TekTorgPublicSource
@@ -454,6 +455,23 @@ def build_source_catalog(
                 enabled=True,
                 capabilities=SourceCapabilities(),
             ))
+
+    # Separate Japanese JETRO *agency-only* RSS: requires its own explicit
+    # opt-in and independent real queue -> worker -> search CI acceptance.
+    # Do not include in the previously approved six Hong Kong sources.
+    if os.environ.get("VALYQON_ASIA_JETRO_BID_ENABLED", "").strip() == "1":
+        registry.register(SourceRegistration(
+            key="jp_jetro_bid",
+            display_name="Japan External Trade Organization — public competitive bids",
+            source=JetroBidRssSource(timeout=min(timeout, 30.0)),
+            transport=SourceTransport.RSS,
+            jurisdictions=("JP",),
+            languages=("ja",),
+            homepage_url=JETRO_BID_RSS_URL,
+            official=True,
+            enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
 
     # Russian connectors are opt-in. Do not enable unverified live adapters.
     if settings.eis_223_configured:

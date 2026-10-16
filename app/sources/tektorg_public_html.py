@@ -32,11 +32,9 @@ class _PublicListing(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.current = None
         self.records = []
-        self.level = 0
-
+    
     def handle_starttag(self, tag, attrs):
         if self.current is not None:
-            self.level += 1
             return
         if tag != "a":
             return
@@ -49,8 +47,7 @@ class _PublicListing(HTMLParser):
                 and not p.query and not p.fragment and not p.username
                 and not p.password and p.port is None):
             self.current = [m.group(1), p.geturl(), []]
-            self.level = 1
-
+    
     def handle_data(self, data):
         if self.current is not None:
             self.current[2].append(data)
@@ -58,8 +55,7 @@ class _PublicListing(HTMLParser):
     def handle_endtag(self, tag):
         if self.current is None:
             return
-        self.level -= 1
-        if self.level == 0:
+        if tag == 'a':
             identity, url, parts = self.current
             self.records.append((identity, url, _text(parts)))
             self.current = None
@@ -68,26 +64,23 @@ class _PublicListing(HTMLParser):
 class _DetailHeading(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
-        self.level = 0
+        self.active = False
         self.parts = []
         self.headings = []
 
     def handle_starttag(self, tag, attrs):
-        if self.level > 0:
-            self.level += 1
-        elif tag == "h1":
-            self.level = 1
+        if tag == "h1" and not self.active:
+            self.active = True
             self.parts = []
 
     def handle_data(self, data):
-        if self.level:
+        if self.active:
             self.parts.append(data)
 
     def handle_endtag(self, tag):
-        if self.level:
-            self.level -= 1
-            if not self.level:
-                self.headings.append(_text(self.parts))
+        if tag == "h1" and self.active:
+            self.headings.append(_text(self.parts))
+            self.active = False
 
 
 def _document(payload):

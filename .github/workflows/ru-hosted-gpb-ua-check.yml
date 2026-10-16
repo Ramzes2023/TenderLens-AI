@@ -1,0 +1,28 @@
+name: RU hosted GPB standard UA public response diagnostic
+on:
+  push:
+    branches: [diag/ru-gpb-official-html-20261016]
+    paths: [.github/workflows/ru-hosted-gpb-ua-check.yml]
+permissions: {}
+jobs:
+  hosted-gpb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify direct HTTPS listing without proxy or bypass
+        shell: bash
+        run: |
+          set -euo pipefail
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          response="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 18 --max-filesize 1800000 -H 'User-Agent: Mozilla/5.0' -H 'Accept: text/html' --output "$dir/listing" --write-out '%{http_code} %{content_type} %{size_download}' 'https://etpgpb.ru/procedures/' 2>"$dir/stderr")" && rc=0 || rc=$?
+          echo "HOSTED_GPB_CURL=$response;EXIT=$rc"
+          if test "$rc" = 0 && test "${response%% *}" = 200; then
+            python3 - "$dir/listing" <<'PY'
+          import sys
+          p=open(sys.argv[1],'rb').read()
+          print('HOSTED_GPB_NONEMPTY_HTML='+str(p[:200].lstrip().lower().startswith((b'<!doctype html', b'<html'))))
+          print('HOSTED_GPB_PUBLIC_PROCEDURES='+str(b'/procedures/etp/' in p))
+          PY
+          fi
+          echo 'PRODUCTION_CHANGED=NO'

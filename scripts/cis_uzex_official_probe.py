@@ -31,7 +31,7 @@ def make_request(type_id: int) -> Request:
     if type_id not in (1, 2):
         raise ValueError("Only tender and selection public listings are approved")
     body = json.dumps(
-        {"TypeId": type_id, "From": 0, "To": MAX_RECORDS, "System_Id": 0},
+        {"TypeId": type_id, "From": 1, "To": MAX_RECORDS, "System_Id": 0},
         separators=(",", ":"),
     ).encode("ascii")
     return Request(

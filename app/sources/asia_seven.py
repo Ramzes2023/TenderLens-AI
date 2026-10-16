@@ -38,18 +38,20 @@ def validate_sources(catalog, *, now=None) -> tuple[str, ...]:
     return SOURCES
 
 
-def search_stored(opportunities, query: str, *, limit: int = 20) -> list[dict]:
+def search_stored(opportunities, query: str, *, limit: int = 20, source: str | None = None) -> list[dict]:
     """Bounded local keyword search; never send the user's words upstream."""
     if not isinstance(query, str) or not _QUERY.fullmatch(query.strip()):
         raise ValueError("Search query must be 2-120 printable characters.")
     if type(limit) is not int or not 1 <= limit <= MAX_RETURNED:
         raise ValueError("Invalid search limit.")
+    if source is not None and source not in SOURCES:
+        raise ValueError("Unknown Asian source selector.")
     word = query.strip()
     rows = []
-    for source in SOURCES:
+    for source_id in ((source,) if source else SOURCES):
         # Read at most limit rows from each fixed public source ID. The
         # existing repository enforces an additional 1000-row candidate bound.
-        for notice in opportunities.read(source, limit=limit, search_terms=(word,)):
+        for notice in opportunities.read(source_id, limit=limit, search_terms=(word,)):
             rows.append({
                 "source": notice.source, "external_id": notice.external_id,
                 "title": notice.title, "url": notice.url,
@@ -69,6 +71,8 @@ def main(argv=None) -> int:
                           help="Queue 7 approved source refreshes for current UTC hour.")
     commands.add_argument("--search", metavar="KEYWORD",
                           help="Search only already-persisted public Asian tenders.")
+    parser.add_argument("--source", choices=SOURCES,
+                        help="Optional source ID for already-persisted search results.")
     parser.add_argument("--limit", type=int, default=20,
                         help="Max returned stored tenders (1..30).")
     args = parser.parse_args(argv)
@@ -86,6 +90,8 @@ def main(argv=None) -> int:
     try:
         if os.environ.get("VALYQON_ASIA_OPERATIONS_ENABLED") != "1":
             raise ValueError("Explicit operator enablement required.")
+        if args.source and args.search is None:
+            raise ValueError("Source filter requires search mode.")
         if args.search is not None:
             if not _QUERY.fullmatch(args.search.strip()) or not 1 <= args.limit <= MAX_RETURNED:
                 raise ValueError("Invalid search input.")
@@ -118,7 +124,7 @@ def main(argv=None) -> int:
 
         database = Database(load_database_settings())
         opportunities = OpportunityRepository(database)
-        rows = search_stored(opportunities, args.search, limit=args.limit)
+        rows = search_stored(opportunities, args.search, limit=args.limit, source=args.source)
         print(json.dumps({
             "mode": "stored_search", "query": args.search.strip(),
             "results": rows, "count": len(rows),

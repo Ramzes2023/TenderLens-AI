@@ -409,7 +409,7 @@ def test_each_asia_source_uses_real_queue_worker_sqlite_and_snapshot(
             source_keys=(source,), search_terms=("zzzz-impossible-rss-keyword-999",),
         ))
         assert not missing.failures
-        assert missing.notices == []
+        assert not missing.notices
         assert requests == [ASIA_RSS_FEEDS[source]]
     finally:
         database.close()

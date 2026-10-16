@@ -112,6 +112,8 @@ def main():
                 data["reason"] = "non_html_or_non200"
     except (HTTPError, URLError, TimeoutError, OSError, ValueError) as exc:
         data["error_kind"] = type(exc).__name__
+        if isinstance(exc, HTTPError):
+            data["http_status"] = exc.code
     print(json.dumps(data, sort_keys=True, ensure_ascii=False))
     return 0 if data.get("verified") else 1
 

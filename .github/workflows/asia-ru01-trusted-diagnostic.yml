@@ -1,0 +1,130 @@
+name: Asia trusted RU-01 public diagnostic
+
+# This is an explicitly authorized, reviewed public-only diagnostic.
+# No PR event, no checkout, no repository-script execution, no credentials.
+on:
+  push:
+    branches:
+      - feat/asia-public-procurement-six-20261015
+    paths:
+      - .github/workflows/asia-ru01-trusted-diagnostic.yml
+
+permissions: {}
+
+jobs:
+  asia-ru01-trusted-public:
+    if: github.repository == 'Ramzes2023/TenderLens-AI' && github.ref == 'refs/heads/feat/asia-public-procurement-six-20261015'
+    runs-on: [self-hosted, valyqon-ru]
+    timeout-minutes: 8
+    steps:
+      - name: Verify trusted RU-01 host without checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = "VALYQON-RU-01"
+          test "$(uname -s)" = "Linux"
+          if mountpoint -q /mnt/c; then
+            echo "ASIA_TRUSTED_SECURITY_BLOCK=WINDOWS_C_MOUNTED"
+            exit 1
+          fi
+          python3 --version
+          curl --version | head -n 1
+          echo "ASIA_TRUSTED_HOST_ONLY=PASS"
+      - name: Inspect six fixed official HTTPS listings with bounded curl
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          for source in hk_ha_works hk_ha_leasing hk_emsd_tenders hk_emsd_consultancy jp_jetro_national jp_jetro_local; do
+            case "$source" in
+              hk_ha_works) url="https://www.housingauthority.gov.hk/en/rss/tenders.xml" ;;
+              hk_ha_leasing) url="https://www.housingauthority.gov.hk/en/rss/tender-notices-and-awards.xml" ;;
+              hk_emsd_tenders) url="https://www.emsd.gov.hk/filemanager/tendernotice/en/tender_notices.xml" ;;
+              hk_emsd_consultancy) url="https://www.emsd.gov.hk/filemanager/tendernotice/en/consultancy.xml" ;;
+              jp_jetro_national) url="https://www.jetro.go.jp/en/database/procurement/national/list.html" ;;
+              jp_jetro_local) url="https://www.jetro.go.jp/en/database/procurement/local/list.html" ;;
+            esac
+            if status="$(curl --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 25 --max-filesize 1048576 --output "$tmp/$source" --write-out '%{http_code}' "$url" 2>/dev/null)"; then
+              bytes="$(wc -c < "$tmp/$source" | tr -d ' ')"
+              echo "ASIA_UPSTREAM_${source}=HTTP_${status};BYTES=${bytes}"
+              if [ "$status" != 200 ]; then rm -f "$tmp/$source"; fi
+            else
+              echo "ASIA_UPSTREAM_${source}=FETCH_FAILED;CURL_EXIT=$?"
+              rm -f "$tmp/$source"
+            fi
+          done
+          python3 - "$tmp" <<'PY'
+          import hashlib
+          import json
+          import re
+          import sqlite3
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          from urllib.parse import urlsplit
+          directory = Path(sys.argv[1])
+          rows = []
+          def accept(source, title, url, approved):
+              title = ' '.join((title or '').split())[:400]
+              url = (url or '').strip()
+              try:
+                  parsed = urlsplit(url)
+                  valid = parsed.scheme == 'https' and parsed.hostname in approved and not parsed.username and not parsed.password and not parsed.fragment
+              except ValueError:
+                  valid = False
+              if title and valid and not re.search(r'\\b(?:contract awards?|tender awards?|awarded)\\b', title, re.I):
+                  rows.append((source, hashlib.sha256(url.encode()).hexdigest()[:32], title, url))
+          for source in ('hk_ha_works','hk_ha_leasing','hk_emsd_tenders','hk_emsd_consultancy'):
+              path = directory/source
+              if not path.exists():
+                  print(f'ASIA_PROBE_{source}=NO_HTTP_200')
+                  continue
+              payload = path.read_bytes()
+              if b'<!DOCTYPE' in payload.upper() or b'<!ENTITY' in payload.upper():
+                  print(f'ASIA_PROBE_{source}=FORBIDDEN_XML')
+                  continue
+              try:
+                  root = ET.fromstring(payload)
+              except ET.ParseError:
+                  print(f'ASIA_PROBE_{source}=INVALID_XML')
+                  continue
+              count_before = len(rows)
+              namespace = '{http://www.w3.org/2005/Atom}'
+              if root.tag == 'rss':
+                  items = root.findall('./channel/item')
+                  for item in items[:50]:
+                      accept(source, item.findtext('title'), item.findtext('link'), ('www.housingauthority.gov.hk','www.emsd.gov.hk'))
+              elif root.tag == namespace+'feed':
+                  items = root.findall(f'./{namespace}entry')
+                  for item in items[:50]:
+                      link = next((l.get('href') for l in item.findall(f'{namespace}link') if l.get('rel','alternate') == 'alternate'), None)
+                      accept(source, item.findtext(namespace+'title'), link, ('www.housingauthority.gov.hk','www.emsd.gov.hk'))
+              else:
+                  print(f'ASIA_PROBE_{source}=UNSUPPORTED_XML_ROOT')
+                  continue
+              print(f'ASIA_PROBE_{source}=XML_ITEMS_{len(items)};HTTPS_ITEM_LINKS_{len(rows)-count_before}')
+          for source, section in (('jp_jetro_national','national'),('jp_jetro_local','local')):
+              path = directory/source
+              if not path.exists():
+                  print(f'ASIA_PROBE_{source}=NO_HTTP_200')
+                  continue
+              html = path.read_text(encoding='utf-8',errors='replace')
+              if section == 'national':
+                  pattern = r'/en/database/procurement/national/articles/[0-9]+/[0-9]+\\.html'
+              else:
+                  pattern = r'/en/database/procurement/local/articles/[0-9a-f]{16}\\.html'
+              matches = set(re.findall(pattern, html))
+              print(f'ASIA_PROBE_{source}=HTML_BYTES_{len(html.encode())};ARTICLE_LINKS_{len(matches)}')
+              for path in sorted(matches)[:50]:
+                  accept(source, 'Official JETRO article link (title unverified)', 'https://www.jetro.go.jp'+path, ('www.jetro.go.jp',))
+          db=sqlite3.connect(':memory:')
+          db.execute('CREATE TABLE public_probe (source TEXT, identity TEXT, title TEXT, url TEXT, UNIQUE(source,identity))')
+          db.executemany('INSERT OR IGNORE INTO public_probe VALUES(?,?,?,?)', rows)
+          for source in ('hk_ha_works','hk_ha_leasing','hk_emsd_tenders','hk_emsd_consultancy','jp_jetro_national','jp_jetro_local'):
+              saved=db.execute('SELECT count(*) FROM public_probe WHERE source=?',(source,)).fetchone()[0]
+              searched=db.execute('SELECT count(*) FROM public_probe WHERE source=? AND title LIKE ?', (source,'%'+('Official' if source.startswith('jp_') else '')+'%')).fetchone()[0]
+              print(f'ASIA_INDEPENDENT_PROBE_{source}=STORED_{saved};QUERY_{searched}')
+          print('ASIA_PROBE_NOT_APPLICATION_WORKER_PROOF=YES')
+          print('PRODUCTION_CHANGED=NO')
+          PY

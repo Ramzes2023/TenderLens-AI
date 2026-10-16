@@ -7,7 +7,7 @@ Uses only vetted application-scoped CA, strict official HTTPS, no TLS bypass.
 from __future__ import annotations
 
 from contextlib import nullcontext
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from html.parser import HTMLParser
 from pathlib import Path
 import re
@@ -116,44 +116,15 @@ def parse_official_44_listing(payload, limit=MAX_RECORDS):
         title = match.group(1).strip()
         if len(title) < 5 or len(title) > 800:
             raise ValueError("Invalid EIS procurement title")
-        # Extract only explicitly labelled public facts from this same result.
-        customer_match = re.search(
-            r"\bЗаказчик\s+(.+?)\s+Начальная цена\b", text
-        )
-        customer = customer_match.group(1).strip() if customer_match else None
-        if customer is not None and not 3 <= len(customer) <= 500:
-            customer = None
-        price_match = re.search(
-            r"Начальная цена\s+([0-9][0-9 \u00a0]*(?:[,.][0-9]{2})?)\s*₽", text
-        )
-        price = None
-        if price_match:
-            price = float(price_match.group(1).replace(" ", "").replace("\u00a0", "").replace(",", "."))
-        date_match = re.search(r"\bРазмещено\s+([0-9]{2}\.[0-9]{2}\.[0-9]{4})(?:\s|$)", text)
-        # Core law/ID/link are mandatory. Optional fields may be omitted on
-        # a malformed card, but can never invalidate the verified notice.
-        core = TenderNotice(
+        # All values below come from that same official search-result card.
+        notice = TenderNotice(
             source=SOURCE_ID,
             external_id=identity,
             tender_number=identity,
             title=title,
             url=url,
         )
-        validate_notice(core, SOURCE_ID)
-        notice = replace(
-            core,
-            customer=customer,
-            initial_price=price,
-            currency="RUB" if price is not None else None,
-            published_at=date_match.group(1) if date_match else None,
-            summary=text[:1400],
-        )
-        try:
-            validate_notice(notice, SOURCE_ID)
-        except (ValueError, TypeError, OverflowError):
-            # Fail closed on core provenance, never guess optional dates,
-            # amounts or buyer names from an inconsistent public card.
-            notice = core
+        validate_notice(notice, SOURCE_ID)
         if identity in seen:
             if seen[identity] != notice:
                 raise ValueError("Conflicting EIS 44-FZ procurement identity")

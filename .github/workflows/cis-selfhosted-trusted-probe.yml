@@ -18,7 +18,7 @@ concurrency:
 jobs:
   inspect-runner:
     name: Trusted runner environment only (no PR code)
-    runs-on: [self-hosted, Linux, X64, valyqon-int]
+    runs-on: [self-hosted, valyqon-int]
     timeout-minutes: 5
     steps:
       - name: Verify Linux tools without checkout or secrets

@@ -30,7 +30,9 @@ jobs:
             fi
             curl --noproxy '*' --fail --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 20 --max-filesize 65536 \
               "https://gu-st.ru/content/Other/doc/$file.cer" -o "$dir/$file.cer"
-            openssl x509 -inform DER -in "$dir/$file.cer" -out "$dir/$part.pem"
+            if ! openssl x509 -inform PEM -in "$dir/$file.cer" -out "$dir/$part.pem" 2>/dev/null; then
+              openssl x509 -inform DER -in "$dir/$file.cer" -out "$dir/$part.pem"
+            fi
             thumb="$(openssl x509 -in "$dir/$part.pem" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
             test "$thumb" = "$expected"
             echo "RU3_EIS_CA_${part}_SHA256=PASS"

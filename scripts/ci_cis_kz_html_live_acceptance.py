@@ -20,6 +20,7 @@ from app.jobs import HandlerRegistry, JobRepository, JobService
 from app.jobs.worker import Worker
 from app.monitoring.config import MonitoringSettings
 from app.sources.catalog import SourceCatalog, build_source_catalog
+from app.sources.eis_rss import SourceError
 from app.sources.ingestion import (
     HOSTS, JOB_TYPE, SYSTEM_SCOPE, ConnectorSyncHandler, ConnectorSyncService,
 )
@@ -85,6 +86,8 @@ def verify(source_id):
                     probe_rows = asyncio.run(registration.source.fetch(1))
                 except Exception as exc:
                     diagnostics["source_probe_error_type"] = type(exc).__name__
+                    if isinstance(exc, SourceError):
+                        diagnostics["source_probe_safe_reason"] = str(exc)[:160]
                 else:
                     diagnostics["source_probe_rows"] = len(probe_rows)
                 return diagnostics

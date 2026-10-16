@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Iterable
 from .asia_public import ASIA_RSS_FEEDS, AsiaPublicSource
 from .austender_rss import AusTenderRssSource
 from .b2b_center import B2BCenterSource
+from .tektorg_public_html import TekTorgPublicSource
 from .canada_buys_dataset import CanadaBuysDatasetSource
 from .eis_rss import EisRssSource, SourceError
 from .eis_223_rss import Eis223RssSource
@@ -488,6 +489,18 @@ def build_source_catalog(
                 pagination=False, documents=False, keyword_search=False,
                 authentication_required=False,
             ),
+        ))
+
+    if settings.tektorg_public_enabled:
+        registry.register(SourceRegistration(
+            key="tektorg",
+            display_name="TEK-Torg — public tenders (law not independently verified)",
+            source=TekTorgPublicSource(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",), languages=("ru",),
+            homepage_url="https://www.tektorg.ru/223-fz/procedures",
+            official=False, enabled=True,
+            capabilities=SourceCapabilities(),
         ))
 
     return SourceCatalog(

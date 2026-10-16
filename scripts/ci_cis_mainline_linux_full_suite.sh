@@ -19,7 +19,9 @@ docker run --rm --network bridge --memory 4g --cpus 2 --pids-limit 256 \
   --mount "type=bind,source=${GITHUB_WORKSPACE},target=/source,readonly" \
   --workdir /work python:3.12-slim sh -euc '
     mkdir -p /work
-    cp -a /source/. /work/
+    # No CAP_CHOWN in this isolated Docker job: copy contents without trying
+    # to preserve host ownership. Only the disposable /work tree is modified.
+    cp -R /source/. /work/
     cd /work
     python -m pip install --no-cache-dir -r requirements-dev.txt
     python - <<'"'"'PY'"'"'

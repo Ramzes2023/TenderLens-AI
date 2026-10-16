@@ -40,6 +40,13 @@ jobs:
             docker --version
             echo "DOCKER_HOST_OVERRIDE=$([[ -n "${DOCKER_HOST:-}" ]] && echo SET || echo UNSET)"
             for socket in /var/run/docker.sock /mnt/wsl/docker-desktop/shared-sockets/guest-services/docker.sock; do
+              if [[ "$socket" == "/var/run/docker.sock" ]]; then
+                if [[ -w "$socket" ]]; then
+                  echo "DOCKER_DEFAULT_SOCKET_ACCESS=WRITABLE"
+                else
+                  echo "DOCKER_DEFAULT_SOCKET_ACCESS=NOT_WRITABLE"
+                fi
+              fi
               if [[ -S "$socket" ]]; then
                 echo "DOCKER_SOCKET_${socket//\\//_}=SOCKET_PRESENT"
                 stat -Lc 'DOCKER_SOCKET_MODE=%A;OWNER=%U;GROUP=%G' "$socket"

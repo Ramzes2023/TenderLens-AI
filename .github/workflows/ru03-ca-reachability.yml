@@ -1,0 +1,32 @@
+name: RU-03 trusted ministry CA reachability
+
+on:
+  push:
+    branches: [ops/ru3-trusted-source-probe-20261016]
+    paths: [.github/workflows/ru03-ca-reachability.yml]
+
+permissions: {}
+
+jobs:
+  verified-download:
+    runs-on: valyqon-ru3
+    timeout-minutes: 3
+    steps:
+      - name: Read-only government certificate download diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = "VALYQON-ASIA-03"
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          for name in russian_trusted_root_ca russian_trusted_sub_ca; do
+            url="https://gu-st.ru/content/Other/doc/${name}.cer"
+            code="$(curl --noproxy '*' --silent --show-error --proto '=https' --connect-timeout 8 --max-time 20 --max-redirs 0 --max-filesize 65536 --output "$dir/$name" --write-out '%{http_code}' "$url" 2>"$dir/stderr")" && rc=0 || rc=$?
+            echo "RU3_CA_${name}_HTTP=$code;CURL_EXIT=$rc"
+            if test "$rc" = 0; then
+              openssl x509 -inform DER -in "$dir/$name" -noout -subject -issuer -fingerprint -sha256 || openssl x509 -inform PEM -in "$dir/$name" -noout -subject -issuer -fingerprint -sha256
+            fi
+          done
+          echo "OS_TRUST_STORE_UNCHANGED=YES"
+          echo "EIS_TLS_VERIFY_DISABLED=NO"
+          echo "PRODUCTION_CHANGED=NO"

@@ -93,6 +93,8 @@ def test_real_adapter_public_request_contract_offline(monkeypatch):
         assert kwargs["trust_env"] is False
         assert kwargs["follow_redirects"] is False
         assert kwargs["timeout"] == 15
+        assert kwargs["headers"]["Accept"] == "text/html"
+        assert kwargs["headers"]["User-Agent"] == "Mozilla/5.0"
         yield FakeClient()
     import app.sources.tektorg_public_html as module
     monkeypatch.setattr(module, "source_client", fake_source_client)

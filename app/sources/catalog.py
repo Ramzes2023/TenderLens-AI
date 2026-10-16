@@ -11,9 +11,11 @@ from .kg_gov_legacy import KyrgyzstanGovLegacySource
 from .uz_uzex import UzbekistanUzexSource
 from .asia_public import ASIA_RSS_FEEDS, AsiaPublicSource
 from .jp_jetro_bid_rss import JetroBidRssSource, RSS_URL as JETRO_BID_RSS_URL
+from .hk_hyd_tenders import HighwaysTendersSource, RSS_URL as HYD_TENDERS_RSS_URL
 from .austender_rss import AusTenderRssSource
 from .b2b_center import B2BCenterSource
 from .tektorg_public_html import TekTorgPublicSource
+from .gpb_etp_public import GpbEtpPublicSource
 from .canada_buys_dataset import CanadaBuysDatasetSource
 from .eis_rss import EisRssSource, SourceError
 from .eis_44_public_html import Eis44PublicHtmlSource
@@ -448,8 +450,7 @@ def build_source_catalog(
         capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
     ))
 
-    # Legacy Kyrgyz government HTML listing: real official rows, disabled until
-    # independent end-to-end live acceptance and operator activation.
+    # Official Kyrgyz server-rendered government listing; operator activation separate.
     registry.register(SourceRegistration(
         key="kg_gov_legacy",
         display_name="Kyrgyzstan government public tender notices",
@@ -501,6 +502,20 @@ def build_source_catalog(
             homepage_url=JETRO_BID_RSS_URL,
             official=True,
             enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    # Hong Kong Highways Department has an independent official RSS gate.
+    # It is not included in the six existing HK sources or JETRO source.
+    if os.environ.get("VALYQON_ASIA_HYD_ENABLED", "").strip() == "1":
+        registry.register(SourceRegistration(
+            key="hk_hyd_tenders",
+            display_name="Hong Kong Highways Department — tender notices",
+            source=HighwaysTendersSource(timeout=min(timeout, 30.0)),
+            transport=SourceTransport.RSS,
+            jurisdictions=("HK",), languages=("en",),
+            homepage_url=HYD_TENDERS_RSS_URL,
+            official=True, enabled=True,
             capabilities=SourceCapabilities(),
         ))
 
@@ -580,6 +595,20 @@ def build_source_catalog(
             jurisdictions=("RU",), languages=("ru",),
             homepage_url="https://zakupki.gov.ru/",
             official=True, enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    if settings.gpb_etp_public_enabled:
+        registry.register(SourceRegistration(
+            key="gpb_etp_public",
+            display_name="Gazprombank ETP public procurement (law unverified)",
+            source=GpbEtpPublicSource(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url="https://etpgpb.ru/procedures/",
+            official=False,
+            enabled=True,
             capabilities=SourceCapabilities(),
         ))
 

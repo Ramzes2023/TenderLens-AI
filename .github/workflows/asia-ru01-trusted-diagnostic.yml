@@ -30,6 +30,29 @@ jobs:
           python3 --version
           curl --version | head -n 1
           echo "ASIA_TRUSTED_HOST_ONLY=PASS"
+      - name: Read-only discovery of native Windows testing options
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = "VALYQON-RU-01"
+          if command -v powershell.exe >/dev/null 2>&1; then
+            echo "ASIA_NATIVE_WINDOWS_INTEROP=POWERSHELL_EXE_PRESENT"
+          elif command -v pwsh.exe >/dev/null 2>&1; then
+            echo "ASIA_NATIVE_WINDOWS_INTEROP=PWSH_EXE_PRESENT"
+          elif command -v cmd.exe >/dev/null 2>&1; then
+            echo "ASIA_NATIVE_WINDOWS_INTEROP=CMD_EXE_PRESENT"
+          else
+            echo "ASIA_NATIVE_WINDOWS_INTEROP=NOT_EXPOSED"
+          fi
+          if command -v wsl.exe >/dev/null 2>&1; then
+            echo "ASIA_WINDOWS_WSL_CONTROL=AVAILABLE"
+          else
+            echo "ASIA_WINDOWS_WSL_CONTROL=NOT_EXPOSED"
+          fi
+          if test -e /run/WSL; then
+            echo "ASIA_WSL_INTEROP_MOUNT=PRESENT"
+          fi
+          echo "ASIA_WINDOWS_CODE_EXECUTED=NO"
       - name: Confirm Docker WSL integration on approved Asia runner
         shell: bash
         run: |

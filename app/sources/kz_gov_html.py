@@ -41,10 +41,12 @@ def _date(value):
     text = " ".join(value.split())
     if DATE.fullmatch(text) is None:
         raise SourceError("KZ unexpected official date format.")
-    try:
-        return datetime.fromisoformat(text)
-    except ValueError:
-        raise SourceError("KZ invalid procurement timestamp.") from None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    raise SourceError("KZ invalid procurement timestamp.")
 
 
 def _amount(value):

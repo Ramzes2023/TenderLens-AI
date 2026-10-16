@@ -61,9 +61,13 @@ def acceptance():
                     source_keys=(SOURCE,),
                     search_terms=(row.external_id,), limit_per_source=10,
                 ))
-                if (found.failures or len(found.notices) != 1
-                        or found.notices[0].identity != row.identity
-                        or found.notices[0].url != row.url):
+                # Keyword search is substring-based, not an exact-ID filter:
+                # short numeric IDs can occur in dates/prices of other notices.
+                # Require the exact notice identity AND URL among results.
+                if (found.failures or not any(
+                        hit.identity == row.identity and hit.url == row.url
+                        for hit in found.notices
+                )):
                     raise AssertionError("Real worker keyword-search mismatch")
                 # Replaying identical normalized notices changes no identities.
                 if store.upsert(row, connector_version(SOURCE)):

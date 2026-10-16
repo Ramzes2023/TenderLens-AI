@@ -37,4 +37,4 @@ jobs:
         run: python -m py_compile scripts/ci_ru_b2b_real_worker.py
       - name: Real B2B -> app worker -> ephemeral SQLite -> source keyword query
         timeout-minutes: 3
-        run: python -B scripts/ci_ru_b2b_real_worker.py
+        run: python -B -m scripts.ci_ru_b2b_real_worker

@@ -43,7 +43,7 @@ jobs:
           text=' '.join(' '.join(v.text).split())
           identity=sys.argv[2]
           print('RU3_ROSELTORG_VISIBLE_ID='+identity+';MATCH='+str(identity in text))
-          print('RU3_ROSELTORG_STRICT_MARKER='+str(bool(re.search(r'Процедура\\s*:\\s*'+re.escape(identity)+r'(?![A-Z0-9])',text))))
+          print('RU3_ROSELTORG_STRICT_MARKER='+str(bool(re.search(r'Процедура\s*:\s*'+re.escape(identity)+r'(?![A-Z0-9])',text))))
           print('RU3_ROSELTORG_H1_COUNT='+str(len(v.h))+';NONEMPTY='+str(sum(5<=len(x)<=1000 for x in v.h)))
           print('RU3_ROSELTORG_VISIBLE_NUMBER_PREFIX='+repr(text[max(0,text.find(identity)-55):text.find(identity)+len(identity)+55] if identity in text else 'NO_VISIBLE_NUMBER'))
           PY

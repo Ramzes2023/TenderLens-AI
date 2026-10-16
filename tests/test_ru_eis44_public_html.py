@@ -55,7 +55,9 @@ def test_official_result_has_stable_identity_and_law():
     assert row.title == TITLE
     assert row.url == URL
     assert row.tender_number == NUMBER
-    assert row.initial_price is None  # unsupported field intentionally not invented
+    assert row.initial_price == 56000.0
+    assert row.currency == "RUB"
+    assert row.customer is None  # Only extract customer from a labelled field
 
 
 @pytest.mark.parametrize("body", [
@@ -110,3 +112,14 @@ def test_fetch_is_bounded_tls_and_source_scoped_offline(tmp_path, monkeypatch):
     assert called == [LIST_URL]
     assert len(notices) == 1
     assert notices[0].source == SOURCE_ID
+
+def test_extracts_only_labelled_customer_and_publication_date():
+    body = fixture().replace(
+        "Начальная цена 56 000,00 ₽".encode(),
+        "Заказчик МБУ «УМКА» Начальная цена 56 000,00 ₽ Размещено 16.10.2026".encode(),
+    )
+    notice = parse_official_44_listing(body)[0]
+    assert notice.customer == "МБУ «УМКА»"
+    assert notice.initial_price == 56000.0
+    assert notice.published_at == "16.10.2026"
+    assert notice.deadline is None

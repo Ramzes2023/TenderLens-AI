@@ -72,6 +72,26 @@ def main():
     except Exception as e:
         print("RU_TEKTORG_REAL_WORKER=BLOCKED")
         print("FAILURE_CLASS="+type(e).__name__)
+
+        # Only emit fixed test assertions and safe queue failure code categories.
+        allowed = {
+            "No independently verified live TEK-Torg notices",
+            "TEK-Torg durable ingestion incomplete",
+            "Missing TEK-Torg SQL rows",
+            "Noncanonical TEK-Torg detail URL",
+            "Stored TEK-Torg record not found",
+            "Duplicate TEK-Torg identity inserted",
+            "No real durable connector job was claimed",
+            "Durable connector result source mismatch",
+        }
+        reason = str(e)
+        if type(e) is AssertionError:
+            if reason.startswith("Durable connector job did not succeed: "):
+                code = reason.rsplit(": ", 1)[-1]
+                if code in {"handler_error","permanent_failure","lease_expired","invalid_result","job missing"}:
+                    print("FAILURE_STAGE=LEASED_WORKER_" + code.upper())
+            elif reason in allowed:
+                print("FAILURE_STAGE=" + reason.replace(" ", "_")[:100])
         print("PRODUCTION_CHANGED=NO")
         return 1
     print("RU_TEKTORG_REAL_WORKER_EVIDENCE="+json.dumps(result,sort_keys=True))

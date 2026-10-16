@@ -1,0 +1,36 @@
+name: RU-03 Gazprombank verified redirect destination
+on:
+  push:
+    branches: [ops/ru3-trusted-source-probe-20261016]
+    paths: [.github/workflows/ru03-gpb-redirect-diagnostic.yml]
+permissions: {}
+jobs:
+  gpb-redirect:
+    runs-on: valyqon-ru3
+    timeout-minutes: 3
+    steps:
+      - name: Read only official public 301 Location hostname, no redirect follow
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          file="$(mktemp)"
+          trap 'rm -f "$file"' EXIT
+          result="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 18 -D "$file" -o /dev/null --write-out '%{http_code}' https://new.etpgpb.ru/procedures/)"
+          echo "RU3_GPB_ORIGINAL_HTTP=$result"
+          python3 - "$file" <<'PY'
+          import sys
+          from urllib.parse import urlsplit,urljoin
+          content=open(sys.argv[1],encoding='latin-1').read().splitlines()
+          location=[line.split(':',1)[1].strip() for line in content if line.lower().startswith('location:')]
+          if len(location)!=1:
+              print('RU3_GPB_ONE_REDIRECT=NO')
+          else:
+              u=urlsplit(urljoin('https://new.etpgpb.ru/procedures/',location[0]))
+              if u.scheme!='https' or u.username or u.password or u.fragment or u.port not in (None,443):
+                  raise ValueError('Unsafe external redirect')
+              print('RU3_GPB_SAFE_LOCATION_HOST='+str(u.hostname))
+              print('RU3_GPB_SAFE_LOCATION_PATH='+u.path[:130])
+          PY
+          echo 'FOLLOWED_EXTERNAL_REDIRECT=NO'
+          echo 'PRODUCTION_CHANGED=NO'

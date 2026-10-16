@@ -51,6 +51,8 @@ class PublicProbeTests(unittest.TestCase):
         check_url("https://public.mtender.gov.md/tenders/")
         check_url("https://zakupki.gov.kg/popp/")
         check_url("https://tender.gov.md/ro/documente-in-curs-de-examinare")
+        check_url("https://mtender.gov.md/ru/tenders")
+        check_url("https://goszakupki.okmot.kg/public/")
 
     def test_moldova_ocids_not_confused_with_full_tenders(self):
         rows = {"offset": "", "data": [
@@ -93,6 +95,7 @@ class PublicProbeTests(unittest.TestCase):
         self.assertTrue(result["verified"])
         self.assertEqual(result["order_ids"], 1)
         self.assertEqual(result["verified_order_count"], 1)
+        self.assertEqual(describe_payload("kg_public_no_locale", listing.encode("utf-8"), "text/html")["verified_order_count"], 1)
         self.assertFalse(describe_payload("kg_new_portal", b"<html>menu only</html>", "text/html")["verified"])
         self.assertFalse(describe_payload("kg_new_portal", b"202610122560014988", "text/html")["verified"])
         self.assertFalse(describe_payload(
@@ -179,6 +182,8 @@ class PublicProbeTests(unittest.TestCase):
         self.assertTrue(out["verified"])
         self.assertEqual(out["ocid_count"], 1)
         self.assertFalse(describe_payload("md_public_portal", b'<html>empty</html>', "text/html")["verified"])
+        self.assertTrue(describe_payload("md_public_portal_ru", data, "text/html")["verified"])
+        self.assertFalse(describe_payload("md_public_portal_ru", b"<html>empty</html>", "text/html")["verified"])
 
     def test_probe_is_bounded_and_has_no_fallback(self):
         opener = Opener(json.dumps({"data": [{"ocid": "ocds-b3wdp1-MD-1770204825070"}]}).encode())

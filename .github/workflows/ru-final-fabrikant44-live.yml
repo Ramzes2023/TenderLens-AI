@@ -19,18 +19,19 @@ jobs:
           ! mountpoint -q /mnt/c
       - uses: actions/checkout@v4
         with:
-          ref: febd3c8a882e9eece8e9d40a81e9bea4d0e16fd3
+          ref: efeaad8d6156823e7f8f5f8accab09608794c161
           persist-credentials: false
       - name: Exact vetted source SHA offline contracts and live durable worker to search
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = febd3c8a882e9eece8e9d40a81e9bea4d0e16fd3
+          test "$(git rev-parse HEAD)" = efeaad8d6156823e7f8f5f8accab09608794c161
           d="$(mktemp -d)"
           trap 'rm -rf "$d"' EXIT
           python3 -m venv "$d/venv"
           "$d/venv/bin/python" -m pip install --disable-pip-version-check -r requirements-dev.txt >/dev/null
           "$d/venv/bin/python" -m pytest -q tests/test_ru_fabrikant44_public.py
           "$d/venv/bin/python" -B -m scripts.ci_ru_fabrikant44_real_worker
+          "$d/venv/bin/python" -B -m scripts.ci_ru_fabrikant44_authenticated
           echo 'RU_FABRIKANT44_INDEPENDENT_SOURCE_SQL_KEYWORD=PASS'
           echo 'PRODUCTION_CHANGED=NO'

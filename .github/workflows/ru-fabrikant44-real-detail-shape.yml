@@ -1,0 +1,86 @@
+name: RU official Fabrikant 44-FZ listing and independent details
+on:
+  push:
+    branches: [diag/ru-final-gates-20261016]
+    paths: [.github/workflows/ru-fabrikant44-real-detail-shape.yml]
+permissions: {}
+jobs:
+  fabrikant-public-detail:
+    runs-on: valyqon-ru3
+    timeout-minutes: 5
+    steps:
+      - name: Verify live catalog and exact procurement detail identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          python3 - <<'PY'
+          import re,ssl,urllib.request
+          from html.parser import HTMLParser
+          from urllib.parse import urlsplit,urljoin
+          HOST="44.fabrikant.ru"
+          BASE="https://"+HOST+"/44/catalog/procedure"
+          pattern=re.compile(r"/44/procedure/([a-z0-9-]{2,18})/([0-9]{19})")
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self,*a,**k):return None
+          http=urllib.request.build_opener(
+              urllib.request.ProxyHandler({}),
+              urllib.request.HTTPSHandler(context=ssl.create_default_context()),
+              NoRedirect())
+          def get(url):
+              u=urlsplit(url)
+              if u.scheme!='https' or u.netloc!=HOST or u.username or u.password or u.port is not None or u.fragment or u.query:raise ValueError("Unexpected URL")
+              req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0","Accept":"text/html"})
+              with http.open(req,timeout=18) as resp:
+                  if resp.status!=200 or 'html' not in resp.headers.get('Content-Type','').lower():raise ValueError("Not public HTML 200")
+                  data=resp.read(1_600_001)
+              if not data or len(data)>1_600_000:raise ValueError("Invalid official HTML response")
+              return data.decode('utf-8-sig','replace')
+          class Visible(HTMLParser):
+              def __init__(self):
+                  super().__init__(convert_charrefs=True)
+                  self.links=[];self.cur=None;self.h1=[];self.heading=None;self.text=[];self.hidden=0
+              def handle_starttag(self,tag,attrs):
+                  a=dict(attrs)
+                  if tag in ("script","style","template","noscript"):self.hidden+=1
+                  if not self.hidden and tag=="a" and a.get("href"):self.cur=[a["href"],[]]
+                  if not self.hidden and tag=="h1":self.heading=[]
+              def handle_data(self,data):
+                  if not self.hidden:
+                      self.text.append(data)
+                      if self.cur is not None:self.cur[1].append(data)
+                      if self.heading is not None:self.heading.append(data)
+              def handle_endtag(self,tag):
+                  if not self.hidden and tag=="a" and self.cur is not None:
+                      self.links.append((self.cur[0]," ".join(" ".join(self.cur[1]).split())))
+                      self.cur=None
+                  if not self.hidden and tag=="h1" and self.heading is not None:
+                      self.h1.append(" ".join(" ".join(self.heading).split()))
+                      self.heading=None
+                  if tag in ("script","style","template","noscript") and self.hidden:self.hidden-=1
+          page=Visible();page.feed(get(BASE))
+          unique={}
+          for href,text in page.links:
+              u=urlsplit(urljoin(BASE,href))
+              match=pattern.fullmatch(u.path)
+              if u.scheme=="https" and u.netloc==HOST and match and not u.query and not u.fragment and u.port is None:
+                  unique.setdefault(match.group(2),(u.geturl(),match.group(1),text))
+          print("RU_FABRIKANT_44_PUBLIC_LIST_UNIQUE="+str(len(unique)))
+          print("RU_FABRIKANT_44_ANCHOR_TEXT_LENGTHS="+repr([len(x[2]) for x in list(unique.values())[:4]]))
+          verified=0
+          for ident,(url,kind,title) in list(unique.items())[:3]:
+              try:
+                  details=Visible();details.feed(get(url))
+                  visible=" ".join(" ".join(details.text).split())
+                  heading=str(details.h1[:1])
+                  visible_id=ident in visible
+                  title_present=bool(title and len(title)>=5 and title in visible)
+                  heading_id=any(ident in h for h in details.h1)
+                  print("RU_FABRIKANT_44_DETAIL_KIND="+kind+";HTTP=200;ID_VISIBLE="+str(visible_id)+";H1_ID="+str(heading_id)+";ANCHOR_TITLE_VISIBLE="+str(title_present)+";H1_COUNT="+str(len(details.h1)))
+                  if visible_id and heading_id:verified+=1
+              except Exception as e:
+                  print("RU_FABRIKANT_44_DETAIL_FAILED_CLASS="+type(e).__name__)
+          print("RU_FABRIKANT_44_INDEPENDENT_VERIFIED="+str(verified))
+          print("RU_FABRIKANT_44_DB_QUERY_VERIFIED=NO")
+          print("PRODUCTION_CHANGED=NO")
+          PY

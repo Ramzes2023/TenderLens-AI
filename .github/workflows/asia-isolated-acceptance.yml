@@ -18,7 +18,6 @@ on:
       - ".github/workflows/asia-ru01-release-build.yml"
       - ".github/workflows/asia-windows-selfhosted.yml"
       - "scripts/dev/setup_valyqon_windows_asia_runner.ps1"
-      - "scripts/dev/asia_windows_sandbox_guest.ps1"
       - "docs/asia/FREE_WINDOWS_RUNNER.md"
   workflow_dispatch:
 

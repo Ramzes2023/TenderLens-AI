@@ -30,6 +30,45 @@ jobs:
           python3 --version
           curl --version | head -n 1
           echo "ASIA_TRUSTED_HOST_ONLY=PASS"
+      - name: Preflight local isolation before any approved application tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ASIA_ISOLATION_PREFLIGHT=START"
+          if command -v docker >/dev/null 2>&1; then
+            if docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; then
+              echo "ASIA_CONTAINER_ENGINE=DOCKER_DAEMON_AVAILABLE"
+              docker info --format 'ASIA_DOCKER_SECURITY={{.SecurityOptions}}'
+              docker images --format 'ASIA_DOCKER_IMAGE={{.Repository}}:{{.Tag}}' | head -n 8 || true
+            else
+              echo "ASIA_CONTAINER_ENGINE=DOCKER_CLI_ONLY_NO_DAEMON"
+            fi
+          elif command -v podman >/dev/null 2>&1; then
+            if podman info >/dev/null 2>&1; then
+              echo "ASIA_CONTAINER_ENGINE=PODMAN_AVAILABLE"
+            else
+              echo "ASIA_CONTAINER_ENGINE=PODMAN_UNAVAILABLE"
+            fi
+          else
+            echo "ASIA_CONTAINER_ENGINE=NOT_INSTALLED"
+          fi
+          if command -v unshare >/dev/null 2>&1 && unshare --user --map-root-user true >/dev/null 2>&1; then
+            echo "ASIA_USER_NAMESPACE=AVAILABLE"
+          else
+            echo "ASIA_USER_NAMESPACE=UNAVAILABLE"
+          fi
+          python3 - <<'PY'
+          import importlib.util
+          import sys
+          print("ASIA_PYTHON_VERSION="+sys.version.split()[0])
+          for dependency in ("pytest","httpx","psycopg","psycopg_pool"):
+              try:
+                  found = importlib.util.find_spec(dependency) is not None
+              except (ValueError, ModuleNotFoundError):
+                  found = False
+              print("ASIA_HOST_LIBRARY_"+dependency.upper()+"="+("PRESENT" if found else "MISSING"))
+          print("ASIA_PR_CODE_EXECUTED=NO")
+          PY
       - name: Inspect six fixed official HTTPS listings with bounded curl
         shell: bash
         run: |

@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 from urllib.request import HTTPSHandler, HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 HOST = "procurement.gov.kz"
+APPROVED_HOSTS = ("procurement.gov.kz", "old.goszakup.gov.kz", "goszakup.gov.kz")
 INDEX = "https://procurement.gov.kz/ru/search/announce?count_record=50&page=1"
 MAX_BYTES = 1024 * 1024
 TIMEOUT = 16
@@ -88,7 +89,7 @@ class PublicTables(HTMLParser):
         self.cell_links = []
 
 
-def inspect_index(raw):
+def inspect_index(raw, *, hostname=HOST):
     if type(raw) is not bytes or len(raw) > MAX_BYTES:
         return {"verified": False, "reason": "invalid_body"}
     parser = PublicTables()
@@ -105,7 +106,7 @@ def inspect_index(raw):
                 approved = []
                 for href in links:
                     target = urlsplit(href)
-                    if (target.scheme in ("", "https") and target.hostname in (None, HOST)
+                    if (target.scheme in ("", "https") and target.hostname in (None, hostname)
                             and DETAIL_PATH.fullmatch(target.path)
                             and not target.query and not target.fragment
                             and not target.username and not target.password):
@@ -133,7 +134,7 @@ def inspect_index(raw):
 
 def get(url, opener):
     parsed = urlsplit(url)
-    if (parsed.scheme != "https" or parsed.hostname != HOST
+    if (parsed.scheme != "https" or parsed.hostname not in APPROVED_HOSTS
             or parsed.username or parsed.password or parsed.port not in (None, 443)):
         raise ValueError("unapproved official host")
     request = Request(url, headers={"User-Agent": "VALYQON-cis-official-public-readonly/1.0",
@@ -149,26 +150,36 @@ def get(url, opener):
 
 def main():
     opener = build_opener(ProxyHandler({}), HTTPSHandler(context=ssl.create_default_context()), NoRedirect())
-    out = {"source": "kz_goszakup_public_html", "index_verified": False,
-           "detail_verified": False, "production_activation_allowed": False}
-    try:
-        result = inspect_index(get(INDEX, opener))
-        out.update(result)
-        out["index_verified"] = result["verified"]
-        candidates = [p for t in result.get("public_table_shapes", []) for p in t.get("sample_detail_paths", [])]
-        if result["verified"] and candidates:
-            # Do not assert detail data just because its URL responds.
-            detail = get("https://" + HOST + candidates[0], opener).decode("utf-8", errors="replace")
-            out["detail_verified"] = (
-                "Просмотр объявления" in detail and
-                "Организатор" in detail and
-                "Срок окончания приема заявок" in detail
-            )
-    except HTTPError as exc:
-        out.update({"failure_kind": "HTTPError", "http_status": exc.code})
-    except (URLError, OSError, ValueError, TimeoutError) as exc:
-        out["failure_kind"] = type(exc).__name__
-    out["verified"] = out["index_verified"] and out["detail_verified"]
+    out = {"source": "kz_goszakup_public_html", "verified": False,
+           "production_activation_allowed": False, "hosts": []}
+    for hostname in APPROVED_HOSTS:
+        probe = {"hostname": hostname, "index_verified": False,
+                 "detail_verified": False}
+        index_url = f"https://{hostname}/ru/search/announce?count_record=50&page=1"
+        try:
+            result = inspect_index(get(index_url, opener), hostname=hostname)
+            probe["index_verified"] = result["verified"]
+            probe["matched_notice_rows"] = result.get("verified_list_rows", 0)
+            probe["detail_link_count"] = result.get("detail_links_seen", 0)
+            candidates = [p for t in result.get("public_table_shapes", [])
+                          for p in t.get("sample_detail_paths", [])]
+            if result["verified"] and candidates:
+                detail = get("https://" + hostname + candidates[0], opener).decode("utf-8", errors="replace")
+                probe["detail_verified"] = (
+                    "Просмотр объявления" in detail and
+                    "Организатор" in detail and
+                    "Срок окончания приема заявок" in detail
+                )
+        except HTTPError as exc:
+            probe.update({"failure_kind": "HTTPError", "http_status": exc.code})
+        except URLError as exc:
+            probe.update({"failure_kind": "URLError",
+                          "reason_class": type(exc.reason).__name__})
+        except (OSError, ValueError, TimeoutError) as exc:
+            probe["failure_kind"] = type(exc).__name__
+        probe["verified"] = probe["index_verified"] and probe["detail_verified"]
+        out["hosts"].append(probe)
+    out["verified"] = any(x["verified"] for x in out["hosts"])
     print(json.dumps(out, ensure_ascii=False, sort_keys=True))
     return 0 if out["verified"] else 1
 

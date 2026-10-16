@@ -66,7 +66,7 @@ jobs:
           for href,_ in page.links:
               if "/44/procedure/" in href:
                   u=urlsplit(urljoin(BASE,href))
-                  samples.append((re.sub(r"[0-9]{19}","<ID>",u.path)[:130],bool(u.query),bool(u.fragment),u.netloc))
+                  samples.append((re.sub(r"[0-9]{19}","<ID>",u.path)[:130],bool(u.query),bool(u.fragment),u.netloc,[p.split("=")[0] for p in u.query.split("&") if p][:3],bool(pattern.fullmatch(u.path))))
           print("RU_FABRIKANT_44_DETAIL_URL_SHAPES="+repr(samples[:4]))
           print("RU_FABRIKANT_44_RAW_ID_19="+str(len(set(re.findall(r"(?<![0-9])[0-9]{19}(?![0-9])",html)))))
           print("RU_FABRIKANT_44_RAW_DETAIL_PATHS="+str(len(re.findall(r"/44/procedure/[a-z0-9-]{2,18}/[0-9]{19}",html))))

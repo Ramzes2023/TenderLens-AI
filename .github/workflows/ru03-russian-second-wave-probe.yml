@@ -1,0 +1,49 @@
+name: RU-03 second-wave Russian procurement public host inventory
+on:
+  push:
+    branches: [diag/ru-gpb-official-html-20261016]
+    paths: [.github/workflows/ru03-russian-second-wave-probe.yml]
+permissions: {}
+jobs:
+  official-public-endpoints:
+    runs-on: valyqon-ru3
+    timeout-minutes: 7
+    steps:
+      - name: Bounded read-only direct TLS checks for identified Russian public ETP sites
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          for src in sberbank_ast rts_tender rts_market fabrikant etp_ets zakazrf lot_online rosneft eat etprf otc; do
+            case "$src" in
+            sberbank_ast) url='https://utp.sberbank-ast.ru/Trade/List/PurchaseList' ;;
+            rts_tender) url='https://www.rts-tender.ru/' ;;
+            rts_market) url='https://market.rts-tender.ru/' ;;
+            fabrikant) url='https://www.fabrikant.ru/trades/procedure/search' ;;
+            etp_ets) url='https://etp-ets.ru/procedure/catalog/' ;;
+            zakazrf) url='https://www.zakazrf.ru/' ;;
+            lot_online) url='https://tender.lot-online.ru/' ;;
+            rosneft) url='https://zakupki.rosneft.ru/' ;;
+            eat) url='https://agregatoreat.ru/' ;;
+            etprf) url='https://www.etprf.ru/' ;;
+            otc) url='https://www.otc.ru/' ;;
+              *) exit 2 ;;
+            esac
+            result="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 6 --max-time 14 --max-filesize 1500000 -H 'User-Agent: Mozilla/5.0' -H 'Accept: text/html' --output "$dir/$src" --write-out '%{http_code} %{content_type} %{size_download}' "$url" 2>/dev/null)" && rc=0 || rc=$?
+            echo "RU3_SECOND_WAVE_${src}_HTTP=$result;CURL_EXIT=$rc"
+            if test "$rc" = 0 && test "${result%% *}" = 200; then
+              python3 - "$dir/$src" "$src" <<'PY'
+          import sys
+          data=open(sys.argv[1],"rb").read()
+          low=data.lower()
+          ishtml=low[:250].lstrip().startswith((b'<!doctype html',b'<html'))
+          hints=sum(low.count(x) for x in [b'procurement',b'tender',b'procedure',b'/trade/',b'/purchase/'])
+          print("RU3_SECOND_WAVE_SOURCE="+sys.argv[2]+";HTML="+str(ishtml)+";MARKER_OCCURRENCES="+str(hints))
+          PY
+            fi
+          done
+          echo 'RU3_SECOND_WAVE_INDEPENDENT_DETAILS_VERIFIED=NO'
+          echo 'RU3_SECOND_WAVE_REAL_APP_DB=NOT_TESTED'
+          echo 'PRODUCTION_CHANGED=NO'

@@ -1,0 +1,57 @@
+name: RU Roseltorg strict hosted egress diagnostic
+on:
+  push:
+    branches: [diag/ru-final-gates-20261016]
+    paths: [.github/workflows/ru-roseltorg-hosted-failure-probe.yml]
+permissions:
+  contents: read
+jobs:
+  hosted-egress-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 0e8a942fdcbc6671f576746ebcdc8e938a98ac0b
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Diagnose actual source response without reclassifying a failure as PASS
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 0e8a942fdcbc6671f576746ebcdc8e938a98ac0b
+          python -m pip install -r requirements-dev.txt >/dev/null
+          python - <<'PY'
+          import asyncio
+          import httpx
+          from app.sources.roseltorg_public import (
+              RoseltorgPublicSource, LIST_URL, parse_roseltorg_links,
+          )
+          async def check():
+              async with httpx.AsyncClient(
+                  timeout=20, trust_env=False, follow_redirects=False,
+                  headers={"Accept":"text/html","User-Agent":"Mozilla/5.0"},
+              ) as client:
+                  try:
+                      response=await client.get(LIST_URL)
+                      print("HOSTED_ROSELTORG_HTTP_STATUS="+str(response.status_code))
+                      print("HOSTED_ROSELTORG_CONTENT_TYPE="+repr(response.headers.get("Content-Type","")[:80]))
+                      print("HOSTED_ROSELTORG_BODY_BYTES="+str(len(response.content)))
+                      if response.status_code==200:
+                          try:
+                              items=parse_roseltorg_links(response.content,limit=3)
+                              print("HOSTED_ROSELTORG_LISTING_VERIFIED="+str(len(items)))
+                          except Exception as e:
+                              print("HOSTED_ROSELTORG_LISTING_ERROR="+type(e).__name__)
+                  except Exception as e:
+                      print("HOSTED_ROSELTORG_HTTP_ERROR="+type(e).__name__)
+              try:
+                  records=await RoseltorgPublicSource().fetch(limit=3)
+                  print("HOSTED_ROSELTORG_SOURCE_FETCH_VERIFIED="+str(len(records)))
+              except Exception as e:
+                  print("HOSTED_ROSELTORG_SOURCE_ERROR="+type(e).__name__)
+          asyncio.run(check())
+          print("PRODUCTION_CHANGED=NO")
+          PY

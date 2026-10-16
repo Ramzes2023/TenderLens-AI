@@ -1,0 +1,56 @@
+name: RU-03 Roseltorg public listing discovery
+on:
+  push:
+    branches: [diag/ru-gpb-official-html-20261016]
+    paths: [.github/workflows/ru03-roseltorg-listing-discovery.yml]
+permissions: {}
+jobs:
+  roseltorg-listing:
+    runs-on: valyqon-ru3
+    timeout-minutes: 4
+    steps:
+      - name: Check safe public listing and exact procedure links
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          for path in /procedures/search /procedures/ /; do
+            name="${path//\//_}"
+            response="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 7 --max-time 18 --max-filesize 1800000 --output "$dir/$name" --write-out '%{http_code} %{content_type} %{size_download}' "https://www.roseltorg.ru$path" 2>/dev/null)" && rc=0 || rc=$?
+            echo "RU3_ROSELTORG_LIST_PATH=$path;STATUS=$response;CURL_EXIT=$rc"
+            if test "$rc" = 0 && test "${response%% *}" = 200; then
+              python3 - "$dir/$name" "$path" <<'PY'
+          import sys,re
+          from html.parser import HTMLParser
+          from urllib.parse import urljoin,urlsplit
+          class A(HTMLParser):
+              def __init__(self):super().__init__();self.links=[];self.cur=None
+              def handle_starttag(self,tag,attrs):
+                  if tag=='a':
+                      v=dict(attrs).get('href')
+                      if v:self.cur=[v,[]]
+              def handle_data(self,data):
+                  if self.cur:self.cur[1].append(data)
+              def handle_endtag(self,tag):
+                  if tag=='a' and self.cur:
+                      self.links.append((self.cur[0],' '.join(' '.join(self.cur[1]).split())))
+                      self.cur=None
+          body=open(sys.argv[1],'rb').read()
+          a=A();a.feed(body.decode('utf-8','replace'))
+          procedures=[]
+          for href,title in a.links:
+              u=urlsplit(urljoin('https://www.roseltorg.ru'+sys.argv[2],href))
+              match=re.fullmatch(r'/procedure/([A-Z0-9]{8,24})(?:/1)?/?',u.path)
+              if u.scheme=='https' and u.netloc=='www.roseltorg.ru' and match and not u.query and not u.fragment:
+                  procedures.append((match.group(1),title[:150],u.path))
+          unique=list(dict.fromkeys(row[0] for row in procedures))
+          print('RU3_ROSELTORG_ANCHOR_COUNT='+str(len(a.links)))
+          print('RU3_ROSELTORG_PROCEDURE_LINKS='+str(len(procedures)))
+          print('RU3_ROSELTORG_UNIQUE_PROCEDURES='+str(len(unique)))
+          print('RU3_ROSELTORG_SAMPLE_PATHS='+repr([p[2] for p in procedures[:3]]))
+          print('PRODUCTION_CHANGED=NO')
+          PY
+            fi
+          done

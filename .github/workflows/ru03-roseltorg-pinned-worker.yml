@@ -1,0 +1,37 @@
+name: RU-03 pinned Roseltorg real worker SQLite acceptance
+on:
+  push:
+    branches: [diag/ru-gpb-official-html-20261016]
+    paths: [.github/workflows/ru03-roseltorg-pinned-worker.yml]
+permissions:
+  contents: read
+jobs:
+  roseltorg-live:
+    runs-on: valyqon-ru3
+    timeout-minutes: 15
+    steps:
+      - name: Confirm trusted isolated runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          test "$(id -un)" = valyqon
+          ! mountpoint -q /mnt/c
+      - name: Checkout reviewed immutable Roseltorg adapter
+        uses: actions/checkout@v4
+        with:
+          ref: 57d1a4f57654121d52bb26d10450c266c6be629b
+          persist-credentials: false
+      - name: Real Roseltorg listing and detail to worker and DB
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 57d1a4f57654121d52bb26d10450c266c6be629b
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          python3 -m venv "$dir/venv"
+          "$dir/venv/bin/python" -m pip install --disable-pip-version-check -r requirements-dev.txt >/dev/null
+          "$dir/venv/bin/python" -m pytest -q tests/test_ru_roseltorg_public.py
+          "$dir/venv/bin/python" -B -m scripts.ci_ru_roseltorg_real_worker
+          echo 'RU3_ROSELTORG_REAL_WORKER=PASS'
+          echo 'PRODUCTION_CHANGED=NO'

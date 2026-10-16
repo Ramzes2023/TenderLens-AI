@@ -134,10 +134,9 @@ def _calendar(text):
 
 def _amount(text):
     text = text.replace("\xa0", " ").strip()
-    candidates = re.findall(r"[\d\s.,]+\s*MDL\b", text)
-    if not candidates:
-        raise SourceError("MD estimated price missing.")
-    raw = candidates[0][:-3].strip()
+    if not re.fullmatch(r"[\d\s.,]+\s*MDL", text):
+        raise SourceError("MD estimated price missing or extra fields.")
+    raw = text[:-3].strip()
     if not NUMBER.fullmatch(raw):
         raise SourceError("MD estimate malformed.")
     # Integer thousands groups may be spaced; a comma denotes a decimal

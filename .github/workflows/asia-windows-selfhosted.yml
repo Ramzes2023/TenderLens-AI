@@ -1,0 +1,105 @@
+name: Asia native Windows Home-compatible acceptance (self-hosted)
+
+# Separate native Windows-only compatibility gate using only source from main.
+# Never executes pull-request application Python on the Windows host.
+on:
+  push:
+    branches: [feat/asia-public-procurement-six-20261015]
+    paths:
+      - ".github/workflows/asia-windows-selfhosted.yml"
+      - ".github/workflows/asia-isolated-acceptance.yml"
+      - ".github/workflows/asia-ru01-release-build.yml"
+      - "scripts/dev/setup_valyqon_windows_asia_runner.ps1"
+      - "docs/asia/FREE_WINDOWS_RUNNER.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: asia-native-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-offline-fixture:
+    if: github.repository == 'Ramzes2023/TenderLens-AI' && github.ref == 'refs/heads/feat/asia-public-procurement-six-20261015'
+    runs-on: valyqon-asia-windows
+    timeout-minutes: 30
+    steps:
+      - name: Verify Windows Home-compatible trusted runner
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_NAME -ne 'VALYQON-WIN-ASIA-01' -or $env:OS -ne 'Windows_NT') {
+              throw 'Unexpected runner or OS.'
+          }
+          $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+          $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+          if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) -or
+              $identity.Name -match '^(NT AUTHORITY\\SYSTEM|.*\\Administrator)$') {
+              throw 'Do not execute on an elevated Windows account.'
+          }
+          Write-Host 'ASIA_NATIVE_WINDOWS_RUNNER=NON_ADMIN'
+          Write-Host 'ASIA_WINDOWS_SANDBOX=NOT_REQUIRED'
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+          lfs: false
+          clean: true
+          fetch-depth: 0
+      - name: Prove Windows fixture and its dependency modules are unchanged from reviewed main
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # All Windows fixture, helpers and related dependencies must be
+          # byte-for-byte identical to the protected, trusted main revision.
+          & git diff --exit-code origin/main HEAD -- requirements.txt requirements-dev.txt app/analytics app/models app/scoring app/currency.py app/sources/enrichment.py app/sources/normalization.py scripts/p39e_local_h_preview.py tests/test_p39e_local_preview.py tests/fixtures/p39d_offline_history.json
+          if ($LASTEXITCODE -ne 0) { throw 'Reviewed native Windows test parity changed.' }
+          Write-Host 'ASIA_WINDOWS_SOURCE_PARITY_WITH_MAIN=PASS'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run only protected-main Windows fixture in temporary non-admin environment
+        shell: powershell
+        timeout-minutes: 20
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $work = Join-Path $env:RUNNER_TEMP ("asia-trusted-native-windows-" + $env:GITHUB_RUN_ID + "-" + $env:GITHUB_RUN_ATTEMPT)
+          $trusted = Join-Path $work 'trusted-main'
+          $venv = Join-Path $work 'venv'
+          if (Test-Path $work) { throw 'Trusted test directory already exists; refusing to overwrite.' }
+          New-Item -Path $work -ItemType Directory | Out-Null
+          try {
+              # Checkout from protected main, NOT from feature branch, so host
+              # never executes any unreviewed PR application Python.
+              & git worktree add --detach $trusted origin/main
+              if ($LASTEXITCODE -ne 0) { throw 'Cannot materialize main fixture.' }
+              & python -m venv $venv
+              if ($LASTEXITCODE -ne 0) { throw 'Cannot create isolated dependencies.' }
+              $py = Join-Path $venv 'Scripts\\python.exe'
+              $env:PYTHONPATH = ''
+              $env:PYTHONNOUSERSITE = '1'
+              $env:PYTHONDONTWRITEBYTECODE = '1'
+              $env:PIP_DISABLE_PIP_VERSION_CHECK = '1'
+              & $py -m pip install --disable-pip-version-check --only-binary=:all: -r (Join-Path $trusted 'requirements-dev.txt')
+              if ($LASTEXITCODE -ne 0) { throw 'Cannot install reviewed, pinned dependencies.' }
+              Push-Location $trusted
+              try {
+                  & $py -m compileall -q app tests scripts
+                  if ($LASTEXITCODE -ne 0) { throw 'Windows compilation failed.' }
+                  & $py -m pytest -vv --maxfail=1 --durations=15 tests/test_p39e_local_preview.py
+                  if ($LASTEXITCODE -ne 0) { throw 'Native Windows process isolation tests failed.' }
+              } finally { Pop-Location }
+              Write-Host 'ASIA_NATIVE_WIN32_PROCESS_TEST=PASS'
+              Write-Host 'ASIA_WINDOWS_SOURCE=TRUSTED_MAIN_ONLY'
+              Write-Host 'ASIA_WINDOWS_IS_NOT_VM_SANDBOX=YES'
+              Write-Host 'ASIA_PRODUCTION_CHANGED=NO'
+          } finally {
+              if (Test-Path $trusted) {
+                  & git worktree remove --force $trusted 2>$null
+              }
+              if (Test-Path $work) {
+                  Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+              }
+          }

@@ -1,0 +1,37 @@
+name: RU EIS 44-FZ official public HTML contracts
+
+on:
+  push:
+    branches: [integration/ru-eis44-html-public-main-20261016]
+    paths:
+      - .github/workflows/ru-eis44-public-contracts.yml
+      - app/sources/eis_44_public_html.py
+      - tests/test_ru_eis44_public_html.py
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/ru-eis44-public-contracts.yml
+      - app/sources/eis_44_public_html.py
+      - tests/test_ru_eis44_public_html.py
+      - app/sources/ingestion.py
+      - app/sources/catalog.py
+
+permissions:
+  contents: read
+
+jobs:
+  eis44-offline-source-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install deterministic source test dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Strict law, canonical URL, notice and scoped TLS contracts
+        run: python -m pytest -q tests/test_ru_eis44_public_html.py

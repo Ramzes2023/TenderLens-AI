@@ -13,6 +13,7 @@ from .jp_jetro_bid_rss import JetroBidRssSource, RSS_URL as JETRO_BID_RSS_URL
 from .austender_rss import AusTenderRssSource
 from .b2b_center import B2BCenterSource
 from .tektorg_public_html import TekTorgPublicSource
+from .gpb_etp_public import GpbEtpPublicSource
 from .canada_buys_dataset import CanadaBuysDatasetSource
 from .eis_rss import EisRssSource, SourceError
 from .eis_44_public_html import Eis44PublicHtmlSource
@@ -564,6 +565,20 @@ def build_source_catalog(
             jurisdictions=("RU",), languages=("ru",),
             homepage_url="https://zakupki.gov.ru/",
             official=True, enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    if settings.gpb_etp_public_enabled:
+        registry.register(SourceRegistration(
+            key="gpb_etp_public",
+            display_name="Gazprombank ETP public procurement (law unverified)",
+            source=GpbEtpPublicSource(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url="https://etpgpb.ru/procedures/",
+            official=False,
+            enabled=True,
             capabilities=SourceCapabilities(),
         ))
 

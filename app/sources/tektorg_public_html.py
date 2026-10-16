@@ -151,7 +151,10 @@ class TekTorgPublicSource:
         with policy if policy is not None else nullcontext():
             async with source_client(
                 timeout=self.timeout, trust_env=False,
-                follow_redirects=False, headers={"Accept": "text/html"},
+                follow_redirects=False,
+                # The official host returned an incomplete page to HTTPX default UA.
+                # A normal browser UA exposed real same-host procedure anchors on RU3.
+                headers={"Accept": "text/html", "User-Agent": "Mozilla/5.0"},
             ) as client:
                 listing = await client.get(LIST_URL)
                 listing.raise_for_status()

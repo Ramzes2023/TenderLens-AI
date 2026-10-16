@@ -39,14 +39,14 @@ jobs:
           auth_dir=$(mktemp -d)
           trap 'rm -rf "$auth_dir"' EXIT
           chmod 700 "$auth_dir"
-          printf '%s\\n' '{"auths":{}}' > "$auth_dir/config.json"
+          printf '%s\n' '{"auths":{}}' > "$auth_dir/config.json"
           chmod 600 "$auth_dir/config.json"
           export DOCKER_CONFIG="$auth_dir"
           docker pull --quiet python:3.12-slim >/dev/null
-          docker run --rm --network none --memory 512m --pids-limit 64 --cpus 1 \\
-            --cap-drop ALL --security-opt no-new-privileges \\
-            --mount "type=bind,source=${GITHUB_WORKSPACE},target=/workspace,readonly" \\
-            --workdir /workspace python:3.12-slim \\
+          docker run --rm --network none --memory 512m --pids-limit 64 --cpus 1 \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --mount "type=bind,source=${GITHUB_WORKSPACE},target=/workspace,readonly" \
+            --workdir /workspace python:3.12-slim \
             python -B -m unittest discover -s tests -p test_cis_md_kg_probe.py -v
 
   official-live-observation:
@@ -68,11 +68,11 @@ jobs:
           auth_dir=$(mktemp -d)
           trap 'rm -rf "$auth_dir"' EXIT
           chmod 700 "$auth_dir"
-          printf '%s\\n' '{"auths":{}}' > "$auth_dir/config.json"
+          printf '%s\n' '{"auths":{}}' > "$auth_dir/config.json"
           chmod 600 "$auth_dir/config.json"
           export DOCKER_CONFIG="$auth_dir"
-          docker run --rm --network bridge --memory 512m --pids-limit 64 --cpus 1 \\
-            --cap-drop ALL --security-opt no-new-privileges \\
-            --mount "type=bind,source=${GITHUB_WORKSPACE},target=/workspace,readonly" \\
-            --workdir /workspace python:3.12-slim \\
+          docker run --rm --network bridge --memory 512m --pids-limit 64 --cpus 1 \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --mount "type=bind,source=${GITHUB_WORKSPACE},target=/workspace,readonly" \
+            --workdir /workspace python:3.12-slim \
             python -B scripts/cis_md_kg_public_probe.py --require-live

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Iterable
 from .am_armeps import ArmeniaArmepsSource
 from .tj_eprocurement import TajikistanEprocurementSource
 from .kg_gov_legacy import KyrgyzstanGovLegacySource
+from .kz_gov_html import KazakhstanGovHtmlSource
 from .uz_uzex import UzbekistanUzexSource
 from .asia_public import ASIA_RSS_FEEDS, AsiaPublicSource
 from .jp_jetro_bid_rss import JetroBidRssSource, RSS_URL as JETRO_BID_RSS_URL
@@ -460,6 +461,21 @@ def build_source_catalog(
         jurisdictions=("KG",),
         languages=("ru", "ky"),
         homepage_url="https://zakupki.gov.kg/popp/view/order/list.xhtml",
+        official=True,
+        enabled=False,
+        capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
+    ))
+
+    # Independent public HTML source complements credentialed KZ Goszakup API.
+    # HTTPS list-to-notice ingestion is disabled until operator activation.
+    registry.register(SourceRegistration(
+        key="kz_gov_html",
+        display_name="Kazakhstan government public procurement announcements",
+        source=KazakhstanGovHtmlSource(timeout=min(timeout, 30)),
+        transport=SourceTransport.HTML,
+        jurisdictions=("KZ",),
+        languages=("ru", "kk"),
+        homepage_url="https://old.goszakup.gov.kz/ru/search/announce",
         official=True,
         enabled=False,
         capabilities=SourceCapabilities(pagination=False, incremental_sync=False),

@@ -302,11 +302,11 @@ jobs:
               for title,raw_url in items[:80]:
                   title=' '.join((title or '').split())[:1000]
                   url=normalize(raw_url,base,host)
-                  if not title or not url or re.search(r'\\b(?:contract awards?|tender awards?|awarded)\\b',title,re.I):
+                  if not title or not url or re.search(r'\b(?:contract awards?|tender awards?|awarded)\b',title,re.I):
                       continue
                   identity=hashlib.sha256(url.encode()).hexdigest()[:40]
                   conn.execute('INSERT OR IGNORE INTO opportunities VALUES(?,?,?,?)',(source,identity,title,url))
-                  token=next(iter(re.findall(r'[^\\W_]{3,}',title,flags=re.UNICODE)),title[:5])
+                  token=next(iter(re.findall(r'[^\W_]{3,}',title,flags=re.UNICODE)),title[:5])
                   found=conn.execute('SELECT 1 FROM opportunities WHERE source=? AND external_id=? AND title LIKE ? AND url=?',(source,identity,'%'+token+'%',url)).fetchone()
                   accepted+=1
                   searched+=bool(found)

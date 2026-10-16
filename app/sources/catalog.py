@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Iterable
 
 from .austender_rss import AusTenderRssSource
 from .b2b_center import B2BCenterSource
+from .tektorg_public_html import TekTorgPublicSource
 from .canada_buys_dataset import CanadaBuysDatasetSource
 from .eis_rss import EisRssSource, SourceError
 from .eis_223_rss import Eis223RssSource
@@ -422,6 +423,20 @@ def build_source_catalog(
             jurisdictions=("RU",),
             languages=("ru",),
             homepage_url="https://www.b2b-center.ru/",
+            official=False,
+            enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    if settings.tektorg_public_enabled:
+        registry.register(SourceRegistration(
+            key="tektorg",
+            display_name="TEK-Torg — public 223-FZ procurement",
+            source=TekTorgPublicSource(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url="https://www.tektorg.ru/223-fz/procedures",
             official=False,
             enabled=True,
             capabilities=SourceCapabilities(),

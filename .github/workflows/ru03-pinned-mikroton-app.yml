@@ -1,0 +1,50 @@
+name: RU-03 pinned MikroTon application acceptance
+
+# Trusted branch only; never execute PR code or floating refs on a laptop runner.
+on:
+  push:
+    branches: [ops/ru3-trusted-source-probe-20261016]
+    paths: [.github/workflows/ru03-pinned-mikroton-app.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  ru3-mikroton-pinned:
+    if: github.repository == 'Ramzes2023/TenderLens-AI' && github.ref == 'refs/heads/ops/ru3-trusted-source-probe-20261016'
+    runs-on: valyqon-ru3
+    timeout-minutes: 20
+    steps:
+      - name: Verify exact isolated runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = "VALYQON-ASIA-03"
+          test "$(id -un)" = valyqon
+          if mountpoint -q /mnt/c; then exit 1; fi
+          echo 'RU3_PINNED_HOST=PASS'
+      - name: Checkout reviewed immutable Russian adapter commit
+        uses: actions/checkout@v4
+        with:
+          ref: 84a0c01329a98c1e2e3a1c5c652938083421e093
+          persist-credentials: false
+      - name: Run offline contracts and real authenticated source acceptance
+        shell: bash
+        env:
+          MONITORING_ENABLED: "false"
+          VALYQON_AI_CACHE_ENABLED: "false"
+          RAG_ENABLED: "false"
+          VALYQON_EMAIL_MODE: "disabled"
+          OUTBOUND_PROXY_URL: ""
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "84a0c01329a98c1e2e3a1c5c652938083421e093"
+          temp="$(mktemp -d)"
+          trap 'rm -rf "$temp"' EXIT
+          python3 -m venv "$temp/venv"
+          "$temp/venv/bin/python" -m pip install --disable-pip-version-check --no-cache-dir -r requirements-dev.txt
+          "$temp/venv/bin/python" -m pytest -q tests/test_mikroton_tender.py tests/test_ru_mikroton_real_api.py tests/test_ru_mikroton_worker_contract.py
+          "$temp/venv/bin/python" -B -m scripts.ci_ru_mikroton_real_api
+          "$temp/venv/bin/python" -B -m scripts.ci_ru_mikroton_authenticated
+          echo 'RU3_MIKROTON_PINNED_APP_GATE=PASS'
+          echo 'PRODUCTION_CHANGED=NO'

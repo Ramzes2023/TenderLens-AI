@@ -118,6 +118,11 @@ def _after(tokens, label, *, limit=5):
         "valorea estimată", "valoarea estimată fără tva",
     }
     for i, token in enumerate(tokens):
+        if token.casefold().startswith(label.casefold() + " "):
+            fused = token[len(label):].strip()
+            if not fused or len(fused) > 2000:
+                raise SourceError("MD malformed same-element detail field.")
+            return fused
         if token.casefold() == label.casefold():
             for candidate in tokens[i+1:i+1+limit]:
                 if candidate.strip() and candidate.casefold() != label.casefold():

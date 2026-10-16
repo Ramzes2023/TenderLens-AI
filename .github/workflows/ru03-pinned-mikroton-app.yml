@@ -26,7 +26,7 @@ jobs:
       - name: Checkout reviewed immutable Russian adapter commit
         uses: actions/checkout@v4
         with:
-          ref: 84a0c01329a98c1e2e3a1c5c652938083421e093
+          ref: af69a12495694620fa082da850cd6f5cde76b7dc
           persist-credentials: false
       - name: Run offline contracts and real authenticated source acceptance
         shell: bash
@@ -38,7 +38,7 @@ jobs:
           OUTBOUND_PROXY_URL: ""
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "84a0c01329a98c1e2e3a1c5c652938083421e093"
+          test "$(git rev-parse HEAD)" = "af69a12495694620fa082da850cd6f5cde76b7dc"
           temp="$(mktemp -d)"
           trap 'rm -rf "$temp"' EXIT
           python3 -m venv "$temp/venv"

@@ -1,0 +1,32 @@
+name: CIS Moldova accredited MTender marketplace live discovery
+
+on:
+  push:
+    branches:
+      - integration/cis-md-mtender-platform-20261016
+    paths:
+      - scripts/ci_cis_md_marketplace_structure.py
+      - .github/workflows/cis-md-mtender-marketplace-live.yml
+  pull_request:
+    paths:
+      - scripts/ci_cis_md_marketplace_structure.py
+      - .github/workflows/cis-md-mtender-marketplace-live.yml
+
+permissions:
+  contents: read
+
+jobs:
+  md-marketplace-live-cards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify real Moldovan accredited procurement platform listing
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -B scripts/ci_cis_md_marketplace_structure.py

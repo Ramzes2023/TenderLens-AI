@@ -66,7 +66,7 @@ def test_incomplete_or_malformed_listing_fails_closed(html):
 def test_detail_requires_same_title_and_identity():
     for body in (detail(title="Другой тендер"),
                  detail(identity="20000522"),
-                 b"<html><h1>Поставка стали</h1></html>"):
+                 "<html><h1>Поставка стали</h1></html>".encode("utf-8")):
         with pytest.raises(ValueError):
             validate_public_detail(body, identity="20000521", title="Поставка стали")
 

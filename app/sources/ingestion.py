@@ -43,6 +43,8 @@ HOSTS = {
     'hk_ha_leasing': frozenset({'www.housingauthority.gov.hk'}),
     'hk_emsd_tenders': frozenset({'www.emsd.gov.hk'}),
     'hk_emsd_consultancy': frozenset({'www.emsd.gov.hk'}),
+    'hk_dsd_current': frozenset({'www.dsd.gov.hk'}),
+    'hk_cedd_tenders': frozenset({'www.cedd.gov.hk'}),
     'jp_jetro_national': frozenset({'www.jetro.go.jp'}),
     'jp_jetro_local': frozenset({'www.jetro.go.jp'}),
 }

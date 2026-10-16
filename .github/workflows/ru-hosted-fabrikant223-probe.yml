@@ -1,0 +1,29 @@
+name: RU hosted Fabrikant223 official listing discovery
+on:
+  push:
+    branches: [diag/ru-final-gates-20261016]
+    paths: [.github/workflows/ru-hosted-fabrikant223-probe.yml]
+permissions: {}
+jobs:
+  public-223-listing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Validate real public 223-FZ list from hosted network without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          d="$(mktemp -d)"
+          trap 'rm -rf "$d"' EXIT
+          res="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 20 --max-filesize 1500000 -H 'User-Agent: Mozilla/5.0' -H 'Accept: text/html' --output "$d/page" --write-out '%{http_code} %{content_type} %{size_download}' 'https://soap2.fabrikant.ru/223/catalog/procedure' 2>/dev/null)" && rc=0 || rc=$?
+          echo "RU_HOSTED_FABRIKANT223_PUBLIC_HTTP=$res;EXIT=$rc"
+          if test "$rc" = 0 && test "${res%% *}" = 200; then
+            python3 - "$d/page" <<'PY'
+          import re,sys
+          html=open(sys.argv[1],"rb").read()
+          print("RU_HOSTED_FABRIKANT223_11_DIGIT_IDS="+str(len(set(re.findall(rb"(?<![0-9])3[0-9]{10}(?![0-9])",html)))))
+          print("RU_HOSTED_FABRIKANT223_DETAIL_LINK_MARKER="+str(b"/223/procedure/" in html))
+          PY
+          fi
+          echo 'RU_HOSTED_FABRIKANT223_REAL_SQL_VERIFIED=NO'
+          echo 'PRODUCTION_CHANGED=NO'

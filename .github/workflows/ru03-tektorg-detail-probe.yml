@@ -79,10 +79,15 @@ jobs:
           for identity,(url,text) in list(unique.items())[:6]:
               print(f'RU3_TEKTORG_ANCHOR_ID={identity};TEXT_CHARS={len(text)};TEXT_PREVIEW={text[:130]!r}')
           verified=0
-          for identity,(url,text) in list(unique.items())[:2]:
-              detail=fetch(url)
+          for identity,(url,text) in list(unique.items())[:5]:
+              try:
+                  detail=fetch(url)
+              except Exception as error:
+                  print(f'RU3_TEKTORG_DETAIL_ID={identity};REQUEST_FAILURE_CLASS={type(error).__name__}')
+                  continue
               if identity not in detail:
-                  raise ValueError('Missing identity on detail card')
+                  print(f'RU3_TEKTORG_DETAIL_ID={identity};IDENTITY_MISMATCH=YES')
+                  continue
               class Titles(HTMLParser):
                   def __init__(self):
                       super().__init__(); self.active=None; self.blocks=[]

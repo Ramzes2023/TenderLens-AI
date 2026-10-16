@@ -53,6 +53,7 @@ HOSTS = {
     'hk_cedd_tenders': frozenset({'www.cedd.gov.hk'}),
     'jp_jetro_national': frozenset({'www.jetro.go.jp'}),
     'jp_jetro_local': frozenset({'www.jetro.go.jp'}),
+    'jp_jetro_bid': frozenset({'www.jetro.go.jp'}),
 }
 
 

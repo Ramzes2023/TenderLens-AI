@@ -192,7 +192,7 @@ def parse_marketplace_detail(html, *, url):
     # inline tags. Anchor to the verified unique public label and currency,
     # never take an arbitrary number or a price from an adjacent notice.
     estimate = re.search(
-        r"Valoarea\\s+estimată\\s+fără\\s+TVA\\s+([0-9][0-9\\s.,]{0,30}?)\\s*MDL\\b",
+        r"Valoarea\s+estimată\s+fără\s+TVA\s+([0-9][0-9\s.,]{0,30}?)\s*MDL\b",
         " ".join(tokens), flags=re.I,
     )
     if estimate is None:

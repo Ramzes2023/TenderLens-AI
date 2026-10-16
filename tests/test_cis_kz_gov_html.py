@@ -43,6 +43,13 @@ class KazakhstanPublicHTMLContracts(unittest.TestCase):
         self.assertEqual(item.url, "https://old.goszakup.gov.kz/ru/announce/index/17804133")
         self.assertIn("Городская техническая служба", item.customer)
 
+    def test_official_single_digit_hour_is_valid_but_invalid_date_fails(self):
+        listing = fixture().replace("2026-10-16 09:00", "2026-10-16 9:00")
+        notices = parse_kz_public_html(listing)
+        self.assertEqual(len(notices), 5)
+        with self.assertRaises(SourceError):
+            parse_kz_public_html(fixture().replace("2026-10-16 09:00", "2026-99-16 09:00"))
+
     def test_no_html_or_partial_fields_never_count_as_tenders(self):
         for bad in ("<html>Loading</html>", "<script>var tender=17804133;</script>",
                     "<table><tr><td>17804133-1</td></tr></table>"):

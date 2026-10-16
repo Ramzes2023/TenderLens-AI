@@ -1,0 +1,29 @@
+name: RU hosted Fabrikant44 real public procurement acceptance
+on:
+  push:
+    branches: [diag/ru-final-gates-20261016]
+    paths: [.github/workflows/ru-hosted-fabrikant44-pinned-live.yml]
+permissions:
+  contents: read
+jobs:
+  real-fabrikant44-hosted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: febd3c8a882e9eece8e9d40a81e9bea4d0e16fd3
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Require genuine official Fabrikant44 notice to durable worker, SQLite and search
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = febd3c8a882e9eece8e9d40a81e9bea4d0e16fd3
+          python -m pip install --disable-pip-version-check -r requirements-dev.txt >/dev/null
+          python -m pytest -q tests/test_ru_fabrikant44_public.py
+          python -B -m scripts.ci_ru_fabrikant44_real_worker
+          echo 'RU_HOSTED_FABRIKANT44_REAL_WORKER=PASS'
+          echo 'PRODUCTION_CHANGED=NO'

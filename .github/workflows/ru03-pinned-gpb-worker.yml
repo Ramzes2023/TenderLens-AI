@@ -20,13 +20,13 @@ jobs:
       - name: Checkout reviewed immutable GPB adapter commit
         uses: actions/checkout@v4
         with:
-          ref: 5eecaf951f05a470495056cbb52584636951e1da
+          ref: eff698eed13c2e510f6253d087558403cc4bb7a5
           persist-credentials: false
       - name: Offline source contracts and live worker-to-SQLite gate
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 5eecaf951f05a470495056cbb52584636951e1da
+          test "$(git rev-parse HEAD)" = eff698eed13c2e510f6253d087558403cc4bb7a5
           dir="$(mktemp -d)"
           trap 'rm -rf "$dir"' EXIT
           python3 -m venv "$dir/venv"

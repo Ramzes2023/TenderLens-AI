@@ -121,6 +121,21 @@ class SourceCatalog:
                     source=source,
                 )
 
+            # Persisted SnapshotSource wrappers expose local_keyword_search.
+            # EIS/223 and TED already specialize above; all other snapshot
+            # sources must receive the user's terms as well.  Never send
+            # profile terms to live public-source adapters implicitly.
+            if (
+                registration.enabled
+                and registration.key not in {"eis", "eis_223", "ted"}
+                and getattr(registration.source, "local_keyword_search", False)
+                and hasattr(registration.source, "for_search_terms")
+            ):
+                registration = replace(
+                    registration,
+                    source=registration.source.for_search_terms(terms),
+                )
+
             registrations.append(
                 registration
             )

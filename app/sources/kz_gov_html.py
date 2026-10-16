@@ -35,16 +35,16 @@ HEADERS = ("№", "Наименование объявления", "Способ
 def _date(value):
     if type(value) is not str or len(value) > 120:
         raise SourceError("KZ malformed procurement date.")
-    found = DATE.search(value)
-    if found is None:
-        raise SourceError("KZ start/end procurement date missing.")
-    # Exact-match date after whitespace normalization: partial dates forbidden.
+    # Real official HTML emits adjacent date and time text nodes with NO
+    # separator: "2026-10-1909:00:00". Pin this exact observed DOM contract.
     text = " ".join(value.split())
-    if DATE.fullmatch(text) is None:
-        raise SourceError("KZ unexpected official date format.")
+    match = re.fullmatch(r"(20\\d{2}-\\d{2}-\\d{2})\\s*(\\d{1,2}:\\d{2}(?::\\d{2})?)", text)
+    if match is None:
+        raise SourceError("KZ start/end procurement date missing.")
+    canonical = match.group(1) + " " + match.group(2)
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
         try:
-            return datetime.strptime(text, fmt)
+            return datetime.strptime(canonical, fmt)
         except ValueError:
             continue
     raise SourceError("KZ invalid procurement timestamp.")

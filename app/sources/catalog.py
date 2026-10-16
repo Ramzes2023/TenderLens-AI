@@ -433,6 +433,20 @@ def build_source_catalog(
             capabilities=SourceCapabilities(pagination=pagination),
         ))
 
+    # Verified official Uzbekistan API; operator activation remains separate.
+    registry.register(SourceRegistration(
+        key="uz_uzex",
+        display_name="Uzbekistan UZEX public tenders and selections",
+        source=UzbekistanUzexSource(timeout=min(timeout, 30)),
+        transport=SourceTransport.API,
+        jurisdictions=("UZ",),
+        languages=("uz", "ru"),
+        homepage_url="https://etender.uzex.uz/",
+        official=True,
+        enabled=False,
+        capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
+    ))
+
     # Staged Asian sources are intentionally excluded from default operations.
     # Enable only after live network → normalized notice → isolated DB acceptance.
     if os.environ.get("VALYQON_ASIA_SOURCES_ENABLED", "").strip() == "1":
@@ -552,20 +566,6 @@ def build_source_catalog(
             official=True, enabled=True,
             capabilities=SourceCapabilities(),
         ))
-
-    # Verified official Uzbekistan API; operator activation remains separate.
-    registry.register(SourceRegistration(
-        key="uz_uzex",
-        display_name="Uzbekistan UZEX public tenders and selections",
-        source=UzbekistanUzexSource(timeout=min(timeout, 30)),
-        transport=SourceTransport.API,
-        jurisdictions=("UZ",),
-        languages=("uz", "ru"),
-        homepage_url="https://etender.uzex.uz/",
-        official=True,
-        enabled=False,
-        capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
-    ))
 
     return SourceCatalog(
         registry=registry,

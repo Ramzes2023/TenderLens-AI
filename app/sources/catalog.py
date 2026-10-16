@@ -5,7 +5,6 @@ import os
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Iterable
 
-from .asia_public import ASIA_RSS_FEEDS, AsiaPublicSource
 from .austender_rss import AusTenderRssSource
 from .b2b_center import B2BCenterSource
 from .canada_buys_dataset import CanadaBuysDatasetSource
@@ -119,21 +118,6 @@ class SourceCatalog:
                 registration = replace(
                     registration,
                     source=source,
-                )
-
-            # Persisted SnapshotSource wrappers expose local_keyword_search.
-            # EIS/223 and TED already specialize above; all other snapshot
-            # sources must receive the user's terms as well.  Never send
-            # profile terms to live public-source adapters implicitly.
-            if (
-                registration.enabled
-                and registration.key not in {"eis", "eis_223", "ted"}
-                and getattr(registration.source, "local_keyword_search", False)
-                and hasattr(registration.source, "for_search_terms")
-            ):
-                registration = replace(
-                    registration,
-                    source=registration.source.for_search_terms(terms),
                 )
 
             registrations.append(
@@ -406,30 +390,6 @@ def build_source_catalog(
             ),
         ]
     )
-
-    # Staged Asian sources are intentionally excluded from default operations.
-    # Enable only after live network → normalized notice → isolated DB acceptance.
-    if os.environ.get("VALYQON_ASIA_SOURCES_ENABLED", "").strip() == "1":
-        for key, url in ASIA_RSS_FEEDS.items():
-            registry.register(SourceRegistration(
-                key=key,
-                display_name={
-                    "hk_ha_works": "Hong Kong Housing Authority — works and services",
-                    "hk_ha_leasing": "Hong Kong Housing Authority — property tenders",
-                    "hk_emsd_tenders": "Hong Kong EMSD — tender notices",
-                    "hk_emsd_consultancy": "Hong Kong EMSD — consultancy invitations",
-                    "hk_dsd_current": "Hong Kong Drainage Services Department — current tenders",
-                    "hk_cedd_tenders": "Hong Kong Civil Engineering and Development Department — tenders",
-                }[key],
-                source=AsiaPublicSource(name=key, timeout=timeout),
-                transport=SourceTransport.RSS,
-                jurisdictions=("HK",),
-                languages=("en",),
-                homepage_url=url,
-                official=True,
-                enabled=True,
-                capabilities=SourceCapabilities(),
-            ))
 
     # Russian connectors are opt-in. Do not enable unverified live adapters.
     if settings.eis_223_configured:

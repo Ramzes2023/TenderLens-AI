@@ -11,8 +11,15 @@ on:
       - "app/sources/catalog.py"
       - "app/sources/ingestion.py"
       - "tests/test_ru_mikroton_worker_contract.py"
+      - "scripts/ci_ru_mikroton_real_worker.py"
       - "tests/test_mikroton_tender.py"
       - ".github/workflows/ru-mikroton-real-api.yml"
+  push:
+    branches: [integration/ru-mikroton-public-main-20261016]
+    paths:
+      - ".github/workflows/ru-mikroton-real-api.yml"
+      - "app/sources/mikroton_tender.py"
+      - "scripts/ci_ru_mikroton_real_worker.py"
   workflow_dispatch:
 
 permissions:
@@ -35,6 +42,9 @@ jobs:
       - name: Strict live API notice and official detail identity
         timeout-minutes: 2
         run: python -B -m scripts.ci_ru_mikroton_real_api
+      - name: Strict real MikroTon via application worker to ephemeral SQLite query
+        timeout-minutes: 3
+        run: python -B -m scripts.ci_ru_mikroton_real_worker
       - name: Real live API notices through SQLite search and signed-in scoring
         timeout-minutes: 3
         run: python -B -m scripts.ci_ru_mikroton_authenticated

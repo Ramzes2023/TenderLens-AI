@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Iterable
 
 from .am_armeps import ArmeniaArmepsSource
 from .tj_eprocurement import TajikistanEprocurementSource
+from .kg_gov_legacy import KyrgyzstanGovLegacySource
 from .uz_uzex import UzbekistanUzexSource
 from .asia_public import ASIA_RSS_FEEDS, AsiaPublicSource
 from .jp_jetro_bid_rss import JetroBidRssSource, RSS_URL as JETRO_BID_RSS_URL
@@ -442,6 +443,21 @@ def build_source_catalog(
         jurisdictions=("UZ",),
         languages=("uz", "ru"),
         homepage_url="https://etender.uzex.uz/",
+        official=True,
+        enabled=False,
+        capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
+    ))
+
+    # Legacy Kyrgyz government HTML listing: real official rows, disabled until
+    # independent end-to-end live acceptance and operator activation.
+    registry.register(SourceRegistration(
+        key="kg_gov_legacy",
+        display_name="Kyrgyzstan government public tender notices",
+        source=KyrgyzstanGovLegacySource(timeout=min(timeout, 30)),
+        transport=SourceTransport.HTML,
+        jurisdictions=("KG",),
+        languages=("ru", "ky"),
+        homepage_url="https://zakupki.gov.kg/popp/view/order/list.xhtml",
         official=True,
         enabled=False,
         capabilities=SourceCapabilities(pagination=False, incremental_sync=False),

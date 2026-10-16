@@ -153,6 +153,7 @@ class ConnectorSyncHandler:
                          else 2 if source_id in {'jp_jetro_national', 'jp_jetro_local'}
                          else min(self.max_records, 5) + 1 if source_id == 'tektorg'
                          else 4 if source_id == 'gpb_etp_public'
+                         else 2 if source_id == 'b2b_center'
                          else 2 if source_id == 'mikroton_tender'
                          else 1)
         async def fetch():

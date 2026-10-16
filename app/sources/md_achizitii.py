@@ -188,8 +188,16 @@ def parse_marketplace_detail(html, *, url):
     ocid = _after(tokens, "MTender ID", limit=3)
     if not OCID.fullmatch(ocid):
         raise SourceError("MD OCID not linked to detail.")
-    expected = _after(tokens, "Valoarea estimată fără TVA", limit=3)
-    amount = _amount(expected)
+    # The production HTML combines the price label and amount across nested
+    # inline tags. Anchor to the verified unique public label and currency,
+    # never take an arbitrary number or a price from an adjacent notice.
+    estimate = re.search(
+        r"Valoarea\\s+estimată\\s+fără\\s+TVA\\s+([0-9][0-9\\s.,]{0,30}?)\\s*MDL\\b",
+        " ".join(tokens), flags=re.I,
+    )
+    if estimate is None:
+        raise SourceError("MD labelled estimate absent.")
+    amount = _amount(estimate.group(1).strip() + " MDL")
     # Full public tender page provides a dedicated proposal submission window,
     # distinct from the clarification period.
     proposals = tokens.index("Propunerea ofertelor") if "Propunerea ofertelor" in tokens else -1

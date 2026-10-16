@@ -68,7 +68,7 @@ def main() -> int:
                             keyword = next((w for w in words if len(w) >= 3), "")
                             if not keyword:
                                 continue
-                            found = search_stored(opportunities, keyword, limit=30)
+                            found = search_stored(opportunities, keyword, limit=30, source=key)
                             if any(row["source"] == key and row["external_id"] == record.external_id
                                    and row["url"] == record.url for row in found):
                                 report["searched"] += 1

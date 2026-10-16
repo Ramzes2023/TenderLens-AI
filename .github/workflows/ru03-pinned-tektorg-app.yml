@@ -23,7 +23,7 @@ jobs:
       - name: Checkout reviewed immutable Russian TEK-Torg integration candidate
         uses: actions/checkout@v4
         with:
-          ref: e156819ac750c47ca0ab223835556f2240a5e0d7
+          ref: 0f04439e7708bfc5d5b15ab900d880152a88ee63
           persist-credentials: false
       - name: Offline contract tests and real public source durable-worker proof
         shell: bash
@@ -32,7 +32,7 @@ jobs:
           VALYQON_EMAIL_MODE: disabled
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = e156819ac750c47ca0ab223835556f2240a5e0d7
+          test "$(git rev-parse HEAD)" = 0f04439e7708bfc5d5b15ab900d880152a88ee63
           temp="$(mktemp -d)"
           trap 'rm -rf "$temp"' EXIT
           python3 -m venv "$temp/venv"

@@ -1,0 +1,47 @@
+name: RU-03 Roseltorg curl public detail identity
+
+on:
+  push:
+    branches: [ops/ru3-trusted-source-probe-20261016]
+    paths: [.github/workflows/ru03-roseltorg-curl-detail.yml]
+
+permissions: {}
+
+jobs:
+  public-cards:
+    runs-on: valyqon-ru3
+    timeout-minutes: 4
+    steps:
+      - name: Check bounded Roseltorg detail pages via verified curl
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          folder="$(mktemp -d)"
+          trap 'rm -rf "$folder"' EXIT
+          for id in 0318300120826000550 0371500001026000784 ATOM16102600405 COM16102600135 COM16102600136; do
+            url="https://www.roseltorg.ru/procedure/$id/1"
+            response="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 18 --max-filesize 1500000 --output "$folder/$id" --write-out '%{http_code} %{content_type}' "$url" 2>"$folder/error")" && rc=0 || rc=$?
+            bytes=0; test ! -f "$folder/$id" || bytes="$(wc -c < "$folder/$id" | tr -d ' ')"
+            echo "RU3_ROSELTORG_CURL_DETAIL_$id=$response;EXIT=$rc;BYTES=$bytes"
+            if test "$rc" = 0 && test "${response%% *}" = 200; then
+              python3 - "$folder/$id" "$id" <<'PY'
+          from html.parser import HTMLParser
+          import sys
+          class Headings(HTMLParser):
+              def __init__(self):super().__init__();self.active=None;self.all=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag in ('h1','title') and self.active is None:self.active=[tag,[]]
+              def handle_data(self,data):
+                  if self.active:self.active[1].append(data)
+              def handle_endtag(self,tag):
+                  if self.active and tag==self.active[0]:
+                      self.all.append((tag,' '.join(' '.join(self.active[1]).split())[:140]));self.active=None
+          doc=open(sys.argv[1],'rb').read().decode('utf-8','replace')
+          h=Headings();h.feed(doc)
+          print('RU3_ROSELTORG_CARD_ID='+sys.argv[2]+';ID_IN_PAGE='+str(sys.argv[2] in doc)+';TITLES='+repr(h.all[:4]))
+          PY
+            fi
+          done
+          echo 'RU3_ROSELTORG_REAL_APP_DB=NOT_VERIFIED'
+          echo 'PRODUCTION_CHANGED=NO'

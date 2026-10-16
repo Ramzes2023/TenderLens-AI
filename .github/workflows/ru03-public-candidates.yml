@@ -1,0 +1,39 @@
+name: RU-03 public procurement endpoint inventory
+
+on:
+  push:
+    branches: [ops/ru3-trusted-source-probe-20261016]
+    paths: [.github/workflows/ru03-public-candidates.yml]
+
+permissions: {}
+
+jobs:
+  ru3-public-inventory:
+    runs-on: valyqon-ru3
+    timeout-minutes: 5
+    steps:
+      - name: Probe bounded public Russian procurement endpoints without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          n=0
+          for src in tektorg roseltorg fabrikant mos_supplier tenderguru; do
+            case "$src" in
+              tektorg) url='https://www.tektorg.ru/223-fz/procedures' ;;
+              roseltorg) url='https://www.roseltorg.ru/procedures/search' ;;
+              fabrikant) url='https://www.fabrikant.ru/trades/procedure/search' ;;
+              mos_supplier) url='https://zakupki.mos.ru/' ;;
+              tenderguru) url='https://www.tenderguru.ru/api2.3/export?dtype=json&kwords=%D0%BF%D0%BE%D1%81%D1%82%D0%B0%D0%B2%D0%BA%D0%B0' ;;
+            esac
+            code="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 22 --max-filesize 2097152 --output "$dir/$src" --write-out '%{http_code} %{content_type}' "$url" 2>"$dir/curl-error")" && rc=0 || rc=$?
+            bytes=0
+            test ! -f "$dir/$src" || bytes="$(wc -c < "$dir/$src" | tr -d ' ')"
+            printf 'RU3_CANDIDATE_%s_HTTP=%s;CURL_EXIT=%s;BYTES=%s\n' "$src" "$code" "$rc" "$bytes"
+            n=$((n+1))
+          done
+          echo "RU3_CANDIDATE_HOSTS_CHECKED=$n"
+          echo 'NEW_SOURCE_TENDERS_VERIFIED=NO'
+          echo 'PRODUCTION_CHANGED=NO'

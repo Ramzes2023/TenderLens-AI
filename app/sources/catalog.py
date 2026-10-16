@@ -12,6 +12,7 @@ from .uz_uzex import UzbekistanUzexSource
 from .asia_public import ASIA_RSS_FEEDS, AsiaPublicSource
 from .jp_jetro_bid_rss import JetroBidRssSource, RSS_URL as JETRO_BID_RSS_URL
 from .hk_hyd_tenders import HighwaysTendersSource, RSS_URL as HYD_TENDERS_RSS_URL
+from .sg_gebiz_rss import FEEDS as SG_GEBIZ_RSS_FEEDS, SingaporeGeBizRssSource
 from .austender_rss import AusTenderRssSource
 from .b2b_center import B2BCenterSource
 from .tektorg_public_html import TekTorgPublicSource
@@ -518,6 +519,22 @@ def build_source_catalog(
             official=True, enabled=True,
             capabilities=SourceCapabilities(),
         ))
+
+    # Singapore GeBIZ government-owned BO feeds; never confuse with award RSS.
+    # Two fixed official categories only, independent opt-in, default disabled.
+    if os.environ.get("VALYQON_ASIA_GEBIZ_ENABLED", "").strip() == "1":
+        for key, url in SG_GEBIZ_RSS_FEEDS.items():
+            registry.register(SourceRegistration(
+                key=key,
+                display_name=("Singapore GeBIZ — professional service opportunities"
+                              if key == "sg_gebiz_professional"
+                              else "Singapore GeBIZ — miscellaneous open opportunities"),
+                source=SingaporeGeBizRssSource(name=key, timeout=min(timeout, 30.0)),
+                transport=SourceTransport.RSS,
+                jurisdictions=("SG",), languages=("en",),
+                homepage_url=url, official=True, enabled=True,
+                capabilities=SourceCapabilities(),
+            ))
 
     # Russian connectors are opt-in. Do not enable unverified live adapters.
     if settings.eis_223_configured:

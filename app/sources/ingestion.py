@@ -55,6 +55,8 @@ HOSTS = {
     'hk_dsd_current': frozenset({'www.dsd.gov.hk'}),
     'hk_cedd_tenders': frozenset({'www.cedd.gov.hk'}),
     'hk_hyd_tenders': frozenset({'www.hyd.gov.hk'}),
+    'sg_gebiz_professional': frozenset({'www.gebiz.gov.sg'}),
+    'sg_gebiz_misc': frozenset({'www.gebiz.gov.sg'}),
     'jp_jetro_national': frozenset({'www.jetro.go.jp'}),
     'jp_jetro_local': frozenset({'www.jetro.go.jp'}),
     'jp_jetro_bid': frozenset({'www.jetro.go.jp'}),

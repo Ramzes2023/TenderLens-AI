@@ -121,6 +121,8 @@ def inspect_index(raw, *, hostname=HOST):
                 "date_fields": sum(bool(KZ_DATE.search(v)) for v in cells),
                 "linked_detail_routes": len(approved),
                 "sample_cell_lengths": [min(300, len(v)) for v in cells[:12]],
+                "first_header": [v[:80] for v in table[0][0][:12]],
+                "first_record_field_shapes": [{"date": bool(KZ_DATE.search(v)), "contains_organizer": "Организатор" in v, "notice_id": bool(ANNOUNCE_NUMBER.search(v)), "numeric": bool(re.fullmatch(r"[0-9\s,.]+", v.strip()))} for v in cells[:12]],
                 "sample_detail_paths": approved[:2],
             })
     real = sum(x["matched_announcement_rows"] for x in candidates)

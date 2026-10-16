@@ -78,7 +78,7 @@ def test_worker_preserves_exact_two_list_requests_and_sqlite_query(tmp_path, mon
         jobs = JobRepository(db)
         jobs.initialize()
         jobs.enqueue('connector.sync.v1', _payload(), scope=JobScope())
-        claim = jobs.claim_next('mikroton-offline-lease-test')
+        claim = jobs.claim_next('worker-' + '0' * 32)
         assert claim is not None
         worker = ConnectorSyncHandler(catalog, opportunities, max_records=10)
         context = SimpleNamespace(

@@ -63,7 +63,9 @@ def _amount(value):
 def _detail_link(links, announcement_id):
     matches = []
     for column, raw in links:
-        if column != 0:
+        # Official source can attach its announcement anchor to either ID or
+        # title cell; exact same-ID host/path remains mandatory.
+        if not 0 <= column < 7:
             continue
         parsed = urlsplit(raw)
         if (parsed.scheme not in ("", "https") or parsed.hostname not in (None, HOST)
@@ -73,11 +75,15 @@ def _detail_link(links, announcement_id):
         if parsed.path == "/ru/announce/index/" + announcement_id:
             matches.append(DETAIL_PREFIX + announcement_id)
     if len(matches) != 1:
-        raise SourceError("KZ detail link not independently verified.")
+        columns = tuple(sorted({col for col, _ in links if type(col) is int}))
+        raise SourceError(
+            "KZ detail link not independently verified. "
+            f"anchors={len(links)}, exact_matches={len(matches)}, columns={columns}"
+        )
     return matches[0]
 
 
-def parse_kz_public_html(html):
+def parse_kz_public_html(html, *, limit=20):
     if type(html) is not str or len(html.encode("utf-8")) > MAX_BODY:
         raise SourceError("KZ invalid or oversized official listing.")
     parser = _Tables()
@@ -90,7 +96,7 @@ def parse_kz_public_html(html):
         raise SourceError("KZ 7-column official procurement table missing/changed.")
     table = tables[0]
     result = {}
-    for row in table[1:]:
+    for row in table[1:1+max(1, min(int(limit), 20))]:
         if len(row) != 7 or not all(row):
             raise SourceError("KZ incomplete official listing row.")
         first, buyer_title, method, opened, deadline, amount, status = row
@@ -156,7 +162,7 @@ class KazakhstanGovHtmlSource:
                 response.raise_for_status()
                 if "text/html" not in response.headers.get("content-type", "").lower():
                     raise SourceError("KZ government listing not HTML.")
-                return parse_kz_public_html(response.text)[:requested]
+                return parse_kz_public_html(response.text, limit=requested)
         except (httpx.HTTPError, ConnectorTransportError, OSError) as error:
             if transient_transport(error):
                 raise SourceTransportError("KZ public government HTML temporarily unavailable.") from None

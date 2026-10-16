@@ -1,0 +1,54 @@
+name: RU final pinned leased live worker acceptance for existing sources
+on:
+  push:
+    branches: [diag/ru-final-gates-20261016]
+    paths: [.github/workflows/ru-final-leased-live.yml]
+permissions:
+  contents: read
+jobs:
+  offline-fenced-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: b3d3a9aa2c98db831a9c065b864516a177593609
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Actual JobRepository lease and fenced SQL writes (synthetic notice only)
+        run: python -m pytest -q tests/test_ru_live_worker_fenced_gates.py
+  live-sources:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - source: b2b_center
+            command: scripts.ci_ru_b2b_real_worker
+          - source: mikroton_tender
+            command: scripts.ci_ru_mikroton_real_worker
+          - source: tektorg
+            command: scripts.ci_ru_tektorg_real_worker
+    name: "Real source to leased worker and SQL / ${{ matrix.source }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: b3d3a9aa2c98db831a9c065b864516a177593609
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Exact source and revision sanity
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = b3d3a9aa2c98db831a9c065b864516a177593609
+      - name: Real public tender acquisition via genuine durable worker to ephemeral SQLite search
+        timeout-minutes: 3
+        run: python -B -m ${{ matrix.command }}

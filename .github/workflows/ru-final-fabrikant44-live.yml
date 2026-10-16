@@ -19,13 +19,13 @@ jobs:
           ! mountpoint -q /mnt/c
       - uses: actions/checkout@v4
         with:
-          ref: efeaad8d6156823e7f8f5f8accab09608794c161
+          ref: ef9938c605010afd92cb52e78b05ef7fe54f9a07
           persist-credentials: false
       - name: Exact vetted source SHA offline contracts and live durable worker to search
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = efeaad8d6156823e7f8f5f8accab09608794c161
+          test "$(git rev-parse HEAD)" = ef9938c605010afd92cb52e78b05ef7fe54f9a07
           d="$(mktemp -d)"
           trap 'rm -rf "$d"' EXIT
           python3 -m venv "$d/venv"

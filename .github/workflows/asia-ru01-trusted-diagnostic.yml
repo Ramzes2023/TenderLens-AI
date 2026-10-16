@@ -69,6 +69,32 @@ jobs:
               print("ASIA_HOST_LIBRARY_"+dependency.upper()+"="+("PRESENT" if found else "MISSING"))
           print("ASIA_PR_CODE_EXECUTED=NO")
           PY
+      - name: Check unprivileged full-test sandbox options without checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in bwrap firejail proot chroot unshare; do
+            if command -v "$name" >/dev/null 2>&1; then
+              echo "ASIA_SANDBOX_TOOL_${name}=PRESENT"
+            else
+              echo "ASIA_SANDBOX_TOOL_${name}=MISSING"
+            fi
+          done
+          if unshare --user --map-root-user --mount --pid --net --fork true >/dev/null 2>&1; then
+            echo "ASIA_USER_MOUNT_PID_NET_NAMESPACE=AVAILABLE"
+          else
+            echo "ASIA_USER_MOUNT_PID_NET_NAMESPACE=UNAVAILABLE"
+          fi
+          if python3 - <<'PY'
+          import ensurepip
+          import venv
+          PY
+          then
+            echo "ASIA_ISOLATED_VENV_SUPPORT=AVAILABLE"
+          else
+            echo "ASIA_ISOLATED_VENV_SUPPORT=UNAVAILABLE"
+          fi
+          echo "ASIA_APPLICATION_CODE_EXECUTED=NO"
       - name: Inspect six fixed official HTTPS listings with bounded curl
         shell: bash
         run: |

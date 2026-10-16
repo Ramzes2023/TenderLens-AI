@@ -1,0 +1,72 @@
+name: RU-03 verified official EIS endpoint variant discovery
+
+on:
+  push:
+    branches: [ops/ru3-trusted-source-probe-20261016]
+    paths: [.github/workflows/ru03-eis-path-variants.yml]
+
+permissions: {}
+
+jobs:
+  eis44-eis223:
+    runs-on: valyqon-ru3
+    timeout-minutes: 5
+    steps:
+      - name: Verify official Ministry chain and live EIS feeds with TLS fully enabled
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          test "$(id -un)" = valyqon
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          for part in root sub; do
+            if test "$part" = root; then
+              file=russian_trusted_root_ca
+              expected=d26d2d0231b7c39f92cc738512ba54103519e4405d68b5bd703e9788ca8ecf31
+            else
+              file=russian_trusted_sub_ca
+              expected=bbbde2103e790b999ec62bd03cf625a5a2e7c316e10afe6a490eedead8b3fd9b
+            fi
+            curl --noproxy '*' --fail --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 20 --max-filesize 65536 \
+              "https://gu-st.ru/content/Other/doc/$file.cer" -o "$dir/$file.cer"
+            if ! openssl x509 -inform PEM -in "$dir/$file.cer" -out "$dir/$part.pem" 2>/dev/null; then
+              openssl x509 -inform DER -in "$dir/$file.cer" -out "$dir/$part.pem"
+            fi
+            thumb="$(openssl x509 -in "$dir/$part.pem" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+            test "$thumb" = "$expected"
+            echo "RU3_EIS_CA_${part}_SHA256=PASS"
+          done
+          openssl verify -CAfile "$dir/root.pem" "$dir/sub.pem"
+          cat "$dir/root.pem" "$dir/sub.pem" > "$dir/eis-only.pem"
+          for kind in 44rsshtml 44rssplain 223rsshtml 223rssplain results search home; do
+            case "$kind" in
+              44rsshtml) path='/epz/order/extendedsearch/rss.html?fz44=on&searchString=postavka&morphology=on&pageNumber=1' ;;
+              44rssplain) path='/epz/order/extendedsearch/rss?fz44=on&searchString=postavka&morphology=on&pageNumber=1' ;;
+              223rsshtml) path='/epz/order/extendedsearch/rss.html?fz223=on&searchString=postavka&morphology=on&pageNumber=1' ;;
+              223rssplain) path='/epz/order/extendedsearch/rss?fz223=on&searchString=postavka&morphology=on&pageNumber=1' ;;
+              results) path='/epz/order/extendedsearch/results.html?fz44=on&pageNumber=1' ;;
+              search) path='/epz/order/extendedsearch/search.html' ;;
+              home) path='/epz/main/public/home.html' ;;
+            esac
+            result="$(curl --noproxy '*' --silent --show-error --proto '=https' --cacert "$dir/eis-only.pem" --max-redirs 0 --connect-timeout 8 --max-time 18 --max-filesize 1048576 --output "$dir/$kind" --write-out '%{http_code} %{content_type}' "https://zakupki.gov.ru$path" 2>"$dir/curlerror")" && rc=0 || rc=$?
+            bytes=0
+            test ! -f "$dir/$kind" || bytes="$(wc -c < "$dir/$kind" | tr -d ' ')"
+            echo "RU3_EIS_VARIANT_$kind=$result;CURL_EXIT=$rc;BYTES=$bytes"
+            if test "$rc" = 0 && test "${result%% *}" = 200 && echo "$kind" | grep -q 'rss'; then
+              python3 - "$dir/$kind" "$kind" <<'PY'
+          import sys,xml.etree.ElementTree as ET
+          raw=open(sys.argv[1],'rb').read()
+          if b'<!DOCTYPE' in raw.upper() or b'<!ENTITY' in raw.upper(): raise ValueError('Unsafe XML')
+          try:
+              root=ET.fromstring(raw)
+              print('RU3_EIS_FEED_'+sys.argv[2]+'_ROOT='+root.tag.split('}')[-1])
+              print('RU3_EIS_FEED_'+sys.argv[2]+'_ENTRIES='+str(sum(x.tag.split('}')[-1] in ('item','entry') for x in root.iter())))
+          except ET.ParseError:
+              print('RU3_EIS_FEED_'+sys.argv[2]+'_NOT_XML=YES')
+          PY
+            fi
+          done
+          echo "RU3_CA_SCOPE=EIS_ONLY"
+          echo "TLS_VERIFICATION_DISABLED=NO"
+          echo "PRODUCTION_CHANGED=NO"

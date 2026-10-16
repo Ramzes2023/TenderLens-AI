@@ -74,6 +74,15 @@ jobs:
           WORKDIR /workspace
           DOCKERFILE
           echo "ASIA_REVIEWED_DOCKERFILE=CREATED_OUTSIDE_PR"
+      - name: Use anonymous Docker config for public base image
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/asia-anonymous-docker-config"
+          printf '{"auths":{}}\\n' > "$RUNNER_TEMP/asia-anonymous-docker-config/config.json"
+          echo "ASIA_DOCKER_AUTHLESS_CONFIG=$RUNNER_TEMP/asia-anonymous-docker-config" >> "$GITHUB_ENV"
+          echo "ASIA_PUBLIC_DOCKER_AUTH=ANONYMOUS_NO_WSL_CREDENTIAL_HELPER"
       - name: Build temporary dependency-only test image
         shell: bash
         timeout-minutes: 24
@@ -84,7 +93,8 @@ jobs:
           quoted_image="$(printf '%q' "$ASIA_TEST_IMAGE")"
           quoted_dockerfile="$(printf '%q' "$RUNNER_TEMP/Dockerfile.asia-reviewed")"
           quoted_context="$(printf '%q' "$GITHUB_WORKSPACE")"
-          timeout 1050s sg docker -c "docker build --pull --no-cache -f $quoted_dockerfile -t $quoted_image $quoted_context"
+          quoted_config="$(printf '%q' "$ASIA_DOCKER_AUTHLESS_CONFIG")"
+          timeout 1050s sg docker -c "DOCKER_CONFIG=$quoted_config docker build --progress=plain -f $quoted_dockerfile -t $quoted_image $quoted_context"
       - name: Offline contracts in read-only networkless constrained container
         shell: bash
         timeout-minutes: 8

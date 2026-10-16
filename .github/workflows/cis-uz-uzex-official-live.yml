@@ -38,6 +38,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install adapter test dependencies
+        run: python -m pip install -r requirements-dev.txt
       - name: Prove parser rejects incomplete or fake notices
         run: python -B -m unittest discover -s tests -p test_cis_uzex_official_probe.py -v
       - name: Strict Uzbekistan adapter normalization tests

@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: b3d3a9aa2c98db831a9c065b864516a177593609
+          ref: e9ed68d70d5cda2892fe3c433dcabe7a006bba0a
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
@@ -38,7 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: b3d3a9aa2c98db831a9c065b864516a177593609
+          ref: e9ed68d70d5cda2892fe3c433dcabe7a006bba0a
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
@@ -48,7 +48,7 @@ jobs:
       - name: Exact source and revision sanity
         shell: bash
         run: |
-          test "$(git rev-parse HEAD)" = b3d3a9aa2c98db831a9c065b864516a177593609
+          test "$(git rev-parse HEAD)" = e9ed68d70d5cda2892fe3c433dcabe7a006bba0a
       - name: Real public tender acquisition via genuine durable worker to ephemeral SQLite search
         timeout-minutes: 3
         run: python -B -m ${{ matrix.command }}

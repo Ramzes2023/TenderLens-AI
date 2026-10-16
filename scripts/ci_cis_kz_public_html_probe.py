@@ -163,6 +163,7 @@ def main():
             probe["index_verified"] = result["verified"]
             probe["matched_notice_rows"] = result.get("verified_list_rows", 0)
             probe["detail_link_count"] = result.get("detail_links_seen", 0)
+            probe["verified_table_shapes"] = result.get("public_table_shapes", [])
             candidates = [p for t in result.get("public_table_shapes", [])
                           for p in t.get("sample_detail_paths", [])]
             if result["verified"] and candidates:

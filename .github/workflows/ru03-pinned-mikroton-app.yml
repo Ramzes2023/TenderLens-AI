@@ -26,7 +26,7 @@ jobs:
       - name: Checkout reviewed immutable Russian adapter commit
         uses: actions/checkout@v4
         with:
-          ref: af69a12495694620fa082da850cd6f5cde76b7dc
+          ref: 7b0a46e13469f32f1a43052d36412241fe133693
           persist-credentials: false
       - name: Run offline contracts and real authenticated source acceptance
         shell: bash
@@ -38,13 +38,14 @@ jobs:
           OUTBOUND_PROXY_URL: ""
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "af69a12495694620fa082da850cd6f5cde76b7dc"
+          test "$(git rev-parse HEAD)" = "7b0a46e13469f32f1a43052d36412241fe133693"
           temp="$(mktemp -d)"
           trap 'rm -rf "$temp"' EXIT
           python3 -m venv "$temp/venv"
           "$temp/venv/bin/python" -m pip install --disable-pip-version-check --no-cache-dir -r requirements-dev.txt
           "$temp/venv/bin/python" -m pytest -q tests/test_mikroton_tender.py tests/test_ru_mikroton_real_api.py tests/test_ru_mikroton_worker_contract.py
           "$temp/venv/bin/python" -B -m scripts.ci_ru_mikroton_real_api
+          "$temp/venv/bin/python" -B -m scripts.ci_ru_mikroton_real_worker
           "$temp/venv/bin/python" -B -m scripts.ci_ru_mikroton_authenticated
           echo 'RU3_MIKROTON_PINNED_APP_GATE=PASS'
           echo 'PRODUCTION_CHANGED=NO'

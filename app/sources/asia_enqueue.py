@@ -11,10 +11,10 @@ import json
 import os
 from datetime import datetime, timezone
 
-from .asia_public import ASIA_RSS_FEEDS, JETRO_LISTS
+from .asia_public import ASIA_RSS_FEEDS
 from .ingestion import connector_version, sync_window, validate_payload
 
-SOURCES = (*ASIA_RSS_FEEDS, *JETRO_LISTS)
+SOURCES = tuple(ASIA_RSS_FEEDS)
 
 
 def validate_batch(catalog, *, now=None) -> tuple[str, ...]:

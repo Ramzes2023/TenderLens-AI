@@ -96,3 +96,24 @@ def test_worker_preserves_exact_two_list_requests_and_sqlite_query(tmp_path, mon
         assert len(requests_observed) == 2
     finally:
         db.close()
+
+def test_scoring_candidate_is_explicitly_opt_in_only():
+    from app.scoring.runs import ScoringInputError, ScoringRunService, validate_configuration
+    from app.jobs import JobRepository, JobService
+    from app.database.backend import Database
+    from app.database.config import DatabaseSettings
+    import tempfile
+    from pathlib import Path
+
+    assert validate_configuration([SOURCE_ID], 10)["sources"] == [SOURCE_ID]
+    with tempfile.TemporaryDirectory(prefix="ru-mikroton-scoring-optin-") as folder:
+        db = Database(DatabaseSettings("mikroton-scoring-guard", Path(folder) / "guard.sqlite"))
+        try:
+            jobs = JobRepository(db)
+            jobs.initialize()
+            service = ScoringRunService(JobService(jobs), catalog=_catalog(False))
+            # The disabled source must be refused before private profile access.
+            with pytest.raises(ScoringInputError, match="explicitly configured"):
+                service.enqueue(scope=JobScope(1, 1, 1), sources=(SOURCE_ID,))
+        finally:
+            db.close()

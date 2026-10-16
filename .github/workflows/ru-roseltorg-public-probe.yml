@@ -1,0 +1,61 @@
+name: RU Roseltorg verified public notice discovery
+
+on:
+  push:
+    branches: [research/ru-roseltorg-public-20261016]
+    paths: [.github/workflows/ru-roseltorg-public-probe.yml]
+
+permissions: {}
+
+jobs:
+  discover-roseltorg:
+    if: github.repository == 'Ramzes2023/TenderLens-AI'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read-only exact-host bounded HTTPS listing and HTML evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          for name in listing procedures; do
+            case "$name" in
+              listing) url='https://www.roseltorg.ru/procedures/search' ;;
+              procedures) url='https://www.roseltorg.ru/procedures' ;;
+            esac
+            result="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 28 --max-filesize 1572864 --output "$tmp/$name" --write-out '%{http_code} %{content_type}' "$url" 2>"$tmp/error")" && rc=0 || rc=$?
+            count=0
+            test ! -f "$tmp/$name" || count="$(wc -c < "$tmp/$name" | tr -d ' ')"
+            echo "RU_ROSELTORG_$name=$result;CURL_EXIT=$rc;BYTES=$count"
+            if test "$rc" = 0 && test "${result%% *}" = 200; then
+              python3 - "$tmp/$name" <<'PY'
+          import re, sys
+          from collections import Counter
+          from html.parser import HTMLParser
+          from urllib.parse import urljoin, urlsplit
+          class Links(HTMLParser):
+              def __init__(self):
+                  super().__init__();self.links=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag=='a':
+                      href=dict(attrs).get('href')
+                      if href:self.links.append(href)
+          data=open(sys.argv[1],'rb').read()
+          parser=Links();parser.feed(data.decode('utf-8','replace'))
+          base='https://www.roseltorg.ru/'
+          candidates=set()
+          for href in parser.links:
+              p=urlsplit(urljoin(base,href))
+              if p.scheme!='https' or p.hostname!='www.roseltorg.ru' or p.fragment:continue
+              if re.search(r'/(?:procedures|purchase|tenders|notice)/[0-9a-z-]{5,}',p.path,re.I):
+                  candidates.add(p.path)
+          print('RU_ROSELTORG_PUBLIC_ANCHORS='+str(len(parser.links)))
+          print('RU_ROSELTORG_PUBLIC_UNIQUE_CANDIDATE_PATHS='+str(len(candidates)))
+          print('RU_ROSELTORG_SAMPLE_PATHS='+repr(sorted(candidates)[:5]))
+          PY
+            fi
+          done
+          echo 'RU_ROSELTORG_TENDER_RECORDS_VERIFIED=NO'
+          echo 'RU_ROSELTORG_API_LICENSE_VERIFIED=NO'
+          echo 'PRODUCTION_CHANGED=NO'

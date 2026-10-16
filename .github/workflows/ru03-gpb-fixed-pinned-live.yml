@@ -20,18 +20,19 @@ jobs:
       - name: Checkout exact reviewed GPB fix commit
         uses: actions/checkout@v4
         with:
-          ref: 40e94de01397bb7f3c1beeaa7e16e5ee12af5080
+          ref: 25aff3721737a1c2de8d51f37712fca043ea6e2f
           persist-credentials: false
       - name: Verify real GPB HTML to database and query
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 40e94de01397bb7f3c1beeaa7e16e5ee12af5080
+          test "$(git rev-parse HEAD)" = 25aff3721737a1c2de8d51f37712fca043ea6e2f
           dir="$(mktemp -d)"
           trap 'rm -rf "$dir"' EXIT
           python3 -m venv "$dir/venv"
           "$dir/venv/bin/python" -m pip install --disable-pip-version-check -r requirements-dev.txt >/dev/null
           "$dir/venv/bin/python" -m pytest -q tests/test_ru_gpb_public.py
           "$dir/venv/bin/python" -B -m scripts.ci_ru_gpb_public_worker
+          "$dir/venv/bin/python" -B -m scripts.ci_ru_gpb_authenticated
           echo 'RU3_GPB_FIXED_REAL_WORKER=PASS'
           echo 'PRODUCTION_CHANGED=NO'

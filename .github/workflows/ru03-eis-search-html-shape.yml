@@ -1,0 +1,82 @@
+name: RU-03 verified EIS 44-223 public HTML search result analysis
+
+on:
+  push:
+    branches: [ops/ru3-trusted-source-probe-20261016]
+    paths: [.github/workflows/ru03-eis-search-html-shape.yml]
+
+permissions: {}
+
+jobs:
+  eis44-eis223:
+    runs-on: valyqon-ru3
+    timeout-minutes: 5
+    steps:
+      - name: Verify official Ministry chain and live EIS feeds with TLS fully enabled
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          test "$(id -un)" = valyqon
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          for part in root sub; do
+            if test "$part" = root; then
+              file=russian_trusted_root_ca
+              expected=d26d2d0231b7c39f92cc738512ba54103519e4405d68b5bd703e9788ca8ecf31
+            else
+              file=russian_trusted_sub_ca
+              expected=bbbde2103e790b999ec62bd03cf625a5a2e7c316e10afe6a490eedead8b3fd9b
+            fi
+            curl --noproxy '*' --fail --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 20 --max-filesize 65536 \
+              "https://gu-st.ru/content/Other/doc/$file.cer" -o "$dir/$file.cer"
+            if ! openssl x509 -inform PEM -in "$dir/$file.cer" -out "$dir/$part.pem" 2>/dev/null; then
+              openssl x509 -inform DER -in "$dir/$file.cer" -out "$dir/$part.pem"
+            fi
+            thumb="$(openssl x509 -in "$dir/$part.pem" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+            test "$thumb" = "$expected"
+            echo "RU3_EIS_CA_${part}_SHA256=PASS"
+          done
+          openssl verify -CAfile "$dir/root.pem" "$dir/sub.pem"
+          cat "$dir/root.pem" "$dir/sub.pem" > "$dir/eis-only.pem"
+          for law in 44 223; do
+            url="https://zakupki.gov.ru/epz/order/extendedsearch/results.html?fz${law}=on&pageNumber=1&recordsPerPage=_10"
+            code="$(curl --noproxy '*' --silent --show-error --proto '=https' --cacert "$dir/eis-only.pem" --max-redirs 0 --connect-timeout 8 --max-time 25 --max-filesize 1200000 --output "$dir/results$law" --write-out '%{http_code}' "$url")"
+            test "$code" = 200
+            python3 - "$dir/results$law" "$law" <<'PY'
+          import re,sys
+          from collections import Counter
+          from html.parser import HTMLParser
+          from urllib.parse import urlsplit,parse_qs,urljoin
+          class LinkList(HTMLParser):
+              def __init__(self): super().__init__();self.hrefs=[];self.classes=Counter()
+              def handle_starttag(self,tag,attrs):
+                  d=dict(attrs)
+                  if tag=='a' and d.get('href'):self.hrefs.append(d['href'])
+                  if 'class' in d:
+                      for cls in d['class'].split():
+                          if re.search('search|procure|registry|order|notice',cls,re.I):
+                              self.classes[cls]+=1
+          raw=open(sys.argv[1],'rb').read()
+          doc=raw.decode('utf-8','replace')
+          parser=LinkList();parser.feed(doc)
+          host='zakupki.gov.ru'
+          candidates=set()
+          for href in parser.hrefs:
+              p=urlsplit(urljoin('https://'+host+'/',href))
+              if p.hostname!=host or p.scheme!='https':continue
+              qs=parse_qs(p.query)
+              if ('regNumber' in qs or 'notice' in p.path.lower() or 'view/common-info' in p.path):
+                  candidates.add(p.path+'?'+','.join(sorted(qs)))
+          print(f'RU3_EIS_{sys.argv[2]}_HTML_BYTES={len(raw)}')
+          print(f'RU3_EIS_{sys.argv[2]}_ANCHORS={len(parser.hrefs)}')
+          print(f'RU3_EIS_{sys.argv[2]}_NOTICE_SHAPES={len(candidates)}')
+          print(f'RU3_EIS_{sys.argv[2]}_NOTICE_PATHS={sorted(candidates)[:7]!r}')
+          print(f'RU3_EIS_{sys.argv[2]}_CSS_SHAPES={parser.classes.most_common(8)!r}')
+          print(f'RU3_EIS_{sys.argv[2]}_HAS_44_TEXT={"44-ФЗ" in doc}')
+          print(f'RU3_EIS_{sys.argv[2]}_HAS_223_TEXT={"223-ФЗ" in doc}')
+          PY
+          done
+          echo "RU3_CA_SCOPE=EIS_ONLY"
+          echo "TLS_VERIFICATION_DISABLED=NO"
+          echo "PRODUCTION_CHANGED=NO"

@@ -1,0 +1,137 @@
+name: Asia native Windows Sandbox acceptance (self-hosted)
+
+# A fourth, dedicated Windows runner is required. No untrusted PR triggers.
+# The checkout is mapped read-only into a disposable Windows Sandbox VM.
+on:
+  push:
+    branches: [feat/asia-public-procurement-six-20261015]
+    paths:
+      - ".github/workflows/asia-windows-selfhosted.yml"
+      - "scripts/dev/asia_windows_sandbox_guest.ps1"
+      - "scripts/dev/setup_valyqon_windows_asia_runner.ps1"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-offline-fixture:
+    if: github.repository == 'Ramzes2023/TenderLens-AI' && github.ref == 'refs/heads/feat/asia-public-procurement-six-20261015'
+    runs-on: [self-hosted, Windows, X64, valyqon-asia-windows]
+    timeout-minutes: 40
+    steps:
+      - name: Verify dedicated low-privilege Windows runner and Sandbox
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_NAME -ne 'VALYQON-WIN-ASIA-01' -or $env:OS -ne 'Windows_NT') {
+              throw "Incorrect runner or OS"
+          }
+          $sandbox = Join-Path $env:SystemRoot 'System32\WindowsSandbox.exe'
+          if (-not (Test-Path $sandbox)) {
+              throw "Native Windows Sandbox is not enabled. Do not execute PR tests on the host."
+          }
+          if ($env:USERNAME -match '^(SYSTEM|Administrator)$') {
+              throw "Windows runner must not run as SYSTEM or Administrator."
+          }
+          Write-Host "ASIA_WINDOWS_SANDBOX_AVAILABLE=YES"
+          Write-Host "ASIA_WINDOWS_HOST_PR_CODE_EXECUTED=NO"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: false
+          clean: true
+          fetch-depth: 0
+      - name: Verify immutable test dependencies and Windows fixtures against main
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & git diff --exit-code HEAD origin/main -- requirements.txt requirements-dev.txt tests/test_p39e_local_preview.py scripts/p39e_local_h_preview.py app/analytics/offline_fixture.py app/analytics/offline_spike.py app/analytics/offline_worker.py app/analytics/process_isolation.py
+          if ($LASTEXITCODE -ne 0) { throw "Windows fixture or dependency parity differs from reviewed main" }
+          Write-Host "ASIA_WINDOWS_REVIEWED_INPUT_PARITY=PASS"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Stage signed Python installer and binary-only wheels outside checkout
+        shell: pwsh
+        timeout-minutes: 15
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 'valyqon-windows-sandbox'
+          $cache = Join-Path $root 'cache'
+          New-Item -ItemType Directory -Force -Path (Join-Path $cache 'wheels') | Out-Null
+          $installer = Join-Path $cache 'python-3.12.10-amd64.exe'
+          Invoke-WebRequest -Uri 'https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe' -OutFile $installer -TimeoutSec 180
+          $signature = Get-AuthenticodeSignature -FilePath $installer
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Python Software Foundation') {
+              throw "Python installer signature failed."
+          }
+          & python -m pip download --disable-pip-version-check --only-binary=:all: --dest (Join-Path $cache 'wheels') -r requirements-dev.txt
+          if ($LASTEXITCODE -ne 0) { throw "Cannot stage offline Windows package wheels." }
+          "ASIA_WINDOWS_SANDBOX_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "ASIA_WINDOWS_OFFLINE_DEPS=READY"
+      - name: Run native Win32 process-isolation fixture in disposable Windows Sandbox
+        shell: pwsh
+        timeout-minutes: 20
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Add-Type -AssemblyName System.Security
+          $root = $env:ASIA_WINDOWS_SANDBOX_ROOT
+          $results = Join-Path $root 'results'
+          New-Item -ItemType Directory -Force -Path $results | Out-Null
+          $source = [Security.SecurityElement]::Escape($env:GITHUB_WORKSPACE)
+          $cache = [Security.SecurityElement]::Escape((Join-Path $root 'cache'))
+          $output = [Security.SecurityElement]::Escape($results)
+          $config = Join-Path $root 'windows-test.wsb'
+          @"
+          <Configuration>
+            <VGpu>Disable</VGpu>
+            <Networking>Disable</Networking>
+            <AudioInput>Disable</AudioInput>
+            <VideoInput>Disable</VideoInput>
+            <PrinterRedirection>Disable</PrinterRedirection>
+            <ClipboardRedirection>Disable</ClipboardRedirection>
+            <MappedFolders>
+              <MappedFolder><HostFolder>$source</HostFolder><SandboxFolder>C:\VALYQON_SOURCE</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>
+              <MappedFolder><HostFolder>$cache</HostFolder><SandboxFolder>C:\VALYQON_CACHE</SandboxFolder><ReadOnly>true</ReadOnly></MappedFolder>
+              <MappedFolder><HostFolder>$output</HostFolder><SandboxFolder>C:\VALYQON_RESULTS</SandboxFolder><ReadOnly>false</ReadOnly></MappedFolder>
+            </MappedFolders>
+            <LogonCommand>
+              <Command>powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\VALYQON_SOURCE\scripts\dev\asia_windows_sandbox_guest.ps1</Command>
+            </LogonCommand>
+          </Configuration>
+          "@ | Set-Content -LiteralPath $config -Encoding UTF8
+          $sandboxExe = Join-Path $env:SystemRoot 'System32\WindowsSandbox.exe'
+          $sandboxProcess = Start-Process -FilePath $sandboxExe -ArgumentList @($config) -PassThru
+          try {
+              $report = Join-Path $results 'windows-result.json'
+              $deadline = (Get-Date).AddMinutes(17)
+              while ((Get-Date) -lt $deadline -and -not (Test-Path $report)) {
+                  Start-Sleep -Seconds 5
+                  $sandboxProcess.Refresh()
+                  if ($sandboxProcess.HasExited) { break }
+              }
+              if (-not (Test-Path $report)) {
+                  throw "Windows Sandbox did not return a test result before timeout."
+              }
+              $value = Get-Content -LiteralPath $report -Raw | ConvertFrom-Json
+              $logFile = Join-Path $results 'windows-p39e-pytest.log'
+              if (Test-Path $logFile) { Get-Content $logFile -Tail 90 }
+              if ($value.exit_code -ne 0 -or $value.state -ne 'WINDOWS_FIXTURE_PASSED') {
+                  throw "Native Windows fixture failed inside sandbox."
+              }
+              Write-Host "ASIA_NATIVE_WINDOWS_FIXTURE=PASS"
+              Write-Host "ASIA_PRODUCTION_CHANGED=NO"
+          } finally {
+              if ($sandboxProcess -and -not $sandboxProcess.HasExited) {
+                  Stop-Process -Id $sandboxProcess.Id -Force -ErrorAction SilentlyContinue
+              }
+          }
+      - name: Remove disposable Windows Sandbox installation cache
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:ASIA_WINDOWS_SANDBOX_ROOT -and (Test-Path $env:ASIA_WINDOWS_SANDBOX_ROOT)) {
+              Remove-Item -LiteralPath $env:ASIA_WINDOWS_SANDBOX_ROOT -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          Write-Host "ASIA_WINDOWS_HOST_PRIVATE_FILES_UNMAPPED=YES"

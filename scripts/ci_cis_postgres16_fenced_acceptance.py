@@ -230,9 +230,13 @@ def main():
             "(SELECT system_identifier::text FROM pg_control_system())"
         ).fetchone()
         if (not identity or identity[0] != "valyqon_ci" or identity[1] != "postgres"
-                or not 160000 <= identity[2] < 170000 or identity[3] != "127.0.0.1"
+                or not 160000 <= identity[2] < 170000 or not identity[3]
                 or identity[4] != 5432 or not re.fullmatch(r"[0-9]+", identity[5] or "")):
             raise RuntimeError("Unrecognized disposable PostgreSQL service")
+        # Docker-published localhost ports are NATed: inside PostgreSQL the
+        # observed client address can be the bridge gateway (172.x), not
+        # 127.0.0.1. The client DSN itself is pinned to 127.0.0.1:5432;
+        # still require the expected version, user, bootstrap DB and port.
         print("CIS_PG16=SERVER_IDENTITY_VERIFIED")
         connection.execute(sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(sql.Identifier(database)))
         created = True

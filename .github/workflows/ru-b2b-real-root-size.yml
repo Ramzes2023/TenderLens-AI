@@ -1,0 +1,31 @@
+name: RU B2B root public response size and safe ingestion envelope
+on:
+  push:
+    branches: [diag/ru-final-gates-20261016]
+    paths: [.github/workflows/ru-b2b-real-root-size.yml]
+permissions: {}
+jobs:
+  size-and-cards:
+    runs-on: valyqon-ru3
+    timeout-minutes: 4
+    steps:
+      - name: Bounded one-request real HTML size and B2B procurement evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          d="$(mktemp -d)"
+          trap 'rm -rf "$d"' EXIT
+          result="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 45 --max-filesize 20000000 -H 'Accept: text/html' -H 'User-Agent: Mozilla/5.0' --output "$d/b2b" --write-out '%{http_code} %{content_type} %{size_download}' 'https://www.b2b-center.ru/search/' 2>/dev/null)" && rc=0 || rc=$?
+          echo "RU_B2B_ROOT_HTTP=$result;CURL_EXIT=$rc"
+          if test "$rc" = 0 && test "${result%% *}" = 200; then
+            python3 - "$d/b2b" <<'PY'
+          import sys
+          body=open(sys.argv[1],"rb").read()
+          print("RU_B2B_ROOT_COMPLETE_BYTES="+str(len(body)))
+          print("RU_B2B_ROOT_LIST_ITEM_COUNT="+str(body.count(b'https://schema.org/ListItem')))
+          print("RU_B2B_ROOT_OWN_DETAIL_MARKERS="+str(body.count(b'/search/number/')))
+          print("RU_B2B_ROOT_HTML_END="+str(b'</html>' in body[-2048:].lower()))
+          PY
+          fi
+          echo 'RU_B2B_NO_PRODUCTION_CHANGE=YES'

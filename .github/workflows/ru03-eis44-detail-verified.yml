@@ -1,4 +1,4 @@
-name: RU-03 EIS 44-FZ real detail identity probe
+name: RU-03 verified EIS-44 real detail probe
 
 on:
   push:
@@ -8,44 +8,44 @@ on:
 permissions: {}
 
 jobs:
-  eis44-eis223:
+  eis44-detail:
     runs-on: valyqon-ru3
-    timeout-minutes: 5
+    timeout-minutes: 4
     steps:
-      - name: Verify official Ministry chain and live EIS feeds with TLS fully enabled
+      - name: Verified Ministry CA and explicit public 44-FZ detail URLs
         shell: bash
         run: |
           set -euo pipefail
           test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
-          test "$(id -un)" = valyqon
           dir="$(mktemp -d)"
           trap 'rm -rf "$dir"' EXIT
-          for part in root sub; do
-            if test "$part" = root; then
-              file=russian_trusted_root_ca
-              expected=d26d2d0231b7c39f92cc738512ba54103519e4405d68b5bd703e9788ca8ecf31
-            else
-              file=russian_trusted_sub_ca
-              expected=bbbde2103e790b999ec62bd03cf625a5a2e7c316e10afe6a490eedead8b3fd9b
-            fi
-            for id in 0316300145126000012 0320500000426000057; do
+          for item in root sub; do
+            case "$item" in
+              root) file=russian_trusted_root_ca; pin=d26d2d0231b7c39f92cc738512ba54103519e4405d68b5bd703e9788ca8ecf31 ;;
+              sub) file=russian_trusted_sub_ca; pin=bbbde2103e790b999ec62bd03cf625a5a2e7c316e10afe6a490eedead8b3fd9b ;;
+            esac
+            curl --noproxy '*' --fail --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 20 --max-filesize 65536 -o "$dir/$item.crt" "https://gu-st.ru/content/Other/doc/$file.cer"
+            openssl x509 -in "$dir/$item.crt" -out "$dir/$item.pem"
+            fp="$(openssl x509 -in "$dir/$item.pem" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+            test "$fp" = "$pin"
+          done
+          openssl verify -CAfile "$dir/root.pem" "$dir/sub.pem"
+          cat "$dir/root.pem" "$dir/sub.pem" > "$dir/eis-only.pem"
+          for id in 0316300145126000012 0320500000426000057; do
             url="https://zakupki.gov.ru/epz/order/notice/ezt20/view/common-info.html?regNumber=$id"
-            result="$(curl --noproxy '*' --silent --show-error --proto '=https' --cacert "$dir/eis-only.pem" --max-redirs 0 \
-              --connect-timeout 8 --max-time 25 --max-filesize 2000000 --output "$dir/$id" --write-out '%{http_code} %{content_type}' "$url" 2>"$dir/fetch_error")" && rc=0 || rc=$?
+            result="$(curl --noproxy '*' --silent --show-error --proto '=https' --cacert "$dir/eis-only.pem" --max-redirs 0 --connect-timeout 8 --max-time 25 --max-filesize 2000000 --output "$dir/$id" --write-out '%{http_code} %{content_type}' "$url" 2>"$dir/fetcherror")" && rc=0 || rc=$?
             bytes=0
             test ! -f "$dir/$id" || bytes="$(wc -c < "$dir/$id" | tr -d ' ')"
             echo "RU3_EIS_DETAIL_ID=$id;HTTP=$result;CURL_EXIT=$rc;BYTES=$bytes"
             if test "$rc" = 0 && test "${result%% *}" = 200; then
               python3 - "$dir/$id" "$id" <<'PY'
           import sys
-          p=open(sys.argv[1], 'rb').read().decode('utf-8','replace')
-          print('RU3_EIS_DETAIL_ID_MATCH=' + str(sys.argv[2] in p))
-          print('RU3_EIS_DETAIL_HAS_44_FZ=' + str('44-ФЗ' in p))
-          print('RU3_EIS_DETAIL_FORM_HTML=' + str('<html' in p.lower()[:2000]))
+          p=open(sys.argv[1],'rb').read().decode('utf-8','replace')
+          print('RU3_EIS_DETAIL_ID_MATCH='+str(sys.argv[2] in p))
+          print('RU3_EIS_DETAIL_HAS_44_FZ='+str('44-ФЗ' in p))
+          print('RU3_EIS_DETAIL_HAS_HTML='+str('<html' in p.lower()[:2000]))
           PY
             fi
           done
-          echo 'EIS_REAL_TENDER_RECORDS_VERIFIED=NO'
-          echo "RU3_CA_SCOPE=EIS_ONLY"
-          echo "TLS_VERIFICATION_DISABLED=NO"
-          echo "PRODUCTION_CHANGED=NO"
+          echo 'RU3_EIS_TLS_VERIFICATION=ENABLED'
+          echo 'PRODUCTION_CHANGED=NO'

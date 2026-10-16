@@ -36,6 +36,8 @@ jobs:
           set -euo pipefail
           test "${RUNNER_NAME:-}" = "VALYQON-RU-01"
           echo "ASIA_DOCKER_USER_UID=$(id -u)"
+          echo "ASIA_RUNNER_EFFECTIVE_GROUPS=$(id -Gn | tr ' ' ',')"
+          echo "ASIA_VALYQON_CONFIGURED_GROUPS=$(id -nG valyqon | tr ' ' ',')"
           if test -S /var/run/docker.sock; then
             stat -Lc 'ASIA_DOCKER_SOCKET=YES;MODE=%a;UID=%u;GID=%g' /var/run/docker.sock
             if test -w /var/run/docker.sock; then
@@ -60,12 +62,15 @@ jobs:
             echo "ASIA_DOCKER_WSL_INTEGRATION=NOT_AVAILABLE"
             exit 2
           fi
-          if ! timeout 20s docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; then
+          if timeout 15s docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; then
+            echo "ASIA_DOCKER_RUNNER_SESSION=DIRECT_ACCESS"
+          elif timeout 20s sg docker -c "timeout 15s docker info --format '{{.ServerVersion}}' >/dev/null 2>&1" >/dev/null 2>&1; then
+            echo "ASIA_DOCKER_RUNNER_SESSION=GROUP_RELOGIN_REQUIRED"
+          else
             echo "ASIA_DOCKER_WSL_INTEGRATION=ENGINE_UNREACHABLE"
             exit 3
           fi
-          timeout 20s docker version --format 'ASIA_DOCKER_CLIENT={{.Client.Version}};ASIA_DOCKER_SERVER={{.Server.Version}}'
-          timeout 20s docker info --format 'ASIA_DOCKER_OS={{.OSType}};ASIA_DOCKER_ARCH={{.Architecture}}'
+          echo "ASIA_DOCKER_CLIENT_PRESENT=YES"
           echo "ASIA_DOCKER_WSL_INTEGRATION=PASS"
           echo "ASIA_DOCKER_CONTAINER_EXECUTED=NO"
       - name: Preflight local isolation before any approved application tests

@@ -272,7 +272,14 @@ class MoldovaAchizitiiSource:
                     detail.raise_for_status()
                     if "html" not in detail.headers.get("content-type", "").lower():
                         raise SourceError("MD public detail was not HTML.")
-                    result.append(parse_marketplace_detail(detail.text, url=url))
+                    try:
+                        result.append(parse_marketplace_detail(detail.text, url=url))
+                    except SourceError:
+                        # An individual notice with an incomplete buyer, OCID,
+                        # price or deadline cannot become a persisted tender.
+                        # Other independently complete public notices still
+                        # qualify; the entire batch fails if none does.
+                        continue
         except (httpx.HTTPError, ConnectorTransportError, OSError) as error:
             if transient_transport(error):
                 raise SourceTransportError("MD public procurement temporarily unavailable.") from None

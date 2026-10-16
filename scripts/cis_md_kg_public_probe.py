@@ -7,7 +7,7 @@ against official/public endpoints to establish current network accessibility.
 from __future__ import annotations
 
 import argparse
-import html
+import html as html_lib
 import json
 import re
 import ssl
@@ -116,7 +116,7 @@ def describe_payload(name, raw, content_type):
             cells = re.findall(r"<t[dh]\b[^>]*>(.*?)</t[dh]\s*>", row, flags=re.I | re.S)
             if len(cells) < 9:
                 continue
-            cleaned = [re.sub(r"\s+", " ", html.unescape(
+            cleaned = [re.sub(r"\s+", " ", html_lib.unescape(
                 re.sub(r"<[^>]+>", " ", cell))).strip() for cell in cells]
             document_type, title = cleaned[5], cleaned[6]
             ocid, cpv, received = cleaned[7], cleaned[8], cleaned[2]

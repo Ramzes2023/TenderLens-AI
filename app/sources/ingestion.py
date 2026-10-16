@@ -38,6 +38,7 @@ HOSTS = {
     'za_etenders': frozenset({'admin.etenders.gov.za'}),
     'india_cppp': frozenset({'eprocure.gov.in'}),
     'kz_goszakup': frozenset({'ows.goszakup.gov.kz'}),
+    'mikroton_tender': frozenset({'tender.mt52.ru'}),
     # Staged Asian feeds: host allowlists apply to the actual worker network call.
     'hk_ha_works': frozenset({'www.housingauthority.gov.hk'}),
     'hk_ha_leasing': frozenset({'www.housingauthority.gov.hk'}),
@@ -134,7 +135,7 @@ class ConnectorSyncHandler:
         request_limit = (4 if source_id in {'ted', 'uk_fts', 'world_bank'}
                          else self.max_records + 1 if source_id == 'austender'
                          else 5 if source_id in {'eis', 'eis_223', 'india_cppp', 'kz_goszakup'}
-                         else 2 if source_id in {'jp_jetro_national', 'jp_jetro_local'}
+                         else 2 if source_id in {'jp_jetro_national', 'jp_jetro_local', 'mikroton_tender'}
                          else 1)
         async def fetch():
             with bounded_fetch(FetchPolicy(HOSTS[source_id], request_limit)):

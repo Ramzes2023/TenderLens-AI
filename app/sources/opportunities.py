@@ -71,7 +71,8 @@ class OpportunityRepository:
         # Additive, versioned Russian notice provenance; separate from existing tables.
         self.database.migrate('source_observations')
 
-    def upsert(self, notice, connector_version):
+    @staticmethod
+    def _prepare_upsert(notice, connector_version):
         validate_notice(notice, notice.source)
         if (type(connector_version) is not str or not re.fullmatch(
                 r'connector-sync-v1:' + re.escape(notice.source) + r':adapter-r[1-9][0-9]{0,3}', connector_version)):
@@ -79,21 +80,53 @@ class OpportunityRepository:
         notice = with_connector(notice, connector_version)
         encoded = json.dumps(asdict(notice), ensure_ascii=False, allow_nan=False, separators=(',', ':'))
         now = datetime.now(timezone.utc).isoformat()
+        return notice, encoded, now
+
+    @staticmethod
+    def _write_prepared(conn, notice, encoded, now, connector_version):
+        # Must run within the caller's active transaction. No connection or
+        # transaction is opened here, so lease fencing and this write can be atomic.
+        inserted = conn.execute('''INSERT INTO source_opportunities
+            (source_id,external_id,notice_json,connector_version,first_seen,last_seen)
+            VALUES(?,?,?,?,?,?) ON CONFLICT(source_id,external_id) DO NOTHING''',
+            (notice.source, notice.external_id, encoded, connector_version, now, now)).rowcount == 1
+        if not inserted:
+            conn.execute('''UPDATE source_opportunities SET notice_json=?,connector_version=?,last_seen=?
+                WHERE source_id=? AND external_id=?''',
+                (encoded, connector_version, now, notice.source, notice.external_id))
+        if notice.source in {'eis', 'eis_223'}:
+            from .observations import record_observation
+            record_observation(conn, notice, encoded, now, connector_version)
+        return inserted
+
+    def upsert(self, notice, connector_version):
+        # Standalone operator/import path retains its existing transaction.
+        prepared = self._prepare_upsert(notice, connector_version)
         with closing(self.database.connect()) as conn:
             with conn:
                 conn.execute('BEGIN IMMEDIATE')
-                inserted = conn.execute('''INSERT INTO source_opportunities
-                    (source_id,external_id,notice_json,connector_version,first_seen,last_seen)
-                    VALUES(?,?,?,?,?,?) ON CONFLICT(source_id,external_id) DO NOTHING''',
-                    (notice.source, notice.external_id, encoded, connector_version, now, now)).rowcount == 1
-                if not inserted:
-                    conn.execute('''UPDATE source_opportunities SET notice_json=?,connector_version=?,last_seen=?
-                        WHERE source_id=? AND external_id=?''',
-                        (encoded, connector_version, now, notice.source, notice.external_id))
-                if notice.source in {'eis', 'eis_223'}:
-                    from .observations import record_observation
-                    record_observation(conn, notice, encoded, now, connector_version)
-                return inserted
+                return self._write_prepared(conn, *prepared, connector_version)
+
+    def upsert_fenced(self, notice, connector_version, fenced_write):
+        """Persist connector notice only within the currently owned job lease.
+
+        The JobRepository callback validates the token and applies this write in
+        one transaction. No independent upsert/connection or precheck is allowed.
+        """
+        from app.jobs.models import LeaseLostError
+        if not callable(fenced_write):
+            raise LeaseLostError('Connector lease proof unavailable.')
+        prepared = self._prepare_upsert(notice, connector_version)
+        persisted = []
+
+        def write(conn, _now):
+            persisted.append(self._write_prepared(conn, *prepared, connector_version))
+
+        if not fenced_write(write):
+            raise LeaseLostError('Connector lease expired before storage.')
+        if len(persisted) != 1:
+            raise RuntimeError('Invalid fenced connector write callback.')
+        return persisted[0]
 
     def read(self, source_id, limit=20, search_terms=()):
         limit = max(1, min(int(limit), 100))

@@ -40,9 +40,16 @@ files = [
      "79241647c6acae10fcf61b3112cef35228339c632c664bfc4f8101f82c0556bd"),
 ]
 for url, path, digest in files:
-    with urlopen(Request(url, headers={"User-Agent": "VALYQON-CIS-trusted-CI/1.0"}), timeout=30) as response:
-        blob = response.read(8 * 1024 * 1024 + 1)
-    if len(blob) > 8 * 1024 * 1024 or hashlib.sha256(blob).hexdigest() != digest:
+    # The official eForms CPV codelist is tens of MB, not a small HTML page.
+    # Keep an explicit bounded maximum and the SAME pinned SHA256 commitment.
+    limit = 128 * 1024 * 1024 if path.endswith("official_eforms_cpv.gc") else 8 * 1024 * 1024
+    with urlopen(Request(url, headers={"User-Agent": "VALYQON-CIS-trusted-CI/1.0"}), timeout=90) as response:
+        blob = response.read(limit + 1)
+    if len(blob) > limit:
+        raise AssertionError("Official CI evidence exceeds bounded size: " + path)
+    computed = hashlib.sha256(blob).hexdigest()
+    if computed != digest:
+        print("CIS_PINNED_EVIDENCE_HASH_MISMATCH=" + path, flush=True)
         raise AssertionError("Pinned external CI evidence unavailable or changed: " + path)
     dest = Path(path)
     dest.parent.mkdir(parents=True, exist_ok=True)

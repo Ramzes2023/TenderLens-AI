@@ -1,0 +1,51 @@
+name: RU-03 Roseltorg real detail markers and HTML identity
+on:
+  push:
+    branches: [diag/ru-gpb-official-html-20261016]
+    paths: [.github/workflows/ru03-roseltorg-detail-markers.yml]
+permissions: {}
+jobs:
+  markers:
+    runs-on: valyqon-ru3
+    timeout-minutes: 4
+    steps:
+      - name: Inspect independent real HTML identity markers from official cards
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          for id in 0318300120826000551 0373100045926000671 0318300120826000550; do
+            url="https://www.roseltorg.ru/procedure/$id/1"
+            result="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 7 --max-time 16 --max-filesize 1800000 -H 'User-Agent: Mozilla/5.0' --output "$dir/$id" --write-out '%{http_code} %{content_type} %{size_download}' "$url" 2>/dev/null)" && rc=0 || rc=$?
+            echo "RU3_ROSELTORG_DETAIL_HTTP=$id;$result;EXIT=$rc"
+            if test "$rc" != 0 || test "${result%% *}" != 200; then continue; fi
+            python3 - "$dir/$id" "$id" <<'PY'
+          import re,sys
+          from html.parser import HTMLParser
+          class Read(HTMLParser):
+              def __init__(self):
+                  super().__init__();self.depth=0;self.head=None;self.h=[];self.text=[]
+              def handle_starttag(self,t,a):
+                  if t in {'script','style','template','noscript','svg'}:self.depth+=1
+                  if t=='h1' and not self.depth:self.head=[]
+              def handle_data(self,d):
+                  if not self.depth:
+                      self.text.append(d)
+                      if self.head is not None:self.head.append(d)
+              def handle_endtag(self,t):
+                  if t=='h1' and self.head is not None:
+                      self.h.append(' '.join(' '.join(self.head).split()));self.head=None
+                  if t in {'script','style','template','noscript','svg'} and self.depth:self.depth-=1
+          p=open(sys.argv[1],'rb').read().decode('utf-8-sig','replace')
+          v=Read();v.feed(p)
+          text=' '.join(' '.join(v.text).split())
+          identity=sys.argv[2]
+          print('RU3_ROSELTORG_VISIBLE_ID='+identity+';MATCH='+str(identity in text))
+          print('RU3_ROSELTORG_STRICT_MARKER='+str(bool(re.search(r'Процедура\\s*:\\s*'+re.escape(identity)+r'(?![A-Z0-9])',text))))
+          print('RU3_ROSELTORG_H1_COUNT='+str(len(v.h))+';NONEMPTY='+str(sum(5<=len(x)<=1000 for x in v.h)))
+          print('RU3_ROSELTORG_VISIBLE_NUMBER_PREFIX='+repr(text[max(0,text.find(identity)-55):text.find(identity)+len(identity)+55] if identity in text else 'NO_VISIBLE_NUMBER'))
+          PY
+          done
+          echo 'PRODUCTION_CHANGED=NO'

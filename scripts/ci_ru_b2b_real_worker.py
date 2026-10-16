@@ -91,9 +91,14 @@ def acceptance() -> dict[str, int | bool]:
                     source_keys=(SOURCE,),
                     search_terms=(notice.external_id,),
                 ))
-                if (result.failures or len(result.notices) != 1 or
-                        result.notices[0].identity != notice.identity or
-                        result.notices[0].url != notice.url):
+                # Keyword search intentionally uses substring matching. A
+                # procurement number may appear in another title or price;
+                # assert the exact canonical stored identity is present.
+                if (result.failures or not any(
+                        candidate.identity == notice.identity and
+                        candidate.url == notice.url
+                        for candidate in result.notices
+                )):
                     raise AssertionError("Real stored notice not searchable by identity")
                 # Same-version upsert must be idempotent; no extra network call.
                 if store.upsert(notice, connector_version(SOURCE)):

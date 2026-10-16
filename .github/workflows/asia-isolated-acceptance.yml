@@ -105,6 +105,15 @@ jobs:
           quoted_image="$(printf '%q' "$ASIA_TEST_IMAGE")"
           timeout 420s sg docker -c "docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 128 --memory 2g --cpus 2 --user 65534:65534 --tmpfs /tmp:rw,nosuid,nodev,size=512m --env HOME=/tmp --env PYTHONDONTWRITEBYTECODE=1 --volume $quoted_source:/workspace:ro --workdir /workspace $quoted_image python -m pytest -q -p no:cacheprovider tests/test_asia_public_sources.py tests/test_source_catalog.py tests/test_connector_workers.py tests/test_source_http.py tests/test_source_http_transport.py"
           echo "ASIA_ISOLATED_OFFLINE_CONTRACTS=PASS"
+      - name: Full Linux CI test suite on dedicated free RU-01 (networkless sandbox)
+        shell: bash
+        timeout-minutes: 18
+        run: |
+          set -euo pipefail
+          quoted_source="$(printf '%q' "$GITHUB_WORKSPACE")"
+          quoted_image="$(printf '%q' "$ASIA_TEST_IMAGE")"
+          timeout 1000s sg docker -c "docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 3g --cpus 2 --user 65534:65534 --tmpfs /tmp:rw,nosuid,nodev,size=768m --tmpfs /workspace/.cache:rw,nosuid,nodev,size=256m --env HOME=/tmp --env PYTHONDONTWRITEBYTECODE=1 --volume $quoted_source:/workspace:ro --workdir /workspace $quoted_image python -m pytest -q -p no:cacheprovider --durations=15 --ignore=tests/test_p39e_local_preview.py"
+          echo "ASIA_SELF_HOSTED_FULL_LINUX_CI=PASS"
       - name: Real source adapter → disposable SQLite → keyword-search acceptance
         shell: bash
         timeout-minutes: 8

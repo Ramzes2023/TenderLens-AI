@@ -146,6 +146,13 @@ def main():
                 response.read(min(4096, MAX_BYTES))
         except HTTPError as err:
             item.update({"error_kind": "HTTPError", "http_status": err.code})
+            if err.code in (301, 302, 307, 308):
+                target = urlsplit(err.headers.get("Location", ""))
+                if (target.scheme == "https" and target.hostname in
+                        {"zakupki.butb.by", "butb.by", "www.butb.by"}
+                        and not target.username and not target.password):
+                    item["approved_canonical_host"] = target.hostname
+                    item["canonical_path"] = target.path[:120]
         except URLError as err:
             item.update({"error_kind": "URLError", "reason_class": type(err.reason).__name__})
         except (OSError, TimeoutError, ValueError) as err:

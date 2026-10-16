@@ -25,6 +25,8 @@ SYSTEM_SCOPE = JobScope()
 # Explicit server-owned hosts. EIS custom operator URLs remain supported by live
 # discovery; worker ingestion deliberately only permits the official EIS host.
 HOSTS = {
+    'am_armeps': frozenset({'eauction.armeps.am'}),
+    'tj_eprocurement': frozenset({'eprocurement.gov.tj'}),
     'b2b_center': frozenset({'www.b2b-center.ru'}),
     'eis_223': frozenset({'zakupki.gov.ru'}),
     'eis': frozenset({'zakupki.gov.ru', 'www.zakupki.gov.ru'}),
@@ -131,8 +133,11 @@ class ConnectorSyncHandler:
         source = registration.source
         if source_id == 'austender' and hasattr(source, 'max_concurrency'):
             source = replace(source, max_concurrency=1)
+        if source_id == 'am_armeps':
+            source = replace(source, max_pages=2)
         # At most five listing/feed requests; AusTender adds one detail per notice.
         request_limit = (4 if source_id in {'ted', 'uk_fts', 'world_bank'}
+                         else 2 if source_id == 'am_armeps'
                          else self.max_records + 1 if source_id == 'austender'
                          else 5 if source_id in {'eis', 'eis_223', 'india_cppp', 'kz_goszakup'}
                          else 2 if source_id in {'jp_jetro_national', 'jp_jetro_local'}

@@ -1,0 +1,55 @@
+name: RU-03 TenderGuru public API schema and identity research
+
+on:
+  push:
+    branches: [ops/ru3-trusted-source-probe-20261016]
+    paths: [.github/workflows/ru03-tenderguru-shape.yml]
+
+permissions: {}
+
+jobs:
+  public-api-shape:
+    runs-on: valyqon-ru3
+    timeout-minutes: 3
+    steps:
+      - name: Investigate JSON schema without storing or logging procurement details
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          python3 - <<'PY'
+          import json
+          import ssl
+          import urllib.request
+          from urllib.parse import urlsplit
+          url = 'https://www.tenderguru.ru/api2.3/export?dtype=json&kwords=%D0%BF%D0%BE%D1%81%D1%82%D0%B0%D0%B2%D0%BA%D0%B0'
+          no_redirect = type('NoRedirect', (urllib.request.HTTPRedirectHandler,),
+                             {'redirect_request': lambda *args, **kwargs: None})
+          client = urllib.request.build_opener(
+              urllib.request.ProxyHandler({}),
+              urllib.request.HTTPSHandler(context=ssl.create_default_context()),
+              no_redirect())
+          req = urllib.request.Request(url, headers={'Accept': 'application/json'})
+          with client.open(req, timeout=15) as response:
+              content_type = response.headers.get('Content-Type', '')
+              if response.status != 200 or 'json' not in content_type.lower():
+                  raise ValueError('Public JSON endpoint unavailable')
+              raw = response.read(2_000_001)
+          if len(raw) > 2_000_000:
+              raise ValueError('Oversized public JSON')
+          body = json.loads(raw)
+          print('RU3_TENDERGURU_RESPONSE_TYPE=' + type(body).__name__)
+          if isinstance(body, list):
+              print('RU3_TENDERGURU_ENTRY_COUNT=' + str(len(body)))
+              for idx, record in enumerate(body[:3]):
+                  if type(record) is dict:
+                      print(f'RU3_TENDERGURU_INDEX_{idx}_KEYS=' + ','.join(sorted(record)[:45]))
+                      print(f'RU3_TENDERGURU_INDEX_{idx}_NONEMPTY_FIELDS=' + str(sum(v not in (None, '', [], {}) for v in record.values())))
+          elif isinstance(body, dict):
+              print('RU3_TENDERGURU_ROOT_KEYS=' + ','.join(sorted(body)[:50]))
+          else:
+              raise ValueError('Unsupported JSON envelope')
+          print('RU3_TENDERGURU_DATA_NOT_PERSISTED=YES')
+          print('RU3_TENDERGURU_COMMERCIAL_LICENSE_NOT_VERIFIED=YES')
+          print('PRODUCTION_CHANGED=NO')
+          PY

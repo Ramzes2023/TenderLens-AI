@@ -108,6 +108,27 @@ def main() -> int:
     except Exception as error:
         print("RU_B2B_REAL_WORKER_GATE=BLOCKED", flush=True)
         print("FAILURE_CLASS=" + type(error).__name__, flush=True)
+
+        # Report only explicitly coded assertion messages or durable failure codes.
+        allowed = {
+            "Real worker ingestion did not persist every public notice",
+            "Persisted notice count mismatch",
+            "Real notice identities not unique",
+            "Stored source and public URL mismatch",
+            "Real stored notice not searchable by identity",
+            "Replay inserted duplicate source identity",
+            "Incomplete DB -> keyword search roundtrip",
+            "No real durable connector job was claimed",
+            "Durable connector result source mismatch",
+        }
+        reason = str(error)
+        if type(error) is AssertionError:
+            if reason.startswith("Durable connector job did not succeed: "):
+                code = reason.rsplit(": ", 1)[-1]
+                if code in {"handler_error","permanent_failure","lease_expired","invalid_result","job missing"}:
+                    print("FAILURE_STAGE=LEASED_WORKER_" + code.upper(), flush=True)
+            elif reason in allowed:
+                print("FAILURE_STAGE=" + reason.replace(" ", "_")[:100], flush=True)
         print("PRODUCTION_CHANGED=NO", flush=True)
         return 1
     print("RU_B2B_REAL_WORKER_GATE=PASS", flush=True)

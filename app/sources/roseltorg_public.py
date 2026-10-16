@@ -124,10 +124,13 @@ def parse_roseltorg_detail(payload, *, identity, url):
     detail.feed(_html(payload))
     detail.close()
     visible = " ".join(" ".join(detail.visible).split())
-    # The exact listed procedure number must be independently visible on its
-    # own official detail, never only embedded in a script or unrelated link.
-    if not re.search(r"Процедура\s*:\s*" + re.escape(identity) + r"(?![A-Z0-9])", visible):
-        raise ValueError("Official Roseltorg detail number is not visible")
+    # Verified against the official public Roseltorg detail (RU3 live).
+    # The same exact procedure ID must occur twice in the visible breadcrumb:
+    # "Закупки <ID> Лот <number> <ID>". Arbitrary scripts/sidebar IDs are unsafe.
+    breadcrumb = (r"Закупки\s+" + re.escape(identity) + r"\s+Лот\s+[0-9]{1,5}\s+"
+                  + re.escape(identity) + r"(?![A-Z0-9])")
+    if not re.search(breadcrumb, visible):
+        raise ValueError("Official Roseltorg detail breadcrumb identity mismatch")
     titles = [name for name in detail.headings if 5 <= len(name) <= 1000]
     if len(titles) != 1:
         raise ValueError("Roseltorg official detail title is ambiguous")

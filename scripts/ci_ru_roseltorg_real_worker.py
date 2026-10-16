@@ -7,14 +7,16 @@ import asyncio
 import json
 import tempfile
 from pathlib import Path
-from types import SimpleNamespace
 
 from app.database.backend import Database
 from app.database.config import DatabaseSettings
+from app.jobs import HandlerRegistry, JobRepository, JobSettings
 from app.jobs.models import JobScope
+from app.jobs.worker import Worker
 from app.monitoring.config import MonitoringSettings
 from app.sources.catalog import build_source_catalog
-from app.sources.ingestion import ConnectorSyncHandler, connector_version, sync_window
+from app.sources.ingestion import (ConnectorSyncHandler, ConnectorSyncService,
+                                   JOB_TYPE, connector_version)
 from app.sources.opportunities import OpportunityRepository
 from app.sources.snapshots import snapshot_catalog
 
@@ -33,16 +35,21 @@ def acceptance():
     with tempfile.TemporaryDirectory(prefix="valyqon-ru-roseltorg-") as d:
         db = Database(DatabaseSettings("ru-roseltorg-live", Path(d) / "proof.sqlite"))
         try:
+            jobs = JobRepository(db, JobSettings(lease_seconds=240, heartbeat_seconds=10))
+            jobs.initialize()
             store = OpportunityRepository(db)
             store.initialize()
-            worker = ConnectorSyncHandler(catalog, store, max_records=3)
-            ctx = SimpleNamespace(job=SimpleNamespace(scope=JobScope()), should_stop=False)
-            payload = {
-                "schema": 1, "source_id": SOURCE,
-                "sync_window": sync_window(),
-                "connector_version": connector_version(SOURCE),
-            }
-            stats = worker(ctx, payload)
+            handler = ConnectorSyncHandler(catalog, store, max_records=3)
+            queued = ConnectorSyncService(jobs, catalog).enqueue(SOURCE)
+            handlers = HandlerRegistry()
+            handlers.register(JOB_TYPE, handler)
+            if not Worker(jobs, handlers, job_types=(JOB_TYPE,)).run_once():
+                raise AssertionError("Roseltorg job was not claimed by durable worker")
+            completed = jobs.get(queued.id, scope=JobScope())
+            if completed is None or completed.state != "succeeded":
+                raise AssertionError("Roseltorg durable worker did not succeed: "
+                                     + str(completed.failure_code if completed else "missing"))
+            stats = completed.result
             if not 1 <= stats["fetched_count"] <= 3:
                 raise AssertionError("Roseltorg did not return real verified notices")
             if (stats["accepted_count"] != stats["fetched_count"]

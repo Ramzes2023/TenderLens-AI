@@ -1,0 +1,51 @@
+name: RU MikroTon real API and tenant integration
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "app/sources/mikroton_tender.py"
+      - "app/sources/catalog.py"
+      - "app/sources/ingestion.py"
+      - "app/scoring/runs.py"
+      - "tests/test_mikroton_tender.py"
+      - "tests/test_ru_mikroton_real_api.py"
+      - "tests/test_ru_mikroton_worker_contract.py"
+      - "scripts/ci_ru_mikroton_real_worker.py"
+      - ".github/workflows/ru-mikroton-integration.yml"
+  push:
+    branches: [integration/ru-mikroton-mainline-20261016]
+    paths:
+      - "app/sources/mikroton_tender.py"
+      - "app/sources/catalog.py"
+      - "app/sources/ingestion.py"
+      - "app/scoring/runs.py"
+      - "scripts/ci_ru_mikroton_real_worker.py"
+      - ".github/workflows/ru-mikroton-integration.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  mikroton-real:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Strict offline adapter, worker, and tenant-contract tests
+        run: python -m pytest -q tests/test_ru_mikroton_real_api.py tests/test_mikroton_tender.py tests/test_ru_mikroton_worker_contract.py
+      - name: Real MikroTon API, independent detail, actual worker, and authorized scoring
+        if: github.event_name == 'push'
+        timeout-minutes: 4
+        run: |
+          python -B -m scripts.ci_ru_mikroton_real_api
+          python -B -m scripts.ci_ru_mikroton_real_worker
+          python -B -m scripts.ci_ru_mikroton_authenticated

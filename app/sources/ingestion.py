@@ -30,6 +30,7 @@ HOSTS = {
     'tj_eprocurement': frozenset({'eprocurement.gov.tj'}),
     'uz_uzex': frozenset({'apietender.uzex.uz', 'etender.uzex.uz'}),
     'kg_gov_legacy': frozenset({'zakupki.gov.kg'}),
+    'kz_gov_html': frozenset({'old.goszakup.gov.kz'}),
     'b2b_center': frozenset({'www.b2b-center.ru'}),
     'tektorg': frozenset({'www.tektorg.ru'}),
     'gpb_etp_public': frozenset({'etpgpb.ru'}),

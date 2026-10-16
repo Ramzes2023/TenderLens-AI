@@ -290,7 +290,7 @@ def test_jetro_real_world_links_with_query_and_nested_title_markup():
     )
     l = parse_jetro_html(local, source="jp_jetro_local")[0]
     assert l.external_id == "b25795fdff1a1aba"
-    assert "_page=1" in l.url
+    assert l.url == "https://www.jetro.go.jp/en/database/procurement/local/articles/b25795fdff1a1aba.html"
     validate_notice(l, "jp_jetro_local")
 
 

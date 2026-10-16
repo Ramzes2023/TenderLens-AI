@@ -69,7 +69,11 @@ jobs:
                   visible=" ".join(" ".join(detail.text).split())
                   id_visible=identifier in visible
                   title_visible=bool(title and len(title)>=5 and title in visible)
-                  print("RU_LENOBL_REAL_DETAIL_ID_PRESENT="+str(id_visible)+";LIST_TITLE_VISIBLE="+str(title_visible)+";H1_COUNT="+str(len(detail.h1)))
+                  tokens=lambda value: set(re.findall(r"[А-Яа-яЁёA-Za-z0-9]{3,}",value.lower()))
+                  title_tokens=tokens(title)
+                  h1_tokens=tokens(detail.h1[0]) if detail.h1 else set()
+                  overlap=(len(title_tokens & h1_tokens)/len(title_tokens)) if title_tokens else 0
+                  print("RU_LENOBL_REAL_DETAIL_ID_PRESENT="+str(id_visible)+";LIST_TITLE_VISIBLE="+str(title_visible)+";H1_COUNT="+str(len(detail.h1))+";H1_TOKEN_OVERLAP="+str(round(overlap,2)))
                   print("RU_LENOBL_REAL_DETAIL_HEADING_LENGTHS="+repr([len(x) for x in detail.h1[:2]]))
                   if id_visible and title_visible:verified+=1
               except Exception as e:

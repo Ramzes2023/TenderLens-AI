@@ -20,13 +20,13 @@ jobs:
       - name: Checkout exact reviewed GPB fix commit
         uses: actions/checkout@v4
         with:
-          ref: 41c8b0a7c36b4a6b806edaae9f5a3a40327bd47e
+          ref: 91ec5c75599413eb6fce6d501b55ea5c4701b611
           persist-credentials: false
       - name: Verify real GPB HTML to database and query
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 41c8b0a7c36b4a6b806edaae9f5a3a40327bd47e
+          test "$(git rev-parse HEAD)" = 91ec5c75599413eb6fce6d501b55ea5c4701b611
           dir="$(mktemp -d)"
           trap 'rm -rf "$dir"' EXIT
           python3 -m venv "$dir/venv"

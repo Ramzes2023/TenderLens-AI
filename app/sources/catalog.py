@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Iterable
 
 from .am_armeps import ArmeniaArmepsSource
 from .tj_eprocurement import TajikistanEprocurementSource
+from .uz_uzex import UzbekistanUzexSource
 from .asia_public import ASIA_RSS_FEEDS, AsiaPublicSource
 from .jp_jetro_bid_rss import JetroBidRssSource, RSS_URL as JETRO_BID_RSS_URL
 from .austender_rss import AusTenderRssSource
@@ -551,6 +552,20 @@ def build_source_catalog(
             official=True, enabled=True,
             capabilities=SourceCapabilities(),
         ))
+
+    # Verified official Uzbekistan API; operator activation remains separate.
+    registry.register(SourceRegistration(
+        key="uz_uzex",
+        display_name="Uzbekistan UZEX public tenders and selections",
+        source=UzbekistanUzexSource(timeout=min(timeout, 30)),
+        transport=SourceTransport.API,
+        jurisdictions=("UZ",),
+        languages=("uz", "ru"),
+        homepage_url="https://etender.uzex.uz/",
+        official=True,
+        enabled=False,
+        capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
+    ))
 
     return SourceCatalog(
         registry=registry,

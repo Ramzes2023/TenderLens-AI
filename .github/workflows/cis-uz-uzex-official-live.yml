@@ -1,0 +1,46 @@
+name: CIS Uzbekistan official UzEx tender acceptance
+
+on:
+  push:
+    branches:
+      - research/cis-uz-uzex-official-live-gate-20261016
+    paths:
+      - scripts/cis_uzex_official_probe.py
+      - tests/test_cis_uzex_official_probe.py
+      - .github/workflows/cis-uz-uzex-official-live.yml
+  pull_request:
+    paths:
+      - scripts/cis_uzex_official_probe.py
+      - tests/test_cis_uzex_official_probe.py
+      - .github/workflows/cis-uz-uzex-official-live.yml
+
+permissions:
+  contents: read
+
+jobs:
+  offline-probe-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prove parser rejects incomplete or fake notices
+        run: python -B -m unittest discover -s tests -p test_cis_uzex_official_probe.py -v
+
+  official-live-tradelist:
+    needs: offline-probe-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Real official HTTPS POST for both tenders and selections, fail closed
+        run: python -B scripts/cis_uzex_official_probe.py --require-live

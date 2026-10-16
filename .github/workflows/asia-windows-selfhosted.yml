@@ -13,6 +13,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: asia-native-windows-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows-offline-fixture:
     if: github.repository == 'Ramzes2023/TenderLens-AI' && github.ref == 'refs/heads/feat/asia-public-procurement-six-20261015'

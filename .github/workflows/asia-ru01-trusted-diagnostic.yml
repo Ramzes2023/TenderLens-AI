@@ -1,0 +1,454 @@
+name: Asia trusted RU-01 public diagnostic
+
+# This is an explicitly authorized, reviewed public-only diagnostic.
+# No PR event, no checkout, no repository-script execution, no credentials.
+on:
+  push:
+    branches:
+      - feat/asia-public-procurement-six-20261015
+    paths:
+      - .github/workflows/asia-ru01-trusted-diagnostic.yml
+
+permissions: {}
+
+jobs:
+  asia-ru01-trusted-public:
+    if: github.repository == 'Ramzes2023/TenderLens-AI' && github.ref == 'refs/heads/feat/asia-public-procurement-six-20261015'
+    runs-on: valyqon-ru
+    timeout-minutes: 8
+    steps:
+      - name: Verify trusted RU-01 host without checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = "VALYQON-RU-01"
+          test "$(uname -s)" = "Linux"
+          if mountpoint -q /mnt/c; then
+            echo "ASIA_TRUSTED_SECURITY_BLOCK=WINDOWS_C_MOUNTED"
+            exit 1
+          fi
+          python3 --version
+          curl --version | head -n 1
+          echo "ASIA_TRUSTED_HOST_ONLY=PASS"
+      - name: Read-only discovery of native Windows testing options
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = "VALYQON-RU-01"
+          if command -v powershell.exe >/dev/null 2>&1; then
+            echo "ASIA_NATIVE_WINDOWS_INTEROP=POWERSHELL_EXE_PRESENT"
+          elif command -v pwsh.exe >/dev/null 2>&1; then
+            echo "ASIA_NATIVE_WINDOWS_INTEROP=PWSH_EXE_PRESENT"
+          elif command -v cmd.exe >/dev/null 2>&1; then
+            echo "ASIA_NATIVE_WINDOWS_INTEROP=CMD_EXE_PRESENT"
+          else
+            echo "ASIA_NATIVE_WINDOWS_INTEROP=NOT_EXPOSED"
+          fi
+          if command -v wsl.exe >/dev/null 2>&1; then
+            echo "ASIA_WINDOWS_WSL_CONTROL=AVAILABLE"
+          else
+            echo "ASIA_WINDOWS_WSL_CONTROL=NOT_EXPOSED"
+          fi
+          if test -e /run/WSL; then
+            echo "ASIA_WSL_INTEROP_MOUNT=PRESENT"
+          fi
+          echo "ASIA_WINDOWS_CODE_EXECUTED=NO"
+      - name: Confirm Docker WSL integration on approved Asia runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = "VALYQON-RU-01"
+          echo "ASIA_DOCKER_USER_UID=$(id -u)"
+          echo "ASIA_RUNNER_EFFECTIVE_GROUPS=$(id -Gn | tr ' ' ',')"
+          echo "ASIA_VALYQON_CONFIGURED_GROUPS=$(id -nG valyqon | tr ' ' ',')"
+          if test -S /var/run/docker.sock; then
+            stat -Lc 'ASIA_DOCKER_SOCKET=YES;MODE=%a;UID=%u;GID=%g' /var/run/docker.sock
+            if test -w /var/run/docker.sock; then
+              echo "ASIA_DOCKER_SOCKET_WRITABLE=YES"
+            else
+              echo "ASIA_DOCKER_SOCKET_WRITABLE=NO"
+            fi
+          else
+            echo "ASIA_DOCKER_SOCKET=NOT_FOUND"
+          fi
+          if test -d /mnt/wsl/docker-desktop; then
+            echo "ASIA_WSL_DOCKER_MOUNT=PRESENT"
+          else
+            echo "ASIA_WSL_DOCKER_MOUNT=NOT_PRESENT"
+          fi
+          if test -n "${DOCKER_HOST:-}"; then
+            echo "ASIA_DOCKER_HOST_ENV=SET"
+          else
+            echo "ASIA_DOCKER_HOST_ENV=UNSET"
+          fi
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "ASIA_DOCKER_WSL_INTEGRATION=NOT_AVAILABLE"
+            exit 2
+          fi
+          if timeout 15s docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; then
+            echo "ASIA_DOCKER_RUNNER_SESSION=DIRECT_ACCESS"
+          elif timeout 20s sg docker -c "timeout 15s docker info --format '{{.ServerVersion}}' >/dev/null 2>&1" >/dev/null 2>&1; then
+            echo "ASIA_DOCKER_RUNNER_SESSION=GROUP_RELOGIN_REQUIRED"
+          else
+            echo "ASIA_DOCKER_WSL_INTEGRATION=ENGINE_UNREACHABLE"
+            exit 3
+          fi
+          echo "ASIA_DOCKER_CLIENT_PRESENT=YES"
+          echo "ASIA_DOCKER_WSL_INTEGRATION=PASS"
+          echo "ASIA_DOCKER_CONTAINER_EXECUTED=NO"
+      - name: Preflight local isolation before any approved application tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ASIA_ISOLATION_PREFLIGHT=START"
+          if command -v docker >/dev/null 2>&1; then
+            if timeout 20s docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; then
+              echo "ASIA_CONTAINER_ENGINE=DOCKER_DAEMON_AVAILABLE"
+              timeout 20s docker info --format 'ASIA_DOCKER_SECURITY={{.SecurityOptions}}'
+              timeout 20s docker images --format 'ASIA_DOCKER_IMAGE={{.Repository}}:{{.Tag}}' | head -n 8 || true
+            else
+              echo "ASIA_CONTAINER_ENGINE=DOCKER_CLI_ONLY_NO_DAEMON"
+            fi
+          elif command -v podman >/dev/null 2>&1; then
+            if podman info >/dev/null 2>&1; then
+              echo "ASIA_CONTAINER_ENGINE=PODMAN_AVAILABLE"
+            else
+              echo "ASIA_CONTAINER_ENGINE=PODMAN_UNAVAILABLE"
+            fi
+          else
+            echo "ASIA_CONTAINER_ENGINE=NOT_INSTALLED"
+          fi
+          if command -v unshare >/dev/null 2>&1 && unshare --user --map-root-user true >/dev/null 2>&1; then
+            echo "ASIA_USER_NAMESPACE=AVAILABLE"
+          else
+            echo "ASIA_USER_NAMESPACE=UNAVAILABLE"
+          fi
+          python3 - <<'PY'
+          import importlib.util
+          import sys
+          print("ASIA_PYTHON_VERSION="+sys.version.split()[0])
+          for dependency in ("pytest","httpx","psycopg","psycopg_pool"):
+              try:
+                  found = importlib.util.find_spec(dependency) is not None
+              except (ValueError, ModuleNotFoundError):
+                  found = False
+              print("ASIA_HOST_LIBRARY_"+dependency.upper()+"="+("PRESENT" if found else "MISSING"))
+          print("ASIA_PR_CODE_EXECUTED=NO")
+          PY
+      - name: Check unprivileged full-test sandbox options without checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in bwrap firejail proot chroot unshare; do
+            if command -v "$name" >/dev/null 2>&1; then
+              echo "ASIA_SANDBOX_TOOL_${name}=PRESENT"
+            else
+              echo "ASIA_SANDBOX_TOOL_${name}=MISSING"
+            fi
+          done
+          if unshare --user --map-root-user --mount --pid --net --fork true >/dev/null 2>&1; then
+            echo "ASIA_USER_MOUNT_PID_NET_NAMESPACE=AVAILABLE"
+          else
+            echo "ASIA_USER_MOUNT_PID_NET_NAMESPACE=UNAVAILABLE"
+          fi
+          if python3 - <<'PY'
+          import ensurepip
+          import venv
+          PY
+          then
+            echo "ASIA_ISOLATED_VENV_SUPPORT=AVAILABLE"
+          else
+            echo "ASIA_ISOLATED_VENV_SUPPORT=UNAVAILABLE"
+          fi
+          echo "ASIA_APPLICATION_CODE_EXECUTED=NO"
+      - name: Inspect six fixed official HTTPS listings with bounded curl
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          for source in hk_ha_works hk_ha_leasing hk_emsd_tenders hk_emsd_consultancy jp_jetro_national jp_jetro_local; do
+            case "$source" in
+              hk_ha_works) url="https://www.housingauthority.gov.hk/en/rss/tenders.xml" ;;
+              hk_ha_leasing) url="https://www.housingauthority.gov.hk/en/rss/tender-notices-and-awards.xml" ;;
+              hk_emsd_tenders) url="https://www.emsd.gov.hk/filemanager/tendernotice/en/tender_notices.xml" ;;
+              hk_emsd_consultancy) url="https://www.emsd.gov.hk/filemanager/tendernotice/en/consultancy.xml" ;;
+              jp_jetro_national) url="https://www.jetro.go.jp/en/database/procurement/national/list.html" ;;
+              jp_jetro_local) url="https://www.jetro.go.jp/en/database/procurement/local/list.html" ;;
+            esac
+            if status="$(curl --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 25 --max-filesize 1048576 --output "$tmp/$source" --write-out '%{http_code}' "$url" 2>/dev/null)"; then
+              bytes="$(wc -c < "$tmp/$source" | tr -d ' ')"
+              echo "ASIA_UPSTREAM_${source}=HTTP_${status};BYTES=${bytes}"
+              if [ "$status" != 200 ]; then rm -f "$tmp/$source"; fi
+            else
+              echo "ASIA_UPSTREAM_${source}=FETCH_FAILED;CURL_EXIT=$?"
+              rm -f "$tmp/$source"
+            fi
+          done
+          python3 - "$tmp" <<'PY'
+          import hashlib
+          from collections import Counter
+          import json
+          import re
+          import sqlite3
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          from urllib.parse import urlsplit
+          directory = Path(sys.argv[1])
+          rows = []
+          def accept(source, title, url, approved):
+              title = ' '.join((title or '').split())[:400]
+              url = (url or '').strip()
+              try:
+                  parsed = urlsplit(url)
+                  valid = parsed.scheme == 'https' and parsed.hostname in approved and not parsed.username and not parsed.password and not parsed.fragment
+              except ValueError:
+                  valid = False
+              if title and valid and not re.search(r'\b(?:contract awards?|tender awards?|awarded)\b', title, re.I):
+                  rows.append((source, hashlib.sha256(url.encode()).hexdigest()[:32], title, url))
+          for source in ('hk_ha_works','hk_ha_leasing','hk_emsd_tenders','hk_emsd_consultancy'):
+              path = directory/source
+              if not path.exists():
+                  print(f'ASIA_PROBE_{source}=NO_HTTP_200')
+                  continue
+              payload = path.read_bytes()
+              if b'<!DOCTYPE' in payload.upper() or b'<!ENTITY' in payload.upper():
+                  print(f'ASIA_PROBE_{source}=FORBIDDEN_XML')
+                  continue
+              try:
+                  root = ET.fromstring(payload)
+              except ET.ParseError:
+                  print(f'ASIA_PROBE_{source}=INVALID_XML')
+                  continue
+              count_before = len(rows)
+              namespace = '{http://www.w3.org/2005/Atom}'
+              if root.tag == 'rss':
+                  items = root.findall('./channel/item')
+                  for item in items[:50]:
+                      accept(source, item.findtext('title'), item.findtext('link'), ('www.housingauthority.gov.hk','www.emsd.gov.hk'))
+              elif root.tag == namespace+'feed':
+                  items = root.findall(f'./{namespace}entry')
+                  for item in items[:50]:
+                      link = next((l.get('href') for l in item.findall(f'{namespace}link') if l.get('rel','alternate') == 'alternate'), None)
+                      accept(source, item.findtext(namespace+'title'), link, ('www.housingauthority.gov.hk','www.emsd.gov.hk'))
+              else:
+                  print(f'ASIA_PROBE_{source}=UNSUPPORTED_XML_ROOT')
+                  continue
+              # Classify links by public hostname and scheme only (no raw URLs,
+              # full titles, tokens, response bodies or query strings in logs).
+              shape = Counter()
+              hosts = Counter()
+              nonempty_titles = 0
+              for item in items[:50]:
+                  link = item.findtext('link') if root.tag == 'rss' else next(
+                      (l.get('href') for l in item.findall(f'{namespace}link') if l.get('rel','alternate') == 'alternate'), None)
+                  title = item.findtext('title') if root.tag == 'rss' else item.findtext(namespace+'title')
+                  nonempty_titles += bool((title or '').strip())
+                  if not link:
+                      shape['NO_LINK'] += 1
+                  else:
+                      parsed = urlsplit(link.strip())
+                      shape[parsed.scheme.lower() or 'RELATIVE'] += 1
+                      hosts[parsed.hostname or '(relative)'] += 1
+              print(f'ASIA_RSS_SHAPES_{source}=' + json.dumps({'schemes':dict(shape),'hosts':dict(hosts),'titled':nonempty_titles},sort_keys=True))
+              print(f'ASIA_PROBE_{source}=XML_ITEMS_{len(items)};HTTPS_ITEM_LINKS_{len(rows)-count_before}')
+          for source, section in (('jp_jetro_national','national'),('jp_jetro_local','local')):
+              path = directory/source
+              if not path.exists():
+                  print(f'ASIA_PROBE_{source}=NO_HTTP_200')
+                  continue
+              html = path.read_text(encoding='utf-8',errors='replace')
+              if section == 'national':
+                  pattern = r'/en/database/procurement/national/articles/[0-9]+/[0-9]+\.html'
+              else:
+                  pattern = r'/en/database/procurement/local/articles/[0-9a-f]{16}\.html'
+              matches = set(re.findall(pattern, html))
+              print(f'ASIA_PROBE_{source}=HTML_BYTES_{len(html.encode())};ARTICLE_LINKS_{len(matches)}')
+              for path in sorted(matches)[:50]:
+                  accept(source, 'Official JETRO article link (title unverified)', 'https://www.jetro.go.jp'+path, ('www.jetro.go.jp',))
+          db=sqlite3.connect(':memory:')
+          db.execute('CREATE TABLE public_probe (source TEXT, identity TEXT, title TEXT, url TEXT, UNIQUE(source,identity))')
+          db.executemany('INSERT OR IGNORE INTO public_probe VALUES(?,?,?,?)', rows)
+          for source in ('hk_ha_works','hk_ha_leasing','hk_emsd_tenders','hk_emsd_consultancy','jp_jetro_national','jp_jetro_local'):
+              saved=db.execute('SELECT count(*) FROM public_probe WHERE source=?',(source,)).fetchone()[0]
+              searched=db.execute('SELECT count(*) FROM public_probe WHERE source=? AND title LIKE ?', (source,'%'+('Official' if source.startswith('jp_') else '')+'%')).fetchone()[0]
+              print(f'ASIA_INDEPENDENT_PROBE_{source}=STORED_{saved};QUERY_{searched}')
+          print('ASIA_PROBE_NOT_APPLICATION_WORKER_PROOF=YES')
+          print('PRODUCTION_CHANGED=NO')
+          PY
+
+      - name: Probe alternative official tender RSS including Japan GSI
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          for source in jp_gsi_goods jp_gsi_survey hk_dsd_current hk_cedd_tenders; do
+            case "$source" in
+              jp_gsi_goods) url="https://www.gsi.go.jp/nyusatu1.rdf" ;;
+              jp_gsi_survey) url="https://www.gsi.go.jp/nyusatu2.rdf" ;;
+              hk_dsd_current) url="https://www.dsd.gov.hk/Menu/EN/RSS/Current_Tenders.xml" ;;
+              hk_cedd_tenders) url="https://www.cedd.gov.hk/eng/rss/tender_notices_rss.xml" ;;
+            esac
+            if code="$(curl --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 25 --max-filesize 1048576 --output "$tmp/$source" --write-out '%{http_code}' "$url" 2>/dev/null)"; then
+              echo "ASIA_CANDIDATE_$source=HTTP_$code;BYTES_$(wc -c < "$tmp/$source" | tr -d ' ')"
+              test "$code" = "200" || rm -f "$tmp/$source"
+            else
+              echo "ASIA_CANDIDATE_$source=FETCH_FAILED;CURL_EXIT=$?"
+              rm -f "$tmp/$source"
+            fi
+          done
+          python3 - "$tmp" <<'PY'
+          from collections import Counter
+          import json
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          from urllib.parse import urlsplit
+          directory=Path(sys.argv[1])
+          atom='{http://www.w3.org/2005/Atom}'
+          rdf='{http://www.w3.org/1999/02/22-rdf-syntax-ns#}'
+          rss1='{http://purl.org/rss/1.0/}'
+          for source in ('jp_gsi_goods','jp_gsi_survey','hk_dsd_current','hk_cedd_tenders'):
+              path=directory/source
+              if not path.exists():
+                  print('ASIA_CANDIDATE_XML_'+source+'=NO_HTTP_200')
+                  continue
+              payload=path.read_bytes()
+              if b'<!DOCTYPE' in payload.upper() or b'<!ENTITY' in payload.upper():
+                  print('ASIA_CANDIDATE_XML_'+source+'=BLOCKED_DTD')
+                  continue
+              try:
+                  root=ET.fromstring(payload)
+              except ET.ParseError:
+                  print('ASIA_CANDIDATE_XML_'+source+'=MALFORMED')
+                  continue
+              if root.tag == 'rss':
+                  items=[(x.findtext('title'),x.findtext('link')) for x in root.findall('./channel/item')]
+              elif root.tag == rdf+'RDF':
+                  items=[(x.findtext(rss1+'title'),x.findtext(rss1+'link')) for x in root.findall(rss1+'item')]
+              elif root.tag == atom+'feed':
+                  items=[(x.findtext(atom+'title'),next((z.get('href') for z in x.findall(atom+'link') if z.get('rel','alternate')=='alternate'),None)) for x in root.findall(atom+'entry')]
+              else:
+                  print('ASIA_CANDIDATE_XML_'+source+'=UNSUPPORTED_FORMAT')
+                  continue
+              counts=Counter()
+              hosts=Counter()
+              for title,link in items[:80]:
+                  if not title or not link:
+                      counts['MISSING_TITLE_OR_LINK']+=1
+                      continue
+                  try:
+                      parts=urlsplit(link.strip())
+                  except ValueError:
+                      counts['INVALID_URL']+=1
+                      continue
+                  counts[parts.scheme or 'RELATIVE']+=1
+                  hosts[parts.hostname or '(relative)']+=1
+              print('ASIA_CANDIDATE_XML_'+source+'='+json.dumps({'records':len(items),'scheme':dict(counts),'host':dict(hosts)},sort_keys=True))
+          print('ASIA_CANDIDATES_ARE_DISCOVERY_ONLY=YES')
+          print('PRODUCTION_CHANGED=NO')
+          PY
+
+      - name: Six public RSS to isolated SQLite and keyword search (not app integration)
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          for source in hk_ha_works hk_ha_leasing hk_emsd_tenders hk_emsd_consultancy hk_dsd_current hk_cedd_tenders; do
+            case "$source" in
+              hk_ha_works) url="https://www.housingauthority.gov.hk/en/rss/tenders.xml" ;;
+              hk_ha_leasing) url="https://www.housingauthority.gov.hk/en/rss/tender-notices-and-awards.xml" ;;
+              hk_emsd_tenders) url="https://www.emsd.gov.hk/filemanager/tendernotice/en/tender_notices.xml" ;;
+              hk_emsd_consultancy) url="https://www.emsd.gov.hk/filemanager/tendernotice/en/consultancy.xml" ;;
+              hk_dsd_current) url="https://www.dsd.gov.hk/Menu/EN/RSS/Current_Tenders.xml" ;;
+              hk_cedd_tenders) url="https://www.cedd.gov.hk/eng/rss/tender_notices_rss.xml" ;;
+            esac
+            status="$(curl --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 25 --max-filesize 1048576 --output "$tmp/$source" --write-out '%{http_code}' "$url")"
+            if test "$status" != 200; then
+              echo "ASIA_LIVE_GATE_${source}=HTTP_${status}"
+              exit 1
+            fi
+          done
+          python3 - "$tmp" <<'PY'
+          import hashlib
+          import re
+          import sqlite3
+          import sys
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          from urllib.parse import urljoin,urlsplit
+          root=Path(sys.argv[1])
+          official={
+            'hk_ha_works':('https://www.housingauthority.gov.hk/en/rss/tenders.xml','www.housingauthority.gov.hk'),
+            'hk_ha_leasing':('https://www.housingauthority.gov.hk/en/rss/tender-notices-and-awards.xml','www.housingauthority.gov.hk'),
+            'hk_emsd_tenders':('https://www.emsd.gov.hk/filemanager/tendernotice/en/tender_notices.xml','www.emsd.gov.hk'),
+            'hk_emsd_consultancy':('https://www.emsd.gov.hk/filemanager/tendernotice/en/consultancy.xml','www.emsd.gov.hk'),
+            'hk_dsd_current':('https://www.dsd.gov.hk/Menu/EN/RSS/Current_Tenders.xml','www.dsd.gov.hk'),
+            'hk_cedd_tenders':('https://www.cedd.gov.hk/eng/rss/tender_notices_rss.xml','www.cedd.gov.hk'),
+          }
+          def normalize(link,base,host):
+              if not link or any(ch.isspace() or ord(ch)<32 or ch=='\\' for ch in link):
+                  return None
+              if re.search(r'%(?:0[0-9a-f]|1[0-9a-f]|7f)',link,re.I):
+                  return None
+              try:
+                  parsed=urlsplit(urljoin(base,link))
+                  if parsed.hostname!=host or parsed.username or parsed.password or parsed.fragment or parsed.port not in (None,443):
+                      return None
+                  if parsed.scheme=='http' and parsed.port is None:
+                      normalized='https://'+parsed.netloc+parsed.path+('?' + parsed.query if parsed.query else '')
+                  elif parsed.scheme=='https':
+                      normalized=parsed.geturl()
+                  else:
+                      return None
+                  return normalized if len(normalized)<=2000 else None
+              except ValueError:
+                  return None
+          conn=sqlite3.connect(root/'asia-six.sqlite')
+          conn.execute('CREATE TABLE opportunities (source TEXT, external_id TEXT, title TEXT, url TEXT, PRIMARY KEY(source,external_id))')
+          passed=0
+          for source,(base,host) in official.items():
+              payload=(root/source).read_bytes()
+              if len(payload)>1048576 or b'<!DOCTYPE' in payload.upper() or b'<!ENTITY' in payload.upper():
+                  print('ASIA_LIVE_GATE_'+source+'=UNSAFE_XML')
+                  continue
+              try:
+                  doc=ET.fromstring(payload)
+              except ET.ParseError:
+                  print('ASIA_LIVE_GATE_'+source+'=MALFORMED_XML')
+                  continue
+              atom='{http://www.w3.org/2005/Atom}'
+              if doc.tag=='rss':
+                  items=[(x.findtext('title'),x.findtext('link')) for x in doc.findall('./channel/item')]
+              elif doc.tag==atom+'feed':
+                  items=[(x.findtext(atom+'title'),next((link.get('href') for link in x.findall(atom+'link') if link.get('rel','alternate')=='alternate'),None)) for x in doc.findall(atom+'entry')]
+              else:
+                  print('ASIA_LIVE_GATE_'+source+'=UNSUPPORTED_XML')
+                  continue
+              accepted=0
+              searched=0
+              for title,raw_url in items[:80]:
+                  title=' '.join((title or '').split())[:1000]
+                  url=normalize(raw_url,base,host)
+                  if not title or not url or re.search(r'\b(?:contract awards?|tender awards?|awarded)\b',title,re.I):
+                      continue
+                  identity=hashlib.sha256(url.encode()).hexdigest()[:40]
+                  conn.execute('INSERT OR IGNORE INTO opportunities VALUES(?,?,?,?)',(source,identity,title,url))
+                  token=next(iter(re.findall(r'[^\W_]{3,}',title,flags=re.UNICODE)),title[:5])
+                  found=conn.execute('SELECT 1 FROM opportunities WHERE source=? AND external_id=? AND title LIKE ? AND url=?',(source,identity,'%'+token+'%',url)).fetchone()
+                  accepted+=1
+                  searched+=bool(found)
+              conn.commit()
+              saved=conn.execute('SELECT COUNT(*) FROM opportunities WHERE source=?',(source,)).fetchone()[0]
+              correct=saved>0 and searched==accepted
+              print('ASIA_LIVE_GATE_'+source+f'=NORM_{accepted};STORED_{saved};QUERIED_{searched};'+('PASS' if correct else 'FAIL'))
+              passed+=bool(correct)
+          print(f'ASIA_TRUSTED_6_LIVE_SQLITE_QUERY_VERIFIED={passed}/6')
+          print('APP_CONNECTOR_WORKER_NOT_EXECUTED=YES')
+          print('PRODUCTION_CHANGED=NO')
+          if passed!=6:
+              raise SystemExit(3)
+          PY

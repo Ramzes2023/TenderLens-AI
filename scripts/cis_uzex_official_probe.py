@@ -89,7 +89,11 @@ def inspect_json(raw: bytes) -> dict:
     if not isinstance(rows, list):
         return {"verified": False, "reason": "unexpected_schema"}
     verified = sum(validate_notice(item) for item in rows[:MAX_RECORDS])
+    # Schema-only diagnostics: never print customer, tender, tax or personal values.
+    sample = next((item for item in rows[:MAX_RECORDS] if isinstance(item, dict)), {})
+    field_types = {key: type(value).__name__ for key, value in sorted(sample.items())[:60]}
     return {
+        "public_schema_types": field_types,
         "verified": verified > 0,
         "kind": "official_uzex_public_tender_list",
         "rows_seen": min(len(rows), MAX_RECORDS),

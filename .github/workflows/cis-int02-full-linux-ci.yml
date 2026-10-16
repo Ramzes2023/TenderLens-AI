@@ -1,0 +1,42 @@
+name: CIS INT-02 full Linux suite on current mainline integration
+on:
+  push:
+    branches:
+      - integration/cis-am-tj-mainline-20261016
+    paths:
+      - ".github/workflows/cis-int02-full-linux-ci.yml"
+      - "scripts/ci_cis_mainline_linux_full_suite.sh"
+      - "app/sources/**"
+      - "app/jobs/**"
+      - "app/database/**"
+      - "tests/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: valyqon-cis-int02-full-linux
+  cancel-in-progress: true
+
+jobs:
+  trusted-full-suite:
+    name: CIS INT-02 full Linux integration tests
+    runs-on: valyqon-int
+    timeout-minutes: 50
+    steps:
+      - name: Verify designated owner-controlled runner and local Docker socket
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${RUNNER_NAME:-}" == "VALYQON-INT-02" ]]
+          [[ "${GITHUB_EVENT_NAME:-}" == "push" ]]
+          [[ "${GITHUB_REF:-}" == "refs/heads/integration/cis-am-tj-mainline-20261016" ]]
+          [[ -w /var/run/docker.sock ]]
+          echo "CIS_INT02_FULL_LINUX_TRUSTED_CONTEXT=VERIFIED"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Restore checksum-pinned references and execute entire Linux CI test suite in disposable container
+        shell: bash
+        timeout-minutes: 45
+        run: bash scripts/ci_cis_mainline_linux_full_suite.sh

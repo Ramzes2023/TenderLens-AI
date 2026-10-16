@@ -1,0 +1,93 @@
+name: RU-03 trusted read-only source diagnosis
+
+# Trusted, branch-scoped, explicit push workflow. No PR code or repository checkout.
+on:
+  push:
+    branches:
+      - ops/ru3-trusted-source-probe-20261016
+    paths:
+      - .github/workflows/ru03-trusted-diagnostics.yml
+
+permissions: {}
+
+jobs:
+  check-ru3-public-https:
+    if: github.repository == 'Ramzes2023/TenderLens-AI' && github.ref == 'refs/heads/ops/ru3-trusted-source-probe-20261016'
+    runs-on: valyqon-ru3
+    timeout-minutes: 6
+    steps:
+      - name: Verify correct third WSL host
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = "VALYQON-ASIA-03"
+          test "$(id -un)" = "valyqon"
+          test "$(uname -s)" = "Linux"
+          if mountpoint -q /mnt/c; then
+            echo "RU3_SECURITY_WINDOWS_DRIVE_MOUNTED=YES"
+            exit 1
+          fi
+          echo "RU3_VERIFIED_RUNNER=PASS"
+      - name: Probe four explicit public Russian source URLs without TLS bypass
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          for source in eis44 eis223 b2b mikroton; do
+            case "$source" in
+              eis44) url='https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on' ;;
+              eis223) url='https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz223=on' ;;
+              b2b) url='https://www.b2b-center.ru/search/' ;;
+              mikroton) url='https://tender.mt52.ru/api/v1/tenders?page=1&page_size=10' ;;
+            esac
+            path="$tmp/$source"
+            status=none
+            mime=none
+            if result="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 8 --max-time 25 --max-filesize 2097152 --output "$path" --write-out '%{http_code} %{content_type}' "$url" 2>"$tmp/error")"; then
+              status="${result%% *}"
+              mime="${result#* }"
+              size="$(wc -c < "$path" | tr -d ' ')"
+              printf 'RU3_%s_HTTP=%s MIME=%s BYTES=%s\n' "$source" "$status" "$mime" "$size"
+              if test "$source" = b2b && test "$status" = 200; then
+                python3 - "$path" <<'PY'
+import sys
+from html.parser import HTMLParser
+class Shape(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.listitems = 0
+        self.demands = 0
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == 'div' and a.get('itemtype') == 'https://schema.org/ListItem':
+            self.listitems += 1
+        if a.get('itemtype') == 'https://schema.org/Demand':
+            self.demands += 1
+p = Shape()
+with open(sys.argv[1], encoding='utf-8-sig') as f:
+    for line in f:
+        p.feed(line)
+print(f'RU3_B2B_HTML_SHAPES=LISTITEMS:{p.listitems},DEMANDS:{p.demands}')
+PY
+              fi
+            else
+              rc="$?"
+              printf 'RU3_%s_BLOCKED=CURL_EXIT_%s\n' "$source" "$rc"
+            fi
+          done
+          echo 'RU3_REAL_TENDERS_DB_QUERY_VERIFIED=NO'
+          echo 'PRODUCTION_CHANGED=NO'
+      - name: Diagnose source TLS verifier metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          temp="$(mktemp)"
+          trap 'rm -f "$temp"' EXIT
+          if timeout 15s openssl s_client -connect zakupki.gov.ru:443 -servername zakupki.gov.ru -showcerts </dev/null >"$temp" 2>/dev/null; then
+            echo 'RU3_EIS_TLS_HANDSHAKE=CONNECTED'
+          else
+            echo 'RU3_EIS_TLS_HANDSHAKE=FAILED'
+          fi
+          grep -E '^Verify return code:' "$temp" || true
+          echo 'RU3_EIS_TLS_CERT_NOT_ADDED_TO_TRUST_STORE=YES'

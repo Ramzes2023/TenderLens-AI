@@ -11,6 +11,7 @@ from .b2b_center import B2BCenterSource
 from .tektorg_public_html import TekTorgPublicSource
 from .canada_buys_dataset import CanadaBuysDatasetSource
 from .eis_rss import EisRssSource, SourceError
+from .eis_44_public_html import Eis44PublicHtmlSource
 from .eis_223_rss import Eis223RssSource
 from .india_cppp import IndiaCpppSource
 from .kz_goszakup import KazakhstanGoszakupApiSource
@@ -502,6 +503,21 @@ def build_source_catalog(
             homepage_url="https://www.tektorg.ru/223-fz/procedures",
             official=False,
             enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    if settings.eis_44_html_enabled:
+        registry.register(SourceRegistration(
+            key="eis_44_html",
+            display_name="EIS 44-FZ — official HTML search list (independent detail pending)",
+            source=Eis44PublicHtmlSource(
+                ca_bundle_file=settings.ca_bundle_file,
+                timeout=min(timeout, 30),
+            ),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",), languages=("ru",),
+            homepage_url="https://zakupki.gov.ru/",
+            official=True, enabled=True,
             capabilities=SourceCapabilities(),
         ))
 

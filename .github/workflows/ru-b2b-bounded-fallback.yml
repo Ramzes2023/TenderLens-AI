@@ -7,6 +7,7 @@ on:
       - app/sources/ingestion.py
       - tests/test_b2b_foreign_aggregate.py
       - scripts/ci_ru_b2b_real_worker.py
+      - scripts/ci_ru_b2b_user_scoring.py
       - scripts/ci_ru_leased_connector.py
       - .github/workflows/ru-b2b-bounded-fallback.yml
   pull_request:
@@ -16,6 +17,7 @@ on:
       - app/sources/ingestion.py
       - tests/test_b2b_foreign_aggregate.py
       - scripts/ci_ru_b2b_real_worker.py
+      - scripts/ci_ru_b2b_user_scoring.py
       - scripts/ci_ru_leased_connector.py
       - .github/workflows/ru-b2b-bounded-fallback.yml
 permissions:

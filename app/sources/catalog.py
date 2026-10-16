@@ -13,6 +13,7 @@ from .asia_public import ASIA_RSS_FEEDS, AsiaPublicSource
 from .jp_jetro_bid_rss import JetroBidRssSource, RSS_URL as JETRO_BID_RSS_URL
 from .hk_hyd_tenders import HighwaysTendersSource, RSS_URL as HYD_TENDERS_RSS_URL
 from .sg_gebiz_rss import FEEDS as SG_GEBIZ_RSS_FEEDS, SingaporeGeBizRssSource
+from .hk_hkma_tender import HKMATenderSource, API_URL as HKMA_TENDER_API_URL
 from .austender_rss import AusTenderRssSource
 from .b2b_center import B2BCenterSource
 from .tektorg_public_html import TekTorgPublicSource
@@ -535,6 +536,18 @@ def build_source_catalog(
                 homepage_url=url, official=True, enabled=True,
                 capabilities=SourceCapabilities(),
             ))
+
+    # Independent Hong Kong Monetary Authority government Gazette tenders API.
+    # Tender invitations only (segment=tender), NOT the award/notice segment.
+    if os.environ.get("VALYQON_ASIA_HKMA_ENABLED", "").strip() == "1":
+        registry.register(SourceRegistration(
+            key="hk_hkma_tender",
+            display_name="Hong Kong Monetary Authority — official tender invitations",
+            source=HKMATenderSource(timeout=min(timeout, 30.0)),
+            transport=SourceTransport.API, jurisdictions=("HK",),
+            languages=("en",), homepage_url=HKMA_TENDER_API_URL,
+            official=True, enabled=True, capabilities=SourceCapabilities(),
+        ))
 
     # Russian connectors are opt-in. Do not enable unverified live adapters.
     if settings.eis_223_configured:

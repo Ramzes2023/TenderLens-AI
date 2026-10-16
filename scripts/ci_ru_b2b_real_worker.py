@@ -9,20 +9,15 @@ import asyncio
 import json
 import tempfile
 from pathlib import Path
-from types import SimpleNamespace
 
 from app.database.backend import Database
 from app.database.config import DatabaseSettings
-from app.jobs.models import JobScope
 from app.monitoring.config import MonitoringSettings
 from app.sources.catalog import build_source_catalog
-from app.sources.ingestion import (
-    ConnectorSyncHandler,
-    connector_version,
-    sync_window,
-)
+from app.sources.ingestion import connector_version
 from app.sources.opportunities import OpportunityRepository
 from app.sources.snapshots import snapshot_catalog
+from scripts.ci_ru_leased_connector import run_leased_connector
 
 SOURCE = "b2b_center"
 MAX_RECORDS = 10
@@ -51,20 +46,7 @@ def acceptance() -> dict[str, int | bool]:
         try:
             store = OpportunityRepository(db)
             store.initialize()
-            handler = ConnectorSyncHandler(catalog, store, max_records=MAX_RECORDS)
-            context = SimpleNamespace(
-                job=SimpleNamespace(scope=JobScope()),
-                should_stop=False,
-            )
-            payload = {
-                "schema": 1,
-                "source_id": SOURCE,
-                "sync_window": sync_window(),
-                "connector_version": connector_version(SOURCE),
-            }
-
-            # Actual application ingestion handler, not direct repo.upsert().
-            report = handler(context, payload)
+            report = run_leased_connector(db, catalog, store, SOURCE, max_records=MAX_RECORDS)
             if (
                 report["fetched_count"] < 1
                 or report["accepted_count"] != report["fetched_count"]

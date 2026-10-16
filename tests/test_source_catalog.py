@@ -116,10 +116,12 @@ def test_catalog_registers_all_phase23_sources(
         "tj_eprocurement",
         "uz_uzex",
         "kg_gov_legacy",
+        "md_achizitii",
     )
 
     assert not catalog.registry.get("uz_uzex").enabled
     assert not catalog.registry.get("kg_gov_legacy").enabled
+    assert not catalog.registry.get("md_achizitii").enabled
 
     assert catalog.enabled_keys == (
         "eis",

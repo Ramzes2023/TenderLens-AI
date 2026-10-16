@@ -1,0 +1,32 @@
+name: CIS Moldova accredited achizitii marketplace live acceptance
+
+on:
+  push:
+    branches:
+      - integration/cis-md-achizitii-certified-20261016
+    paths:
+      - scripts/ci_cis_md_achizitii_live.py
+      - .github/workflows/cis-md-achizitii-public-live.yml
+  pull_request:
+    paths:
+      - scripts/ci_cis_md_achizitii_live.py
+      - .github/workflows/cis-md-achizitii-public-live.yml
+
+permissions:
+  contents: read
+
+jobs:
+  md-platform-live-official-notices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Require real public Moldova tender cards and full OCID detail page
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python -B scripts/ci_cis_md_achizitii_live.py

@@ -107,3 +107,49 @@ def test_real_adapter_public_request_contract_offline(monkeypatch):
 def test_invalid_limit_rejected(limit):
     with pytest.raises(ValueError):
         asyncio.run(TekTorgPublicSource().fetch(limit))
+
+def test_drops_stale_public_detail_but_keeps_independently_verified_notice(monkeypatch):
+    first = "https://www.tektorg.ru/223-fz/procedures/20000521"
+    second = "https://www.tektorg.ru/223-fz/procedures/20000522"
+    pair = listing() + listing(title="Поставка кабелей", link="/223-fz/procedures/20000522")
+
+    class FakeClient:
+        async def get(self, url):
+            if url == LIST_URL:
+                body = pair
+            elif url == first:
+                body = detail(title="Некорректная карточка", identity="20000521")
+            elif url == second:
+                body = detail(title="Поставка кабелей", identity="20000522")
+            else:
+                raise AssertionError("Unexpected URL")
+            return SimpleNamespace(
+                content=body, headers={"content-type": "text/html"},
+                raise_for_status=lambda: None,
+            )
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        yield FakeClient()
+
+    import app.sources.tektorg_public_html as module
+    monkeypatch.setattr(module, "source_client", client)
+    notices = asyncio.run(TekTorgPublicSource(timeout=15).fetch(2))
+    assert [n.external_id for n in notices] == ["20000522"]
+
+
+def test_all_stale_tektorg_details_fail_closed(monkeypatch):
+    class FakeClient:
+        async def get(self, url):
+            return SimpleNamespace(
+                content=listing() if url == LIST_URL else detail(title="Не совпадает"),
+                headers={"content-type": "text/html"},
+                raise_for_status=lambda: None,
+            )
+    @asynccontextmanager
+    async def client(**kwargs):
+        yield FakeClient()
+    import app.sources.tektorg_public_html as module
+    monkeypatch.setattr(module, "source_client", client)
+    with pytest.raises(ValueError, match="No independently verified"):
+        asyncio.run(TekTorgPublicSource(timeout=15).fetch(1))

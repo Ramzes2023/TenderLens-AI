@@ -1,0 +1,32 @@
+name: CIS Kazakhstan official public HTML evidence
+
+on:
+  push:
+    branches:
+      - research/cis-kz-public-gov-listing-20261016
+    paths:
+      - scripts/ci_cis_kz_public_html_probe.py
+      - .github/workflows/cis-kz-public-html-live.yml
+  pull_request:
+    paths:
+      - scripts/ci_cis_kz_public_html_probe.py
+      - .github/workflows/cis-kz-public-html-live.yml
+
+permissions:
+  contents: read
+
+jobs:
+  official-kz-html-list-detail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Require real Kazakhstan official announcements plus usable detail
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -B scripts/ci_cis_kz_public_html_probe.py

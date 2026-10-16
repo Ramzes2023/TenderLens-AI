@@ -1,0 +1,29 @@
+name: RU hosted pinned Roseltorg real public worker acceptance
+on:
+  push:
+    branches: [diag/ru-gpb-official-html-20261016]
+    paths: [.github/workflows/ru-hosted-roseltorg-pinned-live.yml]
+permissions:
+  contents: read
+jobs:
+  roseltorg-hosted-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 0e8a942fdcbc6671f576746ebcdc8e938a98ac0b
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Real Roseltorg source to bounded durable worker and temporary searchable DB
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 0e8a942fdcbc6671f576746ebcdc8e938a98ac0b
+          python -m pip install -r requirements-dev.txt >/dev/null
+          python -m pytest -q tests/test_ru_roseltorg_public.py
+          python -B -m scripts.ci_ru_roseltorg_real_worker
+          echo 'RU_HOSTED_ROSELTORG_REAL_WORKER=PASS'
+          echo 'PRODUCTION_CHANGED=NO'

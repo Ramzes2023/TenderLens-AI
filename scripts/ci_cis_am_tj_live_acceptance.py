@@ -9,6 +9,7 @@ import argparse
 import asyncio
 import json
 import tempfile
+import time
 from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -52,14 +53,30 @@ def verify(source_id):
             claimable = service.enqueue(source_id)
             handlers = HandlerRegistry()
             handlers.register(JOB_TYPE, ConnectorSyncHandler(catalog, notices, max_records=20))
-            if not Worker(jobs, handlers, job_types=(JOB_TYPE,)).run_once():
-                raise AssertionError("No source job claimed by live worker")
+            # Respect the durable queue's *existing* bounded three-attempt
+            # retry policy. Transient official HTTPS failures may recover a few
+            # seconds later; do not fabricate or accept any missing records.
+            # Permanent source/schema/storage failures must remain red.
+            final = None
+            for attempt in range(3):
+                if not Worker(jobs, handlers, job_types=(JOB_TYPE,)).run_once():
+                    raise AssertionError("No source job claimed by live worker")
+                final = jobs.get(claimable.id, scope=SYSTEM_SCOPE)
+                if final is None or final.state == "succeeded":
+                    break
+                if (final.state != "queued" or final.failure_code != "handler_error"
+                        or final.attempt_count >= final.max_attempts or attempt == 2):
+                    break
+                # The repository stores microsecond UTC availability. Wait only
+                # until its real retry slot; never backdate or bypass the lease.
+                wait = final.available_at / 1_000_000 - time.time()
+                time.sleep(min(4.0, max(0.1, wait + 0.15)))
 
-            final = jobs.get(claimable.id, scope=SYSTEM_SCOPE)
             if final is None or final.state != "succeeded" or not isinstance(final.result, dict):
                 diagnostics = {"source": source_id, "passed": False,
                                "failed_at": "lease_or_live_acquisition",
                                "job_state": final.state if final else "missing",
+                               "attempts": final.attempt_count if final else 0,
                                "safe_failure_code": final.failure_code if final else None}
                 # A one-notice direct official HTTPS probe diagnoses transport
                 # versus HTML schema without logging a response, URL query,

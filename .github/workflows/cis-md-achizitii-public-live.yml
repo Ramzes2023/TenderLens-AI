@@ -5,10 +5,20 @@ on:
     branches:
       - integration/cis-md-achizitii-certified-20261016
     paths:
+      - app/sources/md_achizitii.py
+      - app/sources/catalog.py
+      - app/sources/ingestion.py
+      - scripts/ci_cis_md_achizitii_live_acceptance.py
+      - tests/test_cis_md_achizitii.py
       - scripts/ci_cis_md_achizitii_live.py
       - .github/workflows/cis-md-achizitii-public-live.yml
   pull_request:
     paths:
+      - app/sources/md_achizitii.py
+      - app/sources/catalog.py
+      - app/sources/ingestion.py
+      - scripts/ci_cis_md_achizitii_live_acceptance.py
+      - tests/test_cis_md_achizitii.py
       - scripts/ci_cis_md_achizitii_live.py
       - .github/workflows/cis-md-achizitii-public-live.yml
 
@@ -30,3 +40,40 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python -B scripts/ci_cis_md_achizitii_live.py
+
+  md-strict-offline-normalization:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install application/parser dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Strict public Moldova OCID, buyer, amount, date normalization
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -B -m unittest discover -s tests -p test_cis_md_achizitii.py -v
+
+  md-real-marketplace-worker-search:
+    needs: [md-platform-live-official-notices, md-strict-offline-normalization]
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install real SQLite and job test dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Verify actual HTTPS -> leased worker -> disposable SQLite -> search
+        timeout-minutes: 4
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHON_DOTENV_DISABLED: '1'
+        run: python -B -m scripts.ci_cis_md_achizitii_live_acceptance --source md_achizitii

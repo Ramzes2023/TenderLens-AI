@@ -32,6 +32,7 @@ HOSTS = {
     'b2b_center': frozenset({'www.b2b-center.ru'}),
     'tektorg': frozenset({'www.tektorg.ru'}),
     'gpb_etp_public': frozenset({'etpgpb.ru'}),
+    'roseltorg_public': frozenset({'www.roseltorg.ru'}),
     'eis_223': frozenset({'zakupki.gov.ru'}),
     'eis_44_html': frozenset({'zakupki.gov.ru'}),
     'eis': frozenset({'zakupki.gov.ru', 'www.zakupki.gov.ru'}),
@@ -149,6 +150,7 @@ class ConnectorSyncHandler:
                          else 2 if source_id in {'jp_jetro_national', 'jp_jetro_local'}
                          else min(self.max_records, 5) + 1 if source_id == 'tektorg'
                          else 4 if source_id == 'gpb_etp_public'
+                         else min(self.max_records, 3) + 1 if source_id == 'roseltorg_public'
                          else 2 if source_id == 'mikroton_tender'
                          else 1)
         async def fetch():

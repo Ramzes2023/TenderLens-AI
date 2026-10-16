@@ -1,4 +1,4 @@
-name: CIS trusted self-hosted runner diagnostic
+name: CIS INT-02 trusted self-hosted runner diagnostic
 
 # This is an OWNER-CONTROLLED push branch, NEVER pull_request or pull_request_target.
 # No checkout or untrusted repository code runs in this diagnostic.
@@ -18,14 +18,14 @@ concurrency:
 jobs:
   inspect-runner:
     name: Trusted runner environment only (no PR code)
-    runs-on: [self-hosted]
+    runs-on: [self-hosted, Linux, X64, valyqon-int]
     timeout-minutes: 5
     steps:
       - name: Verify Linux tools without checkout or secrets
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${RUNNER_NAME:-}" != "VALYQON-RU-01" ]]; then
+          if [[ "${RUNNER_NAME:-}" != "VALYQON-INT-02" ]]; then
             echo "CIS_RUNNER_PROBE=UNEXPECTED_RUNNER"
             exit 12
           fi

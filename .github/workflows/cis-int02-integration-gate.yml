@@ -35,7 +35,21 @@ jobs:
           set -euo pipefail
           [[ "${RUNNER_NAME:-}" == "VALYQON-INT-02" ]]
           [[ -w /var/run/docker.sock ]]
-          timeout 15s docker info --format '{{.ServerVersion}}'
+          # Docker Desktop / WSL sometimes needs extra time to answer an
+          # otherwise valid local socket under parallel runner workload.
+          # Still fail closed if the real Engine cannot be verified.
+          ready=0
+          for attempt in 1 2 3; do
+            if timeout 35s docker info --format '{{.ServerVersion}}'; then
+              ready=1
+              break
+            fi
+            sleep 3
+          done
+          if [[ "$ready" != 1 ]]; then
+            echo "::error::INT-02 Docker Engine did not respond to three bounded requests"
+            exit 1
+          fi
           echo "CIS_INT02_RELEASE_PREREQUISITES=PASS"
 
   postgres16:

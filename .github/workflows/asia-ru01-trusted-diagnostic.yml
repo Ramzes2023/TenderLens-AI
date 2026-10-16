@@ -73,7 +73,7 @@ jobs:
                   valid = parsed.scheme == 'https' and parsed.hostname in approved and not parsed.username and not parsed.password and not parsed.fragment
               except ValueError:
                   valid = False
-              if title and valid and not re.search(r'\\b(?:contract awards?|tender awards?|awarded)\\b', title, re.I):
+              if title and valid and not re.search(r'\b(?:contract awards?|tender awards?|awarded)\b', title, re.I):
                   rows.append((source, hashlib.sha256(url.encode()).hexdigest()[:32], title, url))
           for source in ('hk_ha_works','hk_ha_leasing','hk_emsd_tenders','hk_emsd_consultancy'):
               path = directory/source
@@ -111,9 +111,9 @@ jobs:
                   continue
               html = path.read_text(encoding='utf-8',errors='replace')
               if section == 'national':
-                  pattern = r'/en/database/procurement/national/articles/[0-9]+/[0-9]+\\.html'
+                  pattern = r'/en/database/procurement/national/articles/[0-9]+/[0-9]+\.html'
               else:
-                  pattern = r'/en/database/procurement/local/articles/[0-9a-f]{16}\\.html'
+                  pattern = r'/en/database/procurement/local/articles/[0-9a-f]{16}\.html'
               matches = set(re.findall(pattern, html))
               print(f'ASIA_PROBE_{source}=HTML_BYTES_{len(html.encode())};ARTICLE_LINKS_{len(matches)}')
               for path in sorted(matches)[:50]:

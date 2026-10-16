@@ -60,11 +60,13 @@ def test_important_sources_remain_disabled_by_default(monkeypatch):
 def test_exact_six_sources_opt_in_to_existing_catalog_and_worker(monkeypatch):
     monkeypatch.setenv("VALYQON_ASIA_SOURCES_ENABLED", "1")
     catalog = build_source_catalog(_settings())
-    assert set((*ASIA_RSS_FEEDS, *JETRO_LISTS)) <= set(catalog.enabled_keys)
-    for key in (*ASIA_RSS_FEEDS, *JETRO_LISTS):
+    assert set(ASIA_RSS_FEEDS) <= set(catalog.enabled_keys)
+    assert len(ASIA_RSS_FEEDS) == 6
+    assert not set(JETRO_LISTS) & set(catalog.registry.keys())
+    for key in ASIA_RSS_FEEDS:
         registration = catalog.registry.get(key)
         assert registration.official is True
-        assert registration.jurisdictions == (("HK",) if key.startswith("hk_") else ("JP",))
+        assert registration.jurisdictions == ("HK",)
         assert registration.source.name == key
         assert key in HOSTS
         assert len(HOSTS[key]) == 1
@@ -206,6 +208,27 @@ def test_asia_diagnostic_classifies_safe_http_error(monkeypatch):
     assert result["response_bytes"] == 0
 
 
+def test_dsd_current_feed_preserves_official_host_and_agency():
+    notice = parse_asia_rss(
+        _six_rss_fixture("hk_dsd_current"), source="hk_dsd_current",
+    )[0]
+    assert notice.customer == "Hong Kong Drainage Services Department"
+    assert notice.url.startswith("https://www.dsd.gov.hk/")
+    validate_notice(notice, "hk_dsd_current")
+
+
+def test_cedd_official_legacy_http_link_is_promoted_to_https():
+    rss = _six_rss_fixture("hk_cedd_tenders")
+    rss = rss.replace(
+        b"https://www.cedd.gov.hk/en/tenders/example-123.html",
+        b"http://www.cedd.gov.hk/en/tenders/example-123.html",
+    )
+    notice = parse_asia_rss(rss, source="hk_cedd_tenders")[0]
+    assert notice.customer == "Hong Kong Civil Engineering and Development Department"
+    assert notice.url == "https://www.cedd.gov.hk/en/tenders/example-123.html"
+    validate_notice(notice, "hk_cedd_tenders")
+
+
 def test_jetro_national_link_and_date_retain_no_fabricated_deadline():
     notice = parse_jetro_html(JETRO, source="jp_jetro_national")[0]
     validate_notice(notice, "jp_jetro_national")
@@ -280,34 +303,43 @@ def test_jetro_disallows_other_host_and_unrelated_non_tender_links():
         parse_jetro_html(bad, source="jp_jetro_national")
 
 
+def _six_rss_fixture(key):
+    import urllib.parse
+
+    host = urllib.parse.urlsplit(ASIA_RSS_FEEDS[key]).hostname
+    return RSS.replace(
+        b"www.housingauthority.gov.hk/en/tenders/example-123.html",
+        (host + "/en/tenders/example-123.html").encode(),
+    )
+
+
 def test_all_six_sources_fetch_through_safe_single_page_transport(monkeypatch):
     calls = []
+
     async def fake_fetch(url, timeout, accept):
         calls.append((url, timeout, accept))
-        if url in ASIA_RSS_FEEDS.values():
-            payload = RSS.replace(
-                b"www.housingauthority.gov.hk/en/tenders/example-123.html",
-                (b"www.emsd.gov.hk/en/tenders/example-123.html"
-                 if "emsd" in url else b"www.housingauthority.gov.hk/en/tenders/example-123.html"))
-            return payload
-        return JETRO_LOCAL if "local" in url else JETRO
+        key = next(key for key, endpoint in ASIA_RSS_FEEDS.items()
+                   if endpoint == url)
+        return _six_rss_fixture(key)
 
     monkeypatch.setattr("app.sources.asia_public._fetch", fake_fetch)
+
     async def run():
         results = []
-        for key in (*ASIA_RSS_FEEDS, *JETRO_LISTS):
+        for key in ASIA_RSS_FEEDS:
             notices = await AsiaPublicSource(key).fetch(limit=5)
             assert notices and notices[0].source == key
             validate_notice(notices[0], key)
             results.extend(notices)
         return results
+
     notices = asyncio.run(run())
     assert len(notices) == 6
     assert len(calls) == 6
     assert all(timeout == 30.0 for _, timeout, _ in calls)
 
 
-@pytest.mark.parametrize("source", [*ASIA_RSS_FEEDS, *JETRO_LISTS])
+@pytest.mark.parametrize("source", tuple(ASIA_RSS_FEEDS))
 def test_each_asia_source_uses_real_queue_worker_sqlite_and_snapshot(
     monkeypatch, tmp_path, source,
 ):
@@ -328,16 +360,8 @@ def test_each_asia_source_uses_real_queue_worker_sqlite_and_snapshot(
 
     async def fake_fetch(url, timeout, accept):
         requests.append(url)
-        if source in ASIA_RSS_FEEDS:
-            assert url == ASIA_RSS_FEEDS[source]
-            if source.startswith("hk_emsd_"):
-                return RSS.replace(
-                    b"www.housingauthority.gov.hk/en/tenders/example-123.html",
-                    b"www.emsd.gov.hk/en/tenders/example-123.html",
-                )
-            return RSS
-        assert url == JETRO_LISTS[source]
-        return JETRO_LOCAL if source == "jp_jetro_local" else JETRO
+        assert url == ASIA_RSS_FEEDS[source]
+        return _six_rss_fixture(source)
 
     monkeypatch.setattr("app.sources.asia_public._fetch", fake_fetch)
     database = Database(DatabaseSettings("", tmp_path / "asia-worker.sqlite"))
@@ -354,7 +378,7 @@ def test_each_asia_source_uses_real_queue_worker_sqlite_and_snapshot(
         assert job.id
         assert Worker(jobs, handlers, job_types=(JOB_TYPE,)).run_once() is True
 
-        term = "engineering" if source in ASIA_RSS_FEEDS else "procurement"
+        term = "engineering"
         stored = opportunities.read(source, search_terms=(term,))
         assert len(stored) == 1
         assert stored[0].source == source
@@ -365,10 +389,7 @@ def test_each_asia_source_uses_real_queue_worker_sqlite_and_snapshot(
         assert not report.failures
         assert len(report.notices) == 1
         assert report.notices[0].identity == stored[0].identity
-        assert requests == [
-            ASIA_RSS_FEEDS[source] if source in ASIA_RSS_FEEDS
-            else JETRO_LISTS[source]
-        ]
+        assert requests == [ASIA_RSS_FEEDS[source]]
     finally:
         database.close()
 
@@ -437,7 +458,7 @@ def test_asia_queue_batch_validates_six_worker_routes(monkeypatch):
     catalog = build_source_catalog(_settings())
     sources = asia_enqueue.validate_batch(catalog)
     assert len(sources) == len(set(sources)) == 6
-    assert set(sources) == {*ASIA_RSS_FEEDS, *JETRO_LISTS}
+    assert set(sources) == set(ASIA_RSS_FEEDS)
     assert all(key in HOSTS for key in sources)
 
 

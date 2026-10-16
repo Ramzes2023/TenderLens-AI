@@ -433,7 +433,7 @@ def build_source_catalog(
             capabilities=SourceCapabilities(pagination=pagination),
         ))
 
-    # Verified official Uzbekistan API; operator activation remains separate.
+    # Verified Uzbekistan UZEX source; disabled until explicit operator activation.
     registry.register(SourceRegistration(
         key="uz_uzex",
         display_name="Uzbekistan UZEX public tenders and selections",

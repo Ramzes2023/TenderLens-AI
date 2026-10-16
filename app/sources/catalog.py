@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Iterable
 
 from .am_armeps import ArmeniaArmepsSource
 from .tj_eprocurement import TajikistanEprocurementSource
+from .uz_uzex import UzbekistanUzexSource
 from .asia_public import ASIA_RSS_FEEDS, AsiaPublicSource
 from .jp_jetro_bid_rss import JetroBidRssSource, RSS_URL as JETRO_BID_RSS_URL
 from .austender_rss import AusTenderRssSource
@@ -431,6 +432,20 @@ def build_source_catalog(
             homepage_url=homepage, official=True, enabled=False,
             capabilities=SourceCapabilities(pagination=pagination),
         ))
+
+    # Verified Uzbekistan UZEX source; disabled until explicit operator activation.
+    registry.register(SourceRegistration(
+        key="uz_uzex",
+        display_name="Uzbekistan UZEX public tenders and selections",
+        source=UzbekistanUzexSource(timeout=min(timeout, 30)),
+        transport=SourceTransport.API,
+        jurisdictions=("UZ",),
+        languages=("uz", "ru"),
+        homepage_url="https://etender.uzex.uz/",
+        official=True,
+        enabled=False,
+        capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
+    ))
 
     # Staged Asian sources are intentionally excluded from default operations.
     # Enable only after live network → normalized notice → isolated DB acceptance.

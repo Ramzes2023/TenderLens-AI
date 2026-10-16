@@ -1,0 +1,144 @@
+"""Uzbekistan official UzEx open tender / selection adapter, disabled by default.
+
+All discovery comes from the official public TradeList HTTPS API.
+Only bounded public metadata are normalized; no credentials or tenant terms.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+import math
+import re
+
+import httpx
+
+from .eis_rss import SourceError
+from .http import ConnectorTransportError, FetchPolicy, _policy, bounded_fetch, source_client
+from .models import TenderNotice
+from .opportunities import validate_notice
+from .transport_errors import SourceTransportError, transient_transport
+
+API_URL = "https://apietender.uzex.uz/api/common/TradeList"
+DETAIL_PREFIX = "https://etender.uzex.uz/lot/"
+HOST = "apietender.uzex.uz"
+MAX_BODY = 512 * 1024
+PER_TYPE = 20
+
+
+def _nonempty(row, key):
+    value = row.get(key)
+    return value.strip() if type(value) is str and value.strip() else None
+
+
+def _date(value):
+    if type(value) is not str or len(value) > 80 or not re.match(r"^20\d\d-\d\d-\d\d", value):
+        raise SourceError("UzEx invalid observed notice date.")
+    try:
+        return datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        raise SourceError("UzEx invalid observed notice date.") from None
+
+
+def parse_uzex_tradelist(data, *, type_id: int):
+    """Require full official list rows; never treat an ID alone as a notice."""
+    if type_id not in (1, 2) or type(data) is not list or not 0 < len(data) <= PER_TYPE:
+        raise SourceError("UzEx changed public list shape.")
+    result = {}
+    for row in data:
+        if type(row) is not dict:
+            raise SourceError("UzEx malformed public notice row.")
+        identifier = row.get("id")
+        if (type(identifier) is not int or not 100 <= identifier <= 999999999999
+                or row.get("type_id") != type_id):
+            raise SourceError("UzEx invalid official notice identity.")
+        title = _nonempty(row, "name")
+        customer = _nonempty(row, "seller_name")
+        if not title or not customer or len(title) < 8 or len(customer) < 4:
+            raise SourceError("UzEx missing procurement title or organization.")
+        start = _date(row.get("start_date"))
+        end = _date(row.get("end_date"))
+        if (start.tzinfo is None) != (end.tzinfo is None) or end < start:
+            raise SourceError("UzEx inconsistent official date interval.")
+        price = row.get("cost")
+        if type(price) not in (int, float) or not math.isfinite(price) or not 0 <= price <= 1e18:
+            raise SourceError("UzEx invalid procurement amount.")
+        currency = _nonempty(row, "currency_codeabc")
+        if currency is not None and not re.fullmatch(r"[A-Z]{3}", currency):
+            raise SourceError("UzEx invalid ISO currency.")
+        display = _nonempty(row, "display_no")
+        if display is not None and (len(display) > 500 or not re.fullmatch(r"[0-9]{6,30}", display)):
+            raise SourceError("UzEx invalid official lot display number.")
+        notice = TenderNotice(
+            source="uz_uzex",
+            external_id=f"{type_id}-{identifier}",
+            tender_number=display,
+            title=title,
+            url=DETAIL_PREFIX + str(identifier),
+            customer=customer,
+            published_at=start.isoformat(),
+            deadline=end.isoformat(),
+            currency=currency,
+            initial_price=float(price),
+            summary="Official UzEx public " + ("tender" if type_id == 1 else "best-offer selection"),
+        )
+        try:
+            validate_notice(notice, "uz_uzex")
+        except ValueError:
+            raise SourceError("UzEx invalid normalized public notice.") from None
+        if notice.external_id in result:
+            if result[notice.external_id] != notice:
+                raise SourceError("UzEx conflicting duplicate lot.")
+            raise SourceError("UzEx duplicate official lot in response.")
+        result[notice.external_id] = notice
+    return list(result.values())
+
+
+@dataclass(frozen=True)
+class UzbekistanUzexSource:
+    timeout: float = 12.0
+    name: str = "uz_uzex"
+
+    def __post_init__(self):
+        if type(self.timeout) not in (float, int) or not math.isfinite(self.timeout) or not 0 < self.timeout <= 30:
+            raise ValueError("UzEx timeout must be between 0 and 30 seconds.")
+
+    async def fetch(self, limit: int = 20):
+        if _policy.get() is None:
+            with bounded_fetch(FetchPolicy(frozenset({HOST}), 2, max_bytes=MAX_BODY)):
+                return await self._fetch(limit)
+        return await self._fetch(limit)
+
+    async def _fetch(self, limit):
+        if type(limit) is not int:
+            raise SourceError("UzEx invalid record limit.")
+        requested = max(1, min(limit, 20))
+        series = []
+        try:
+            async with source_client(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
+                for type_id in (1, 2):
+                    response = await client.post(
+                        API_URL,
+                        json={"TypeId": type_id, "From": 1, "To": PER_TYPE, "System_Id": 0},
+                        headers={"Accept": "application/json",
+                                 "User-Agent": "VALYQON-public-procurement-adapter/1.0"},
+                    )
+                    response.raise_for_status()
+                    if "json" not in response.headers.get("content-type", "").lower():
+                        raise SourceError("UzEx official response was not JSON.")
+                    if len(response.content) > MAX_BODY:
+                        raise SourceError("UzEx oversized official response.")
+                    series.append(parse_uzex_tradelist(response.json(), type_id=type_id))
+        except (httpx.HTTPError, ConnectorTransportError, OSError) as error:
+            if transient_transport(error):
+                raise SourceTransportError("UzEx official HTTPS temporarily unavailable.") from None
+            raise SourceError("UzEx official HTTPS acquisition failed.") from None
+        except (ValueError, UnicodeError):
+            raise SourceError("UzEx invalid official JSON.") from None
+        output = []
+        # Bound result size while representing both official open tenders and
+        # best-offer selections, without fetching from hidden/private routes.
+        for row in zip(*series):
+            output.extend(row)
+            if len(output) >= requested:
+                return output[:requested]
+        return output[:requested]

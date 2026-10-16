@@ -7,6 +7,7 @@ Default disabled. Real HTTPS -> leased-worker -> disposable SQLite is required.
 from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
+import ssl
 import math
 import re
 from urllib.parse import urlsplit
@@ -142,8 +143,16 @@ class KazakhstanGovHtmlSource:
             raise SourceError("KZ public source limit must be integer.")
         requested = max(1, min(limit, 20))
         try:
-            async with source_client(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
-                response = await client.get(INDEX_URL)
+            # Match the already verified GitHub-hosted government HTTPS probe:
+            # system CA trust + transparent procurement-verifier UA, never TLS bypass.
+            async with source_client(timeout=self.timeout, trust_env=False,
+                                     follow_redirects=False,
+                                     verify=ssl.create_default_context()) as client:
+                response = await client.get(
+                    INDEX_URL,
+                    headers={"User-Agent": "VALYQON-cis-official-public-readonly/1.0",
+                             "Accept": "text/html"},
+                )
                 response.raise_for_status()
                 if "text/html" not in response.headers.get("content-type", "").lower():
                     raise SourceError("KZ government listing not HTML.")
@@ -151,4 +160,4 @@ class KazakhstanGovHtmlSource:
         except (httpx.HTTPError, ConnectorTransportError, OSError) as error:
             if transient_transport(error):
                 raise SourceTransportError("KZ public government HTML temporarily unavailable.") from None
-            raise SourceError("KZ government bounded HTTPS retrieval failed.") from None
+            raise SourceError("KZ government bounded HTTPS retrieval failed: " + type(error).__name__) from None

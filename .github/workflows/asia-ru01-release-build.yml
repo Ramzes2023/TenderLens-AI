@@ -5,7 +5,13 @@ name: Asia verified production Docker build (RU-01)
 on:
   push:
     branches: [feat/asia-public-procurement-six-20261015]
-    paths: [".github/workflows/asia-ru01-release-build.yml"]
+    paths:
+      - ".github/workflows/asia-ru01-release-build.yml"
+      - ".github/workflows/asia-isolated-acceptance.yml"
+      - ".github/workflows/asia-windows-selfhosted.yml"
+      - "scripts/dev/setup_valyqon_windows_asia_runner.ps1"
+      - "scripts/dev/asia_windows_sandbox_guest.ps1"
+      - "docs/asia/FREE_WINDOWS_RUNNER.md"
   workflow_dispatch:
 
 permissions:

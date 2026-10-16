@@ -1,0 +1,44 @@
+name: RU Moscow official public procurement API discovery
+
+on:
+  push:
+    branches: [research/ru-moscow-supplier-api-20261016]
+    paths: [.github/workflows/ru-moscow-public-api-probe.yml]
+
+permissions: {}
+
+jobs:
+  public-interface-metadata:
+    if: github.repository == 'Ramzes2023/TenderLens-AI'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read only official public documentation and landing endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          for name in api_docs api_home supplier_public portal_home; do
+            case "$name" in
+              api_docs) url='https://api.zakupki.mos.ru/index.html' ;;
+              api_home) url='https://api.zakupki.mos.ru/' ;;
+              supplier_public) url='https://zakupki.mos.ru/public-api-access/' ;;
+              portal_home) url='https://zakupki.mos.ru/' ;;
+            esac
+            result="$(curl --noproxy '*' --silent --show-error --proto '=https' --max-redirs 0 --connect-timeout 7 --max-time 20 --max-filesize 524288 --output "$tmp/$name" --write-out '%{http_code} %{content_type}' "$url" 2>"$tmp/stderr")" && rc=0 || rc=$?
+            bytes=0
+            test ! -f "$tmp/$name" || bytes="$(wc -c < "$tmp/$name" | tr -d ' ')"
+            echo "RU_MOSCOW_${name}_PUBLIC_HTTP=$result;CURL_EXIT=$rc;BYTES=$bytes"
+            if test "$rc" = 0 && test "$name" = api_docs; then
+              python3 - "$tmp/$name" <<'PY'
+          import re,sys
+          content=open(sys.argv[1],'rb').read()
+          print("RU_MOSCOW_API_DOCS_SWAGGER_INDICATORS="+str(bool(re.search(rb'(swagger|openapi|redoc)',content,re.I))))
+          print("RU_MOSCOW_API_DOCS_PUBLIC_HTML="+str(b'<html' in content.lower()))
+          PY
+            fi
+          done
+          echo 'RU_MOSCOW_PUBLIC_TENDER_RECORDS_VERIFIED=NO'
+          echo 'RU_MOSCOW_API_LICENSE_VERIFIED=NO'
+          echo 'PRODUCTION_CHANGED=NO'

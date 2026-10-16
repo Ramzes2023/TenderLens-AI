@@ -1,0 +1,36 @@
+name: RU final pinned Roseltorg real source and durable search
+on:
+  push:
+    branches: [diag/ru-final-gates-20261016]
+    paths: [.github/workflows/ru-final-roseltorg-live.yml]
+permissions:
+  contents: read
+jobs:
+  live-real-roseltorg:
+    runs-on: valyqon-ru3
+    timeout-minutes: 12
+    steps:
+      - name: Validate isolated trusted runner identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = VALYQON-ASIA-03
+          test "$(id -un)" = valyqon
+          ! mountpoint -q /mnt/c
+      - uses: actions/checkout@v4
+        with:
+          ref: 0e8a942fdcbc6671f576746ebcdc8e938a98ac0b
+          persist-credentials: false
+      - name: Exact immutable PR head with offline regression and real official live data
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 0e8a942fdcbc6671f576746ebcdc8e938a98ac0b
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          python3 -m venv "$dir/venv"
+          "$dir/venv/bin/python" -m pip install --disable-pip-version-check -r requirements-dev.txt >/dev/null
+          "$dir/venv/bin/python" -m pytest -q tests/test_ru_roseltorg_public.py
+          "$dir/venv/bin/python" -B -m scripts.ci_ru_roseltorg_real_worker
+          echo 'RU_FINAL_ROSELTORG_REAL_SQL_SEARCH=PASS'
+          echo 'PRODUCTION_CHANGED=NO'

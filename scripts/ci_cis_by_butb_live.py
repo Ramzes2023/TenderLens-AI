@@ -115,6 +115,12 @@ def main():
             row.update(data)
         except HTTPError as err:
             row.update({"error_kind":"HTTPError","status":err.code})
+            if err.code in (301, 302, 307, 308):
+                canonical=urlsplit(err.headers.get("Location",""))
+                if (canonical.scheme in ("", "https")
+                        and canonical.hostname in (None, HOST)
+                        and not canonical.username and not canonical.password):
+                    row["approved_redirect_path"]=canonical.path[:120]
         except URLError as err:
             row.update({"error_kind":"URLError","reason_class":type(err.reason).__name__})
         except (OSError,TimeoutError,ValueError) as err:

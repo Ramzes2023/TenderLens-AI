@@ -35,6 +35,27 @@ jobs:
         run: |
           set -euo pipefail
           test "${RUNNER_NAME:-}" = "VALYQON-RU-01"
+          echo "ASIA_DOCKER_USER_UID=$(id -u)"
+          if test -S /var/run/docker.sock; then
+            stat -Lc 'ASIA_DOCKER_SOCKET=YES;MODE=%a;UID=%u;GID=%g' /var/run/docker.sock
+            if test -w /var/run/docker.sock; then
+              echo "ASIA_DOCKER_SOCKET_WRITABLE=YES"
+            else
+              echo "ASIA_DOCKER_SOCKET_WRITABLE=NO"
+            fi
+          else
+            echo "ASIA_DOCKER_SOCKET=NOT_FOUND"
+          fi
+          if test -d /mnt/wsl/docker-desktop; then
+            echo "ASIA_WSL_DOCKER_MOUNT=PRESENT"
+          else
+            echo "ASIA_WSL_DOCKER_MOUNT=NOT_PRESENT"
+          fi
+          if test -n "${DOCKER_HOST:-}"; then
+            echo "ASIA_DOCKER_HOST_ENV=SET"
+          else
+            echo "ASIA_DOCKER_HOST_ENV=UNSET"
+          fi
           if ! command -v docker >/dev/null 2>&1; then
             echo "ASIA_DOCKER_WSL_INTEGRATION=NOT_AVAILABLE"
             exit 2

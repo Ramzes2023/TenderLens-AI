@@ -36,13 +36,15 @@ def run_cases(parameters):
         with closing(db.connect()) as conn:
             rows = conn.execute("SELECT version,domain,checksum FROM app_schema_migrations ORDER BY version").fetchall()
             assert [tuple(row[i] for i in range(3)) for row in rows] == [(m.version, m.domain, m.checksum) for m in MIGRATIONS]
-            assert [m.version for m in MIGRATIONS] == list(range(1, 17))
-            assert MIGRATIONS[-3].domain == "source_observations"
-            assert MIGRATIONS[-2].domain == "legal"
-            assert MIGRATIONS[-1].domain == "deadline_alerts"
+            assert [m.version for m in MIGRATIONS] == list(range(1, 18))
+            assert MIGRATIONS[-4].domain == "source_observations"
+            assert MIGRATIONS[-3].domain == "legal"
+            assert MIGRATIONS[-2].domain == "deadline_alerts"
+            assert MIGRATIONS[-1].domain == "tender_workflows"
+            assert conn.execute("SELECT COUNT(*) FROM saved_opportunity_workflow").fetchone()[0] == 0
             assert conn.execute("SELECT COUNT(*) FROM account_legal_acceptances").fetchone()[0] == 0
             assert conn.execute("SELECT COUNT(*) FROM synchronous_usage").fetchone()[0] == 0
-        print("PASS: migrations 1-16 including legal and deadline alerts, checksums and replay.")
+        print("PASS: migrations 1-17 including legal, deadline alerts and tender workflows, checksums and replay.")
 
         def tenant():
             account = AuthRepository(db).create_account(uuid.uuid4().hex + "@example.test", "synthetic")

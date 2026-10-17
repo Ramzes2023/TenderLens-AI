@@ -106,6 +106,13 @@ jobs:
         run: python -m compileall -q app tests scripts
       - name: Test Windows-only process isolation and offline preview
         run: python -m pytest -vv --maxfail=1 --durations=15 tests/test_p39e_local_preview.py
+      - name: Parse private AWS preview launcher without SSH or network
+        shell: pwsh
+        run: |
+          $plan = & ./ops/private_preview/launch_aws_preview.ps1 -PlanOnly | Out-String
+          if ($plan -notmatch 'PLAN_ONLY=YES' -or $plan -notmatch 'valyqon-private-preview') {
+            throw 'The private preview launcher did not pass its network-free plan.'
+          }
 
   docker-build:
     runs-on: ubuntu-latest

@@ -1,0 +1,81 @@
+name: CIS Kazakhstan real public HTML to leased worker and search
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - app/sources/**
+      - tests/test_cis_kz_gov_html.py
+      - tests/test_source_catalog.py
+      - tests/test_connector_workers.py
+      - scripts/ci_cis_kz_public_html_probe.py
+      - scripts/ci_cis_kz_html_live_acceptance.py
+      - .github/workflows/cis-kz-gov-public-html-live.yml
+  push:
+    branches:
+      - integration/cis-kz-html-live-20261016
+    paths:
+      - app/sources/**
+      - tests/test_cis_kz_gov_html.py
+      - tests/test_source_catalog.py
+      - tests/test_connector_workers.py
+      - scripts/ci_cis_kz_public_html_probe.py
+      - scripts/ci_cis_kz_html_live_acceptance.py
+      - .github/workflows/cis-kz-gov-public-html-live.yml
+
+permissions:
+  contents: read
+
+jobs:
+  kz-strict-offline-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install application dependencies for strict parser contracts
+        run: python -m pip install -r requirements-dev.txt
+      - name: Reject fake Kazakhstan tender data, URLs and incomplete rows
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -B -m unittest discover -s tests -p test_cis_kz_gov_html.py -v
+
+  kz-official-html-real-list-detail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read actual official public procurement HTML and announcement detail
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -B scripts/ci_cis_kz_public_html_probe.py
+
+  kz-leased-worker-real-sqlite:
+    needs: [kz-strict-offline-contract, kz-official-html-real-list-detail]
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install disposable acceptance environment
+        run: python -m pip install -r requirements-dev.txt
+      - name: Live government notices -> owned lease -> fenced SQLite -> saved search
+        timeout-minutes: 4
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHON_DOTENV_DISABLED: '1'
+        run: python -B -m scripts.ci_cis_kz_html_live_acceptance --source kz_gov_html

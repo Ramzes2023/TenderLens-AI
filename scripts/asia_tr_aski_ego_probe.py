@@ -59,7 +59,7 @@ def main():
       if len(record["table_examples"])>=4:break
       record["table_examples"].append({"count":len(cells),"values":[v[:110] for v in cells[:7]]})
     if key in ("ego_list","aski_list"):
-     regex=(r"/tr/ihale/detay/[0-9]+" if key=="ego_list" else r"IhaleDetay\\.aspx\\?ID=")
+     regex=(r"/tr/ihale/detay/[0-9]+" if key=="ego_list" else r"IhaleDetay")
      match=re.search(regex,raw,re.I)
      if match:
       around=raw[max(0,match.start()-1800):match.end()+200]

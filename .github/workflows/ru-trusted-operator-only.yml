@@ -42,6 +42,7 @@ on:
           - torgi_online_commercial
           - r_tender_commercial
           - dagestan_official_small
+          - tver_official_small
 permissions:
   contents: read
 jobs:

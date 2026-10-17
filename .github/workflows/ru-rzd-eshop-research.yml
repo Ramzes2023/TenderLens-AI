@@ -1,0 +1,40 @@
+name: RU RZD e-shop independently verified native low-volume public procurement
+on:
+  push:
+    branches: [research/ru-rzd-small-own-public-20261017]
+    paths:
+      - scripts/research_ru_rzd_eshop.py
+      - tests/test_ru_rzd_eshop.py
+      - .github/workflows/ru-rzd-eshop-research.yml
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  rzd-exact-host-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Reject forged first-party RZD UUID URLs and uncorroborated detail headings
+        run: python -m pytest -q tests/test_ru_rzd_eshop.py
+  rzd-two-real-firstparty-details:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Official live RZD public list -> 2 independent first-party small-purchase details
+        timeout-minutes: 5
+        run: python -B -m scripts.research_ru_rzd_eshop

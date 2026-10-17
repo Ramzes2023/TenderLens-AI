@@ -1,4 +1,4 @@
-name: RU STAN genuine native public small-purchase acceptance
+name: RU STAN first-party commercial procurement live SQL and tenant acceptance
 on:
   push:
     branches: [feat/ru-stan-commercial-leased-20261017]
@@ -11,9 +11,9 @@ on:
       - scripts/ci_ru_stan_real_worker.py
       - scripts/ci_ru_stan_authenticated.py
       - tests/test_ru_stan_commercial_adapter.py
-      - .github/workflows/ru-stan-native-acceptance.yml
+      - .github/workflows/ru-stan-commercial-acceptance.yml
   pull_request:
-    branches: [main]
+    branches: [main, research/ru-stan-commercial-20261017]
 permissions:
   contents: read
 jobs:

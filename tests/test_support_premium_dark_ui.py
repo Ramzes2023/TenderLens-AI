@@ -15,7 +15,7 @@ def test_support_page_readable_dark_sections_and_live_ids():
     assert 'href="/scoring-methodology"' in SUPPORT_HTML
     assert 'Provider-dependent' in SUPPORT_HTML
     assert "body.saas .support-page .support-card" in styles
-    assert "background:#162740" in styles
+    assert "--support-panel:#162740" in styles
     assert "outline:3px solid #8fbfff" in styles
     assert "display:none!important" in styles
 

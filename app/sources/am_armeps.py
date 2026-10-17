@@ -25,13 +25,25 @@ def _retryable_official_dns_failure(error):
     'DNS resolution failed' marker. Never retry PublicIPError, TLS failures,
     or unclassified connect errors. No alternate host or insecure fallback.
     """
-    if not isinstance(error, httpx.ConnectError) or _is_public_ip_error(error):
+    if _is_public_ip_error(error):
         return False
-    seen = set()
+    # BoundedClient intentionally wraps HTTPX transport exceptions into a
+    # retryability-labelled ConnectorTransportError; never blindly trust
+    # that flag or retry an arbitrary policy failure without matching
+    # the exact audited DNS cause inside its exception chain.
+    if isinstance(error, ConnectorTransportError):
+        if not error.retryable:
+            return False
+    elif not isinstance(error, httpx.ConnectError):
+        return False
+    seen, has_httpx_connect = set(), False
     current = error
     while isinstance(current, BaseException) and id(current) not in seen:
         seen.add(id(current))
-        if (type(current) is httpcore.ConnectError
+        if isinstance(current, httpx.ConnectError):
+            has_httpx_connect = True
+        if (has_httpx_connect
+                and type(current) is httpcore.ConnectError
                 and str(current) == "DNS resolution failed"):
             return True
         current = current.__cause__

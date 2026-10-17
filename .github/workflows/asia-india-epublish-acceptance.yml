@@ -28,7 +28,7 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: python -m pip install -r requirements-dev.txt
-      - run: python -m pytest -q tests/test_india_epublish.py tests/test_india_cppp.py tests/test_connector_workers.py
+      - run: python -m pytest -q tests/test_india_epublish.py tests/test_india_cppp_source.py tests/test_connector_workers.py
   india-epublish-real-worker-storage-search:
     runs-on: ubuntu-latest
     timeout-minutes: 12

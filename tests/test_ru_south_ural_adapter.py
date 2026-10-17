@@ -98,3 +98,52 @@ def test_south_ural_optin_flag_never_activates_unrequested_production_adapter():
     ))
     assert "south_ural_public" in enabled.enabled_keys
     assert enabled.registry.get("south_ural_public").source.name == "south_ural_public"
+
+
+def test_collect_up_to_ten_distinct_current_public_invites():
+    from app.sources.south_ural_public import parse_public_listing, MAX_PAGE_ITEMS
+    cards = []
+    for i in range(12):
+        n = 109600 + i
+        cards.append(
+            f'<tr><td>Прием оферт</td><td>{n}</td>'
+            f'<td><a href="/Market/OfferInvitationOpen/View/{n}?isReadOnly=True">'
+            f'Закупка офисных товаров номер {n}</a></td></tr>'
+        )
+    body = ("<table>" + "".join(cards) + "</table>").encode("utf-8")
+    assert len(parse_public_listing(body)) == MAX_PAGE_ITEMS == 10
+    assert [row[0] for row in parse_public_listing(body)] == [str(109600 + n) for n in range(10)]
+    with pytest.raises(ValueError):
+        parse_public_listing(body, limit=100)
+    with pytest.raises(ValueError):
+        parse_public_listing(body, limit=True)
+
+
+
+def test_official_detail_deadline_requires_actual_number_title_and_utc_offset():
+    from app.sources.south_ural_public import independently_verified_deadline
+    n,t,url=parse_public_listing(rows())[0]
+    good=page(n,t).replace(
+        b"</table>",
+        '<tr><td>Дата окончания подачи оферт*</td><td>23.10.2026 10:00 (UTC+05:00) Екатеринбург</td></tr></table>'.encode("utf-8"),
+    )
+    assert independently_verified_deadline(good,n,t,url) == "2026-10-23T10:00:00+05:00"
+    assert independently_verified_deadline(page(n,t),n,t,url) is None
+    # A script inserted into HTML cannot change the visible official date.
+    scripted=good.replace(b"23.10.2026", b"23.10.2026<script>alert(1)</script>")
+    assert independently_verified_deadline(scripted,n,t,url) == "2026-10-23T10:00:00+05:00"
+    for bad in [
+        good.replace(b"UTC+05:00", b"UTC+16:00"),
+        good.replace(b"UTC+05:00", b"UTC+05:99"),
+        good.replace(b"23.10.2026", b"32.10.2026"),
+        good.replace(b"109631",b"109632"),
+    ]:
+        with pytest.raises(ValueError):
+            independently_verified_deadline(bad,n,t,url)
+
+
+def test_deadline_from_malicious_unrelated_script_is_never_used():
+    from app.sources.south_ural_public import independently_verified_deadline
+    n,t,url=parse_public_listing(rows())[0]
+    fake=page(n,t)+'<script>Date: 24.10.2026 20:00 (UTC+05:00) Екатеринбург</script>'.encode('utf-8')
+    assert independently_verified_deadline(fake,n,t,url) is None

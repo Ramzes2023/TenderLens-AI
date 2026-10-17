@@ -39,6 +39,22 @@ def main():
                 if worker.run_once():
                     completed=jobs.get(job.id,scope=SYSTEM_SCOPE)
                     result["job"]=completed.state if completed else "NO_JOB"
+                    if result["job"]!="succeeded":
+                        result["failure_code"]=completed.failure_code if completed else None
+                        try:
+                            from app.sources.tr_ankara_municipality import (
+                                _fetch, INDEX_URL, listing_detail_links, parse_ankara_tender,
+                            )
+                            page=asyncio.run(_fetch(INDEX_URL,25.0,"text/html"))
+                            links=listing_detail_links(page)
+                            result["index_links"]=len(links)
+                            sample=asyncio.run(_fetch(links[0],25.0,"text/html"))
+                            notice=parse_ankara_tender(sample,detail_url=links[0])
+                            result["first_detail_verifiable"]=notice is not None
+                        except Exception as ex:
+                            # Only source-controlled exception class and bounded public message.
+                            result["source_rejection_type"]=type(ex).__name__
+                            result["source_rejection_reason"]=str(ex)[:180]
                     if result["job"]=="succeeded":
                         notices=store.read(SOURCE_ID,limit=20)
                         result["stored"]=len(notices)

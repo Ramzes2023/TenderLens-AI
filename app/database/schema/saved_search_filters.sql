@@ -1,5 +1,5 @@
 -- Account-specific named filter presets, bound to one active organization/company.
--- Pure client-side post-fetch filtering; no implied source subscription or daily delivery.
+-- Pure client-side post-fetch filtering, not a source subscription or daily delivery.
 CREATE TABLE IF NOT EXISTS saved_search_filters (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,

@@ -142,6 +142,114 @@ function renderSavedDetail(index){
   );
 }
 
+
+let workflowSerial=0;
+let workflowRevision=0;
+let workflowRecord=null;
+const workflowStages=['new','reviewing','preparing','submitted','won','lost','archived'];
+const workflowUrl=id=>'/api/v1/organizations/'+encodeURIComponent(state.organizationId)+
+ '/shortlist/'+encodeURIComponent(id)+'/workflow';
+function workflowValid(ticket,scope,id){
+ return ticket===workflowSerial&&scope===identity()&&
+        Number(workflowRecord?.id)===id&&$('savedDetail').open;
+}
+async function loadWorkflowEvents(ticket,scope,id){
+ try{
+  const res=await fetch(workflowUrl(id)+'/events',{credentials:'same-origin',cache:'no-store'});
+  if(!res.ok||!workflowValid(ticket,scope,id))return;
+  const events=await res.json();
+  if(!workflowValid(ticket,scope,id))return;
+  const root=$('savedWorkflowEvents');root.replaceChildren();
+  for(const item of Array.isArray(events)?events.slice(0,20):[]){
+   const li=document.createElement('li');
+   li.textContent='Account #'+Number(item.actor_account_id)+': '+
+    String(item.previous_stage||'new')+' → '+String(item.next_stage||'new')+
+    (item.note_changed?' · note edited':'')+' · '+String(item.changed_at||'');
+   root.appendChild(li);
+  }
+  if(!root.childElementCount){
+   const empty=document.createElement('li');
+   empty.textContent='No changes yet.';
+   root.appendChild(empty);
+  }
+ }catch(error){/* The saved workflow remains available even if audit read fails. */}
+}
+async function loadWorkflow(index){
+ const node=$('savedWorkflowPanel');
+ if(!node)return;
+ const record=records[index],id=Number(record?.id),scope=identity();
+ const ticket=++workflowSerial;
+ workflowRecord=record;
+ workflowRevision=0;
+ node.hidden=false;
+ $('savedWorkflowStatus').textContent='Loading team workflow…';
+ $('saveSavedWorkflow').disabled=true;
+ $('savedWorkflowNote').value='';
+ $('savedWorkflowStage').value='new';
+ $('savedWorkflowEvents').replaceChildren();
+ if(!ready()||!Number.isInteger(id))return;
+ try{
+  const res=await fetch(workflowUrl(id),{credentials:'same-origin',cache:'no-store'});
+  if(!workflowValid(ticket,scope,id))return;
+  if(res.status===401){location.replace('/login');return;}
+  if(!res.ok){
+   $('savedWorkflowStatus').textContent='Workflow unavailable; please retry.';
+   return;
+  }
+  const data=await res.json();
+  if(!workflowValid(ticket,scope,id))return;
+  workflowRevision=Number(data.revision);
+  $('savedWorkflowStage').value=workflowStages.includes(data.stage)?data.stage:'new';
+  $('savedWorkflowNote').value=String(data.note||'').slice(0,2000);
+  const writable=canWriteWorkspace();
+  $('savedWorkflowStage').disabled=!writable;
+  $('savedWorkflowNote').disabled=!writable;
+  $('saveSavedWorkflow').disabled=!writable;
+  $('savedWorkflowStatus').textContent=writable?
+   'Team-only details. Conflicting edits are rejected.':'Read-only access.';
+  await loadWorkflowEvents(ticket,scope,id);
+ }catch(error){
+  if(workflowValid(ticket,scope,id))
+   $('savedWorkflowStatus').textContent='Network unavailable; please retry.';
+ }
+}
+$('saveSavedWorkflow').onclick=async()=>{
+ const record=workflowRecord,id=Number(record?.id),scope=identity(),ticket=workflowSerial;
+ if(!ready()||!canWriteWorkspace()||!Number.isInteger(id)||!workflowValid(ticket,scope,id))return;
+ const stage=$('savedWorkflowStage').value,note=$('savedWorkflowNote').value;
+ if(!workflowStages.includes(stage)||note.length>2000)return;
+ const button=$('saveSavedWorkflow');button.disabled=true;
+ $('savedWorkflowStatus').textContent='Saving…';
+ try{
+  const res=await fetch(workflowUrl(id),{
+   method:'PATCH',credentials:'same-origin',cache:'no-store',
+   headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({stage,note,expected_revision:workflowRevision})
+  });
+  if(!workflowValid(ticket,scope,id))return;
+  if(res.status===409){
+   $('savedWorkflowStatus').textContent='Another team member updated this tender. Close and reopen to reload.';
+   return;
+  }
+  if(!res.ok){
+   $('savedWorkflowStatus').textContent='Not saved. Check access and retry.';
+   return;
+  }
+  const data=await res.json();
+  if(!workflowValid(ticket,scope,id))return;
+  workflowRevision=Number(data.revision);
+  $('savedWorkflowStatus').textContent='Status and note saved.';
+  await loadWorkflowEvents(ticket,scope,id);
+ }catch(error){
+  if(workflowValid(ticket,scope,id))
+   $('savedWorkflowStatus').textContent='Network unavailable. Not saved.';
+ }finally{
+  if(workflowValid(ticket,scope,id)&&
+     !$('savedWorkflowStatus').textContent.startsWith('Another team member'))
+   button.disabled=false;
+ }
+};
+
 function openDetail(index){
  const record=records[index];
 
@@ -155,6 +263,7 @@ function openDetail(index){
  if(!$('savedDetail').open){
   $('savedDetail').showModal();
  }
+ loadWorkflow(index);
 }
 
 function opportunityKey(item){
@@ -628,6 +737,7 @@ async function removeSaved(index,button){
   }
 
   records.splice(index,1);
+  workflowSerial++;
 
   if($('savedDetail').open){
    $('savedDetail').close();
@@ -685,8 +795,10 @@ $('savedDetailBody').onclick=event=>{
 };
 
 $('closeSavedDetail').onclick=()=>{
+ workflowSerial++;
  $('savedDetail').close();
 };
+$('savedDetail').addEventListener('close',()=>{workflowSerial++;});
 
 window.addEventListener(
  'workspace-context',
@@ -697,6 +809,7 @@ window.addEventListener(
    context=next;
    serial++;
    clearResults('Open Saved to load the active company shortlist.');
+   workflowSerial++;
 
    if($('savedDetail').open){
     $('savedDetail').close();

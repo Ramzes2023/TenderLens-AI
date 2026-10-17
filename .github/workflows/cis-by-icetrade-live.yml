@@ -1,0 +1,32 @@
+name: CIS Belarus ICETRADE live public tender evidence
+
+on:
+  push:
+    branches:
+      - research/cis-by-icetrade-official-live-20261016
+    paths:
+      - scripts/ci_cis_by_icetrade_official_probe.py
+      - .github/workflows/cis-by-icetrade-live.yml
+  pull_request:
+    paths:
+      - scripts/ci_cis_by_icetrade_official_probe.py
+      - .github/workflows/cis-by-icetrade-live.yml
+
+permissions:
+  contents: read
+
+jobs:
+  official-belarus-live-listing-detail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Require real official public Belarus tenders and complete detail
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -B scripts/ci_cis_by_icetrade_official_probe.py

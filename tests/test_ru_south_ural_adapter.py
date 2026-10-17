@@ -78,6 +78,28 @@ def test_public_adapter_only_follows_first_party_real_number_and_title(monkeypat
     assert urls==[LIST_URL,*matching]
 
 
+
+def test_south_ural_optin_flag_never_activates_unrequested_production_adapter():
+    from app.monitoring.config import MonitoringSettings
+    from app.sources.catalog import build_source_catalog
+    disabled = build_source_catalog(MonitoringSettings(
+        enabled=False, interval_seconds=600, max_items=2,
+        max_notifications_per_cycle=2, request_timeout=20,
+        eis_rss_urls=(), ca_bundle_file=None,
+        profile_feeds_enabled=False,
+    ))
+    assert "south_ural_public" not in disabled.enabled_keys
+    enabled = build_source_catalog(MonitoringSettings(
+        enabled=False, interval_seconds=600, max_items=2,
+        max_notifications_per_cycle=2, request_timeout=20,
+        eis_rss_urls=(), ca_bundle_file=None,
+        profile_feeds_enabled=False,
+        south_ural_public_enabled=True,
+    ))
+    assert "south_ural_public" in enabled.enabled_keys
+    assert enabled.registry.get("south_ural_public").source.name == "south_ural_public"
+
+
 def test_collect_up_to_ten_distinct_current_public_invites():
     from app.sources.south_ural_public import parse_public_listing, MAX_PAGE_ITEMS
     cards = []

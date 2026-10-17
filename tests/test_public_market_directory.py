@@ -100,6 +100,7 @@ def test_ru_probe_targets_appear_in_directory_or_corresponding_parent_adapter():
             for x in entries[group]}
     parent = {"b2b_office": "b2b_center", "fabrikant_44": "fabrikant_44_public",
               "roseltorg": "roseltorg_public", "lenobl": "lenobl_small_public",
+              "vologda": "vologda_small", "gpb_rss": "gpb_rss_feed",
               "tektorg": "tektorg"}
     assert len(TARGETS) == 34
     assert all(parent.get(label, label) in keys for label in TARGETS)

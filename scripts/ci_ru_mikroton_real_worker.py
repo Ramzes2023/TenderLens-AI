@@ -7,16 +7,15 @@ import asyncio
 import json
 import tempfile
 from pathlib import Path
-from types import SimpleNamespace
 
 from app.database.backend import Database
 from app.database.config import DatabaseSettings
-from app.jobs.models import JobScope
 from app.monitoring.config import MonitoringSettings
 from app.sources.catalog import build_source_catalog
-from app.sources.ingestion import ConnectorSyncHandler, connector_version, sync_window
+from app.sources.ingestion import connector_version
 from app.sources.opportunities import OpportunityRepository
 from app.sources.snapshots import snapshot_catalog
+from scripts.ci_ru_leased_connector import run_leased_connector
 
 SOURCE = "mikroton_tender"
 
@@ -36,12 +35,7 @@ def acceptance():
         try:
             store = OpportunityRepository(db)
             store.initialize()
-            worker = ConnectorSyncHandler(catalog, store, max_records=10)
-            ctx = SimpleNamespace(job=SimpleNamespace(scope=JobScope()), should_stop=False)
-            payload = {"schema": 1, "source_id": SOURCE,
-                       "sync_window": sync_window(),
-                       "connector_version": connector_version(SOURCE)}
-            report = worker(ctx, payload)
+            report = run_leased_connector(db, catalog, store, SOURCE, max_records=10)
             if (not 1 <= report["fetched_count"] <= 10
                     or report["accepted_count"] != report["fetched_count"]
                     or report["inserted_count"] != report["fetched_count"]

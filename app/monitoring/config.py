@@ -39,6 +39,7 @@ class MonitoringSettings:
     mikroton_tender_enabled: bool = False
     gpb_etp_public_enabled: bool = False
     lenobl_small_public_enabled: bool = False
+    fabrikant_44_public_enabled: bool = False
     eis_direct_enabled: bool = False
     eis_system_trust_enabled: bool = False
     eis_44_html_enabled: bool = False
@@ -118,6 +119,7 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         mikroton_tender_enabled=_bool("MIKROTON_TENDER_ENABLED", False),
         gpb_etp_public_enabled=_bool("GPB_ETP_PUBLIC_ENABLED", False),
         lenobl_small_public_enabled=_bool("LENOBL_SMALL_PUBLIC_ENABLED", False),
+        fabrikant_44_public_enabled=_bool("FABRIKANT_44_PUBLIC_ENABLED", False),
         eis_direct_enabled=_bool("EIS_DIRECT_ENABLED", False),
         eis_system_trust_enabled=_bool("EIS_SYSTEM_TRUST_ENABLED", False),
         eis_44_html_enabled=_bool("EIS_44_HTML_ENABLED", False),

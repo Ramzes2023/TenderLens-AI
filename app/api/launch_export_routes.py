@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import csv
 from io import BytesIO, StringIO
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlsplit, urlunsplit, parse_qsl
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from pydantic import ValidationError
@@ -49,7 +49,7 @@ def original_tender_url(value: str | None) -> str:
         if any(ord(c) < 32 or ord(c) == 127 for c in value):
             return ""
         if any(k.lower() in {"token", "api_key", "apikey", "access_token", "password", "secret"}
-               for k in __import__("urllib.parse", fromlist=["parse_qsl"]).parse_qsl(url.query, keep_blank_values=True)):
+               for k, _ in parse_qsl(url.query, keep_blank_values=True)):
             return ""
         return urlunsplit(url)
     except (ValueError, TypeError):

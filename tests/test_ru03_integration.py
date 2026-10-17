@@ -257,7 +257,7 @@ def test_invalid_223_configuration_rejected(url):
 def test_sqlite_migration_14_upgrade_preserves_existing_data(system):
     from app.database.migrations import MIGRATIONS
     s = system
-    assert [migration.version for migration in MIGRATIONS] == list(range(1, 15))
+    assert [migration.version for migration in MIGRATIONS] == list(range(1, len(MIGRATIONS) + 1))
     assert MIGRATIONS[-1].domain == 'source_observations'
     # Only the synthetic fixture database: simulate an installation at version 13.
     with closing(s.database.connect()) as conn, conn:

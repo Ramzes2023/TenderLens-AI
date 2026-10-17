@@ -29,8 +29,8 @@ SAVED_HTML = """
     >
       Refresh saved
     </button>
-    <a id="exportSavedCsv" href="#" hidden>Export CSV</a>
-    <a id="exportSavedXlsx" href="#" hidden>Export Excel</a>
+    <a id="exportSavedCsv" href="#saved" hidden>Export CSV</a>
+    <a id="exportSavedXlsx" href="#saved" hidden>Export Excel</a>
   </div>
 
   <section class="p" id="savedDeadlineSettings" aria-label="Deadline notifications">

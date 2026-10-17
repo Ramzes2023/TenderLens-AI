@@ -41,6 +41,7 @@ class MonitoringSettings:
     lenobl_small_public_enabled: bool = False
     nmck_native_public_enabled: bool = False
     stan_commercial_public_enabled: bool = False
+    south_ural_public_enabled: bool = False
     eis_direct_enabled: bool = False
     eis_system_trust_enabled: bool = False
     eis_44_html_enabled: bool = False
@@ -122,6 +123,7 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         lenobl_small_public_enabled=_bool("LENOBL_SMALL_PUBLIC_ENABLED", False),
         nmck_native_public_enabled=_bool("NMCK_NATIVE_PUBLIC_ENABLED", False),
         stan_commercial_public_enabled=_bool("STAN_COMMERCIAL_PUBLIC_ENABLED", False),
+        south_ural_public_enabled=_bool("SOUTH_URAL_PUBLIC_ENABLED", False),
         eis_direct_enabled=_bool("EIS_DIRECT_ENABLED", False),
         eis_system_trust_enabled=_bool("EIS_SYSTEM_TRUST_ENABLED", False),
         eis_44_html_enabled=_bool("EIS_44_HTML_ENABLED", False),

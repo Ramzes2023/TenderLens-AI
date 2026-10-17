@@ -23,6 +23,7 @@ from .gpb_etp_public import GpbEtpPublicSource
 from .lenobl_small_public import LenoblSmallPublicSource
 from .nmck_native_public import NmckNativePublicSource
 from .stan_commercial_public import StanCommercialPublicSource
+from .south_ural_public import SouthUralPublicSource
 from .canada_buys_dataset import CanadaBuysDatasetSource
 from .eis_rss import EisRssSource, SourceError
 from .eis_44_public_html import Eis44PublicHtmlSource
@@ -701,6 +702,20 @@ def build_source_catalog(
             languages=("ru",),
             homepage_url="https://zakupki.lenreg.ru/Search/NewRequests",
             official=True,
+            enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    if settings.south_ural_public_enabled:
+        registry.register(SourceRegistration(
+            key="south_ural_public",
+            display_name="South Ural Vendor Portal — original municipal and commercial small purchases",
+            source=SouthUralPublicSource(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url="https://www.vendorportal.ru/Market/OfferInvitationOpen",
+            official=False,
             enabled=True,
             capabilities=SourceCapabilities(),
         ))

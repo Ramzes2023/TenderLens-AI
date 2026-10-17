@@ -22,6 +22,7 @@ LIST_URL="https://www.vendorportal.ru/Market/OfferInvitationOpen"
 DETAIL_PREFIX="https://www.vendorportal.ru/Market/OfferInvitationOpen/View/"
 MAX_BYTES=1_800_000
 RECORDS=2
+MAX_PAGE_ITEMS=10
 NUMBER=re.compile(r"[0-9]{5,8}\Z")
 DETAIL_PATH=re.compile(r"/Market/OfferInvitationOpen/View/([0-9]{5,8})\Z")
 
@@ -103,7 +104,9 @@ def canonical_detail(href):
     except ValueError:
         return None
 
-def parse_public_listing(body):
+def parse_public_listing(body, *, limit=MAX_PAGE_ITEMS):
+    if type(limit) is not int or not 1 <= limit <= MAX_PAGE_ITEMS:
+        raise ValueError('Invalid South Ural page bound')
     doc=read_doc(body)
     found=[]
     seen=set()
@@ -124,7 +127,7 @@ def parse_public_listing(body):
         found.extend(candidates)
     if len(found)<RECORDS:
         raise ValueError("Not enough published first-party numbered South Ural invitations")
-    return found[:RECORDS]
+    return found[:limit]
 
 def verify_public_detail(body,number,title,url):
     if canonical_detail(url)!=(number,url) or not NUMBER.fullmatch(number):
@@ -164,7 +167,7 @@ class SouthUralPublicSource:
     async def fetch(self, limit=20):
         if type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError("Invalid South Ural result limit")
-        cap=min(limit,RECORDS)
+        cap=min(limit,MAX_PAGE_ITEMS)
         ctx=(bounded_fetch(FetchPolicy(frozenset({HOST}),cap+1,max_bytes=MAX_BYTES))
              if _policy.get() is None else nullcontext())
         with ctx:
@@ -176,7 +179,7 @@ class SouthUralPublicSource:
                 listing.raise_for_status()
                 if "html" not in listing.headers.get("content-type","").lower():
                     raise ValueError("South Ural listing not public HTML")
-                cards=parse_public_listing(listing.content)[:cap]
+                cards=parse_public_listing(listing.content, limit=cap)
                 notices=[]
                 for number,title,url in cards:
                     try:

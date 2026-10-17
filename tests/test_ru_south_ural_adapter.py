@@ -76,3 +76,22 @@ def test_public_adapter_only_follows_first_party_real_number_and_title(monkeypat
     assert [n.external_id for n in notices]==["109631","109627"]
     assert all(n.region=="Челябинская область" and n.initial_price is None and n.deadline is None for n in notices)
     assert urls==[LIST_URL,*matching]
+
+
+def test_collect_up_to_ten_distinct_current_public_invites():
+    from app.sources.south_ural_public import parse_public_listing, MAX_PAGE_ITEMS
+    cards = []
+    for i in range(12):
+        n = 109600 + i
+        cards.append(
+            f'<tr><td>Прием оферт</td><td>{n}</td>'
+            f'<td><a href="/Market/OfferInvitationOpen/View/{n}?isReadOnly=True">'
+            f'Закупка офисных товаров номер {n}</a></td></tr>'
+        )
+    body = ("<table>" + "".join(cards) + "</table>").encode("utf-8")
+    assert len(parse_public_listing(body)) == MAX_PAGE_ITEMS == 10
+    assert [row[0] for row in parse_public_listing(body)] == [str(109600 + n) for n in range(10)]
+    with pytest.raises(ValueError):
+        parse_public_listing(body, limit=100)
+    with pytest.raises(ValueError):
+        parse_public_listing(body, limit=True)

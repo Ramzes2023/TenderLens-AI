@@ -502,7 +502,7 @@ def build_source_catalog(
         languages=("ro", "ru"),
         homepage_url="https://e-licitatie.md/achizitii",
         official=False,
-        enabled=False,
+        enabled=bool(settings.cis_md_elicitatie_enabled),
         capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
     ))
 
@@ -532,7 +532,7 @@ def build_source_catalog(
         languages=("az",),
         homepage_url="https://azeristilik.gov.az/az/imkanlar/tender-elanlari",
         official=True,
-        enabled=False,
+        enabled=bool(settings.cis_az_azeristilik_enabled),
         capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
     ))
 

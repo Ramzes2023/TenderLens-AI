@@ -4,6 +4,7 @@ import httpx
 
 from app.sources.am_armeps import _retryable_official_dns_failure
 from app.sources.http_transport import PublicIPError
+from app.sources.http import ConnectorTransportError
 
 
 def _real_resolver_failure():
@@ -34,6 +35,26 @@ def test_httpx_can_drop_original_os_error_but_keep_exact_httpcore_dns_marker():
     assert _retryable_official_dns_failure(wrapped)
     # A similarly worded outer HTTPX exception alone is not sufficient.
     assert not _retryable_official_dns_failure(httpx.ConnectError("DNS resolution failed"))
+
+
+def test_bounded_client_wrapper_preserves_genuine_dns_retry_only():
+    core = httpcore.ConnectError("DNS resolution failed")
+    inner = httpx.ConnectError("DNS resolution failed")
+    inner.__cause__ = core
+    wrapped = ConnectorTransportError(retryable=True)
+    wrapped.__cause__ = inner
+    assert _retryable_official_dns_failure(wrapped)
+    nonretryable = ConnectorTransportError(retryable=False)
+    nonretryable.__cause__ = inner
+    assert not _retryable_official_dns_failure(nonretryable)
+    no_cause = ConnectorTransportError(retryable=True)
+    assert not _retryable_official_dns_failure(no_cause)
+    unsafe = ConnectorTransportError(retryable=True)
+    unsafe.__cause__ = PublicIPError("Unapproved IP address")
+    assert not _retryable_official_dns_failure(unsafe)
+    ssl_wrapped = ConnectorTransportError(retryable=True)
+    ssl_wrapped.__cause__ = httpx.ConnectError("TLS certificate verification failed")
+    assert not _retryable_official_dns_failure(ssl_wrapped)
 
 
 def test_public_ip_policy_violation_not_downgraded_to_retry():

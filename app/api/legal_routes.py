@@ -1,6 +1,8 @@
 """Fail-closed Russian legal publication: never present unapproved drafts as terms."""
 from __future__ import annotations
 import os
+import hashlib
+import json
 from html import escape
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
@@ -18,7 +20,17 @@ def legal_ready() -> bool:
             and all(os.environ.get(key, "").strip() for key in REQUIRED_SETTINGS))
 
 def legal_version() -> str:
-    return VERSION
+    # Proof of the exact published operator + document body; never reuse a
+    # version when the operator changes the legal publication configuration.
+    payload = {
+        "revision": VERSION,
+        "operator": {key: os.environ.get(key, "") for key in REQUIRED_SETTINGS},
+        "pages": PAGES,
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()[:12]
+    return VERSION + "-" + digest
 
 PAGES = {
  "offer": ("Публичная оферта", """
@@ -79,7 +91,7 @@ def legal_page(document: str):
             "<meta name='viewport' content='width=device-width,initial-scale=1'>"
             "<title>" + escape(title) + " — VALYQON AI</title></head><body>"
             "<main style='max-width:850px;margin:auto;padding:32px;font:16px/1.6 system-ui'>"
-            "<h1>" + escape(title) + "</h1><p>Редакция " + VERSION + "</p>"
+            "<h1>" + escape(title) + "</h1><p>Редакция " + legal_version() + "</p>"
             + text.format(region=region, retention=retention) + details
             + "</main></body></html>")
     return HTMLResponse(html, headers={"Cache-Control":"public, max-age=300"})

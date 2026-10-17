@@ -13,6 +13,10 @@ def test_legal_four_distinct_pages_and_escaped_operator(monkeypatch):
     for setting in legal_routes.REQUIRED_SETTINGS:
         monkeypatch.setenv(setting, "Company & Partners")
     monkeypatch.setenv("VALYQON_LEGAL_APPROVED", "true")
+    original_revision = legal_routes.legal_version()
+    monkeypatch.setenv("VALYQON_LEGAL_ENTITY", "Other & Company")
+    assert original_revision != legal_routes.legal_version()
+    monkeypatch.setenv("VALYQON_LEGAL_ENTITY", "Company & Partners")
     for name in ("offer", "privacy", "personal-data", "marketing"):
         html = legal_routes.legal_page(name)
         assert html.status_code == 200

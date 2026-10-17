@@ -498,6 +498,13 @@ def shell_html(html: str) -> str:
         DISCOVERY_HTML,
     )
 
+    from .billing_ui import BILLING_HTML
+    context = context.replace(
+        '<section\n  id="futurePage"',
+        BILLING_HTML + '\n<section\n  id="futurePage"',
+        1,
+    )
+
     context = context.replace(
         '<section\n  id="futurePage"',
         HISTORY_HTML
@@ -650,6 +657,7 @@ def shell_html(html: str) -> str:
         '<script src="/assets/first_run.js?v=launch-20261017"></script>'
         '<script src="/assets/history.js?v=ui-fix-20261013"></script>'
         '<script src="/assets/saved.js?v=phase24r"></script>'
+        '<script src="/assets/billing.js?v=pilot-20261017"></script>'
         '<script src="/assets/source_health.js?v=ui-fix-20261013&intl=20261014"></script>'
         '<script src="/assets/rag.js?v=pilot1"></script>'
         '<script src="/assets/locale.js?v=ui-fix-20261013"></script>'

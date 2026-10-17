@@ -52,22 +52,36 @@
       labels.append(el('h3','',item.name),el('small','',item.key));
       top.append(flag,labels);
       const tags = el('div','source-tags');
+      const stage = item.inventory_status || (item.registered === false ? 'optional' : 'registered');
+      const stateLabel = stage === 'research' ? 'Research target · not integrated' :
+        stage === 'staged' ? 'In pull request · not merged' :
+        stage === 'optional' ? 'Available in code · not configured' :
+        item.enabled ? 'Configured for use' : 'Not enabled';
       tags.append(
         el('span','source-tag',item.official ? translate('Government or official') : translate('Marketplace or commercial')),
-        el('span','source-tag',item.focus === 'regional_small' ? translate('Regional / small procurement') : item.transport.toUpperCase()),
-        el('span','source-tag',item.registered === false ? translate('Available in code · not configured') :
-          item.enabled ? translate('Configured for use') : translate('Not enabled'))
+        el('span','source-tag',item.focus === 'regional_small' ? translate('Regional / small procurement') :
+          item.transport === 'unknown' ? translate('Candidate portal') : item.transport.toUpperCase()),
+        el('span','source-tag',translate(stateLabel))
       );
-      const note = el('p','source-directory-note',translate(item.registered === false ?
-        'This adapter is not registered in the running service. Live delivery is not verified.' :
-        'Live delivery is not verified by this directory.'));
+      const noteKey = stage === 'research' ? 'Public research URL only; no working adapter or tender delivery established.' :
+        stage === 'staged' ? 'Source adapter exists in an unmerged pull request and is not available in this deployment.' :
+        stage === 'optional' ? 'This adapter is not registered in the running service. Live delivery is not verified.' :
+        'Live delivery is not verified by this directory.';
+      const note = el('p','source-directory-note',translate(noteKey));
       card.append(top,tags,note);
       if (item.homepage) {
-        const a = el('a','source-official-link',translate('Official source website') + ' ↗');
+        const a = el('a','source-official-link',translate('Source website') + ' ↗');
         a.href = item.homepage;
         a.target = '_blank';
         a.rel = 'noopener noreferrer';
         card.append(a);
+      }
+      if (item.evidence_url && /^https:\/\/github\.com\/Ramzes2023\/TenderLens-AI\//.test(item.evidence_url)) {
+        const evidence = el('a','source-official-link',translate('GitHub evidence') + ' ↗');
+        evidence.href = item.evidence_url;
+        evidence.target = '_blank';
+        evidence.rel = 'noopener noreferrer';
+        card.append(evidence);
       }
       catalog.append(card);
     }
@@ -79,7 +93,7 @@
     message.textContent = state === 'error'
       ? translate('Unable to load source registry right now.')
       : translate('Showing') + ' ' + filtered.length + ' ' +
-        translate('listed adapters (registered and optional). Availability requires a separate check.');
+        translate('source cards across all stages. Live tender delivery requires separate verification.');
     for(const button of mapPins){
       const selected=button.dataset.mapRegion===region;
       button.setAttribute('aria-pressed', String(selected));
@@ -115,7 +129,14 @@
       const optional = Array.isArray(data.optional_sources) ? data.optional_sources.filter(item=>
         valid(item) && item.registered === false && !registeredKeys.has(item.key)
       ) : [];
-      records = registered.concat(optional);
+      const already = new Set(registered.concat(optional).map(item=>item.key));
+      const candidates = Array.isArray(data.candidate_sources) ? data.candidate_sources.filter(item=>{
+        if (!valid(item) || item.registered !== false ||
+            !['staged','research'].includes(item.inventory_status) || already.has(item.key)) return false;
+        already.add(item.key);
+        return true;
+      }) : [];
+      records = registered.concat(optional, candidates);
       state = 'ready';
       render();
     })

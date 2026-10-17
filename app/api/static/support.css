@@ -1292,3 +1292,66 @@ body.saas .support-page .support-form-status.error{color:#ffafb7}
 body.saas .support-page .support-main-grid{gap:16px}
 @media(max-width:1100px){body.saas .support-page .support-main-grid{grid-template-columns:1fr}}
 @media(max-width:760px){body.saas .support-page .support-hero{padding:23px}body.saas .support-page .support-summary{grid-template-columns:1fr}body.saas .support-page .support-hero-actions{width:100%}body.saas .support-page .support-hero-actions button{flex:1}body.saas .support-page .support-form-grid{grid-template-columns:1fr}}
+
+
+/* Operator/customer support conversation readability on the dark support page.
+   Supplements, rather than replaces, the mainline premium support palette. */
+body.saas #supportCenter .support-conversation-card,
+body.saas #supportCenter .support-conversation-grid,
+body.saas #supportCenter .support-thread-list,
+body.saas #supportCenter .support-thread-detail {
+  background:#162740;color:#edf5ff;border-color:#3c5577;
+}
+body.saas #supportCenter .support-thread-list {
+  background:#102139;border-right:1px solid #415b7f;
+}
+body.saas #supportCenter .support-thread-item {
+  background:#172d49;color:#e8f2ff;border-color:#405e80;
+}
+body.saas #supportCenter .support-thread-item:hover,
+body.saas #supportCenter .support-thread-item.active {
+  background:#26456a;border-color:#8ab7f5;
+}
+body.saas #supportCenter .support-thread-ticket-subject,
+body.saas #supportCenter .support-thread-ticket-header h4 {
+  color:#f2f7ff;
+}
+body.saas #supportCenter .support-thread-ticket-id {color:#a5caff}
+body.saas #supportCenter .support-thread-item-meta time,
+body.saas #supportCenter .support-thread-customer,
+body.saas #supportCenter .support-thread-action-status {
+  color:#b8cbe5;
+}
+body.saas #supportCenter .support-thread-detail,
+body.saas #supportCenter .support-thread-ticket-header,
+body.saas #supportCenter .support-thread-reply {
+  border-color:#456185;
+}
+body.saas #supportCenter .support-original-request,
+body.saas #supportCenter .support-thread-message.support {
+  background:#1d3352;color:#eaf3ff;border-color:#4c6688;
+}
+body.saas #supportCenter .support-original-request strong,
+body.saas #supportCenter .support-original-request p,
+body.saas #supportCenter .support-thread-message.support strong,
+body.saas #supportCenter .support-thread-message.support p {
+  color:#eaf3ff;
+}
+body.saas #supportCenter .support-thread-message.user {
+  background:#2857a7;color:#fff;
+}
+body.saas #supportCenter .support-thread-message time {color:#c6d8f0}
+body.saas #supportCenter .support-thread-meta span,
+body.saas #supportCenter .support-operator-controls {
+  background:#1b304f;color:#dce9ff;border-color:#466283;
+}
+body.saas #supportCenter .support-operator-controls label {color:#e0edff}
+body.saas #supportCenter .support-thread-empty {color:#c1d0e6}
+body.saas #supportCenter .support-thread-error {
+  background:#422637;color:#ffd1dc;border-color:#995772;
+}
+@media(max-width:900px){
+ body.saas #supportCenter .support-thread-list{
+   border-right:0;border-bottom:1px solid #405979;
+ }
+}

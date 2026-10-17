@@ -30,6 +30,8 @@ URLS = {
     "rtsomsk": "https://zmo-omsk.rts-tender.ru/",
     "rtsyaroslavl": "https://market-yaroslavl.rts-tender.ru/",
     "sber_berezka": "https://agregatoreat.ru/",
+    "tender_pro": "https://www.tender.pro/api/tenders/list",
+    "gazprom_gmt": "https://gmt.gazprom.ru/tenders/active/",
 }
 CAP = 1_500_000
 DETAIL_HINT = re.compile(r"(?:notice|purchase|lot|tender|procedure|izve|zakup|notification|/trade/|/bid/)", re.I)

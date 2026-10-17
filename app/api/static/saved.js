@@ -20,7 +20,20 @@ function ready(){
  return usingSharedOrganization()&&Number.isInteger(state.activeCompanyId);
 }
 
+function refreshExportLinks(){
+ const canExport=usingSharedOrganization()&&Number.isInteger(state.activeCompanyId);
+ for(const format of ['csv','xlsx']){
+  const anchor=$('exportSaved'+(format==='csv'?'Csv':'Xlsx'));
+  if(!anchor)continue;
+  anchor.hidden=!canExport;
+  if(canExport){
+   anchor.href='/api/v1/organizations/'+encodeURIComponent(state.organizationId)+'/shortlist/export?format='+format;
+  }else anchor.removeAttribute('href');
+ }
+}
+
 function updateContext(){
+ refreshExportLinks();
  if(!usingSharedOrganization()){
   $('savedContext').textContent='Select or create a shared organization in Team first.';
   return;

@@ -29,6 +29,8 @@ SAVED_HTML = """
     >
       Refresh saved
     </button>
+    <a id="exportSavedCsv" href="#" hidden>Export CSV</a>
+    <a id="exportSavedXlsx" href="#" hidden>Export Excel</a>
   </div>
 
   <div class="overview-metrics">

@@ -36,15 +36,17 @@ def run_cases(parameters):
         with closing(db.connect()) as conn:
             rows = conn.execute("SELECT version,domain,checksum FROM app_schema_migrations ORDER BY version").fetchall()
             assert [tuple(row[i] for i in range(3)) for row in rows] == [(m.version, m.domain, m.checksum) for m in MIGRATIONS]
-            assert [m.version for m in MIGRATIONS] == list(range(1, 18))
-            assert MIGRATIONS[-4].domain == "source_observations"
-            assert MIGRATIONS[-3].domain == "legal"
-            assert MIGRATIONS[-2].domain == "deadline_alerts"
-            assert MIGRATIONS[-1].domain == "tender_workflows"
+            assert [m.version for m in MIGRATIONS] == list(range(1, 19))
+            assert MIGRATIONS[-5].domain == "source_observations"
+            assert MIGRATIONS[-4].domain == "legal"
+            assert MIGRATIONS[-3].domain == "deadline_alerts"
+            assert MIGRATIONS[-2].domain == "tender_workflows"
+            assert MIGRATIONS[-1].domain == "saved_search_filters"
+            assert conn.execute("SELECT COUNT(*) FROM saved_search_filters").fetchone()[0] == 0
             assert conn.execute("SELECT COUNT(*) FROM saved_opportunity_workflow").fetchone()[0] == 0
             assert conn.execute("SELECT COUNT(*) FROM account_legal_acceptances").fetchone()[0] == 0
             assert conn.execute("SELECT COUNT(*) FROM synchronous_usage").fetchone()[0] == 0
-        print("PASS: migrations 1-17 including legal, deadline alerts and tender workflows, checksums and replay.")
+        print("PASS: migrations 1-18 including saved search filters, checksums and replay.")
 
         def tenant():
             account = AuthRepository(db).create_account(uuid.uuid4().hex + "@example.test", "synthetic")

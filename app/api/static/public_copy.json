@@ -311,5 +311,15 @@
   "Unable to load source registry right now.": "Не удалось загрузить реестр источников.",
   "No sources match these filters.": "По этим фильтрам источников нет.",
   "Showing": "Показано",
-  "registered adapters. Availability requires a separate check.": "зарегистрированных адаптеров. Доступность проверяется отдельно."
+  "registered adapters. Availability requires a separate check.": "зарегистрированных адаптеров. Доступность проверяется отдельно.",
+  "Explore registered sources by world region": "Исследовать источники по регионам мира",
+  "INTERACTIVE SOURCE MAP": "ИНТЕРАКТИВНАЯ КАРТА ИСТОЧНИКОВ",
+  "Choose a market to explore.": "Выберите рынок для просмотра.",
+  "Regions are navigational filters, not proof of source activity.": "Регионы — это фильтры каталога, а не подтверждение активности источников.",
+  "Europe": "Европа",
+  "Asia & Middle East": "Азия и Ближний Восток",
+  "Americas": "Америка",
+  "Africa": "Африка",
+  "Oceania": "Океания",
+  "Global & other": "Мир и другие"
 }

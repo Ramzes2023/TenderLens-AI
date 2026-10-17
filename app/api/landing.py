@@ -25,7 +25,22 @@ def landing_html(authenticated: bool = False) -> str:
 <section class="public-tour"><h2>Your next steps</h2><p>Create and verify your account → Set up your company → Search and review evidence</p><p>Example: industrial suppliers and engineering firms can compare their capabilities with procurement requirements.</p><div class="toolbar"><a class="secondary" href="/how-it-works">Read the step-by-step guide</a><a href="/usage-guidelines">Usage guidelines</a></div></section><section id="coverage" class="content-section coverage-section"><div class="section-heading"><span class="eyebrow">PUBLIC SOURCE DIRECTORY</span><h2>A procurement map that goes deeper.</h2><p>Browse the adapters registered in this running version of VALYQON. We group Russian, CIS and other international sources without presenting configuration as proof of live tender delivery.</p></div>
 <div id="sourceDirectory">
 <div class="directory-overview"><div class="directory-metric"><strong id="sourceDirectoryCount">—</strong><span>Registered adapters</span></div><div class="directory-metric"><strong id="sourceEnabledCount">—</strong><span>Enabled by configuration, not verified live</span></div></div>
-<div class="source-directory-toolbar"><label>Find a source<input id="sourceSearch" type="search" maxlength="120" placeholder="Name, country or key" autocomplete="off"></label><label>Market<select id="sourceRegion"><option value="all">All markets</option><option value="russia">Russia</option><option value="cis">CIS / neighboring countries</option><option value="world">International</option></select></label></div>
+<div class="source-directory-toolbar"><label>Find a source<input id="sourceSearch" type="search" maxlength="120" placeholder="Name, country or key" autocomplete="off"></label><label>Market<select id="sourceRegion"><option value="all">All markets</option><option value="russia">Russia</option><option value="cis">CIS / neighboring countries</option><option value="world">International</option><option value="europe">Europe</option><option value="asia">Asia &amp; Middle East</option><option value="americas">Americas</option><option value="africa">Africa</option><option value="oceania">Oceania</option><option value="other">Global &amp; other</option></select></label></div>
+<div class="source-map-nav" role="group" aria-label="Explore registered sources by world region">
+  <div class="source-map-caption"><span class="eyebrow">INTERACTIVE SOURCE MAP</span><strong>Choose a market to explore.</strong><small>Regions are navigational filters, not proof of source activity.</small></div>
+  <div class="source-map-grid" aria-hidden="true"></div>
+  <div class="source-map-pins">
+    <button type="button" data-map-region="all" aria-pressed="true" class="is-selected">All markets</button>
+    <button type="button" data-map-region="russia" aria-pressed="false">Russia</button>
+    <button type="button" data-map-region="cis" aria-pressed="false">CIS / neighboring countries</button>
+    <button type="button" data-map-region="europe" aria-pressed="false">Europe</button>
+    <button type="button" data-map-region="asia" aria-pressed="false">Asia &amp; Middle East</button>
+    <button type="button" data-map-region="americas" aria-pressed="false">Americas</button>
+    <button type="button" data-map-region="africa" aria-pressed="false">Africa</button>
+    <button type="button" data-map-region="oceania" aria-pressed="false">Oceania</button>
+    <button type="button" data-map-region="other" aria-pressed="false">Global &amp; other</button>
+  </div>
+</div>
 <p id="sourceDirectoryStatus" class="directory-disclosure" role="status" aria-live="polite">Loading registered source adapters…</p><div id="sourceCards" class="source-directory-grid"></div>
 <p class="directory-disclosure"><strong>Transparency:</strong> this directory lists registered adapters in the current running configuration; optional adapters not installed in this deployment are not included. Enabled does not mean fetched, fresh or healthy. Live status requires separate end-to-end monitoring and the official notice remains authoritative.</p></div>
 <a class="text-link" href="/dashboard#source-health">View source health in your workspace →</a>

@@ -5,6 +5,7 @@ No fixtures in live check, secrets, personal data, login, redirects or TLS bypas
 """
 from __future__ import annotations
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from contextlib import nullcontext
 import math
 import asyncio
@@ -154,6 +155,72 @@ def verify_public_detail(body,number,title,url):
     return (number,title,url)
 
 
+
+def independently_verified_fields(body):
+    """Parse only visible, unique values from the already verified detail HTML.
+
+    Absent or ambiguous optional fields remain None. Never infer a numeric
+    price from text saying price is undefined or a date from the listing.
+    """
+    doc = read_doc(body)
+    values = {}
+    for row in doc.rows:
+        cells = row["cells"]
+        if len(cells) != 2:
+            continue
+        label = cells[0].strip().strip("*:").lower()
+        if label in {
+            "организация", "дата окончания подачи оферт",
+            "максимальная цена товаров, работ, услуг", "тип закупки",
+        }:
+            values.setdefault(label, set()).add(cells[1].strip())
+    def single(label):
+        found = values.get(label, set())
+        return next(iter(found)) if len(found) == 1 else None
+
+    customer = single("организация")
+    if customer is not None and (not 3 <= len(customer) <= 2000 or
+            not re.search(r"[А-Яа-яЁё]", customer)):
+        customer = None
+    deadline = None
+    raw_date = single("дата окончания подачи оферт")
+    if raw_date is not None:
+        m = re.fullmatch(
+            r"(\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2})\s+"
+            r"\(UTC\+05:00\)\s+Екатеринбург", raw_date,
+        )
+        if m:
+            try:
+                deadline = datetime.strptime(
+                    m.group(1), "%d.%m.%Y %H:%M"
+                ).replace(tzinfo=timezone(timedelta(hours=5))).isoformat()
+            except ValueError:
+                pass
+    price = None
+    raw_price = single("максимальная цена товаров, работ, услуг")
+    if raw_price and re.fullmatch(
+        r"\d{1,12}(?:[ \u00a0]\d{3})*(?:[.,]\d{1,2})?", raw_price
+    ):
+        v = float(raw_price.replace("\u00a0", "").replace(" ", "").replace(",", "."))
+        if math.isfinite(v) and 0 < v <= 1_000_000_000_000:
+            price = v
+    procurement_type = single("тип закупки")
+    if procurement_type is not None and not (
+        8 <= len(procurement_type) <= 160
+        and ("Закупка" in procurement_type or
+             "закупка" in procurement_type or
+             "Запрос коммерческих предложений" in procurement_type)
+    ):
+        procurement_type = None
+    return {
+        "customer": customer,
+        "deadline": deadline,
+        "initial_price": price,
+        "currency": "RUB" if price is not None else None,
+        "summary": "Вид закупки: " + procurement_type if procurement_type else None,
+    }
+
+
 @dataclass(frozen=True)
 class SouthUralPublicSource:
     timeout: float = 20
@@ -188,9 +255,11 @@ class SouthUralPublicSource:
                         if "html" not in detail.headers.get("content-type","").lower():
                             raise ValueError("South Ural official detail not public HTML")
                         verify_public_detail(detail.content,number,title,url)
+                        fields=independently_verified_fields(detail.content)
                         notice=TenderNotice(
                             source=SOURCE_ID,external_id=number,tender_number=number,
                             title=title,url=url,region="Челябинская область",
+                            **fields,
                         )
                         validate_notice(notice,SOURCE_ID)
                         notices.append(notice)

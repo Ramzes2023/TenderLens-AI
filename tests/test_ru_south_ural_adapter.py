@@ -1,6 +1,6 @@
 """Synthetic HTML is NEVER accepted as live procurement proof."""
 import pytest
-from app.sources.south_ural_public import canonical_detail,parse_public_listing,verify_public_detail,LIST_URL,SouthUralPublicSource
+from app.sources.south_ural_public import canonical_detail,parse_public_listing,verify_public_detail,LIST_URL,SouthUralPublicSource,independently_verified_fields
 
 def rows():
     return """<html><table>
@@ -117,3 +117,43 @@ def test_collect_up_to_ten_distinct_current_public_invites():
         parse_public_listing(body, limit=100)
     with pytest.raises(ValueError):
         parse_public_listing(body, limit=True)
+
+
+
+def test_independent_real_detail_optional_customer_price_deadline_without_guesses():
+    html = """<html><table>
+    <tr><td>Организация:</td><td>Муниципальное учреждение города Челябинска</td></tr>
+    <tr><td>Дата окончания подачи оферт*</td><td>21.10.2026 15:15 (UTC+05:00) Екатеринбург</td></tr>
+    <tr><td>Максимальная цена товаров, работ, услуг*</td><td>50 188,94</td></tr>
+    <tr><td>Тип закупки*</td><td>Закупка малого объема на основании 223-ФЗ</td></tr>
+    </table></html>""".encode("utf-8")
+    result = independently_verified_fields(html)
+    assert result == {
+        "customer": "Муниципальное учреждение города Челябинска",
+        "deadline": "2026-10-21T15:15:00+05:00",
+        "initial_price": 50188.94,
+        "currency": "RUB",
+        "summary": "Вид закупки: Закупка малого объема на основании 223-ФЗ",
+    }
+
+
+@pytest.mark.parametrize("value", ["Цена не определена", "NaN", "-1", "0", "Infinity"])
+def test_undefined_forged_or_nonpositive_price_never_used(value):
+    data = f"<table><tr><td>Максимальная цена товаров, работ, услуг*</td><td>{value}</td></tr></table>".encode()
+    result = independently_verified_fields(data)
+    assert result["initial_price"] is None and result["currency"] is None
+
+
+def test_ambiguous_customer_and_deadline_not_invented():
+    doc = """<table>
+    <tr><td>Организация:</td><td>Заказчик A</td></tr>
+    <tr><td>Организация:</td><td>Заказчик B</td></tr>
+    <tr><td>Дата окончания подачи оферт*</td><td>31.02.2026 10:00 (UTC+05:00) Екатеринбург</td></tr>
+    </table>""".encode("utf-8")
+    result = independently_verified_fields(doc)
+    assert result["customer"] is None and result["deadline"] is None
+
+
+def test_script_only_dates_and_prices_are_not_data():
+    data = "<script><table><tr><td>Максимальная цена товаров, работ, услуг*</td><td>1000</td></tr></table></script>".encode()
+    assert independently_verified_fields(data)["initial_price"] is None

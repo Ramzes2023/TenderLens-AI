@@ -30,7 +30,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install PyYAML pytest
-      - name: Confirm four non-synthetic live source pipelines and read-only schedule
+      - name: Confirm five non-synthetic live source pipelines and read-only schedule
         run: python -m pytest -q tests/test_ru_daily_source_health_workflow.py
   b2b-center-public-signal:
     if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
@@ -104,3 +104,21 @@ jobs:
       - name: Native STAN notices -> authorized tenant scoring and denial
         timeout-minutes: 4
         run: python -B -m scripts.ci_ru_stan_authenticated
+  south-ural-public-signal:
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Genuine South Ural first-party procurement notices -> fenced worker SQLite and keyword search
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_south_ural_real_worker
+      - name: Verified South Ural notices -> authorized tenant scoring and cross-tenant access denied
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_south_ural_authenticated

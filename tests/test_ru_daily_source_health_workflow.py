@@ -24,9 +24,13 @@ EXPECTED={
         "python -B -m scripts.ci_ru_stan_real_worker",
         "python -B -m scripts.ci_ru_stan_authenticated",
     ),
+    "south-ural-public-signal": (
+        "python -B -m scripts.ci_ru_south_ural_real_worker",
+        "python -B -m scripts.ci_ru_south_ural_authenticated",
+    ),
 }
 
-def test_schedule_manual_default_and_five_specific_jobs():
+def test_schedule_manual_default_and_six_specific_jobs():
     x=load()
     assert "schedule" in x["on"] and len(x["on"]["schedule"])==1
     assert x["on"]["schedule"][0]["cron"]=="17 4 * * *"

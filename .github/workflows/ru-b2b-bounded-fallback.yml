@@ -1,0 +1,69 @@
+name: RU B2B complete bounded root or explicit partial office fallback
+on:
+  push:
+    branches: [fix/ru-b2b-live-budget-and-fallback-20261017]
+    paths:
+      - app/sources/b2b_center.py
+      - app/sources/ingestion.py
+      - tests/test_b2b_foreign_aggregate.py
+      - scripts/ci_ru_b2b_real_worker.py
+      - scripts/ci_ru_b2b_user_scoring.py
+      - scripts/ci_ru_leased_connector.py
+      - .github/workflows/ru-b2b-bounded-fallback.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/b2b_center.py
+      - app/sources/ingestion.py
+      - tests/test_b2b_foreign_aggregate.py
+      - scripts/ci_ru_b2b_real_worker.py
+      - scripts/ci_ru_b2b_user_scoring.py
+      - scripts/ci_ru_leased_connector.py
+      - .github/workflows/ru-b2b-bounded-fallback.yml
+permissions:
+  contents: read
+jobs:
+  safe-offline-b2b-fallback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Fail-closed root transport + bounded official sector fallback contracts
+        run: python -m pytest -q tests/test_b2b_foreign_aggregate.py tests/test_ru_source_integration_contract.py
+  b2b-real-fenced-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Official B2B notices to actual leased connector, ephemeral SQLite and exact search
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_b2b_real_worker
+  b2b-real-signed-in-scoring:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real public B2B notice to isolated authorized customer scoring and tenant separation
+        timeout-minutes: 4
+        run: python -B scripts/ci_ru_b2b_user_scoring.py

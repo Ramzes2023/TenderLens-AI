@@ -59,6 +59,7 @@ HOSTS = {
     'hk_hyd_tenders': frozenset({'www.hyd.gov.hk'}),
     'sg_gebiz_professional': frozenset({'www.gebiz.gov.sg'}),
     'sg_gebiz_misc': frozenset({'www.gebiz.gov.sg'}),
+    'hk_hkma_tender': frozenset({'api.hkma.gov.hk'}),
     'jp_jetro_national': frozenset({'www.jetro.go.jp'}),
     'jp_jetro_local': frozenset({'www.jetro.go.jp'}),
     'jp_jetro_bid': frozenset({'www.jetro.go.jp'}),
@@ -159,7 +160,10 @@ class ConnectorSyncHandler:
                          else 2 if source_id == 'mikroton_tender'
                          else 1)
         async def fetch():
-            with bounded_fetch(FetchPolicy(HOSTS[source_id], request_limit)):
+            with bounded_fetch(FetchPolicy(
+                HOSTS[source_id], request_limit,
+                max_bytes=(2 * 1024 * 1024 if source_id == 'b2b_center' else 25 * 1024 * 1024),
+            )):
                 return await asyncio.wait_for(source.fetch(self.max_records), timeout=180)
         try:
             notices = asyncio.run(fetch())

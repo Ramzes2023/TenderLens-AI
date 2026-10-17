@@ -1,4 +1,3 @@
--- Scoped opt-in reminder preferences; no implied subscriptions.
 CREATE TABLE IF NOT EXISTS deadline_alert_preferences (
  account_id INTEGER NOT NULL REFERENCES auth_accounts(id) ON DELETE CASCADE,
  organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
@@ -10,7 +9,6 @@ CREATE TABLE IF NOT EXISTS deadline_alert_preferences (
 );
 CREATE INDEX IF NOT EXISTS idx_deadline_prefs_enabled
  ON deadline_alert_preferences(organization_id,company_id,email_enabled,telegram_enabled);
--- First-claim-wins protects against repeat sends in concurrent workers.
 CREATE TABLE IF NOT EXISTS deadline_alert_receipts (
  account_id INTEGER NOT NULL,
  organization_id INTEGER NOT NULL,

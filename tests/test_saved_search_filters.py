@@ -23,8 +23,11 @@ def fixture(tmp_path):
         with conn:
             conn.execute("INSERT INTO organization_members(organization_id,account_id,role,created_at) "
                          "VALUES (?,?,?,?)",(org.id,v.id,"viewer","now"))
-            conn.execute("INSERT INTO company_workspaces(id,organization_id) VALUES (?,?)",(55,org.id))
-            conn.execute("INSERT INTO company_workspaces(id,organization_id) VALUES (?,?)",(56,org.id))
+            for company_id, name in ((55, "A factory"), (56, "B factory")):
+                conn.execute("INSERT INTO company_workspaces "
+                             "(id,owner_user_id,name,profile_json,created_at,updated_at,organization_id) "
+                             "VALUES (?,?,?,?,?,?,?)",
+                             (company_id, a.owner_user_id, name, "{}", "now", "now", org.id))
     return db,a,b,v,org
 
 

@@ -24,7 +24,7 @@ def test_genuine_official_pairs_only_from_visible_html():
 
 def test_unknown_and_js_fake_source_blocked():
     assert listing_evidence(b"<html><div>Welcome</div></html>")[0]=={}
-    assert listing_evidence(b"<script>Реестровый номер ИМЗ-2026-2-044-011567 Объект закупки Товар Заказчик</script>")[0]=={}
+    assert listing_evidence("<script>Реестровый номер ИМЗ-2026-2-044-011567 Объект закупки Товар Заказчик</script>".encode("utf-8"))[0]=={}
 
 def test_ambiguous_public_id_disallowed():
     data=('Реестровый номер ИМЗ-2026-2-044-011567 Объект закупки Котел водогрейный Заказчик '

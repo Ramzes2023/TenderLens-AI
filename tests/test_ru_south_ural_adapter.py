@@ -117,3 +117,41 @@ def test_collect_up_to_ten_distinct_current_public_invites():
         parse_public_listing(body, limit=100)
     with pytest.raises(ValueError):
         parse_public_listing(body, limit=True)
+
+
+def test_independently_correlated_visible_metadata_or_unknown_prices():
+    from app.sources.south_ural_public import verified_detail_metadata
+    from datetime import datetime
+    html=("""
+    <table>
+      <tr><td>Организация:</td><td>Муниципальная школа № 5</td></tr>
+      <tr><td>Максимальная цена товаров, работ, услуг*</td><td>25 000,50</td></tr>
+      <tr><td>Валюта</td><td>Российский рубль</td></tr>
+      <tr><td>Дата окончания подачи оферт*</td>
+          <td>29.07.2026 11:00 (UTC+05:00) Екатеринбург</td></tr>
+    </table>
+    """).encode("utf-8")
+    data=verified_detail_metadata(html)
+    assert data=={
+        "customer":"Муниципальная школа № 5",
+        "initial_price":25000.50,
+        "currency":"RUB",
+        "deadline":"2026-07-29T11:00:00+05:00",
+    }
+    assert datetime.fromisoformat(data["deadline"]).utcoffset().total_seconds()==18000
+    no_price=html.replace("25 000,50".encode(),"Цена не определена".encode())
+    assert verified_detail_metadata(no_price)["initial_price"] is None
+    assert verified_detail_metadata(no_price)["currency"] is None
+
+
+def test_metadata_rejects_invalid_or_contradictory_values():
+    from app.sources.south_ural_public import verified_detail_metadata
+    samples=[
+        '<tr><td>Максимальная цена товаров, работ, услуг*</td><td>123abc</td></tr>',
+        '<tr><td>Валюта</td><td>неизвестная</td></tr>',
+        '<tr><td>Дата окончания подачи оферт*</td><td>31.02.2026 11:00 (UTC+05:00) Екатеринбург</td></tr>',
+        '<tr><td>Организация</td><td>Первая</td></tr><tr><td>Организация</td><td>Вторая</td></tr>',
+    ]
+    for sample in samples:
+        with pytest.raises(ValueError):
+            verified_detail_metadata(("<table>"+sample+"</table>").encode("utf-8"))

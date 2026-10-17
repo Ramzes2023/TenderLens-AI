@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 import tempfile
 from pathlib import Path
 
@@ -23,6 +24,33 @@ from app.sources.opportunities import OpportunityRepository
 from app.sources.snapshots import snapshot_catalog
 from scripts.asia_six_live_acceptance import settings
 
+
+
+def run_real_queued_job(worker, jobs, job_id, *, clock=None, sleeper=None):
+    """Honor the durable queue retry schedule without mocking source results.
+
+    Retryable upstream failure legitimately leaves the real claimed job queued.
+    Accept only a genuinely succeeded terminal result after up to 3 attempts.
+    """
+    now = clock if clock is not None else time.time
+    wait = sleeper if sleeper is not None else time.sleep
+    state = None
+    for _ in range(3):
+        worked = worker.run_once()
+        state = jobs.get(job_id, scope=SYSTEM_SCOPE)
+        if not worked:
+            return state, "NO_RUNNABLE_JOB"
+        if state is None:
+            return None, "NO_JOB_RESULT"
+        if state.state != "queued":
+            return state, "FINISHED"
+        if state.attempt_count >= min(state.max_attempts, 3):
+            return state, "RETRIES_EXHAUSTED"
+        delay = (state.available_at - int(now() * 1_000_000)) / 1_000_000
+        if delay > 5:
+            return state, "RETRY_DELAY_OUT_OF_BOUNDS"
+        wait(max(0.0, delay) + 0.06)
+    return state, "RETRY_LIMIT"
 
 def main() -> int:
     if os.environ.get("VALYQON_ASIA_JETRO_BID_ENABLED") != "1":
@@ -46,10 +74,13 @@ def main() -> int:
                 handlers.register(JOB_TYPE, ConnectorSyncHandler(catalog, opportunities, max_records=5))
                 worker = Worker(jobs, handlers, job_types=(JOB_TYPE,))
                 job = service.enqueue(SOURCE_ID)
-                if worker.run_once():
-                    state = jobs.get(job.id, scope=SYSTEM_SCOPE)
-                    result["job"] = state.state if state else "NO_JOB_RESULT"
-                    if state is not None and state.state == "succeeded":
+                state, queue_check = run_real_queued_job(worker, jobs, job.id)
+                result["job"] = state.state if state else "NO_JOB_RESULT"
+                result["queue_check"] = queue_check
+                if state is not None:
+                    result["attempts"] = state.attempt_count
+                    result["failure_code"] = state.failure_code
+                if state is not None and state.state == "succeeded":
                         stored = opportunities.read(SOURCE_ID, limit=10)
                         result["stored"] = len(stored)
                         snapshots = snapshot_catalog(catalog, opportunities)

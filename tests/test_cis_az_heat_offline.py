@@ -53,8 +53,8 @@ class AzerbaijanHeatOfflineContracts(unittest.TestCase):
     def test_script_content_and_size_do_not_count(self):
         self.assertEqual(extract_index(b"<script><a href='/post/legitimate-looking-tender'>Tender satin-alma</a></script>"), ())
         self.assertEqual(extract_index(b"X" * (768 * 1024 + 1)), ())
-        self.assertFalse(detail_fields(b"<p>Satınalan təşkilatın adı: Azəristiliktəchizat</p>" +
-            b"<script>Müsabiqənin başlanma tarixi və vaxtı: 07.10.2026 Təkliflərin son təqdim olunma tarixi və vaxtı: 22.10.2026</script>")["verified"])
+        self.assertFalse(detail_fields(("<p>Satınalan təşkilatın adı: Azəristiliktəchizat</p>" +
+            "<script>Müsabiqənin başlanma tarixi və vaxtı: 07.10.2026 Təkliflərin son təqdim olunma tarixi və vaxtı: 22.10.2026</script>").encode("utf-8"))["verified"])
 
 
 if __name__ == "__main__":

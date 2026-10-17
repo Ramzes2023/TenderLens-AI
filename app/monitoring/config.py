@@ -44,6 +44,9 @@ class MonitoringSettings:
     eis_direct_enabled: bool = False
     eis_system_trust_enabled: bool = False
     eis_44_html_enabled: bool = False
+    # Explicit operator approval; absent config keeps CIS marketplace feeds inert.
+    cis_md_elicitatie_enabled: bool = False
+    cis_az_azeristilik_enabled: bool = False
 
     @property
     def eis_223_configured(self) -> bool:
@@ -125,6 +128,8 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         eis_direct_enabled=_bool("EIS_DIRECT_ENABLED", False),
         eis_system_trust_enabled=_bool("EIS_SYSTEM_TRUST_ENABLED", False),
         eis_44_html_enabled=_bool("EIS_44_HTML_ENABLED", False),
+        cis_md_elicitatie_enabled=_bool("VALYQON_CIS_MD_ELICITATIE_ENABLED", False),
+        cis_az_azeristilik_enabled=_bool("VALYQON_CIS_AZ_AZERISTILIK_ENABLED", False),
         eis_223_rss_urls=_urls(os.environ.get("EIS_223_RSS_URLS", "")),
         eis_223_profile_feeds_enabled=_bool("EIS_223_PROFILE_FEEDS_ENABLED", False),
         profile_feeds_enabled=_bool("EIS_PROFILE_FEEDS_ENABLED", True),

@@ -6,11 +6,13 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Iterable
 
 from .am_armeps import ArmeniaArmepsSource
+from .az_azeristilik import AzerbaijanHeatSource
 from .tj_eprocurement import TajikistanEprocurementSource
 from .kg_gov_legacy import KyrgyzstanGovLegacySource
 from .kz_gov_html import KazakhstanGovHtmlSource
 from .uz_uzex import UzbekistanUzexSource
 from .md_achizitii import MoldovaAchizitiiSource
+from .md_elicitatie import MoldovaELicitatieSource
 from .asia_public import ASIA_RSS_FEEDS, AsiaPublicSource
 from .jp_jetro_bid_rss import JetroBidRssSource, RSS_URL as JETRO_BID_RSS_URL
 from .hk_hyd_tenders import HighwaysTendersSource, RSS_URL as HYD_TENDERS_RSS_URL
@@ -488,6 +490,22 @@ def build_source_catalog(
         capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
     ))
 
+    # Independent accredited Moldova MTender platform with visible municipal purchases.
+    # Not the existing Achizitii.md marketplace and NOT the government OCDS API.
+    # Disabled until real live worker -> SQLite -> saved search CI passes.
+    registry.register(SourceRegistration(
+        key="md_elicitatie",
+        display_name="Moldova e-Licitație — public municipal and small procurement",
+        source=MoldovaELicitatieSource(timeout=min(timeout, 30)),
+        transport=SourceTransport.HTML,
+        jurisdictions=("MD",),
+        languages=("ro", "ru"),
+        homepage_url="https://e-licitatie.md/achizitii",
+        official=False,
+        enabled=bool(settings.cis_md_elicitatie_enabled),
+        capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
+    ))
+
     # Additional official KZ public HTML adapter complements the separately
     # token-authenticated KZ API source; operator activation remains explicit.
     registry.register(SourceRegistration(
@@ -500,6 +518,21 @@ def build_source_catalog(
         homepage_url="https://old.goszakup.gov.kz/ru/search/announce",
         official=True,
         enabled=False,
+        capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
+    ))
+
+    # Verified public announcements of Azerbaijani state-owned heating entity.
+    # Not the national AZ eTender platform, and disabled by default.
+    registry.register(SourceRegistration(
+        key="az_azeristilik",
+        display_name="Azerbaijan Azəristiliktəchizat public procurement",
+        source=AzerbaijanHeatSource(timeout=min(timeout, 30)),
+        transport=SourceTransport.HTML,
+        jurisdictions=("AZ",),
+        languages=("az",),
+        homepage_url="https://azeristilik.gov.az/az/imkanlar/tender-elanlari",
+        official=True,
+        enabled=bool(settings.cis_az_azeristilik_enabled),
         capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
     ))
 

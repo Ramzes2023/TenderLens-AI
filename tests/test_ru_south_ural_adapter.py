@@ -129,11 +129,13 @@ def test_official_detail_deadline_requires_actual_number_title_and_utc_offset():
     )
     assert independently_verified_deadline(good,n,t,url) == "2026-10-23T10:00:00+05:00"
     assert independently_verified_deadline(page(n,t),n,t,url) is None
+    # A script inserted into HTML cannot change the visible official date.
+    scripted=good.replace(b"23.10.2026", b"23.10.2026<script>alert(1)</script>")
+    assert independently_verified_deadline(scripted,n,t,url) == "2026-10-23T10:00:00+05:00"
     for bad in [
         good.replace(b"UTC+05:00", b"UTC+16:00"),
         good.replace(b"UTC+05:00", b"UTC+05:99"),
         good.replace(b"23.10.2026", b"32.10.2026"),
-        good.replace(b"23.10.2026", b"23.10.2026<script>alert(1)</script>"),
         good.replace(b"109631",b"109632"),
     ]:
         with pytest.raises(ValueError):

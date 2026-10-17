@@ -19,7 +19,7 @@ class ScopedRepository:
         return [SimpleNamespace(snapshot_json=(
             '{"source":"eis","external_id":"001","title":"=2+2",'
             '"url":"https://zakupki.gov.ru/notice/001",'
-            '"reasons":[],"preliminary_scoring":null}'
+            '"reasons":[],"metadata_analysis":{},"preliminary_scoring":{"profile_name":"Test company","profile_version":"1","fit_score":82.0,"scorable_weight":100,"completeness_percent":80,"criteria":[]}}'
         ))]
 
 

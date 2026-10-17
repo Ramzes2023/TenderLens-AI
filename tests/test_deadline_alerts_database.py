@@ -28,7 +28,7 @@ def _fixture(tmp_path):
                 (org.id, 500, "eis", "fixture-1",
                  '{"source":"eis","external_id":"fixture-1","title":"Test procurement",'
                  '"url":"https://zakupki.gov.ru/view/fixture-1",'
-                 '"deadline":"2026-10-19T10:00:00+00:00","reasons":[]}',
+                 '"deadline":"2026-10-19T10:00:00+00:00","reasons":[],"metadata_analysis":{},"preliminary_scoring":{"profile_name":"Test company","profile_version":"1","fit_score":82.0,"scorable_weight":100,"completeness_percent":80,"criteria":[]}}',
                  NOW.isoformat(), NOW.isoformat()),
             )
     return db, user, org
@@ -73,7 +73,7 @@ def test_unknown_timezone_is_not_sent(tmp_path):
             conn.execute("UPDATE saved_opportunities SET snapshot_json=?",
                          ('{"source":"eis","external_id":"fixture-1","title":"No timezone",'
                           '"url":"https://zakupki.gov.ru/view/fixture-1",'
-                          '"deadline":"2026-10-19","reasons":[]}',))
+                          '"deadline":"2026-10-19","reasons":[],"metadata_analysis":{},"preliminary_scoring":{"profile_name":"Test company","profile_version":"1","fit_score":82.0,"scorable_weight":100,"completeness_percent":80,"criteria":[]}}',))
     assert alerts.run_once(send_email=lambda *_: (_ for _ in ()).throw(
         AssertionError("Cannot send ambiguous deadline")),now=NOW)["sent"] == 0
     db.close()

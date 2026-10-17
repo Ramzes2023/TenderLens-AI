@@ -1,0 +1,48 @@
+name: Türkiye Ankara EGO real government transit tenders acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/tr_ego_transport.py
+      - app/sources/catalog.py
+      - app/sources/ingestion.py
+      - tests/test_tr_ego_transport.py
+      - scripts/asia_tr_ego_real_worker.py
+      - .github/workflows/asia-tr-ego-live-acceptance.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: turkey-ego-real-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  tr-ego-offline-source-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pytest -q tests/test_tr_ego_transport.py tests/test_tr_aski_water.py tests/test_tr_ankara_municipality.py
+  tr-ego-live-transit-worker-sqlite:
+    runs-on: ubuntu-latest
+    needs: [tr-ego-offline-source-contracts]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: EGO genuine government tender → fenced Worker → SQLite → persisted keyword query
+        env:
+          VALYQON_ASIA_TURKEY_EGO_ENABLED: '1'
+        run: python -m scripts.asia_tr_ego_real_worker

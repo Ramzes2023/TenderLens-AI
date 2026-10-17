@@ -59,3 +59,36 @@
 @media(max-width:1030px){.advantage-grid,.source-directory-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:670px){.advantage-grid,.source-directory-grid{grid-template-columns:1fr}.depth-banner{border-radius:17px}.directory-metric{flex:1;min-width:135px}.landing.premium .hero h1{font-size:clamp(2.6rem,11vw,3.5rem)}}
 @media(prefers-reduced-motion:reduce){.source-directory-card{transition:none}.source-directory-card:hover{transform:none}}
+
+/* Decorative graticule + functional geographic source filters. Not a coverage map. */
+.landing.premium .source-map-nav{
+ position:relative;min-height:200px;margin:24px 0 16px;padding:25px 28px;
+ background:radial-gradient(ellipse at 66% 28%,#3467ad77,transparent 48%),linear-gradient(120deg,#0d2140,#152f57);
+ border-radius:20px;border:1px solid #496991;color:#edf6ff;overflow:hidden;
+ display:grid;grid-template-columns:minmax(190px,.55fr) minmax(0,1fr);gap:24px;align-items:center;
+}
+.landing.premium .source-map-nav:after{
+ content:"";position:absolute;right:-40px;top:-140px;width:min(55vw,520px);height:430px;
+ border-radius:50%;border:1px solid #91bcf544;
+ background:repeating-radial-gradient(ellipse at center,transparent 0 34px,#89b1eb22 35px 36px);
+ pointer-events:none;
+}
+.landing.premium .source-map-grid{position:absolute;inset:0;opacity:.3;pointer-events:none;background:
+ repeating-linear-gradient(0deg,transparent 0 38px,#739fd522 39px 40px),
+ repeating-linear-gradient(90deg,transparent 0 57px,#739fd51c 58px 59px)}
+.landing.premium .source-map-caption{z-index:1;display:grid;gap:10px}
+.landing.premium .source-map-caption .eyebrow{color:#a4ceff}
+.landing.premium .source-map-caption strong{font-size:clamp(21px,2.4vw,31px);line-height:1.14;letter-spacing:-.035em}
+.landing.premium .source-map-caption small{color:#b9cfe9;font-size:12px;line-height:1.6;max-width:270px}
+.landing.premium .source-map-pins{position:relative;z-index:1;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:9px}
+.landing.premium .source-map-pins button{
+ border:1px solid #6b97ce88;background:#183e6aee;color:#ebf5ff;border-radius:999px;
+ padding:10px 13px;cursor:pointer;font:750 11px/1.35 system-ui,sans-serif;
+ box-shadow:0 5px 15px #0b172725;transition:background .16s ease,transform .16s ease;
+}
+.landing.premium .source-map-pins button.is-selected,
+.landing.premium .source-map-pins button[aria-pressed="true"]{background:#d7ecff;color:#163968;border-color:#d7ecff}
+.landing.premium .source-map-pins button:hover{transform:translateY(-2px)}
+.landing.premium .source-map-pins button:focus-visible{outline:3px solid #bfe1ff;outline-offset:3px}
+@media(max-width:750px){.landing.premium .source-map-nav{grid-template-columns:1fr;min-height:0;padding:22px}.landing.premium .source-map-pins{justify-content:flex-start}.landing.premium .source-map-nav:after{width:330px;height:320px;right:-150px;top:0}}
+@media(prefers-reduced-motion:reduce){.landing.premium .source-map-pins button{transition:none}.landing.premium .source-map-pins button:hover{transform:none}}

@@ -13,7 +13,9 @@ def _real_resolver_failure():
         except OSError as inner:
             raise httpcore.ConnectError("DNS resolution failed") from inner
     except httpcore.ConnectError as outer:
-        return httpx.ConnectError("DNS resolution failed") from outer
+        wrapped = httpx.ConnectError("DNS resolution failed")
+        wrapped.__cause__ = outer
+        return wrapped
 
 
 def test_temporary_dns_retry_only_for_audited_resolver_chain():

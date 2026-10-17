@@ -131,6 +131,16 @@ async def export_shortlist(
     rows = export_rows(records)
     extension = format
     payload = serialize_csv(rows) if format == "csv" else serialize_xlsx(rows)
+    # Record a successfully generated payload, never claim delivery/download.
+    # If durable evidence cannot be written, do not hand out an unlogged export.
+    try:
+        await asyncio.to_thread(
+            repo.record_shortlist_export_for_organization,
+            account_id=account.id, organization_id=organization_id,
+            company_id=company.id, format=format, item_count=len(rows),
+        )
+    except DatabaseError as error:
+        _shortlist_data_error(error)
     return Response(
         content=payload,
         media_type=CSV_TYPE if format == "csv" else XLSX_TYPE,

@@ -44,6 +44,16 @@ SAVED_HTML = """
     <p role="status" id="deadlinePreferencesStatus"></p>
   </section>
 
+  <section id="savedTeamAudit" class="p" aria-label="Team activity">
+    <h3>Recent company activity</h3>
+    <p>Read-only for organization owners and admins. Includes who saved or removed
+       tenders and who generated an export. Internal activity is not proof of an
+       official tender action or that the file was downloaded.</p>
+    <button id="refreshSavedActivity" type="button">Refresh activity</button>
+    <p id="savedActivityStatus" role="status">Activity has not been loaded.</p>
+    <ol id="savedActivityEvents"></ol>
+  </section>
+
   <div class="overview-metrics">
     <article>
       <small>

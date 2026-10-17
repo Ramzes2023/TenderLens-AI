@@ -9,6 +9,9 @@ def workspace():
     helper = company_tests.OrganizationCompanyApiTests()
     helper.setUp()
     try:
+        from app.database.backend import Database
+        from app.database.config import DatabaseSettings
+        Database(DatabaseSettings('', helper.path)).migrate()
         repo = TenderRepository(helper.path)
         repo.initialize()
         helper.client.app.state.runtime.tender_repository = repo

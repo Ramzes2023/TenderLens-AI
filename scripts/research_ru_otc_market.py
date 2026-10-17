@@ -142,6 +142,10 @@ async def live():
             resp.raise_for_status()
             if "html" not in resp.headers.get("content-type","").lower():
                 raise ValueError("OTC first-party request listing not HTML")
+            parsed=parse(resp.content)
+            safe_links=sum(1 for href,_ in parsed.links if canonical(href) is not None)
+            print("RU_OTC_PUBLIC_ANCHORS="+str(len(parsed.links)))
+            print("RU_OTC_EXACT_HOST_DETAILS="+str(safe_links))
             cards=list_native(resp.content)
             verified=[]
             for number,title,url in cards:
@@ -161,6 +165,8 @@ def main():
         return 0 if len(n)==2 else 2
     except (ValueError,ConnectorTransportError,httpx.HTTPError,OSError,TimeoutError) as error:
         print("RU_OTC_MARKET_LIVE=BLOCKED_"+type(error).__name__)
+        if isinstance(error,ValueError):
+            print("RU_OTC_PUBLIC_STAGE="+str(error))
         if isinstance(error,ConnectorTransportError):
             print("RU_OTC_MARKET_RETRYABLE="+str(error.retryable))
         print("PRODUCTION_CHANGED=NO")

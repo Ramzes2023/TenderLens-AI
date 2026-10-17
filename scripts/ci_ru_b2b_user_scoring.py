@@ -60,7 +60,7 @@ async def public_notices(catalog):
                 print("B2B_UNSAFE_URL_SHAPE=UNPARSEABLE", flush=True)
             raise
 
-    def observed_parse(payload, *, limit=100):
+    def observed_parse(payload, *, limit=100, listing_url=b2b_center.B2B_CENTER_LIST_URL):
         # Structural counts only; no raw HTML, tender identifiers or content.
         doc = _Document()
         doc.feed(payload.decode("utf-8-sig"))
@@ -89,7 +89,13 @@ async def public_notices(catalog):
                             host = urlsplit(urljoin(b2b_center.B2B_CENTER_LIST_URL, raw)).hostname
                             hosts[host or "(missing)"] = hosts.get(host or "(missing)", 0) + 1
         print("B2B_LIVE_CARD_HOST_COUNTS=" + repr(hosts), flush=True)
-        return original(payload, limit=limit)
+        try:
+            records = original(payload, limit=limit, listing_url=listing_url)
+            print("B2B_REAL_NORMALIZED_CARD_COUNT=" + str(len(records)), flush=True)
+            return records
+        except Exception as error:
+            print("B2B_REAL_PARSER_ERROR_CLASS=" + type(error).__name__, flush=True)
+            raise
 
     with patch.object(b2b_center, "_safe_url", measured_safe_url), \
             patch.object(b2b_center, "parse_b2b_center_listing", observed_parse):
@@ -115,6 +121,7 @@ def acceptance():
     if SOURCE not in catalog.enabled_keys:
         raise AssertionError("B2B-Center was not enabled in the isolated catalog")
     notices = asyncio.run(public_notices(catalog))
+    print("B2B_REAL_FETCHED_COUNT=" + str(len(notices)), flush=True)
     if not notices or len(notices) > 10:
         raise AssertionError("No live B2B procurement notices")
     if any(item.source != SOURCE or not item.external_id or not item.url for item in notices):

@@ -162,7 +162,10 @@ class ConnectorSyncHandler:
                          else 2 if source_id == 'mikroton_tender'
                          else 1)
         async def fetch():
-            with bounded_fetch(FetchPolicy(HOSTS[source_id], request_limit)):
+            with bounded_fetch(FetchPolicy(
+                HOSTS[source_id], request_limit,
+                max_bytes=(2 * 1024 * 1024 if source_id == 'b2b_center' else 25 * 1024 * 1024),
+            )):
                 return await asyncio.wait_for(source.fetch(self.max_records), timeout=180)
         try:
             notices = asyncio.run(fetch())

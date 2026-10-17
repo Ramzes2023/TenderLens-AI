@@ -1,0 +1,43 @@
+name: RU South Ural added to daily live source health
+on:
+  push:
+    branches: [feat/ru-south-ural-daily-real-health-20261017]
+    paths:
+      - .github/workflows/ru-public-sources-daily-live-health.yml
+      - tests/test_ru_daily_source_health_workflow.py
+      - .github/workflows/ru-south-ural-daily-health-acceptance.yml
+  pull_request:
+    branches: [main, feat/ru-south-ural-small-live-sql-20261017]
+permissions:
+  contents: read
+jobs:
+  south-ural-daily-health-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Existing 4 plus real South Ural original source daily SQL and tenant jobs
+        run: python -m pytest -q tests/test_ru_daily_source_health_workflow.py
+  south-ural-live-health-current-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Genuine first-party small purchases to leased SQLite and keyword user search
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_south_ural_real_worker
+      - name: Genuine regional purchases to tenant-authorized scoring; deny other customers
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_south_ural_authenticated

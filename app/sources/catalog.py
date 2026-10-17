@@ -28,6 +28,9 @@ from .eis_223_rss import Eis223RssSource
 from .india_cppp import IndiaCpppSource
 from .india_epublish import IndiaEpublishSource, LIST_URL as INDIA_EPUBLISH_LIST_URL
 from .uae_mof_rfqs import UAEMinistryFinanceSource, URL as UAE_MOF_URL
+from .tr_ankara_municipality import AnkaraMunicipalitySource, INDEX_URL as ANKARA_TENDERS_URL
+from .tr_aski_water import ASKIWaterTendersSource, LIST_URL as ASKI_TENDERS_URL
+from .tr_ego_transport import EGOTenderSource, INDEX_URL as EGO_TENDERS_URL
 from .kz_goszakup import KazakhstanGoszakupApiSource
 from .multi import MultiSourceFetcher, MultiSourceFetchReport
 from .mikroton_tender import MikrotonTenderSource
@@ -608,6 +611,36 @@ def build_source_catalog(
             jurisdictions=("AE",), languages=("en", "ar"),
             homepage_url=UAE_MOF_URL,
             official=True, enabled=True, capabilities=SourceCapabilities(),
+        ))
+
+    # Independently gated Turkish municipal tender buyers; no national EKAP coverage.
+    # All three require public same-origin individually verified bids and future deadlines.
+    if os.environ.get("VALYQON_ASIA_TURKEY_ANKARA_ENABLED", "").strip() == "1":
+        registry.register(SourceRegistration(
+            key="tr_ankara_municipality",
+            display_name="Türkiye Ankara Metropolitan Municipality open tenders",
+            source=AnkaraMunicipalitySource(timeout=min(timeout, 30.0)),
+            transport=SourceTransport.HTML, jurisdictions=("TR",), languages=("tr",),
+            homepage_url=ANKARA_TENDERS_URL, official=True, enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+    if os.environ.get("VALYQON_ASIA_TURKEY_ASKI_ENABLED", "").strip() == "1":
+        registry.register(SourceRegistration(
+            key="tr_aski_water",
+            display_name="Türkiye Ankara ASKİ water utility open tenders",
+            source=ASKIWaterTendersSource(timeout=min(timeout, 30.0)),
+            transport=SourceTransport.HTML, jurisdictions=("TR",), languages=("tr",),
+            homepage_url=ASKI_TENDERS_URL, official=True, enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+    if os.environ.get("VALYQON_ASIA_TURKEY_EGO_ENABLED", "").strip() == "1":
+        registry.register(SourceRegistration(
+            key="tr_ego_transport",
+            display_name="Türkiye Ankara EGO metro and transport open tenders",
+            source=EGOTenderSource(timeout=min(timeout, 30.0)),
+            transport=SourceTransport.HTML, jurisdictions=("TR",), languages=("tr",),
+            homepage_url=EGO_TENDERS_URL, official=True, enabled=True,
+            capabilities=SourceCapabilities(),
         ))
 
     # Russian connectors are opt-in. Do not enable unverified live adapters.

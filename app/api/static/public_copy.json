@@ -321,5 +321,20 @@
   "Americas": "Америка",
   "Africa": "Африка",
   "Oceania": "Океания",
-  "Global & other": "Мир и другие"
+  "Global & other": "Мир и другие",
+  "Registered and optional adapters": "Зарегистрированные и доступные по настройке адаптеры",
+  "Available in code · not configured": "Есть в коде · не подключён",
+  "This adapter is not registered in the running service. Live delivery is not verified.": "Адаптер не зарегистрирован в работающем сервисе. Получение тендеров не подтверждено.",
+  "listed adapters (registered and optional). Availability requires a separate check.": "адаптеров (подключённые и дополнительные). Доступность требует отдельной проверки.",
+  "Browse the adapters registered in this running version of VALYQON, plus separately marked optional Russian adapters already present in the code. Configuration alone is not proof of live tender delivery.": "Просмотрите адаптеры текущей версии VALYQON и отдельно отмеченные дополнительные российские адаптеры из кода. Наличие настроек не подтверждает получение тендеров.",
+  "Source cards at all stages": "Карточки источников на всех стадиях",
+  "Browse registered procurement sources alongside optional Russian adapters, unmerged pull requests and documented research candidates. Every card identifies its stage; only registered sources can participate in the running service.": "Просматривайте зарегистрированные площадки, необязательные российские адаптеры, незавершённые запросы на слияние и исследуемые источники. На каждой карточке указана стадия. Только зарегистрированные источники могут участвовать в работе сервиса.",
+  "Source website": "Сайт источника",
+  "GitHub evidence": "Обоснование в GitHub",
+  "Research target · not integrated": "Исследуется · не интегрирован",
+  "In pull request · not merged": "Разрабатывается в PR · не объединён",
+  "Candidate portal": "Потенциальная площадка",
+  "Public research URL only; no working adapter or tender delivery established.": "Пока только адрес для исследования; работающий адаптер и получение тендеров не подтверждены.",
+  "Source adapter exists in an unmerged pull request and is not available in this deployment.": "Адаптер находится в незавершённом PR и недоступен в текущем развёртывании.",
+  "source cards across all stages. Live tender delivery requires separate verification.": "карточек источников на разных стадиях. Получение тендеров требует отдельной проверки."
 }

@@ -8,7 +8,7 @@ on:
       - tests/test_ru_nmck_public.py
       - .github/workflows/ru-nmck-public-research.yml
   pull_request:
-    branches: [main, fix/ru-idn-bounded-host-comparison-20261017]
+    branches: [main]
     paths:
       - scripts/research_ru_nmck_public.py
       - tests/test_ru_nmck_public.py

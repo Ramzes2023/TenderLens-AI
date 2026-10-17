@@ -44,6 +44,7 @@ RU_RESEARCH_TARGETS = (
     ("r_tender_commercial","R-Tender — коммерческие торги","https://etp.r-tender.ru/app/section/kommerctorg/SearchLots/page", False,"general","https://github.com/Ramzes2023/TenderLens-AI/pull/123"),
     ("dagestan_official_small","Дагестан — официальный реестр малых закупок","https://goszakaz.e-dag.ru/smallpurchases/GzwSP/NoticesGrid", True,"regional_small","https://github.com/Ramzes2023/TenderLens-AI/pull/126"),
     ("tver_official_small","Тверская область — официальный реестр малых закупок","https://gostorgi.tverreg.ru/smallpurchases/Menu/Page/1", True,"regional_small","https://github.com/Ramzes2023/TenderLens-AI/pull/137"),
+    ("spb_official_eshop","Санкт-Петербург — официальный электронный магазин малых закупок (проверка доступности)","https://estore.gz-spb.ru/electronicshop/catalog/procedure/", True,"regional_small","https://github.com/Ramzes2023/TenderLens-AI/pull/153"),
     ("etp_rt","ЭТП РТ — региональные закупки Татарстана","https://etp-rt.ru/search/open", False,"regional_small","https://github.com/Ramzes2023/TenderLens-AI/pull/99"),
     ("rftorgi","РФ-Торги — поиск тендеров","https://rftorgi.ru/tenders", False,"general","https://github.com/Ramzes2023/TenderLens-AI/pull/99"),
     ("gazprom_gmt","Газпром — GMT активные тендеры","https://gmt.gazprom.ru/tenders/active/", False,"general","https://github.com/Ramzes2023/TenderLens-AI/pull/99"),

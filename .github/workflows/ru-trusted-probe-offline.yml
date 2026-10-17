@@ -23,4 +23,4 @@ jobs:
         with:
           python-version: '3.12'
       - name: Strict URL/DNS allowance and no unreviewed PR checkout
-        run: python -B -m unittest tests.test_ru_trusted_live_probe
+        run: python -B -m unittest discover -s tests -p 'test_ru_trusted_live_probe.py'

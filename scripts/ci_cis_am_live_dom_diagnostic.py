@@ -14,9 +14,22 @@ from app.sources.http import FetchPolicy, bounded_fetch, source_client
 
 
 async def run():
-    async with source_client(timeout=15.0, trust_env=False, follow_redirects=False) as client:
-        with bounded_fetch(FetchPolicy(frozenset({"eauction.armeps.am"}), 1, max_bytes=1024 * 1024)):
-            resp = await client.get(ARMEPS_LISTING_URL)
+    try:
+        async with source_client(timeout=15.0, trust_env=False, follow_redirects=False) as client:
+            with bounded_fetch(FetchPolicy(frozenset({"eauction.armeps.am"}), 1, max_bytes=1024 * 1024)):
+                resp = await client.get(ARMEPS_LISTING_URL)
+    except Exception as error:
+        chain, seen = [], set()
+        current = error
+        while isinstance(current, BaseException) and id(current) not in seen and len(chain) < 7:
+            seen.add(id(current))
+            chain.append({"type": type(current).__name__,
+                          "audited_dns_failed": type(current).__name__ == "ConnectError"
+                          and str(current) == "DNS resolution failed"})
+            current = current.__cause__
+        print(json.dumps({"source": "am_armeps", "upstream_html_retrieved": False,
+                          "exception_chain_types": chain}, sort_keys=True))
+        return 1
     report = {
         "status": resp.status_code,
         "html_content_type": "html" in resp.headers.get("content-type", "").lower(),

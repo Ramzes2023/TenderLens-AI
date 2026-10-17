@@ -1,5 +1,5 @@
 """Contrast-safe support cockpit redesign without changes to its API contract."""
-from app.api.saas_shell import shell_html
+from app.api.dashboard import dashboard_html
 from app.api.support_ui import SUPPORT_HTML
 from pathlib import Path
 
@@ -25,4 +25,4 @@ def test_support_dark_style_scoped_and_mobile_compatible():
     assert "#supportCenter .support-ticket-body" in CSS
     assert "@media(max-width:680px)" in CSS
     assert "prefers-reduced-motion" in CSS
-    assert "/assets/support.css?v=dark-20261017" in shell_html("<main></main>")
+    assert "/assets/support.css?v=dark-20261017" in dashboard_html()

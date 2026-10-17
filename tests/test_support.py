@@ -115,7 +115,7 @@ def test_support_ui_is_in_shell():
     html = dashboard_html()
 
     assert 'id="supportCenter"' in html
-    assert "VALYQON SUPPORT CENTER" in html
+    assert "YOUR SUPPORT WORKSPACE" in html
     assert "/assets/support.css" in html
     assert "/assets/support.js" in html
 

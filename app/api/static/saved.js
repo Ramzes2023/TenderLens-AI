@@ -20,7 +20,74 @@ function ready(){
  return usingSharedOrganization()&&Number.isInteger(state.activeCompanyId);
 }
 
+function refreshExportLinks(){
+ const canExport=usingSharedOrganization()&&Number.isInteger(state.activeCompanyId);
+ for(const format of ['csv','xlsx']){
+  const anchor=$('exportSaved'+(format==='csv'?'Csv':'Xlsx'));
+  if(!anchor)continue;
+  anchor.hidden=!canExport;
+  if(canExport){
+   anchor.href='/api/v1/organizations/'+encodeURIComponent(state.organizationId)+'/shortlist/export?format='+format;
+  }else anchor.removeAttribute('href');
+ }
+}
+
+let deadlinePreferenceTicket=0;
+async function loadDeadlinePreferences(){
+ const ticket=++deadlinePreferenceTicket;
+ const org=state.organizationId,scope=identity();
+ const save=$('saveDeadlinePreferences');
+ if(!save)return;
+ save.disabled=true;
+ for(const id of ['deadlineEmailOptin','deadlineTelegramOptin'])$(id).checked=false;
+ if(!usingSharedOrganization()||!Number.isInteger(state.activeCompanyId)){
+  $('deadlinePreferencesStatus').textContent='Activate a shared company to set reminders.';
+  return;
+ }
+ $('deadlinePreferencesStatus').textContent='Loading your reminder preferences...';
+ try{
+  const response=await fetch('/api/v1/organizations/'+encodeURIComponent(org)+'/deadline-alerts/preferences',
+   {credentials:'same-origin',cache:'no-store'});
+  if(ticket!==deadlinePreferenceTicket||scope!==identity())return;
+  if(!response.ok)throw Error('unavailable');
+  const data=await response.json();
+  $('deadlineEmailOptin').checked=!!data.email_enabled;
+  $('deadlineTelegramOptin').checked=!!data.telegram_enabled;
+  save.disabled=false;
+  $('deadlinePreferencesStatus').textContent='Reminders are optional and only sent for saved opportunities.';
+ }catch(error){
+  if(ticket===deadlinePreferenceTicket&&scope===identity())
+   $('deadlinePreferencesStatus').textContent='Could not load preferences. No changes were made.';
+ }
+}
+async function saveDeadlinePreferences(){
+ if(!usingSharedOrganization()||!Number.isInteger(state.activeCompanyId))return;
+ const scope=identity(),org=state.organizationId;
+ const save=$('saveDeadlinePreferences');
+ save.disabled=true;
+ $('deadlinePreferencesStatus').textContent='Saving preferences...';
+ try{
+  const response=await fetch('/api/v1/organizations/'+encodeURIComponent(org)+'/deadline-alerts/preferences',{
+   method:'PUT',credentials:'same-origin',cache:'no-store',
+   headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({
+    email_enabled:$('deadlineEmailOptin').checked,
+    telegram_enabled:$('deadlineTelegramOptin').checked
+   })
+  });
+  if(scope!==identity())return;
+  if(!response.ok)throw Error('unavailable');
+  $('deadlinePreferencesStatus').textContent='Deadline reminder preferences saved.';
+ }catch(error){
+  if(scope===identity())$('deadlinePreferencesStatus').textContent='Preferences were not saved. Please retry.';
+ }finally{
+  if(scope===identity())save.disabled=false;
+ }
+}
+$('saveDeadlinePreferences').onclick=saveDeadlinePreferences;
+
 function updateContext(){
+ refreshExportLinks();
  if(!usingSharedOrganization()){
   $('savedContext').textContent='Select or create a shared organization in Team first.';
   return;
@@ -637,6 +704,7 @@ window.addEventListener(
   }
 
   updateContext();
+  loadDeadlinePreferences();
 
   if(currentPage()==='saved'){
    loadSaved();
@@ -645,6 +713,7 @@ window.addEventListener(
 );
 
 updateContext();
+loadDeadlinePreferences();
 
 if(currentPage()==='saved'){
  loadSaved();

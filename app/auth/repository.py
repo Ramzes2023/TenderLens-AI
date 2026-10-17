@@ -57,7 +57,7 @@ class AuthRepository:
         except (OSError, sqlite3.Error, StorageError, ValueError):
             raise AuthRepositoryError("Could not initialize auth storage.") from None
 
-    def create_account(self, email: str, password_hash: str) -> AuthAccount:
+    def create_account(self, email: str, password_hash: str, *, legal_acceptances=()) -> AuthAccount:
         now = self._now()
         try:
             with closing(self._connect()) as conn:
@@ -87,6 +87,15 @@ class AuthRepository:
                     owner_user_id = WEB_OWNER_OFFSET + account_id
                     conn.execute("UPDATE auth_accounts SET owner_user_id=? WHERE id=?", (owner_user_id, account_id))
                     ensure_personal(conn, account_id)
+                    for doc, revision in legal_acceptances:
+                        if doc not in {"offer", "personal_data", "marketing"}:
+                            raise AuthRepositoryError("Invalid consent type.")
+                        conn.execute(
+                            "INSERT INTO account_legal_acceptances "
+                            "(account_id,document,document_version,granted,recorded_at,origin) "
+                            "VALUES (?,?,?,?,?,?)",
+                            (account_id, doc, revision, 1, now, "web_registration"),
+                        )
                     row = conn.execute("SELECT * FROM auth_accounts WHERE id=?", (account_id,)).fetchone()
             if row is None:
                 raise AuthRepositoryError("Could not create account.")

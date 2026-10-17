@@ -17,14 +17,28 @@ from .migrations import MIGRATIONS
 TABLES = (
     "auth_accounts", "organizations", "organization_members", "organization_invitations",
     "company_workspaces", "company_active", "auth_sessions", "auth_telegram_links",
-    "auth_password_resets", "auth_email_verifications", "tenders", "saved_opportunities",
+    "auth_password_resets", "auth_email_verifications", "account_legal_acceptances",
+    "tenders", "saved_opportunities", "deadline_alert_preferences", "deadline_alert_receipts",
     "discovery_search_history", "monitor_subscriptions", "monitor_seen", "rag_chunks",
     "support_tickets", "support_ticket_messages", "durable_jobs", "source_opportunities",
     "scoring_public_revisions", "scoring_snapshots", "scoring_candidates", "scoring_results", "quota_admissions", "synchronous_usage", "source_notice_observations",
 )
 METADATA = {"schema_meta", "app_schema_migrations", "app_data_imports"}
 OPTIONAL = {"synchronous_usage", "quota_admissions", "rag_chunks", "support_ticket_messages", "durable_jobs", "source_opportunities", "scoring_public_revisions", "scoring_snapshots", "scoring_candidates", "scoring_results"}
-OPTIONAL.add("source_notice_observations")
+OPTIONAL.update({
+    "source_notice_observations", "account_legal_acceptances",
+    "deadline_alert_preferences", "deadline_alert_receipts",
+})
+
+
+def controlled_table_schema(conn, table):
+    """Compare exact SQLite DDL/indexes/hidden columns for sensitive new tables."""
+    objects = [tuple(row) for row in conn.execute(
+        "SELECT type,name,sql FROM sqlite_master WHERE tbl_name=? ORDER BY type,name",
+        (table,))]
+    columns = [tuple(row) for row in conn.execute(
+        "PRAGMA table_xinfo(" + identifier(table) + ")")]
+    return objects, columns
 
 
 def observation_schema(conn):
@@ -75,6 +89,16 @@ def preflight_source(conn):
         "SELECT 1 FROM app_schema_migrations WHERE version=14").fetchone() is not None
     if ("source_notice_observations" in names) != bool(observation_migration):
         raise StorageError("Source observation schema requires its known migration 14.")
+    # New migrations are additive, but their private tables must not disappear
+    # if the source ledger claims they were applied.
+    if "app_schema_migrations" in names:
+        for version, required_tables in (
+            (15, {"account_legal_acceptances"}),
+            (16, {"deadline_alert_preferences", "deadline_alert_receipts"}),
+        ):
+            if conn.execute("SELECT 1 FROM app_schema_migrations WHERE version=?",
+                            (version,)).fetchone() and required_tables - names:
+                raise StorageError("Source launch schema is missing despite migration ledger.")
     if "durable_jobs" not in names and "app_schema_migrations" in names:
         if conn.execute("SELECT 1 FROM app_schema_migrations WHERE version=9").fetchone():
             raise StorageError("Source job schema is missing; upgrade a backed-up copy first.")
@@ -103,6 +127,11 @@ def preflight_source(conn):
                 if "source_notice_observations" in names:
                     if observation_schema(conn) != observation_schema(reference):
                         raise StorageError("Source observation schema differs from migration 14.")
+                # Verify CHECKs, FKs, indices and actual DDL, not only SQL column names.
+                for table in ("account_legal_acceptances", "deadline_alert_preferences",
+                              "deadline_alert_receipts"):
+                    if table in names and controlled_table_schema(conn, table) != controlled_table_schema(reference, table):
+                        raise StorageError("Source launch compliance schema differs from approved migration.")
                 columns = {table: table_columns(reference, table) for table in TABLES if table in names}
                 signatures = {
                     table: [(row[1], row[2].upper(), row[5]) for row in reference.execute(f"PRAGMA table_info({identifier(table)})")]

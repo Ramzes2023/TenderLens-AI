@@ -257,15 +257,15 @@ def test_invalid_223_configuration_rejected(url):
 def test_sqlite_migration_14_upgrade_preserves_existing_data(system):
     from app.database.migrations import MIGRATIONS
     s = system
-    assert [migration.version for migration in MIGRATIONS] == list(range(1, 15))
-    assert MIGRATIONS[-1].domain == 'source_observations'
+    assert [migration.version for migration in MIGRATIONS] == list(range(1, len(MIGRATIONS) + 1))
+    assert MIGRATIONS[13].domain == 'source_observations'
     # Only the synthetic fixture database: simulate an installation at version 13.
     with closing(s.database.connect()) as conn, conn:
         conn.execute('DROP TABLE IF EXISTS source_notice_observations')
         conn.execute('DELETE FROM app_schema_migrations WHERE version=14')
         notices = conn.execute('SELECT * FROM source_opportunities').fetchall()
         accounts = conn.execute('SELECT id,email FROM auth_accounts ORDER BY id').fetchall()
-        ledger = conn.execute('SELECT version,domain,checksum FROM app_schema_migrations ORDER BY version').fetchall()
+        ledger = conn.execute('SELECT version,domain,checksum FROM app_schema_migrations WHERE version<14 ORDER BY version').fetchall()
     s.database.migrate()
     s.database.migrate()
     with closing(s.database.connect()) as conn:
@@ -273,7 +273,7 @@ def test_sqlite_migration_14_upgrade_preserves_existing_data(system):
         assert conn.execute('SELECT id,email FROM auth_accounts ORDER BY id').fetchall() == accounts
         assert conn.execute('SELECT version,domain,checksum FROM app_schema_migrations WHERE version<14 ORDER BY version').fetchall() == ledger
         migration = conn.execute('SELECT version,domain,checksum FROM app_schema_migrations WHERE version=14').fetchone()
-        assert tuple(migration) == (14, 'source_observations', MIGRATIONS[-1].checksum)
+        assert tuple(migration) == (14, 'source_observations', MIGRATIONS[13].checksum)
         assert conn.execute('SELECT COUNT(*) FROM source_notice_observations').fetchone()[0] == 0
         assert not conn.execute('PRAGMA foreign_key_check').fetchall()
 

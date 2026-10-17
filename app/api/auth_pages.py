@@ -32,6 +32,30 @@ def _page(
     switch_text = "Already have an account?" if register else "New to VALYQON AI?"
     autocomplete = "new-password" if register else "current-password"
     hint = '<div class="hint">Use at least 12 characters.</div>' if register else ""
+    from .legal_routes import legal_ready, legal_version
+    from os import environ
+    is_legal_published = legal_ready()
+    is_legal_required = environ.get("VALYQON_LEGAL_REQUIRED", "").lower() == "true"
+    legal_fields = (
+        """<div class="legal-choice">
+          <label><input type="checkbox" id="acceptOffer" required> I accept the
+          <a href="/legal/offer" target="_blank" rel="noopener">public offer</a>.</label>
+          <label><input type="checkbox" id="acceptPersonal" required> I separately consent to
+          <a href="/legal/personal-data" target="_blank" rel="noopener">personal data processing</a>
+          under the <a href="/legal/privacy" target="_blank" rel="noopener">privacy policy</a>.</label>
+          <label><input type="checkbox" id="acceptMarketing"> Optional: I would like
+          promotional email about VALYQON AI (see
+          <a href="/legal/marketing" target="_blank" rel="noopener">advertising consent</a>).</label>
+        </div>"""
+        if register and is_legal_published
+        else ""
+    )
+    legal_note = (
+        '<p role="status">Commercial legal documents are awaiting publication. '
+        'Registration for public commercial use is disabled.</p>'
+        if register and is_legal_required and not is_legal_published else ""
+    )
+    legal_revision_json = json.dumps(legal_version() if is_legal_published else None)
     version = escape(__version__)
     next_path_json = (
         json.dumps(next_path)
@@ -61,6 +85,9 @@ def _page(
     label {{ display:block; color:#c9d5e8; font-size:.82rem; margin:0 0 7px; }}
     .field {{ margin:0 0 16px; }}
     input {{ width:100%; padding:.85rem .9rem; border:1px solid var(--line); border-radius:12px; background:#091426; color:var(--text); font:inherit; outline:none; }}
+    .legal-choice {{ display:grid; gap:12px; margin:16px 0; color:var(--text); }}
+    .legal-choice input {{ width:auto; margin-right:8px; accent-color:var(--accent); }}
+    .legal-choice label {{ font-size:.83rem; line-height:1.5; }}
     input:focus {{ border-color:var(--accent); box-shadow:0 0 0 3px rgba(121,167,255,.12); }}
     button {{ width:100%; padding:.9rem; border:0; border-radius:12px; background:var(--accent); color:#071020; font:inherit; font-weight:800; cursor:pointer; }}
     button:disabled {{ opacity:.6; cursor:wait; }}
@@ -98,7 +125,9 @@ def _page(
           <div class="password-control"><input id="password" type="password" maxlength="128" autocomplete="{autocomplete}" required placeholder="••••••••••••"><button type="button" id="togglePassword" class="password-toggle" aria-controls="password" aria-pressed="false">Show</button></div>
           {hint}
         </div>
-        <button id="submit" type="submit">{escape(button)}</button>
+        {legal_fields}
+        {legal_note}
+        <button id="submit" type="submit" {'disabled' if register and is_legal_required and not is_legal_published else ''}>{escape(button)}</button>
       </form>
       {'' if register else '<p class="switch"><a href="/forgot-password">Forgot password?</a></p>'}
       <p class="switch">{escape(switch_text)} <a href="{switch_href}">{escape(switch_label)}</a></p>
@@ -129,7 +158,13 @@ def _page(
             body:JSON.stringify({{
               email,
               password:
-                document.getElementById('password').value
+                document.getElementById('password').value,
+              ...(registerMode ? {{
+                accepted_offer:!!document.getElementById('acceptOffer')?.checked,
+                personal_data_consent:!!document.getElementById('acceptPersonal')?.checked,
+                marketing_consent:!!document.getElementById('acceptMarketing')?.checked,
+                legal_version:{legal_revision_json}
+              }} : {{}})
             }})
           }}
         );

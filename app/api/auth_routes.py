@@ -35,6 +35,10 @@ class RegisterRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=128)
+    accepted_offer: bool = False
+    personal_data_consent: bool = False
+    marketing_consent: bool = False
+    legal_version: str | None = Field(default=None, max_length=80)
 
 
 class LoginRequest(BaseModel):
@@ -248,6 +252,24 @@ async def register(
         request
     )
 
+    from .legal_routes import legal_ready, legal_version
+    import os
+    published = legal_ready()
+    required = os.environ.get("VALYQON_LEGAL_REQUIRED", "").lower() == "true"
+    if required and not published:
+        raise HTTPException(503, "The legal documents must be approved before registration.")
+    if required and not (payload.accepted_offer and payload.personal_data_consent):
+        raise HTTPException(422, "Accept the offer and the separate personal data consent.")
+    accepted = (
+        ("offer", payload.accepted_offer),
+        ("personal_data", payload.personal_data_consent),
+        ("marketing", payload.marketing_consent),
+    )
+    if any(enabled for _, enabled in accepted) and (
+        not published or payload.legal_version != legal_version()
+    ):
+        raise HTTPException(422, "Legal document version is not published.")
+    consent_receipts = tuple((name, legal_version()) for name, enabled in accepted if enabled)
     sender = _email_sender(
         request
     )
@@ -263,6 +285,7 @@ async def register(
             service.register,
             payload.email,
             payload.password,
+            **({"legal_acceptances": consent_receipts} if consent_receipts else {}),
         )
 
         token, expires_at = (

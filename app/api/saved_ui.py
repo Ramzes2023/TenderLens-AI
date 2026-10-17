@@ -29,7 +29,20 @@ SAVED_HTML = """
     >
       Refresh saved
     </button>
+    <a id="exportSavedCsv" href="#saved" hidden>Export CSV</a>
+    <a id="exportSavedXlsx" href="#saved" hidden>Export Excel</a>
   </div>
+
+  <section class="p" id="savedDeadlineSettings" aria-label="Deadline notifications">
+    <h3>Deadline reminders (48 hours before)</h3>
+    <p>Available for saved tenders with an exact timezone-aware deadline.
+       Enable explicitly; check dates at the official source.
+       Telegram requires a connected account and an active Telegram subscription.</p>
+    <label><input type="checkbox" id="deadlineEmailOptin"> Email reminders</label>
+    <label><input type="checkbox" id="deadlineTelegramOptin"> Telegram reminders</label>
+    <button id="saveDeadlinePreferences" type="button" disabled>Save reminder preferences</button>
+    <p role="status" id="deadlinePreferencesStatus"></p>
+  </section>
 
   <div class="overview-metrics">
     <article>

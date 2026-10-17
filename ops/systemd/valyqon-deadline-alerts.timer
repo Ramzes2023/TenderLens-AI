@@ -1,0 +1,11 @@
+# TEMPLATE ONLY. Enable only after real SMTP/Telegram delivery acceptance.
+[Unit]
+Description=Check opt-in tender deadlines every hour
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+Unit=valyqon-deadline-alerts.service
+
+[Install]
+WantedBy=timers.target

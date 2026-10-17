@@ -129,8 +129,13 @@ class AnkaraMunicipalitySource:
         result=[]
         seen=set()
         for url in links:
-            page=await _fetch(url,self.timeout,"text/html,application/xhtml+xml")
-            item=parse_ankara_tender(page,detail_url=url)
+            # Skip individually withdrawn or malformed details; still fail
+            # closed if no real linked bid validates.
+            try:
+                page=await _fetch(url,self.timeout,"text/html,application/xhtml+xml")
+                item=parse_ankara_tender(page,detail_url=url)
+            except SourceError:
+                continue
             if item is not None and item.external_id not in seen:
                 seen.add(item.external_id)
                 result.append(item)

@@ -84,6 +84,11 @@ class TenderRepository:
     def initialize(self) -> None:
         try:
             self.database.migrate("tenders")
+            # Saved shortlist mutations now require durable tenant activity rows.
+            # Legacy SQLite initializes individual repository domains; apply the
+            # additive audit migration here as well rather than silently
+            # skipping evidence or waiting for a separate database upgrade.
+            self.database.migrate("organization_activity")
         except (OSError, sqlite3.Error, StorageError, ValueError):
             raise DatabaseError("Could not initialize tenders storage.") from None
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from contextlib import nullcontext
 import math
+from datetime import datetime
 import asyncio
 from html.parser import HTMLParser
 import re
@@ -154,6 +155,73 @@ def verify_public_detail(body,number,title,url):
     return (number,title,url)
 
 
+
+def verified_detail_metadata(body):
+    """Extract only independently visible first-party procurement fields.
+
+    Missing price/deadline remain unknown; bad numeric/date values or
+    contradictory repeated fields make the record inadmissible.
+    """
+    fields={}
+    labels=frozenset({
+        "организация", "дата окончания подачи оферт",
+        "максимальная цена товаров, работ, услуг", "валюта",
+    })
+    for row in read_doc(body).rows:
+        cells=row["cells"]
+        if len(cells) != 2:
+            continue
+        label=cells[0].rstrip("*: ").strip().casefold()
+        if label not in labels:
+            continue
+        value=cells[1].strip()
+        if not value or len(value)>2000:
+            raise ValueError("Invalid first-party procurement detail field")
+        if label in fields and fields[label] != value:
+            raise ValueError("Conflicting repeated procurement detail field")
+        fields[label]=value
+    customer=fields.get("организация")
+    price=None
+    raw=fields.get("максимальная цена товаров, работ, услуг")
+    if raw is not None and raw.casefold() != "цена не определена":
+        # Public site uses spaces as grouping, comma as decimal; never
+        # interpret symbols or guess contract prices from product rows.
+        clean=raw.replace(" ", "").replace("\u00a0","").replace("\u202f","").replace(",",".")
+        if not re.fullmatch(r"\d{1,12}(?:\.\d{1,2})?",clean):
+            raise ValueError("Unparseable official maximum contract price")
+        price=float(clean)
+        if not 0 <= price <= 100_000_000_000:
+            raise ValueError("Unreasonable maximum contract price")
+    currency=None
+    raw_currency=fields.get("валюта")
+    if raw_currency:
+        if raw_currency != "Российский рубль":
+            raise ValueError("Unsupported currency without explicit validated ISO code")
+        currency="RUB"
+    deadline=None
+    raw_date=fields.get("дата окончания подачи оферт")
+    if raw_date:
+        match=re.fullmatch(
+            r"(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})\s+\(UTC([+-]\d{2}:\d{2})\)(?:\s+Екатеринбург)?",
+            raw_date
+        )
+        if match is None:
+            raise ValueError("Unparseable official bid deadline")
+        day,month,year,hour,minute,offset=match.groups()
+        try:
+            deadline=datetime.fromisoformat(
+                f"{year}-{month}-{day}T{hour}:{minute}:00{offset}"
+            ).isoformat(timespec="seconds")
+        except ValueError as error:
+            raise ValueError("Impossible official bid deadline") from error
+    return {
+        "customer":customer,
+        "initial_price":price,
+        "currency":currency if price is not None else None,
+        "deadline":deadline,
+    }
+
+
 @dataclass(frozen=True)
 class SouthUralPublicSource:
     timeout: float = 20
@@ -188,9 +256,11 @@ class SouthUralPublicSource:
                         if "html" not in detail.headers.get("content-type","").lower():
                             raise ValueError("South Ural official detail not public HTML")
                         verify_public_detail(detail.content,number,title,url)
+                        metadata=verified_detail_metadata(detail.content)
                         notice=TenderNotice(
                             source=SOURCE_ID,external_id=number,tender_number=number,
                             title=title,url=url,region="Челябинская область",
+                            **metadata,
                         )
                         validate_notice(notice,SOURCE_ID)
                         notices.append(notice)

@@ -66,7 +66,7 @@ class ProbeSafetyTests(unittest.TestCase):
 
     def test_every_batch_target_has_safe_fixed_origin_and_path(self):
         from urllib.parse import urlsplit
-        self.assertEqual(len({(t.host,t.path) for t in TARGETS.values()}),34)
+        self.assertEqual(len({(t.host,t.path) for t in TARGETS.values()}),35)
         for item in TARGETS.values():
             url = urlsplit("https://" + item.host + item.path)
             self.assertEqual(url.hostname, item.host)

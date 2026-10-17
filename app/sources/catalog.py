@@ -11,6 +11,7 @@ from .kg_gov_legacy import KyrgyzstanGovLegacySource
 from .kz_gov_html import KazakhstanGovHtmlSource
 from .uz_uzex import UzbekistanUzexSource
 from .md_achizitii import MoldovaAchizitiiSource
+from .md_elicitatie import MoldovaELicitatieSource
 from .asia_public import ASIA_RSS_FEEDS, AsiaPublicSource
 from .jp_jetro_bid_rss import JetroBidRssSource, RSS_URL as JETRO_BID_RSS_URL
 from .hk_hyd_tenders import HighwaysTendersSource, RSS_URL as HYD_TENDERS_RSS_URL
@@ -483,6 +484,22 @@ def build_source_catalog(
         jurisdictions=("MD",),
         languages=("ro", "ru"),
         homepage_url="https://achizitii.md/ro/",
+        official=False,
+        enabled=False,
+        capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
+    ))
+
+    # Independent accredited Moldova MTender platform with visible municipal purchases.
+    # Not the existing Achizitii.md marketplace and NOT the government OCDS API.
+    # Disabled until real live worker -> SQLite -> saved search CI passes.
+    registry.register(SourceRegistration(
+        key="md_elicitatie",
+        display_name="Moldova e-Licitație — public municipal and small procurement",
+        source=MoldovaELicitatieSource(timeout=min(timeout, 30)),
+        transport=SourceTransport.HTML,
+        jurisdictions=("MD",),
+        languages=("ro", "ru"),
+        homepage_url="https://e-licitatie.md/achizitii",
         official=False,
         enabled=False,
         capabilities=SourceCapabilities(pagination=False, incremental_sync=False),

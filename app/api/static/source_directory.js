@@ -23,7 +23,7 @@
       group.hidden=!groupVisible;
     }
     empty.hidden=visible>0 || groups.length===0;
-    counter.textContent=String(visible)+" source adapters shown · availability not verified";
+    counter.textContent=String(visible)+" / "+String(root.querySelectorAll(".coverage-card").length);
   }
   buttons.forEach(button=>button.addEventListener("click",()=>{
     active=button.dataset.coverageRegion||"all";

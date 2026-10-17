@@ -147,7 +147,7 @@ async def public_guidelines_page():
 @router.get("/", include_in_schema=False)
 async def root_page(request: Request):
     account = await current_account(request, touch=False)
-    return HTMLResponse(landing_html(account is not None), headers={"Cache-Control": "no-store"})
+    return HTMLResponse(landing_html(account is not None, request.app.state.runtime), headers={"Cache-Control": "no-store"})
 
 
 @router.get(

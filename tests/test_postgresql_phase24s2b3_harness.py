@@ -229,7 +229,7 @@ def test_repository_setup_offline_sqlite_smoke(tmp_path, monkeypatch):
         scope = JobScope(account.id, org.id)
         assert usage.finish(usage.admit(scope, "rag"))
         with closing(db.connect()) as conn:
-            assert conn.execute("SELECT MAX(version) FROM app_schema_migrations").fetchone()[0] == 17
+            assert conn.execute("SELECT MAX(version) FROM app_schema_migrations").fetchone()[0] == 18
     finally:
         db.close()
 

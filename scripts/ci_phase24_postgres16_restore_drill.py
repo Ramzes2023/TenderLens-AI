@@ -83,7 +83,7 @@ def _seed(database):
     with closing(database.connect()) as conn:
         assert conn.execute("SELECT COUNT(*) FROM auth_accounts").fetchone()[0] == 2
         assert conn.execute("SELECT COUNT(*) FROM durable_jobs").fetchone()[0] == 2
-        assert conn.execute("SELECT COUNT(*) FROM app_schema_migrations").fetchone()[0] == 17
+        assert conn.execute("SELECT COUNT(*) FROM app_schema_migrations").fetchone()[0] == 18
     print("RESTORE_DRILL=TWO_SYNTHETIC_TENANTS_SEEDED")
 
 

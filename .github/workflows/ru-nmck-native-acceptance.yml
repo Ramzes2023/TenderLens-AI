@@ -13,7 +13,7 @@ on:
       - tests/test_ru_nmck_native.py
       - .github/workflows/ru-nmck-native-acceptance.yml
   pull_request:
-    branches: [main, research/ru-nmck-native-independent-20261017]
+    branches: [main]
 permissions:
   contents: read
 jobs:

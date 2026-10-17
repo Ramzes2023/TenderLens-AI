@@ -8,7 +8,7 @@ import json
 import re
 
 from app.sources.am_armeps import (
-    ARMEPS_LISTING_URL, _Tables, parse_armeps_listing,
+    ARMEPS_LISTING_URL, _Tables, parse_armeps_listing, _retryable_official_dns_failure,
 )
 from app.sources.http import FetchPolicy, bounded_fetch, source_client
 
@@ -35,7 +35,8 @@ async def run():
                               else "other")})
             current = current.__cause__
         print(json.dumps({"source": "am_armeps", "upstream_html_retrieved": False,
-                          "exception_chain_types": chain}, sort_keys=True))
+                          "exception_chain_types": chain,
+                          "classified_retryable_dns": _retryable_official_dns_failure(error)}, sort_keys=True))
         return 1
     report = {
         "status": resp.status_code,

@@ -10,12 +10,33 @@ import math
 import re
 
 import httpx
+import httpcore
 
 from .eis_rss import SourceError
 from .transport_errors import SourceTransportError, transient_transport
-from .http import ConnectorTransportError, FetchPolicy, _policy, bounded_fetch, source_client
+from .http import ConnectorTransportError, FetchPolicy, _policy, bounded_fetch, source_client, _is_public_ip_error
 from .models import TenderNotice
 from .opportunities import validate_notice
+
+def _retryable_official_dns_failure(error):
+    """Only audited resolver's OSError -> 'DNS resolution failed' can retry.
+
+    Never retry PublicIPError, TLS verification, or unclassified connect
+    exceptions. No alternative DNS, host, redirects or insecure fallback.
+    """
+    if not isinstance(error, httpx.ConnectError) or _is_public_ip_error(error):
+        return False
+    seen = set()
+    current = error
+    while isinstance(current, BaseException) and id(current) not in seen:
+        seen.add(id(current))
+        if (type(current) is httpcore.ConnectError
+                and str(current) == "DNS resolution failed"
+                and isinstance(current.__cause__, OSError)):
+            return True
+        current = current.__cause__
+    return False
+
 
 ARMEPS_LISTING_URL = "https://eauction.armeps.am/en/public/tender/"
 ARMEPS_PAGE_TWO_URL = ARMEPS_LISTING_URL + "start/2"
@@ -210,7 +231,7 @@ class ArmeniaArmepsSource:
                         break
                     url = next_url
         except (httpx.HTTPError, ConnectorTransportError, OSError) as error:
-            if transient_transport(error):
+            if transient_transport(error) or _retryable_official_dns_failure(error):
                 raise SourceTransportError("Temporary source transport failure.") from None
             raise SourceError("ARMEPS bounded HTTPS retrieval failed; live verification unavailable.") from None
         return list(result.values())[:requested]

@@ -1,7 +1,7 @@
 name: Asia all sixteen verified adapters operator queue acceptance
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feat/asia-tr-official-tenders-20261017]
     paths:
       - "app/sources/asia_all.py"
       - "app/sources/sg_gebiz_rss.py"

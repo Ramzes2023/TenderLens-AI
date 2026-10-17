@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Iterable
 from .am_armeps import ArmeniaArmepsSource
 from .tj_eprocurement import TajikistanEprocurementSource
 from .kg_gov_legacy import KyrgyzstanGovLegacySource
+from .kz_gov_html import KazakhstanGovHtmlSource
 from .uz_uzex import UzbekistanUzexSource
 from .md_achizitii import MoldovaAchizitiiSource
 from .asia_public import ASIA_RSS_FEEDS, AsiaPublicSource
@@ -477,6 +478,21 @@ def build_source_catalog(
         languages=("ro", "ru"),
         homepage_url="https://achizitii.md/ro/",
         official=False,
+        enabled=False,
+        capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
+    ))
+
+    # Additional official KZ public HTML adapter complements the separately
+    # token-authenticated KZ API source; operator activation remains explicit.
+    registry.register(SourceRegistration(
+        key="kz_gov_html",
+        display_name="Kazakhstan government public procurement announcements",
+        source=KazakhstanGovHtmlSource(timeout=min(timeout, 30)),
+        transport=SourceTransport.HTML,
+        jurisdictions=("KZ",),
+        languages=("ru", "kk"),
+        homepage_url="https://old.goszakup.gov.kz/ru/search/announce",
+        official=True,
         enabled=False,
         capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
     ))

@@ -52,3 +52,18 @@ jobs:
       - name: Independently verified real Roseltorg detail to leased worker SQLite and search
         timeout-minutes: 4
         run: python -B -m scripts.ci_ru_roseltorg_real_worker
+
+  roseltorg-real-public-transport-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Verify official listing and independently checked detail, report only bounded failure classes
+        timeout-minutes: 3
+        run: python -B -m scripts.ci_ru_roseltorg_safe_probe

@@ -49,6 +49,7 @@ HOSTS = {
     'india_cppp': frozenset({'eprocure.gov.in'}),
     'in_epublish': frozenset({'eprocure.gov.in'}),
     'ae_federal_mof': frozenset({'mof.gov.ae'}),
+    'tr_ankara_municipality': frozenset({'www.ankara.bel.tr'}),
     'kz_goszakup': frozenset({'ows.goszakup.gov.kz'}),
     'mikroton_tender': frozenset({'tender.mt52.ru'}),
     # Staged Asian feeds: host allowlists apply to the actual worker network call.

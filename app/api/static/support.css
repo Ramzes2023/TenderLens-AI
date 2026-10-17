@@ -1126,3 +1126,169 @@
     max-width:94%;
   }
 }
+
+/* VALYQON 2026 dark premium support workspace. Scope deliberately excludes operator pages. */
+body.saas .support-page{
+  --support-bg:#101d34;
+  --support-panel:#162740;
+  --support-panel-2:#1d314f;
+  --support-line:#334a6b;
+  --support-ink:#f0f6ff;
+  --support-muted:#b0c3dd;
+  --support-blue:#87b5ff;
+  --support-cyan:#8ad9ff;
+  color:var(--support-ink);
+  background:transparent;
+  gap:16px;
+  padding-bottom:54px;
+}
+body.saas .support-page .support-hero,
+body.saas .support-page .support-card,
+body.saas .support-page .support-summary article{
+  background:var(--support-panel);
+  color:var(--support-ink);
+  border-color:var(--support-line);
+  box-shadow:0 14px 32px #050f2340;
+  border-radius:20px;
+}
+body.saas .support-page .support-hero{
+  background:radial-gradient(circle at 85% -40%,#477bd050,transparent 54%),linear-gradient(120deg,#132845,#182f53);
+  padding:clamp(23px,3.5vw,39px);
+  min-height:175px;
+  align-items:center;
+  position:relative;
+  overflow:hidden;
+}
+body.saas .support-page .support-hero:after{
+  content:"";position:absolute;pointer-events:none;right:-65px;top:-85px;
+  width:250px;height:250px;border:1px solid #8ab2e328;border-radius:50%;
+  box-shadow:0 0 0 38px #8ab2e00b,0 0 0 78px #8ab2e00a;
+}
+body.saas .support-page .support-hero>*{position:relative;z-index:1}
+body.saas .support-page .support-hero .eyebrow{color:var(--support-blue);font-size:10px;letter-spacing:.14em}
+body.saas .support-page .support-hero h2{
+  color:var(--support-ink);
+  font-size:clamp(27px,3.1vw,39px);
+  line-height:1.1;letter-spacing:-.04em;margin:12px 0;
+}
+body.saas .support-page .support-hero p{color:#c0d3ed;font-size:14px;max-width:580px;line-height:1.75}
+body.saas .support-page .support-primary{
+  border:1px solid #5f98ff;
+  background:#376fdb;color:#fff;
+  box-shadow:0 8px 20px #061c4f38;
+}
+body.saas .support-page .support-primary:hover:not(:disabled){background:#4985f4}
+body.saas .support-page .support-secondary{
+  border:1px solid #607ca3;
+  background:#203c60;color:#f1f6ff;
+}
+body.saas .support-page .support-secondary:hover{background:#2b4d77}
+body.saas .support-page .support-summary{gap:13px}
+body.saas .support-page .support-summary article{min-height:102px;padding:19px 22px}
+body.saas .support-page .support-summary small{
+  color:#b1c4df;font-size:10px;letter-spacing:.12em
+}
+body.saas .support-page .support-summary strong{
+  color:#fff;font-size:clamp(20px,2.3vw,27px);letter-spacing:-.02em;
+  margin:12px 0 5px;overflow-wrap:anywhere
+}
+body.saas .support-page .support-summary span{color:#adbfda;font-size:12px;line-height:1.5}
+body.saas .support-page .support-card{min-width:0;padding:clamp(19px,2vw,27px)}
+body.saas .support-page .support-card-heading h3{color:#eef6ff;font-size:21px;letter-spacing:-.02em}
+body.saas .support-page .support-kicker{color:#88bbff;font-size:10px}
+body.saas .support-page .support-muted{color:var(--support-muted);font-size:13px;line-height:1.7}
+body.saas .support-page .support-live-pill{
+  background:#274466;color:#c9deff;border:1px solid #446389
+}
+body.saas .support-page .support-count-pill{
+  background:#29496f;color:#d9e8ff
+}
+body.saas .support-page .support-knowledge-links{
+  display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px
+}
+body.saas .support-page .support-knowledge-links a{
+  border-radius:9px;border:1px solid #3a608c;
+  background:#193253;color:#d5e7ff;text-decoration:none;
+  font-size:11px;line-height:1.45;padding:9px 11px;font-weight:750
+}
+body.saas .support-page .support-knowledge-links a:hover{background:#26466e}
+body.saas .support-page .support-chat{
+  background:#0b192e;border-color:#334a69;min-height:248px;max-height:365px
+}
+body.saas .support-page .support-message.assistant{
+  background:#1c3352;border-color:#39587e;color:#e0edff
+}
+body.saas .support-page .support-message.user{
+  background:#2856a0;color:#fff
+}
+body.saas .support-page .support-message strong{color:#d7e8ff}
+body.saas .support-page .support-topic-row button{
+  background:#213953;color:#c9dcf5;border:1px solid #456081;
+  border-radius:20px
+}
+body.saas .support-page .support-topic-row button:hover{
+  background:#2c4d75;color:#fff;border-color:#7eb5ff
+}
+body.saas .support-page input,
+body.saas .support-page textarea,
+body.saas .support-page select{
+  background:#0e203b;
+  color:#f1f6ff;
+  border:1px solid #476184;
+  min-height:44px;
+  border-radius:10px;
+  box-shadow:none;
+}
+body.saas .support-page input::placeholder,
+body.saas .support-page textarea::placeholder{color:#a9bfdc;opacity:1}
+body.saas .support-page input:hover,
+body.saas .support-page textarea:hover,
+body.saas .support-page select:hover{border-color:#7796c0}
+body.saas .support-page input:focus-visible,
+body.saas .support-page select:focus-visible,
+body.saas .support-page textarea:focus-visible,
+body.saas .support-page button:focus-visible,
+body.saas .support-page a:focus-visible{
+  outline:3px solid #8fbfff;outline-offset:2px
+}
+body.saas .support-page .support-form-grid label,
+body.saas .support-page label{color:#ccddf6;font-size:12px}
+body.saas .support-page .support-assistant-note,
+body.saas .support-page .support-form-footer p{
+  color:#b9cbe3;font-size:11px;line-height:1.55
+}
+body.saas .support-page .support-ticket{
+  background:#13253d;border-color:#365373
+}
+body.saas .support-page .support-ticket summary:hover{background:#223b5d}
+body.saas .support-page .support-ticket-id{color:#9cc6ff}
+body.saas .support-page .support-ticket-subject{color:#f1f7ff}
+body.saas .support-page .support-ticket-date{color:#b1c5dd}
+body.saas .support-page .support-ticket-body{
+  background:#101e34;border-top-color:#365373
+}
+body.saas .support-page .support-ticket-meta span{
+  background:#233a58;color:#d1e1f5
+}
+body.saas .support-page .support-ticket-description{color:#c7d8ee}
+body.saas .support-page .support-status{
+  background:#204b83;color:#d4e6ff
+}
+body.saas .support-page .support-status.resolved,
+body.saas .support-page .support-status.closed{
+  background:#153e38;color:#9ce5ce
+}
+body.saas .support-page .support-status.in_progress{
+  background:#493b24;color:#f8d596
+}
+body.saas .support-page .support-empty{
+  background:#101e35;border-color:#3a5679;color:#b8cce7
+}
+body.saas .support-page .support-error{
+  background:#432837;border-color:#be7079;color:#ffd1d7
+}
+body.saas .support-page .support-form-status.success{color:#9ce5ce}
+body.saas .support-page .support-form-status.error{color:#ffafb7}
+body.saas .support-page .support-main-grid{gap:16px}
+@media(max-width:1100px){body.saas .support-page .support-main-grid{grid-template-columns:1fr}}
+@media(max-width:760px){body.saas .support-page .support-hero{padding:23px}body.saas .support-page .support-summary{grid-template-columns:1fr}body.saas .support-page .support-hero-actions{width:100%}body.saas .support-page .support-hero-actions button{flex:1}body.saas .support-page .support-form-grid{grid-template-columns:1fr}}

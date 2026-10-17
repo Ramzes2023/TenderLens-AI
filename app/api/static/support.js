@@ -188,7 +188,7 @@
     $("supportLatestTicket").textContent =
       tickets.length
         ? tickets[0].public_id
-        : "None";
+        : "No requests yet";
 
     $("supportRequestCount").textContent =
       String(tickets.length);

@@ -321,5 +321,10 @@
   "Americas": "Америка",
   "Africa": "Африка",
   "Oceania": "Океания",
-  "Global & other": "Мир и другие"
+  "Global & other": "Мир и другие",
+  "Registered and optional adapters": "Зарегистрированные и доступные по настройке адаптеры",
+  "Available in code · not configured": "Есть в коде · не подключён",
+  "This adapter is not registered in the running service. Live delivery is not verified.": "Адаптер не зарегистрирован в работающем сервисе. Получение тендеров не подтверждено.",
+  "listed adapters (registered and optional). Availability requires a separate check.": "адаптеров (подключённые и дополнительные). Доступность требует отдельной проверки.",
+  "Browse the adapters registered in this running version of VALYQON, plus separately marked optional Russian adapters already present in the code. Configuration alone is not proof of live tender delivery.": "Просмотрите адаптеры текущей версии VALYQON и отдельно отмеченные дополнительные российские адаптеры из кода. Наличие настроек не подтверждает получение тендеров."
 }

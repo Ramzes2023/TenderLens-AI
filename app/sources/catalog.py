@@ -27,6 +27,7 @@ from .eis_223_rss import Eis223RssSource
 from .india_cppp import IndiaCpppSource
 from .india_epublish import IndiaEpublishSource, LIST_URL as INDIA_EPUBLISH_LIST_URL
 from .uae_mof_rfqs import UAEMinistryFinanceSource, URL as UAE_MOF_URL
+from .tr_ankara_municipality import AnkaraMunicipalitySource, INDEX_URL as ANKARA_OFFICIAL_TENDER_URL
 from .kz_goszakup import KazakhstanGoszakupApiSource
 from .multi import MultiSourceFetcher, MultiSourceFetchReport
 from .mikroton_tender import MikrotonTenderSource
@@ -606,6 +607,19 @@ def build_source_catalog(
             transport=SourceTransport.HTML,
             jurisdictions=("AE",), languages=("en", "ar"),
             homepage_url=UAE_MOF_URL,
+            official=True, enabled=True, capabilities=SourceCapabilities(),
+        ))
+
+    # Official city-level Turkish government procurement (not national EKAP).
+    # Fixed anonymous first-page index + max four verified government detail pages.
+    if os.environ.get("VALYQON_ASIA_TURKEY_ANKARA_ENABLED", "").strip() == "1":
+        registry.register(SourceRegistration(
+            key="tr_ankara_municipality",
+            display_name="Türkiye Ankara Metropolitan Municipality — official open tenders",
+            source=AnkaraMunicipalitySource(timeout=min(timeout, 30.0)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("TR",), languages=("tr",),
+            homepage_url=ANKARA_OFFICIAL_TENDER_URL,
             official=True, enabled=True, capabilities=SourceCapabilities(),
         ))
 

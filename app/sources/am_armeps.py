@@ -233,5 +233,19 @@ class ArmeniaArmepsSource:
         except (httpx.HTTPError, ConnectorTransportError, OSError) as error:
             if transient_transport(error) or _retryable_official_dns_failure(error):
                 raise SourceTransportError("Temporary source transport failure.") from None
+            # Strictly sanitized transport diagnosis. Do not echo upstream URLs,
+            # exception string, data, TLS contents, or DNS address. Security
+            # policy failures and client 4xx remain permanent, never green.
+            if _is_public_ip_error(error):
+                raise SourceError("ARMEPS verified public-IP policy rejected connection.") from None
+            if isinstance(error, httpx.HTTPStatusError):
+                status = error.response.status_code
+                if status in (408, 429) or 500 <= status <= 599:
+                    raise SourceTransportError("ARMEPS official temporary HTTP failure.") from None
+                raise SourceError("ARMEPS official HTTP client status rejected.") from None
+            if isinstance(error, httpx.ConnectError):
+                raise SourceError("ARMEPS unclassified HTTPS connection failure.") from None
+            if isinstance(error, ConnectorTransportError):
+                raise SourceError("ARMEPS strict transport policy rejected request.") from None
             raise SourceError("ARMEPS bounded HTTPS retrieval failed; live verification unavailable.") from None
         return list(result.values())[:requested]

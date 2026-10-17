@@ -5,6 +5,7 @@ No fixtures in live check, secrets, personal data, login, redirects or TLS bypas
 """
 from __future__ import annotations
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from contextlib import nullcontext
 import math
 import asyncio
@@ -154,6 +155,42 @@ def verify_public_detail(body,number,title,url):
     return (number,title,url)
 
 
+
+def independently_verified_deadline(body, number, title, url):
+    """Parse only a complete, uniquely labeled public detail date and UTC offset.
+
+    No guessing from page header, search hit date, listed time, or local PC timezone.
+    """
+    verify_public_detail(body, number, title, url)
+    page = read_doc(body)
+    dates = set()
+    for row in page.rows:
+        cells = row["cells"]
+        if (len(cells) >= 2 and cells[0].rstrip("*").strip().lower()
+                == "дата окончания подачи оферт"):
+            dates.add(cells[1].strip())
+    if not dates:
+        return None
+    if len(dates) != 1:
+        raise ValueError("Conflicting public South Ural submission deadlines")
+    value = next(iter(dates))
+    match = re.fullmatch(
+        r"(\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}) "
+        r"\(UTC([+-])(\d{2}):(\d{2})\) [А-Яа-яЁё -]{2,40}",
+        value,
+    )
+    if not match:
+        raise ValueError("Unrecognized official South Ural public deadline")
+    hours, minutes = int(match[3]), int(match[4])
+    if hours > 14 or minutes not in (0, 15, 30, 45) or (hours == 14 and minutes != 0):
+        raise ValueError("Invalid public deadline timezone offset")
+    offset = timedelta(hours=hours, minutes=minutes)
+    if match[2] == "-":
+        offset = -offset
+    dt = datetime.strptime(match[1], "%d.%m.%Y %H:%M")
+    return dt.replace(tzinfo=timezone(offset)).isoformat(timespec="seconds")
+
+
 @dataclass(frozen=True)
 class SouthUralPublicSource:
     timeout: float = 20
@@ -187,10 +224,10 @@ class SouthUralPublicSource:
                         detail.raise_for_status()
                         if "html" not in detail.headers.get("content-type","").lower():
                             raise ValueError("South Ural official detail not public HTML")
-                        verify_public_detail(detail.content,number,title,url)
+                        deadline=independently_verified_deadline(detail.content,number,title,url)
                         notice=TenderNotice(
                             source=SOURCE_ID,external_id=number,tender_number=number,
-                            title=title,url=url,region="Челябинская область",
+                            title=title,url=url,region="Челябинская область",deadline=deadline,
                         )
                         validate_notice(notice,SOURCE_ID)
                         notices.append(notice)

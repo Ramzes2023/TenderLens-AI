@@ -159,10 +159,12 @@ def _page(
               email,
               password:
                 document.getElementById('password').value,
-              accepted_offer:!!document.getElementById('acceptOffer')?.checked,
-              personal_data_consent:!!document.getElementById('acceptPersonal')?.checked,
-              marketing_consent:!!document.getElementById('acceptMarketing')?.checked,
-              legal_version:{legal_revision_json}
+              ...(registerMode ? {{
+                accepted_offer:!!document.getElementById('acceptOffer')?.checked,
+                personal_data_consent:!!document.getElementById('acceptPersonal')?.checked,
+                marketing_consent:!!document.getElementById('acceptMarketing')?.checked,
+                legal_version:{legal_revision_json}
+              }} : {{}})
             }})
           }}
         );

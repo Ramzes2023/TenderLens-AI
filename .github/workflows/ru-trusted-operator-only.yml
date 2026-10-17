@@ -39,6 +39,8 @@ on:
           - voronezh_small
           - udmurtia_small
           - moscow_oblast_market
+          - torgi_online_commercial
+          - r_tender_commercial
 permissions:
   contents: read
 jobs:

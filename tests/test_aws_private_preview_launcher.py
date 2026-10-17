@@ -25,8 +25,8 @@ def test_loopback_and_verified_disabled_billing_before_browser():
     assert '0.0.0.0:18765' not in SCRIPT
     assert 'PREVIEW_SERVER_HTTP=VERIFIED' in SCRIPT
     assert 'PAYMENTS_AND_EXTERNAL_SOURCES=DISABLED' in SCRIPT
-    assert 'states[\\'database\\'] == \\'operational\\'' in SCRIPT
-    assert 'states[\\'payments\\'] == \\'not_enabled\\'' in SCRIPT
+    assert "states['database'] == 'operational'" in SCRIPT
+    assert "states['payments'] == 'not_enabled'" in SCRIPT
     assert '/private-preview/ready' in SCRIPT
     assert 'generate_env.py' in SCRIPT
     assert 'stat -c' in SCRIPT

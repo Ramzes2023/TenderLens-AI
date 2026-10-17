@@ -1,4 +1,4 @@
-name: Asia all thirteen verified adapters operator queue acceptance
+name: Asia all fourteen verified adapters operator queue acceptance
 on:
   pull_request:
     branches: [main]
@@ -11,9 +11,11 @@ on:
       - "app/sources/hk_hkma_tender.py"
       - "app/sources/india_epublish.py"
       - "app/sources/uae_mof_rfqs.py"
+      - "app/sources/tr_ankara_municipality.py"
       - "tests/test_asia_all.py"
       - "tests/test_india_epublish.py"
       - "tests/test_uae_mof_rfqs.py"
+      - "tests/test_tr_ankara_municipality.py"
       - "tests/test_hk_hkma_tender.py"
       - ".github/workflows/asia-all-operator-acceptance.yml"
   workflow_dispatch:
@@ -23,7 +25,7 @@ concurrency:
   group: asia-all-operator-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
-  all-thirteen-queue-db-search-offline:
+  all-fourteen-queue-db-search-offline:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -35,5 +37,5 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: python -m pip install -r requirements-dev.txt
-      - name: Thirteen approved sources → actual Worker lease fencing → SQLite → keyword search
-        run: python -m pytest -q tests/test_asia_all.py tests/test_asia_seven_operations.py tests/test_sg_gebiz_rss.py tests/test_jp_jetro_bid_rss.py tests/test_hk_hyd_tenders.py tests/test_hk_hkma_tender.py tests/test_india_epublish.py tests/test_uae_mof_rfqs.py
+      - name: Fourteen approved sources → actual Worker lease fencing → SQLite → keyword search
+        run: python -m pytest -q tests/test_asia_all.py tests/test_asia_seven_operations.py tests/test_sg_gebiz_rss.py tests/test_jp_jetro_bid_rss.py tests/test_hk_hyd_tenders.py tests/test_hk_hkma_tender.py tests/test_india_epublish.py tests/test_uae_mof_rfqs.py tests/test_tr_ankara_municipality.py

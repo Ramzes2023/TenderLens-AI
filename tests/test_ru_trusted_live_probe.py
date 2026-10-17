@@ -5,7 +5,7 @@ from scripts.ru_trusted_live_probe import TARGETS, UnsafeAddress, checked_ips, d
 
 class ProbeSafetyTests(unittest.TestCase):
     def test_fixed_unique_approved_targets(self):
-        self.assertEqual(len(TARGETS), 32)
+        self.assertEqual(len(TARGETS), 33)
         pairs = {(t.host, t.path) for t in TARGETS.values()}
         self.assertEqual(len(pairs), len(TARGETS))
         self.assertTrue(all(t.mode in {"html", "rss"} for t in TARGETS.values()))
@@ -53,8 +53,8 @@ class ProbeSafetyTests(unittest.TestCase):
             output = StringIO()
             with redirect_stdout(output):
                 self.assertEqual(main("batch_priority"), 0)
-            self.assertEqual(fn.call_count, 32)
-            self.assertIn("RU_BATCH_HTTPS_VISIBLE=32/32", output.getvalue())
+            self.assertEqual(fn.call_count, 33)
+            self.assertIn("RU_BATCH_HTTPS_VISIBLE=33/33", output.getvalue())
             self.assertIn("RU_BATCH_NOTICE_DETAIL_VERIFIED=NO", output.getvalue())
         def blocked(target):
             if target.host == "44.fabrikant.ru":
@@ -66,7 +66,7 @@ class ProbeSafetyTests(unittest.TestCase):
 
     def test_every_batch_target_has_safe_fixed_origin_and_path(self):
         from urllib.parse import urlsplit
-        self.assertEqual(len({(t.host,t.path) for t in TARGETS.values()}),32)
+        self.assertEqual(len({(t.host,t.path) for t in TARGETS.values()}),33)
         for item in TARGETS.values():
             url = urlsplit("https://" + item.host + item.path)
             self.assertEqual(url.hostname, item.host)

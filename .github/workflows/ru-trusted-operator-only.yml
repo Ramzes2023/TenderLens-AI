@@ -41,6 +41,7 @@ on:
           - moscow_oblast_market
           - torgi_online_commercial
           - r_tender_commercial
+          - dagestan_official_small
 permissions:
   contents: read
 jobs:

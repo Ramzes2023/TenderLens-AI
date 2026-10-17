@@ -1,0 +1,49 @@
+"""Safety and source scope contracts for operator-only trusted RU diagnostics."""
+import unittest
+from unittest.mock import patch
+from scripts.ru_trusted_live_probe import TARGETS, UnsafeAddress, checked_ips, describe, main, read_public, Target
+
+class ProbeSafetyTests(unittest.TestCase):
+    def test_fixed_unique_approved_targets(self):
+        self.assertEqual(len(TARGETS), 8)
+        pairs = {(t.host, t.path) for t in TARGETS.values()}
+        self.assertEqual(len(pairs), len(TARGETS))
+        self.assertTrue(all(t.mode in {"html", "rss"} for t in TARGETS.values()))
+
+    def test_unapproved_choice_never_resolves_dns(self):
+        with patch("scripts.ru_trusted_live_probe.socket.getaddrinfo") as dns:
+            self.assertEqual(main("https://evil.invalid/"), 2)
+            self.assertEqual(main(".."), 2)
+            self.assertEqual(main(""), 2)
+            dns.assert_not_called()
+
+    def test_private_dns_never_connects(self):
+        fixture = [(2,1,6,"",("127.0.0.1",443))]
+        with patch("scripts.ru_trusted_live_probe.socket.getaddrinfo", return_value=fixture):
+            with self.assertRaises(UnsafeAddress):
+                checked_ips("allowed.example")
+        mixed = [(2,1,6,"",("8.8.8.8",443)), (2,1,6,"",("192.168.1.1",443))]
+        with patch("scripts.ru_trusted_live_probe.socket.getaddrinfo", return_value=mixed):
+            with self.assertRaises(UnsafeAddress):
+                checked_ips("allowed.example")
+
+    def test_public_dns_accepted_not_contacted(self):
+        x = [(2,1,6,"",("8.8.8.8",443)), (2,1,6,"",("1.1.1.1",443))]
+        with patch("scripts.ru_trusted_live_probe.socket.getaddrinfo", return_value=x):
+            self.assertEqual(checked_ips("safe.example"), ["1.1.1.1","8.8.8.8"])
+
+    def test_unapproved_redirect_like_and_query_rejected_before_dns(self):
+        with patch("scripts.ru_trusted_live_probe.checked_ips") as dns:
+            for path in ["//evil/path","/path?next=http://evil","/p#frag","/slash\\evil","example"]:
+                with self.assertRaises(ValueError):
+                    read_public(Target("good.example",path))
+            dns.assert_not_called()
+
+    def test_bounded_html_and_rss_classification(self):
+        self.assertEqual(describe("rss",b"<rss><channel><item/><item/></channel></rss>")["rss_items"],2)
+        self.assertEqual(describe("html",b'<a href="/t/123">test</a>')["anchor_tokens"],1)
+        with self.assertRaises(Exception):
+            describe("rss",b"not rss")
+
+if __name__ == "__main__":
+    unittest.main()

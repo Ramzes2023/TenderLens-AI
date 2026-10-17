@@ -1,6 +1,6 @@
-# VALYQON AI · Asian real-source operations, thirteen verified adapters
+# VALYQON AI · Asian real-source operations, fourteen verified adapters
 
-These thirteen sources were previously independently subjected to **real anonymous official
+These fourteen sources were previously independently subjected to **real anonymous official
 HTTPS → lease-fenced durable Worker → disposable SQLite → searchable snapshot** CI
 acceptance. The unified operator CLI adds a safe batch control and search surface,
 **not** a new upstream connector, AWS deployment or customer notifications.
@@ -15,11 +15,12 @@ acceptance. The unified operator CLI adds a safe batch control and search surfac
 - Hong Kong Monetary Authority public invitation notices from the official HKMA JSON API: `hk_hkma_tender`.
 - India Central ePublishing latest tender opportunities: `in_epublish` (original reference and public list, not temporary detail URLs).
 - UAE Ministry of Finance federal current RFQs: `ae_federal_mof` (actual government RFQ detail links; **not** Dubai or Abu Dhabi coverage).
+- Türkiye Ankara Metropolitan Municipality open tender notices: `tr_ankara_municipality` (city government only, **not** all EKAP or Turkey).
 - Singapore Government GeBIZ official *Business Opportunity* category RSS:
   `sg_gebiz_professional` and `sg_gebiz_misc`.
 
-**Count:** 13 distinct connectors across 5 procurement jurisdictions (Hong Kong,
-Japan, Singapore, India and the UAE), not 13 countries. All are disabled by default. Availability varies,
+**Count:** 14 distinct connectors across 6 procurement jurisdictions (Hong Kong,
+Japan, Singapore, India, the UAE and Türkiye), not 14 countries. All are disabled by default. Availability varies,
 open bid status must be checked on the official website before bidding; archived
 opportunities are not automatically expired or removed from local snapshots.
 
@@ -41,6 +42,7 @@ VALYQON_ASIA_HYD_ENABLED=1
 VALYQON_ASIA_HKMA_ENABLED=1
 VALYQON_ASIA_INDIA_EPUBLISH_ENABLED=1
 VALYQON_ASIA_UAE_FEDERAL_ENABLED=1
+VALYQON_ASIA_TURKEY_ANKARA_ENABLED=1
 VALYQON_ASIA_GEBIZ_ENABLED=1
 ```
 
@@ -57,8 +59,8 @@ VALYQON_ASIA_GEBIZ_ENABLED=1
    python -m app.jobs.worker --connectors
    ```
 
-3. Submit thirteen independently validated, idempotent current-UTC-hour queue jobs.
-   Preflight validates **all thirteen** before opening the database. A single disabled
+3. Submit fourteen independently validated, idempotent current-UTC-hour queue jobs.
+   Preflight validates **all fourteen** before opening the database. A single disabled
    source fails the batch, rather than silently lowering expected coverage.
 
    ```sh

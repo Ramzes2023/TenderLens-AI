@@ -16,20 +16,24 @@ from .asia_public import ASIA_RSS_FEEDS
 from .hk_hyd_tenders import SOURCE_ID as HK_HYD
 from .jp_jetro_bid_rss import SOURCE_ID as JP_JETRO
 from .hk_hkma_tender import SOURCE_ID as HK_HKMA
+from .india_epublish import SOURCE_ID as INDIA_EPUBLISH
+from .uae_mof_rfqs import SOURCE_ID as UAE_MOF
 from .sg_gebiz_rss import FEEDS as SG_GEBIZ
 from .ingestion import validate_payload, connector_version, sync_window
 
-SOURCES = (*ASIA_RSS_FEEDS, JP_JETRO, HK_HYD, *SG_GEBIZ, HK_HKMA)
+SOURCES = (*ASIA_RSS_FEEDS, JP_JETRO, HK_HYD, *SG_GEBIZ, HK_HKMA, INDIA_EPUBLISH, UAE_MOF)
 FLAGS = {
     **{key: "VALYQON_ASIA_SOURCES_ENABLED" for key in ASIA_RSS_FEEDS},
     JP_JETRO: "VALYQON_ASIA_JETRO_BID_ENABLED",
     HK_HYD: "VALYQON_ASIA_HYD_ENABLED",
     HK_HKMA: "VALYQON_ASIA_HKMA_ENABLED",
+    INDIA_EPUBLISH: "VALYQON_ASIA_INDIA_EPUBLISH_ENABLED",
+    UAE_MOF: "VALYQON_ASIA_UAE_FEDERAL_ENABLED",
     **{key: "VALYQON_ASIA_GEBIZ_ENABLED" for key in SG_GEBIZ},
 }
 MAX_RETURNED = 30
 _QUERY = re.compile(r"^[^\x00-\x1f\x7f]{2,120}$")
-assert len(SOURCES) == len(set(SOURCES)) == len(FLAGS) == 11
+assert len(SOURCES) == len(set(SOURCES)) == len(FLAGS) == 13
 
 
 def validate_batch(catalog, *, sources=SOURCES, now=None):

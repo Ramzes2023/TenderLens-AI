@@ -27,6 +27,7 @@ SYSTEM_SCOPE = JobScope()
 # discovery; worker ingestion deliberately only permits the official EIS host.
 HOSTS = {
     'am_armeps': frozenset({'eauction.armeps.am'}),
+    'az_azeristilik': frozenset({'azeristilik.gov.az'}),
     'tj_eprocurement': frozenset({'eprocurement.gov.tj'}),
     'uz_uzex': frozenset({'apietender.uzex.uz', 'etender.uzex.uz'}),
     'md_achizitii': frozenset({'achizitii.md'}),

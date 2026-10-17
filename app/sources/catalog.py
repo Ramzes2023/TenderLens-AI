@@ -29,6 +29,7 @@ from .india_epublish import IndiaEpublishSource, LIST_URL as INDIA_EPUBLISH_LIST
 from .uae_mof_rfqs import UAEMinistryFinanceSource, URL as UAE_MOF_URL
 from .tr_ankara_municipality import AnkaraMunicipalitySource, INDEX_URL as ANKARA_OFFICIAL_TENDER_URL
 from .tr_aski_water import ASKIWaterTendersSource, LIST_URL as ASKI_PUBLIC_TENDERS_URL
+from .tr_ego_transport import EGOTenderSource, INDEX_URL as EGO_TENDERS_URL
 from .kz_goszakup import KazakhstanGoszakupApiSource
 from .multi import MultiSourceFetcher, MultiSourceFetchReport
 from .mikroton_tender import MikrotonTenderSource
@@ -633,6 +634,18 @@ def build_source_catalog(
             transport=SourceTransport.HTML,
             jurisdictions=("TR",), languages=("tr",),
             homepage_url=ASKI_PUBLIC_TENDERS_URL, official=True, enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    # Independent Ankara EGO public transit e-tenders, not national EKAP.
+    if os.environ.get("VALYQON_ASIA_TURKEY_EGO_ENABLED", "").strip() == "1":
+        registry.register(SourceRegistration(
+            key="tr_ego_transport",
+            display_name="Türkiye Ankara EGO — public transportation equipment tenders",
+            source=EGOTenderSource(timeout=min(timeout, 30.0)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("TR",), languages=("tr",),
+            homepage_url=EGO_TENDERS_URL, official=True, enabled=True,
             capabilities=SourceCapabilities(),
         ))
 

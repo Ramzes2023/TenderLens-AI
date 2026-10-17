@@ -15,6 +15,7 @@ from .asia_public import ASIA_RSS_FEEDS, AsiaPublicSource
 from .jp_jetro_bid_rss import JetroBidRssSource, RSS_URL as JETRO_BID_RSS_URL
 from .hk_hyd_tenders import HighwaysTendersSource, RSS_URL as HYD_TENDERS_RSS_URL
 from .sg_gebiz_rss import FEEDS as SG_GEBIZ_RSS_FEEDS, SingaporeGeBizRssSource
+from .hk_hkma_tender import HKMATenderSource, API_URL as HKMA_TENDER_API_URL
 from .austender_rss import AusTenderRssSource
 from .b2b_center import B2BCenterSource
 from .tektorg_public_html import TekTorgPublicSource
@@ -25,6 +26,8 @@ from .eis_rss import EisRssSource, SourceError
 from .eis_44_public_html import Eis44PublicHtmlSource
 from .eis_223_rss import Eis223RssSource
 from .india_cppp import IndiaCpppSource
+from .india_epublish import IndiaEpublishSource, LIST_URL as INDIA_EPUBLISH_LIST_URL
+from .uae_mof_rfqs import UAEMinistryFinanceSource, URL as UAE_MOF_URL
 from .kz_goszakup import KazakhstanGoszakupApiSource
 from .multi import MultiSourceFetcher, MultiSourceFetchReport
 from .mikroton_tender import MikrotonTenderSource
@@ -568,6 +571,44 @@ def build_source_catalog(
                 homepage_url=url, official=True, enabled=True,
                 capabilities=SourceCapabilities(),
             ))
+
+    # Independent Hong Kong Monetary Authority government Gazette tenders API.
+    # Tender invitations only (segment=tender), NOT the award/notice segment.
+    if os.environ.get("VALYQON_ASIA_HKMA_ENABLED", "").strip() == "1":
+        registry.register(SourceRegistration(
+            key="hk_hkma_tender",
+            display_name="Hong Kong Monetary Authority — official tender invitations",
+            source=HKMATenderSource(timeout=min(timeout, 30.0)),
+            transport=SourceTransport.API, jurisdictions=("HK",),
+            languages=("en",), homepage_url=HKMA_TENDER_API_URL,
+            official=True, enabled=True, capabilities=SourceCapabilities(),
+        ))
+
+    # India's government-owned ePublishing is independent of CPPP eProcure.
+    if os.environ.get("VALYQON_ASIA_INDIA_EPUBLISH_ENABLED", "").strip() == "1":
+        registry.register(SourceRegistration(
+            key="in_epublish",
+            display_name="India Central ePublishing — latest tender enquiries",
+            source=IndiaEpublishSource(timeout=min(timeout, 30.0)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("IN",), languages=("en",),
+            homepage_url=INDIA_EPUBLISH_LIST_URL,
+            official=True, enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    # Official UAE Ministry of Finance federal current business opportunities.
+    # Separate from Dubai eSupply and Abu Dhabi's procurement portals.
+    if os.environ.get("VALYQON_ASIA_UAE_FEDERAL_ENABLED", "").strip() == "1":
+        registry.register(SourceRegistration(
+            key="ae_federal_mof",
+            display_name="UAE Ministry of Finance — current federal RFQs",
+            source=UAEMinistryFinanceSource(timeout=min(timeout, 30.0)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("AE",), languages=("en", "ar"),
+            homepage_url=UAE_MOF_URL,
+            official=True, enabled=True, capabilities=SourceCapabilities(),
+        ))
 
     # Russian connectors are opt-in. Do not enable unverified live adapters.
     if settings.eis_223_configured:

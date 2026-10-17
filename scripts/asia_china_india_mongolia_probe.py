@@ -6,6 +6,8 @@ no real tender data printed, never marks status 200 as actual source coverage.
 from __future__ import annotations
 import json
 from html.parser import HTMLParser
+import html
+import re
 from urllib.parse import urlsplit, urljoin
 import httpx
 
@@ -48,6 +50,26 @@ def main():
                         if len(data)>900000:
                             raise ValueError("response exceeds bound")
                 item["bytes"]=len(data)
+                if key=="in_epublish":
+                    document=data.decode("utf-8","replace")
+                    structure=[]
+                    for match in re.finditer(r"<tr\\b[^>]*>(.*?)</tr>",document,flags=re.I|re.S):
+                        raw=match.group(1)
+                        if "DirectLink" not in raw and "%24DirectLink" not in raw:
+                            continue
+                        cells=[]
+                        for cell in re.findall(r"<td\\b[^>]*>(.*?)</td>",raw,flags=re.I|re.S):
+                            cells.append(re.sub(r"\\s+"," ",html.unescape(re.sub(r"<[^>]+>"," ",cell))).strip()[:120])
+                        for href in re.findall(r"""href=["']([^"']+)["']""",raw,flags=re.I):
+                            if "DirectLink" not in href and "%24DirectLink" not in href:
+                                continue
+                            l=urlsplit(urljoin(url,html.unescape(href)))
+                            structure.append({"cell_count":len(cells),"cells":cells[:6],
+                                             "path":l.path,"query_keys":sorted(set(
+                                                x.split("=")[0] for x in l.query.split("&") if x))})
+                        if len(structure)>=4:
+                            break
+                    item["tender_row_structure"]=structure
                 parser=Links();parser.feed(data.decode("utf-8","replace"))
                 item["links"]=len(parser.anchors)
                 for link in parser.anchors:

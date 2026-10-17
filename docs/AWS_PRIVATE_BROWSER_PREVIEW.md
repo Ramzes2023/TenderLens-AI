@@ -53,3 +53,20 @@ This requires Playwright installed in that exact Python and an already installed
 Chromium browser, per docs/VALYQON_PERSONAL_PREVIEW_HANDOFF.md. The HTTP smoke is
 NOT the Chromium 7-gate end-to-end test. Do not claim the 7 browser gates passed
 until that script exits 0. Use an @example.test account and only synthetic data.
+
+## Updating an already opened local browser preview
+
+If the previously verified SSH tunnel is still running and holds **both** loopback
+ports, run the launcher with `-ReuseExistingTunnel`. This redeploys new current
+`main` only to the isolated preview Docker project, checks remote readiness, then
+verifies that the same trusted `ssh.exe` process owns both local 18765/18766
+forwards and confirms the live ready response. It does not terminate the tunnel
+or clear browser sessions. If ownership is ambiguous the launcher stops rather
+than manipulating the listener. `-PlanOnly` still performs no network action.
+
+```powershell
+& .\ops\private_preview\launch_aws_preview.ps1 -ReuseExistingTunnel
+```
+
+**Limit:** this is server update / HTTP readiness, not a full Chromium UX journey.
+After updating, refresh the live guest page and Support while keeping the tunnel.

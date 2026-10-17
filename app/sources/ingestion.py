@@ -50,6 +50,9 @@ HOSTS = {
     'india_cppp': frozenset({'eprocure.gov.in'}),
     'in_epublish': frozenset({'eprocure.gov.in'}),
     'ae_federal_mof': frozenset({'mof.gov.ae'}),
+    'tr_ankara_municipality': frozenset({'www.ankara.bel.tr'}),
+    'tr_aski_water': frozenset({'www.aski.gov.tr'}),
+    'tr_ego_transport': frozenset({'www.ego.gov.tr'}),
     'kz_goszakup': frozenset({'ows.goszakup.gov.kz'}),
     'mikroton_tender': frozenset({'tender.mt52.ru'}),
     # Staged Asian feeds: host allowlists apply to the actual worker network call.
@@ -161,6 +164,7 @@ class ConnectorSyncHandler:
                          else min(self.max_records, 5) + 1 if source_id == 'tektorg'
                          else 4 if source_id == 'gpb_etp_public'
                          else 4 if source_id == 'lenobl_small_public'
+                         else 5 if source_id in {'tr_ankara_municipality', 'tr_aski_water', 'tr_ego_transport'}
                          else 2 if source_id == 'mikroton_tender'
                          else 1)
         async def fetch():

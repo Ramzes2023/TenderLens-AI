@@ -74,10 +74,9 @@ def canonical(href):
         url=urlsplit(urljoin(LIST_URL,href))
         m=DETAIL_PATH.fullmatch(url.path)
         if (url.scheme!="https" or url.netloc!=HOST or url.port is not None
-                or url.userinfo if hasattr(url,'userinfo') else False):
-            # urlsplit() has .username and .password, but no .userinfo.
+                or url.username is not None or url.password is not None):
             return None
-        if (url.username or url.password or url.query or url.fragment or not m
+        if (url.query or url.fragment or not m
                 or str(uuid.UUID(m.group(1)))!=m.group(1)):
             return None
         return LIST_URL+"purchases/"+m.group(1)

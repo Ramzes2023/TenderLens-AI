@@ -1,0 +1,40 @@
+name: RU South Ural independent regional small-purchase proof
+on:
+  push:
+    branches: [research/ru-south-ural-vendorportal-20261017]
+    paths:
+      - scripts/research_ru_south_ural_public.py
+      - tests/test_ru_south_ural_public.py
+      - .github/workflows/ru-south-ural-research.yml
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  south-ural-adversarial-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Strict origin, identity, first-party numbered listing and mismatched detail rejection
+        run: python -m pytest -q tests/test_ru_south_ural_public.py
+  south-ural-two-live-independent-details:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real live list on vendorportal.ru then two independently verified first-party details
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_south_ural_public

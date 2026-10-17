@@ -63,6 +63,32 @@ def test_opt_in_idempotent_email_and_cannot_use_wrong_org(tmp_path):
     db.close()
 
 
+def test_explicit_moscow_time_saved_notice_triggers_once(tmp_path):
+    db, user, org = _fixture(tmp_path)
+    alerts = DeadlineAlerts(db)
+    alerts.set_preferences(
+        account_id=user.id, organization_id=org.id, company_id=500,
+        email_enabled=True, telegram_enabled=False,
+    )
+    with closing(db.connect()) as conn:
+        with conn:
+            old = conn.execute(
+                "SELECT snapshot_json FROM saved_opportunities"
+            ).fetchone()["snapshot_json"]
+            conn.execute(
+                "UPDATE saved_opportunities SET snapshot_json=?",
+                (old.replace("2026-10-19T10:00:00+00:00", "19.10.2026 14:00 МСК"),),
+            )
+    sent = []
+    result = alerts.run_once(
+        send_email=lambda address, message: sent.append(message), now=NOW,
+    )
+    assert result["sent"] == 1
+    assert "19.10.2026 14:00 МСК" in sent[0]
+    assert alerts.run_once(send_email=lambda *_: None, now=NOW)["sent"] == 0
+    db.close()
+
+
 def test_unknown_timezone_is_not_sent(tmp_path):
     db,user,org = _fixture(tmp_path)
     alerts=DeadlineAlerts(db)

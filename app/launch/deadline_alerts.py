@@ -6,6 +6,7 @@ from contextlib import closing
 from datetime import datetime, timezone, timedelta
 import json
 import os
+import re
 from urllib.parse import urlsplit
 
 from app.database.backend import database_for
@@ -20,13 +21,34 @@ def aware_deadline(value: str | None) -> datetime | None:
     """Do not assume a timezone for date-only or ambiguous source timestamps."""
     if not value or len(value) > 64:
         return None
+    clean = value.strip()
     try:
-        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(clean.replace("Z", "+00:00"))
+        if dt.tzinfo is not None and dt.utcoffset() is not None:
+            return dt.astimezone(timezone.utc)
     except (TypeError, ValueError):
+        pass
+
+    # Russian official RSS can contain DD.MM.YYYY HH:MM (МСК).
+    # Interpret only an EXPLICIT Moscow time designator. Never silently
+    # assign a timezone to DD.MM.YYYY HH:MM or date-only source values.
+    match = re.fullmatch(
+        r"(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?"
+        r"\s*(?:МСК|MSK|\(МСК\)|\(MSK\))",
+        clean, flags=re.IGNORECASE,
+    )
+    if match is None:
         return None
-    if dt.tzinfo is None or dt.utcoffset() is None:
+    day, month, year, hour, minute, second = match.groups()
+    try:
+        local = datetime(
+            int(year), int(month), int(day),
+            int(hour), int(minute), int(second or "0"),
+            tzinfo=timezone(timedelta(hours=3)),
+        )
+    except ValueError:
         return None
-    return dt.astimezone(timezone.utc)
+    return local.astimezone(timezone.utc)
 
 
 def due_lead_hours(deadline: str | None, *, now: datetime) -> int | None:

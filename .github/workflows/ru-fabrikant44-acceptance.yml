@@ -9,7 +9,7 @@ on:
       - scripts/ci_ru_fabrikant44_authenticated.py
       - .github/workflows/ru-fabrikant44-acceptance.yml
   pull_request:
-    branches: [main, feat/ru-lenobl-live-stacked-20261017]
+    branches: [main]
     paths:
       - app/sources/fabrikant_44_public.py
       - tests/test_ru_fabrikant44_public.py

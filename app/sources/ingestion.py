@@ -35,8 +35,8 @@ HOSTS = {
     'b2b_center': frozenset({'www.b2b-center.ru'}),
     'tektorg': frozenset({'www.tektorg.ru'}),
     'gpb_etp_public': frozenset({'etpgpb.ru'}),
-    'fabrikant_44_public': frozenset({'44.fabrikant.ru'}),
     'lenobl_small_public': frozenset({'zakupki.lenreg.ru'}),
+    'fabrikant_44_public': frozenset({'44.fabrikant.ru'}),
     'eis_223': frozenset({'zakupki.gov.ru'}),
     'eis_44_html': frozenset({'zakupki.gov.ru'}),
     'eis': frozenset({'zakupki.gov.ru', 'www.zakupki.gov.ru'}),
@@ -49,6 +49,8 @@ HOSTS = {
     'nz_gets': frozenset({'www.gets.govt.nz'}),
     'za_etenders': frozenset({'admin.etenders.gov.za'}),
     'india_cppp': frozenset({'eprocure.gov.in'}),
+    'in_epublish': frozenset({'eprocure.gov.in'}),
+    'ae_federal_mof': frozenset({'mof.gov.ae'}),
     'kz_goszakup': frozenset({'ows.goszakup.gov.kz'}),
     'mikroton_tender': frozenset({'tender.mt52.ru'}),
     # Staged Asian feeds: host allowlists apply to the actual worker network call.
@@ -159,8 +161,8 @@ class ConnectorSyncHandler:
                          else 2 if source_id in {'jp_jetro_national', 'jp_jetro_local'}
                          else min(self.max_records, 5) + 1 if source_id == 'tektorg'
                          else 4 if source_id == 'gpb_etp_public'
-                         else 4 if source_id == 'fabrikant_44_public'
                          else 4 if source_id == 'lenobl_small_public'
+                         else 4 if source_id == 'fabrikant_44_public'
                          else 2 if source_id == 'mikroton_tender'
                          else 1)
         async def fetch():

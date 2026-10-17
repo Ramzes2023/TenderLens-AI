@@ -9,7 +9,7 @@ on:
       - scripts/ci_ru_lenobl_authenticated.py
       - .github/workflows/ru-lenobl-public-acceptance.yml
   pull_request:
-    branches: [main, fix/ru-b2b-live-budget-and-fallback-20261017]
+    branches: [main]
     paths:
       - app/sources/lenobl_small_public.py
       - app/sources/catalog.py

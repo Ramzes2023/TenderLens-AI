@@ -1,0 +1,40 @@
+name: RU Sverdlovsk official original small purchase list discovery
+on:
+  push:
+    branches: [research/ru-sverdlovsk-small-index-20261017]
+    paths:
+      - scripts/research_ru_sverdlovsk_public.py
+      - tests/test_ru_sverdlovsk_public.py
+      - .github/workflows/ru-sverdlovsk-small-research.yml
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  sverdlovsk-html-source-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Reject fabricated JS records, ambiguous IDs and empty HTML
+        run: python -m pytest -q tests/test_ru_sverdlovsk_public.py
+  sverdlovsk-real-original-list:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Read official regional HTML, demand two real unique IMZ ID/object pairs
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_sverdlovsk_public

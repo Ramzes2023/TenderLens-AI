@@ -54,7 +54,15 @@ def bounded_fetch(policy):
 
 
 def _validate_bounded_url(url, policy):
-    if (url.scheme != 'https' or url.host not in policy.hosts
+    # HTTPX exposes a decoded Unicode .host for an IDN even when the actual
+    # origin's wire hostname is IDNA/Punycode. Match only the canonical
+    # ASCII wire host against the explicit connector allowlist: this neither
+    # permits lookalike hosts nor relaxes HTTPS, TLS, DNS or peer-IP controls.
+    try:
+        ascii_host = url.raw_host.decode('ascii').lower()
+    except (AttributeError, UnicodeError):
+        raise ConnectorTransportError() from None
+    if (url.scheme != 'https' or ascii_host not in policy.hosts
             or url.userinfo or url.port not in (None, 443)):
         raise ConnectorTransportError()
 

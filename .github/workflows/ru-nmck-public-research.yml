@@ -3,11 +3,12 @@ on:
   push:
     branches: [research/ru-nmck-native-independent-20261017]
     paths:
+      - app/sources/http.py
       - scripts/research_ru_nmck_public.py
       - tests/test_ru_nmck_public.py
       - .github/workflows/ru-nmck-public-research.yml
   pull_request:
-    branches: [main]
+    branches: [main, fix/ru-idn-bounded-host-comparison-20261017]
     paths:
       - scripts/research_ru_nmck_public.py
       - tests/test_ru_nmck_public.py

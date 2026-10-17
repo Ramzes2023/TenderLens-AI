@@ -37,6 +37,7 @@ HOSTS = {
     'gpb_etp_public': frozenset({'etpgpb.ru'}),
     'lenobl_small_public': frozenset({'zakupki.lenreg.ru'}),
     'nmck_native_public': frozenset({'xn--j1adc1b.xn--p1ai'}),
+    'stan_commercial_public': frozenset({'stantorgi.ru'}),
     'eis_223': frozenset({'zakupki.gov.ru'}),
     'eis_44_html': frozenset({'zakupki.gov.ru'}),
     'eis': frozenset({'zakupki.gov.ru', 'www.zakupki.gov.ru'}),
@@ -163,13 +164,14 @@ class ConnectorSyncHandler:
                          else 4 if source_id == 'gpb_etp_public'
                          else 4 if source_id == 'lenobl_small_public'
                          else min(self.max_records, 2) + 1 if source_id == 'nmck_native_public'
+                         else min(self.max_records, 2) + 1 if source_id == 'stan_commercial_public'
                          else 2 if source_id == 'mikroton_tender'
                          else 1)
         async def fetch():
             with bounded_fetch(FetchPolicy(
                 HOSTS[source_id], request_limit,
                 max_bytes=(2 * 1024 * 1024 if source_id == 'b2b_center' else
-                           1_800_000 if source_id == 'nmck_native_public' else 25 * 1024 * 1024),
+                           1_800_000 if source_id in {'nmck_native_public', 'stan_commercial_public'} else 25 * 1024 * 1024),
             )):
                 return await asyncio.wait_for(source.fetch(self.max_records), timeout=180)
         try:

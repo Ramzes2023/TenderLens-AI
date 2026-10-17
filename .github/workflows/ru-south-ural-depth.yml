@@ -6,6 +6,7 @@ on:
       - app/sources/south_ural_public.py
       - app/sources/ingestion.py
       - tests/test_ru_south_ural_adapter.py
+      - scripts/ci_ru_south_ural_10_real_worker.py
       - .github/workflows/ru-south-ural-depth.yml
   pull_request:
     branches: [main, feat/ru-south-ural-small-live-sql-20261017]
@@ -39,6 +40,20 @@ jobs:
       - name: Real South Ural 3 independently validated details to fenced SQL and search
         timeout-minutes: 4
         run: python -B -m scripts.ci_ru_south_ural_real_worker
+  south-ural-ten-originals-fenced-sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real ten distinct official South Ural invitations to leased Worker, SQLite and ten keyword searches
+        timeout-minutes: 7
+        run: python -B -m scripts.ci_ru_south_ural_10_real_worker
   south-ural-live-depth-tenant:
     runs-on: ubuntu-latest
     timeout-minutes: 10

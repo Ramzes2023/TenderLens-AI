@@ -1,0 +1,40 @@
+name: RU Petrozavodsk municipal first-party small-purchase live proof
+on:
+  push:
+    branches: [research/ru-petrozavodsk-firstparty-20261017]
+    paths:
+      - scripts/research_ru_petrozavodsk_public.py
+      - tests/test_ru_petrozavodsk_public.py
+      - .github/workflows/ru-petrozavodsk-research.yml
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  ptz-adversarial-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Strict municipality-only UUID/notice/heading offline fixtures
+        run: python -m pytest -q tests/test_ru_petrozavodsk_public.py
+  ptz-firstparty-live-two-details:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real first-party public index to two independently corroborated UUID-linked procurement details
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_petrozavodsk_public

@@ -1,7 +1,7 @@
 name: Türkiye Ankara EGO real government transit tenders acceptance
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feat/asia-tr-official-tenders-20261017]
     paths:
       - app/sources/tr_ego_transport.py
       - app/sources/catalog.py

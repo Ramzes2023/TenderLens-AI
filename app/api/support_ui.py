@@ -10,16 +10,15 @@ SUPPORT_HTML = r"""
   <header class="support-hero">
     <div>
       <span class="eyebrow">
-        VALYQON SUPPORT CENTER
+        YOUR SUPPORT WORKSPACE
       </span>
 
       <h2>
-        How can we help?
+        Get help, without the friction.
       </h2>
 
       <p>
-        Get product guidance, report a problem
-        or review your support requests.
+        Explore product guides, ask a question, or create a ticket that your team can follow up.
       </p>
     </div>
 
@@ -29,7 +28,7 @@ SUPPORT_HTML = r"""
         type="button"
         class="support-primary"
       >
-        Report a problem
+        Create a request
       </button>
 
       <button
@@ -39,6 +38,7 @@ SUPPORT_HTML = r"""
       >
         Refresh requests
       </button>
+      <a class="support-guide-link" href="/scoring-methodology">Scoring methodology ↗</a>
     </div>
   </header>
 
@@ -50,7 +50,7 @@ SUPPORT_HTML = r"""
       <small>Open requests</small>
       <strong id="supportOpenCount">—</strong>
       <span>
-        Active support conversations
+        Requests awaiting resolution
       </span>
     </article>
 
@@ -58,15 +58,15 @@ SUPPORT_HTML = r"""
       <small>Latest request</small>
       <strong id="supportLatestTicket">—</strong>
       <span>
-        Your most recent ticket
+        Last recorded support request
       </span>
     </article>
 
     <article>
       <small>Assistant</small>
-      <strong>AI assistant</strong>
+      <strong>Product guide</strong>
       <span>
-        Product guidance when available
+        Answers and help articles when available
       </span>
     </article>
   </section>
@@ -80,12 +80,12 @@ SUPPORT_HTML = r"""
           </span>
 
           <h3>
-            Ask VALYQON
+            Ask VALYQON about the platform
           </h3>
         </div>
 
         <span class="support-live-pill">
-          AI assistant
+          Product guide
         </span>
       </div>
 
@@ -170,7 +170,7 @@ SUPPORT_HTML = r"""
       </form>
 
       <p class="support-assistant-note">
-        AI-generated product guidance may contain mistakes.
+        Automated answers may be limited or unavailable.
         For account-specific investigation, create a support
         request. Never share passwords or API keys.
       </p>
@@ -187,15 +187,13 @@ SUPPORT_HTML = r"""
           </span>
 
           <h3>
-            Report a problem
+            Create a support request
           </h3>
         </div>
       </div>
 
       <p class="support-muted">
-        Describe the issue clearly.
-        Your request will be saved in your
-        VALYQON Support Center.
+        Tell us what happened and what you expected. Your request stays visible in your VALYQON Support Center.
       </p>
 
       <form id="supportTicketForm">
@@ -364,7 +362,7 @@ SUPPORT_HTML = r"""
         </span>
 
         <h3>
-          Support history
+          Your request history
         </h3>
       </div>
 

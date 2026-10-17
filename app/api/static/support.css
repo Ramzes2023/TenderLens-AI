@@ -1126,3 +1126,152 @@
     max-width:94%;
   }
 }
+
+
+/* Premium dark support workspace — no change to API, persistence or roles.
+   This is intentionally scoped to #supportCenter: operator panels elsewhere
+   and public product surfaces keep their own styles. */
+#supportCenter {
+  --s-bg:#0c172b;--s-panel:#111f36;--s-panel-up:#182b47;
+  --s-line:#344965;--s-text:#f1f6ff;--s-muted:#bbcae0;
+  --s-soft:#91b3e4;--s-accent:#638eff;
+  color:var(--s-text);
+  gap:18px;
+  isolation:isolate;
+  padding:0 0 40px;
+}
+#supportCenter[hidden] {display:none!important}
+#supportCenter .support-hero {
+  position:relative;isolation:isolate;overflow:hidden;
+  border:1px solid #446291;
+  padding:clamp(24px,3.2vw,42px);
+  border-radius:22px;
+  align-items:center;
+  background:radial-gradient(ellipse at 85% 5%,rgba(79,128,222,.24),transparent 45%),
+    linear-gradient(130deg,#122642,#0c1b34 74%);
+  box-shadow:0 20px 48px #0208172e;
+}
+#supportCenter .support-hero:after {
+  content:"";pointer-events:none;position:absolute;z-index:-1;right:-125px;bottom:-215px;
+  width:460px;height:460px;border-radius:50%;
+  border:1px solid #9bbffe30;box-shadow:0 0 0 68px #9bbffe0b,0 0 0 130px #9bbffe08;
+}
+#supportCenter .support-hero .eyebrow {font-weight:800;letter-spacing:.14em;color:#9cbdff;font-size:11px}
+#supportCenter .support-hero h2 {color:#fff;font-size:clamp(27px,3.3vw,42px);line-height:1.13;letter-spacing:-.04em;max-width:600px;margin:11px 0}
+#supportCenter .support-hero p {color:#c9d9ee;font-size:14px;max-width:580px;line-height:1.75}
+#supportCenter .support-hero-actions {align-items:center}
+#supportCenter .support-primary,
+#supportCenter .support-secondary,
+#supportCenter .support-guide-link {
+  min-height:44px;display:inline-flex;align-items:center;justify-content:center;
+  padding:10px 16px;border-radius:10px;font-weight:750;font-size:12px;
+  box-sizing:border-box;text-decoration:none;transition:transform .15s ease,background .15s ease,border-color .15s ease;
+}
+#supportCenter .support-primary {background:#3d72e5;border:1px solid #719dfc;color:#fff;box-shadow:0 10px 24px #030a1c3d}
+#supportCenter .support-secondary,#supportCenter .support-guide-link {background:#1a3050;border:1px solid #4d6485;color:#e2edff}
+#supportCenter .support-primary:hover:not(:disabled) {background:#517fee}
+#supportCenter .support-secondary:hover,#supportCenter .support-guide-link:hover {background:#284365}
+#supportCenter :is(.support-primary,.support-secondary,.support-guide-link):focus-visible {outline:3px solid #b2c6ff;outline-offset:3px}
+#supportCenter .support-summary {grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+#supportCenter .support-summary article {
+  min-height:105px;position:relative;overflow:hidden;border-radius:16px;
+  border:1px solid var(--s-line);border-top:2px solid #587fce;
+  background:linear-gradient(140deg,#172943,#101d33);
+  box-shadow:0 8px 25px #050c1d25;padding:19px 22px;
+}
+#supportCenter .support-summary small {font-size:10px;letter-spacing:.1em;color:#a8bfe0}
+#supportCenter .support-summary strong {color:#f2f6ff;font-size:clamp(17px,2.2vw,27px);line-height:1.2;overflow-wrap:anywhere}
+#supportCenter .support-summary span {color:#b4c6df;font-size:12px;line-height:1.6}
+#supportCenter .support-main-grid {grid-template-columns:minmax(0,1fr) minmax(0,1.13fr);gap:16px;align-items:stretch}
+#supportCenter .support-card {
+  background:linear-gradient(145deg,#13233c,#0f1d32);color:#edf4ff;
+  border:1px solid var(--s-line);border-radius:19px;box-shadow:0 14px 37px #01061526;
+}
+#supportCenter .support-assistant-card,
+#supportCenter .support-request-card,#supportCenter .support-requests-card {padding:clamp(20px,2.4vw,30px)}
+#supportCenter .support-card-heading h3 {color:#f3f6ff;font-size:clamp(19px,1.65vw,23px);letter-spacing:-.03em}
+#supportCenter .support-kicker {font-size:10px;color:#87afff;letter-spacing:.11em}
+#supportCenter .support-muted {font-size:13px;color:#bbcee8;line-height:1.75;max-width:65ch}
+#supportCenter .support-live-pill,
+#supportCenter .support-count-pill {border:1px solid #44628a;background:#203653;color:#cbe0ff;font-size:10px;white-space:nowrap}
+#supportCenter .support-chat {
+  min-height:260px;max-height:375px;background:#091728;border:1px solid #354d70;
+  padding:18px;border-radius:15px;
+}
+#supportCenter .support-message {font-size:13px;line-height:1.65;max-width:92%;padding:13px 15px}
+#supportCenter .support-message.assistant {background:#1b2e4a;color:#e6efff;border:1px solid #476080}
+#supportCenter .support-message.assistant strong {color:#c1d6fb}
+#supportCenter .support-message.user {background:#2856a0;color:#fff;border:1px solid #4877c3}
+#supportCenter .support-topic-row button {
+  min-height:37px;border:1px solid #3c5679;background:#1a304e;color:#e4efff;
+  border-radius:9px;font-size:12px;padding:7px 11px;
+}
+#supportCenter .support-topic-row button:hover {background:#244061;border-color:#6689b4}
+#supportCenter .support-page label,
+#supportCenter label,
+#supportCenter .support-form-grid label {color:#dae6f7;font-size:12px;line-height:1.5}
+#supportCenter .support-page input,
+#supportCenter input,#supportCenter textarea,#supportCenter select {
+  background:#192c47!important;border:1px solid #486385!important;
+  color:#f4f8ff!important;box-shadow:none!important;min-height:46px;font-size:13px;
+  border-radius:11px;
+}
+#supportCenter input::placeholder,#supportCenter textarea::placeholder {color:#b8c9e4!important;opacity:1}
+#supportCenter input:focus-visible,#supportCenter textarea:focus-visible,
+#supportCenter select:focus-visible,#supportCenter button:focus-visible {outline:3px solid #a4baff!important;outline-offset:2px}
+#supportCenter option {background:#182b45;color:#f3f6ff}
+#supportCenter .support-assistant-note,#supportCenter .support-form-footer p {color:#aebfda;font-size:11px;line-height:1.65}
+#supportCenter .support-form-grid {gap:16px}
+#supportCenter .support-form-grid label {gap:8px}
+#supportCenter .support-form-status {color:#c7d8f4}
+#supportCenter .support-form-status.success {color:#98e9bb}
+#supportCenter .support-form-status.error {color:#ffb0ba}
+#supportCenter .support-requests {gap:12px}
+#supportCenter .support-ticket {background:#152741;border:1px solid #405b7d;border-radius:13px}
+#supportCenter .support-ticket summary {color:#e4eeff}
+#supportCenter .support-ticket summary:hover {background:#203755}
+#supportCenter .support-ticket-id {color:#a9c6ff}
+#supportCenter .support-ticket-subject {color:#f0f5ff}
+#supportCenter .support-ticket-date {color:#b2c5de}
+#supportCenter .support-ticket-body {background:#101e35;border-top:1px solid #3a5476}
+#supportCenter .support-ticket-description {color:#d0dff4}
+#supportCenter .support-ticket-meta span {background:#223a58;color:#d4e4fa}
+#supportCenter .support-status {background:#254976;color:#d7e9ff}
+#supportCenter .support-status.resolved,#supportCenter .support-status.closed {background:#164c42;color:#a8f3d8}
+#supportCenter .support-status.in_progress {background:#504025;color:#ffe3ac}
+#supportCenter .support-empty {background:#11253d;border:1px dashed #517097;color:#c2d3eb}
+#supportCenter .support-error {background:#3b2437;border:1px solid #85516c;color:#ffd1dc}
+#supportCenter .support-conversation-card,
+#supportCenter .support-conversation-grid,#supportCenter .support-thread-list,
+#supportCenter .support-thread-detail {background:#13243d;color:#e5efff;border-color:#415d7d}
+#supportCenter .support-thread-item {background:#142640;color:#e5efff;border-color:#3b577b}
+#supportCenter .support-thread-item:hover,#supportCenter .support-thread-item.active {background:#254163;border-color:#7193c4}
+#supportCenter .support-thread-ticket-subject,#supportCenter .support-thread-ticket-header h4 {color:#f0f5ff}
+#supportCenter .support-thread-item-meta time,#supportCenter .support-thread-customer,
+#supportCenter .support-thread-action-status {color:#b7c9e4}
+#supportCenter .support-thread-message.support,
+#supportCenter .support-original-request {background:#1c304d;color:#e8f1ff;border-color:#4a6281}
+#supportCenter .support-original-request strong,#supportCenter .support-original-request p,
+#supportCenter .support-thread-message.support strong,
+#supportCenter .support-thread-message.support p {color:#e6efff}
+#supportCenter .support-thread-message.user {background:#2857a7;color:#fff}
+#supportCenter .support-thread-message time {color:#b9cee8}
+#supportCenter .support-thread-meta span,#supportCenter .support-operator-controls {background:#1c314e;color:#d3e4fc;border-color:#425e81}
+#supportCenter .support-operator-controls label {color:#e0ecfb}
+#supportCenter .support-thread-reply {border-top-color:#486080}
+@media(max-width:1050px){
+  #supportCenter .support-main-grid {grid-template-columns:1fr}
+}
+@media(max-width:680px){
+  #supportCenter .support-hero {flex-direction:column;align-items:flex-start;padding:24px}
+  #supportCenter .support-hero-actions {width:100%}
+  #supportCenter .support-hero-actions button,#supportCenter .support-guide-link {flex:1}
+  #supportCenter .support-summary {grid-template-columns:1fr}
+  #supportCenter .support-main-grid {grid-template-columns:1fr}
+  #supportCenter .support-form-grid {grid-template-columns:1fr}
+  #supportCenter .support-ticket summary {grid-template-columns:1fr auto;gap:8px}
+  #supportCenter .support-form-footer {flex-direction:column;align-items:stretch}
+}
+@media(prefers-reduced-motion:reduce){
+  #supportCenter :where(button,a) {transition:none}
+}

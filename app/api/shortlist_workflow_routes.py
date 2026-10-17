@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal
 
@@ -57,7 +58,7 @@ async def _call(fn, **kwargs):
 async def get_workflow(organization_id: int, saved_id: int, request: Request):
     service, scope = await _scope(request, organization_id, saved_id)
     result = await _call(service.get, **scope)
-    return __import__("fastapi").responses.JSONResponse(result, headers={"Cache-Control": "private, no-store"})
+    return JSONResponse(result, headers={"Cache-Control": "private, no-store"})
 
 
 @router.patch("/{saved_id}/workflow")
@@ -65,11 +66,11 @@ async def update_workflow(organization_id: int, saved_id: int, payload: Workflow
     require_same_origin_browser_request(request)
     service, scope = await _scope(request, organization_id, saved_id)
     result = await _call(service.update, **scope, **payload.model_dump())
-    return __import__("fastapi").responses.JSONResponse(result, headers={"Cache-Control": "private, no-store"})
+    return JSONResponse(result, headers={"Cache-Control": "private, no-store"})
 
 
 @router.get("/{saved_id}/workflow/events")
 async def workflow_events(organization_id: int, saved_id: int, request: Request):
     service, scope = await _scope(request, organization_id, saved_id)
     result = await _call(service.events, **scope)
-    return __import__("fastapi").responses.JSONResponse(result, headers={"Cache-Control": "private, no-store"})
+    return JSONResponse(result, headers={"Cache-Control": "private, no-store"})

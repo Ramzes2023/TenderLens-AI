@@ -31,8 +31,8 @@ def fixture(tmp_path):
 
 
 def call(service, account, org, saved_id, **extra):
-    return dict(account_id=account.id, organization_id=org.id, company_id=73,
-                saved_id=saved_id, **extra)
+    return dict(dict(account_id=account.id, organization_id=org.id, company_id=73,
+                     saved_id=saved_id), **extra)
 
 
 def test_lifecycle_persists_and_revisions_audited_without_note_copy(tmp_path):

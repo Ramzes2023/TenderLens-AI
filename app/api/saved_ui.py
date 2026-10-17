@@ -103,5 +103,21 @@ SAVED_HTML = """
   </div>
 
   <div id="savedDetailBody"></div>
+  <section id="savedWorkflowPanel" class="p" hidden aria-label="Tender team workflow">
+    <h3>Team tender pipeline</h3>
+    <p>Internal team status only; not proof of official submission or award.</p>
+    <label for="savedWorkflowStage">Internal stage</label>
+    <select id="savedWorkflowStage">
+      <option value="new">New</option><option value="reviewing">Reviewing</option>
+      <option value="preparing">Preparing application</option><option value="submitted">Submitted (team-recorded)</option>
+      <option value="won">Won (team-recorded)</option><option value="lost">Lost (team-recorded)</option>
+      <option value="archived">Archived</option>
+    </select>
+    <label for="savedWorkflowNote">Private team note (up to 2000 characters)</label>
+    <textarea id="savedWorkflowNote" maxlength="2000" rows="3"></textarea>
+    <button type="button" id="saveSavedWorkflow" disabled>Save status and note</button>
+    <p id="savedWorkflowStatus" role="status">Not loaded.</p>
+    <h4>Recent changes</h4><ol id="savedWorkflowEvents"></ol>
+  </section>
 </dialog>
 """

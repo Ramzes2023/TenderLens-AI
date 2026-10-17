@@ -49,6 +49,6 @@ def test_independent_detail_checks():
 
 def test_no_green_on_missing_list_or_duplicate_id():
     with pytest.raises(ValueError):
-        parse_public_listing(b"<html><a href='/login'>Личный кабинет</a></html>")
+        parse_public_listing("<html><a href='/login'>Личный кабинет</a></html>".encode("utf-8"))
     with pytest.raises(ValueError):
         parse_public_listing(rows().replace(b"109627",b"109631"))

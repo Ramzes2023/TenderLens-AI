@@ -1,0 +1,60 @@
+name: RU NMCK genuine native public small-purchase acceptance
+on:
+  push:
+    branches: [feat/ru-nmck-native-leased-20261017]
+    paths:
+      - app/sources/nmck_native_public.py
+      - app/sources/catalog.py
+      - app/sources/ingestion.py
+      - app/monitoring/config.py
+      - app/scoring/runs.py
+      - scripts/ci_ru_nmck_real_worker.py
+      - scripts/ci_ru_nmck_authenticated.py
+      - tests/test_ru_nmck_native.py
+      - .github/workflows/ru-nmck-native-acceptance.yml
+  pull_request:
+    branches: [main, research/ru-nmck-native-independent-20261017]
+permissions:
+  contents: read
+jobs:
+  nmck-strict-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Reject foreign syndicated cards, unsafe Punycode URLs and inconsistent detail IDs
+        run: python -m pytest -q tests/test_ru_nmck_native.py
+  nmck-live-fenced-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real NMCK native notices into durable lease, SQLite and keyword lookup
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_nmck_real_worker
+  nmck-live-auth-tenant:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real NMCK native notices through authenticated scoring with tenant isolation
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_nmck_authenticated

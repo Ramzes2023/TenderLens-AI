@@ -19,6 +19,7 @@ from .austender_rss import AusTenderRssSource
 from .b2b_center import B2BCenterSource
 from .tektorg_public_html import TekTorgPublicSource
 from .gpb_etp_public import GpbEtpPublicSource
+from .roseltorg_public import RoseltorgPublicSource
 from .canada_buys_dataset import CanadaBuysDatasetSource
 from .eis_rss import EisRssSource, SourceError
 from .eis_44_public_html import Eis44PublicHtmlSource
@@ -644,6 +645,20 @@ def build_source_catalog(
             jurisdictions=("RU",), languages=("ru",),
             homepage_url="https://zakupki.gov.ru/",
             official=True, enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    if settings.roseltorg_public_enabled:
+        registry.register(SourceRegistration(
+            key="roseltorg_public",
+            display_name="Roseltorg — public procedures with verified details (law unverified)",
+            source=RoseltorgPublicSource(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url="https://www.roseltorg.ru/procedures/search",
+            official=False,
+            enabled=True,
             capabilities=SourceCapabilities(),
         ))
 

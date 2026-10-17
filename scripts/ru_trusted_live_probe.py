@@ -61,6 +61,7 @@ TARGETS = {
     "moscow_oblast_market": Target("market.mosreg.ru", "/"),
     "torgi_online_commercial": Target("etp.etptorgionline.ru", "/app/section/commerc/SearchLots/page"),
     "r_tender_commercial": Target("etp.r-tender.ru", "/app/section/kommerctorg/SearchLots/page"),
+    # Official public grid is an accessibility probe, not evidence of tender details.
     "dagestan_official_small": Target("goszakaz.e-dag.ru", "/smallpurchases/GzwSP/NoticesGrid"),
 }
 

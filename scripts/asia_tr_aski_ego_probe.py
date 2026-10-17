@@ -43,6 +43,21 @@ def main():
       record["verified_detail_links"]+=1
       if len(record["examples"])<4:
        record["examples"].append({"path":parsed.path,"query_keys":sorted(parse_qs(parsed.query))})
+    if key=="ego_list":
+     record["table_examples"]=[]
+     for tr in re.findall(r"<tr\\b[^>]*>(.*?)</tr>",raw,re.I|re.S):
+      cells=[norm(v) for v in re.findall(r"<td\\b[^>]*>(.*?)</td>",tr,re.I|re.S)]
+      if not cells:continue
+      if len(record["table_examples"])>=5:break
+      record["table_examples"].append({"count":len(cells),"values":[v[:135] for v in cells[:6]],
+       "has_detail_link":("/tr/ihale/detay/" in tr)})
+    if key=="aski_list":
+     record["table_examples"]=[]
+     for tr in re.findall(r"<tr\\b[^>]*>(.*?)</tr>",raw,re.I|re.S):
+      cells=[norm(v) for v in re.findall(r"<td\\b[^>]*>(.*?)</td>",tr,re.I|re.S)]
+      if len(cells)<3:continue
+      if len(record["table_examples"])>=4:break
+      record["table_examples"].append({"count":len(cells),"values":[v[:110] for v in cells[:7]]})
     record["markers"]={s:bool(re.search(s,raw,re.I)) for s in
      ("Kik Kayıt Numarası","KİK KAYIT NO","İhale Tarihi","İHALE TARİHİ","İhale Adı","İHALE ADI")}
     if key.endswith("example"):

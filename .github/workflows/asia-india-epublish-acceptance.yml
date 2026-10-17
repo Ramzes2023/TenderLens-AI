@@ -1,0 +1,48 @@
+name: Asia India separate ePublishing official active tender worker acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/india_epublish.py
+      - app/sources/catalog.py
+      - app/sources/ingestion.py
+      - tests/test_india_epublish.py
+      - scripts/asia_india_epublish_real_worker.py
+      - .github/workflows/asia-india-epublish-acceptance.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: asia-india-epublish-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  india-epublish-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pytest -q tests/test_india_epublish.py tests/test_india_cppp.py tests/test_connector_workers.py
+  india-epublish-real-worker-storage-search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    needs: [india-epublish-offline]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Anonymous real government page → lease-fenced worker → ephemeral DB → keyword search
+        env:
+          VALYQON_ASIA_INDIA_EPUBLISH_ENABLED: '1'
+        run: python -m scripts.asia_india_epublish_real_worker

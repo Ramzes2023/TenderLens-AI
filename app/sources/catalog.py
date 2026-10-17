@@ -25,6 +25,7 @@ from .eis_rss import EisRssSource, SourceError
 from .eis_44_public_html import Eis44PublicHtmlSource
 from .eis_223_rss import Eis223RssSource
 from .india_cppp import IndiaCpppSource
+from .india_epublish import IndiaEpublishSource, LIST_URL as INDIA_EPUBLISH_LIST_URL
 from .kz_goszakup import KazakhstanGoszakupApiSource
 from .multi import MultiSourceFetcher, MultiSourceFetchReport
 from .mikroton_tender import MikrotonTenderSource
@@ -579,6 +580,19 @@ def build_source_catalog(
             transport=SourceTransport.API, jurisdictions=("HK",),
             languages=("en",), homepage_url=HKMA_TENDER_API_URL,
             official=True, enabled=True, capabilities=SourceCapabilities(),
+        ))
+
+    # India's government-owned ePublishing is independent of CPPP eProcure.
+    if os.environ.get("VALYQON_ASIA_INDIA_EPUBLISH_ENABLED", "").strip() == "1":
+        registry.register(SourceRegistration(
+            key="in_epublish",
+            display_name="India Central ePublishing — latest tender enquiries",
+            source=IndiaEpublishSource(timeout=min(timeout, 30.0)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("IN",), languages=("en",),
+            homepage_url=INDIA_EPUBLISH_LIST_URL,
+            official=True, enabled=True,
+            capabilities=SourceCapabilities(),
         ))
 
     # Russian connectors are opt-in. Do not enable unverified live adapters.

@@ -47,4 +47,4 @@ def test_detail_identity_is_independent_and_not_just_static_url():
         verified_detail("<script>Закупка № 0051452025218634 Поставка музыкального оборудования</script>".encode("utf-8"),None,TITLE_A)
 
 def test_unknown_or_external_list_not_proof():
-    assert listing_links(b'<a href="/notices">Поиск</a>')==[]
+    assert listing_links('<a href="/notices">Поиск</a>'.encode("utf-8"))==[]

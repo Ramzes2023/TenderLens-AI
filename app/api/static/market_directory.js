@@ -55,9 +55,12 @@
       tags.append(
         el('span','source-tag',item.official ? translate('Government or official') : translate('Marketplace or commercial')),
         el('span','source-tag',item.focus === 'regional_small' ? translate('Regional / small procurement') : item.transport.toUpperCase()),
-        el('span','source-tag',item.enabled ? translate('Configured for use') : translate('Not enabled'))
+        el('span','source-tag',item.registered === false ? translate('Available in code · not configured') :
+          item.enabled ? translate('Configured for use') : translate('Not enabled'))
       );
-      const note = el('p','source-directory-note',translate('Live delivery is not verified by this directory.'));
+      const note = el('p','source-directory-note',translate(item.registered === false ?
+        'This adapter is not registered in the running service. Live delivery is not verified.' :
+        'Live delivery is not verified by this directory.'));
       card.append(top,tags,note);
       if (item.homepage) {
         const a = el('a','source-official-link',translate('Official source website') + ' ↗');
@@ -76,7 +79,7 @@
     message.textContent = state === 'error'
       ? translate('Unable to load source registry right now.')
       : translate('Showing') + ' ' + filtered.length + ' ' +
-        translate('registered adapters. Availability requires a separate check.');
+        translate('listed adapters (registered and optional). Availability requires a separate check.');
     for(const button of mapPins){
       const selected=button.dataset.mapRegion===region;
       button.setAttribute('aria-pressed', String(selected));
@@ -104,10 +107,15 @@
       if (!response.ok) throw new Error('source registry unavailable');
       const data = await response.json();
       if (!Array.isArray(data.sources)) throw new Error('source registry malformed');
-      records = data.sources.filter(item=>
+      const valid = item =>
         typeof item.key === 'string' && typeof item.name === 'string' &&
-        typeof item.country === 'string' && typeof item.region === 'string'
-      );
+        typeof item.country === 'string' && typeof item.region === 'string';
+      const registered = data.sources.filter(valid);
+      const registeredKeys = new Set(registered.map(item=>item.key));
+      const optional = Array.isArray(data.optional_sources) ? data.optional_sources.filter(item=>
+        valid(item) && item.registered === false && !registeredKeys.has(item.key)
+      ) : [];
+      records = registered.concat(optional);
       state = 'ready';
       render();
     })

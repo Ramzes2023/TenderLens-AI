@@ -95,3 +95,17 @@ def test_native_source_fetches_only_first_party_detail_pages(monkeypatch):
     assert rows[0].tender_number=="20261000009М"
     assert rows[0].initial_price is None
     assert urls==[LIST_URL,*[LIST_URL+"?procedure="+s for s in SLUGS]]
+
+
+
+def test_real_worker_reuses_strict_native_url_identity_contract():
+    from app.sources.models import TenderNotice
+    from scripts.ci_ru_nmck_real_worker import is_canonical_nmck_notice
+    correct = TenderNotice(source="nmck_native_public", external_id="20261000009",
+                           tender_number="20261000009М", title=TITLE1,
+                           url=LIST_URL + "?procedure=" + SLUG1)
+    assert is_canonical_nmck_notice(correct)
+    from dataclasses import replace
+    assert not is_canonical_nmck_notice(replace(correct, tender_number="20261000008М"))
+    assert not is_canonical_nmck_notice(replace(correct, url=correct.url+"&token=evil"))
+    assert not is_canonical_nmck_notice(replace(correct, url=correct.url.replace(HOST, HOST+".evil.test")))

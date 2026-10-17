@@ -13,6 +13,7 @@ from app.sources.http import FetchPolicy,bounded_fetch,source_client,ConnectorTr
 
 HOST="etpzakupki.tatar"
 LIST="https://etpzakupki.tatar/app"
+SEARCH_LIST="https://etpzakupki.tatar/app/SearchLots/"
 LIMIT=6
 REQUIRED=2
 MAX_BYTES=1_800_000
@@ -113,19 +114,28 @@ def verify_detail(data,url,title):
     return(m.group(1),title,url)
 
 async def live():
-    with bounded_fetch(FetchPolicy(frozenset({HOST}),LIMIT+1,max_bytes=MAX_BYTES)):
+    with bounded_fetch(FetchPolicy(frozenset({HOST}),LIMIT+2,max_bytes=MAX_BYTES)):
         async with source_client(timeout=24,follow_redirects=False,trust_env=False,
             headers={"Accept":"text/html","User-Agent":"Mozilla/5.0"}) as client:
-            page=await client.get(LIST)
-            page.raise_for_status()
-            if "html" not in page.headers.get("content-type","").lower():
-                raise ValueError("Native published listing not HTML")
-            p=html(page.content)
-            print("RU_TATAR_ALL_PUBLIC_ANCHORS="+str(len(p.links)))
-            print("RU_TATAR_CANONICAL_OFFER_CARDS="+str(sum(canonical(h) is not None for h,_ in p.links)))
-            print("RU_TATAR_PUBLIC_HEADINGS="+str(len(p.headings)))
-            links=list_cards(page.content)
-            print("RU_TATAR_VISIBLE_FIRSTPARTY_CARD_LINKS="+str(len(links)))
+            links=[]
+            for listed in (LIST, SEARCH_LIST):
+                page=await client.get(listed)
+                page.raise_for_status()
+                if "html" not in page.headers.get("content-type","").lower():
+                    raise ValueError("Native published listing not HTML")
+                p=html(page.content)
+                print("RU_TATAR_ALL_PUBLIC_ANCHORS="+str(len(p.links)))
+                print("RU_TATAR_CANONICAL_OFFER_CARDS="+str(sum(canonical(h) is not None for h,_ in p.links)))
+                print("RU_TATAR_PUBLIC_HEADINGS="+str(len(p.headings)))
+                try:
+                    links=list_cards(page.content)
+                    print("RU_TATAR_VISIBLE_FIRSTPARTY_CARD_LINKS="+str(len(links)))
+                    break
+                except ValueError:
+                    print("RU_TATAR_VISIBLE_FIRSTPARTY_CARD_LINKS=0")
+                    continue
+            if len(links)<REQUIRED:
+                raise ValueError("No independently linked Tatarstan public native procurement listing")
             confirmed=[]
             for url,title in links:
                 detail=await client.get(url)

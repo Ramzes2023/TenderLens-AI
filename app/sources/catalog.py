@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Iterable
 
 from .am_armeps import ArmeniaArmepsSource
+from .az_azeristilik import AzerbaijanHeatSource
 from .tj_eprocurement import TajikistanEprocurementSource
 from .kg_gov_legacy import KyrgyzstanGovLegacySource
 from .kz_gov_html import KazakhstanGovHtmlSource
@@ -498,6 +499,21 @@ def build_source_catalog(
         jurisdictions=("KZ",),
         languages=("ru", "kk"),
         homepage_url="https://old.goszakup.gov.kz/ru/search/announce",
+        official=True,
+        enabled=False,
+        capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
+    ))
+
+    # Verified public announcements of Azerbaijani state-owned heating entity.
+    # Not the national AZ eTender platform, and disabled by default.
+    registry.register(SourceRegistration(
+        key="az_azeristilik",
+        display_name="Azerbaijan Azəristiliktəchizat public procurement",
+        source=AzerbaijanHeatSource(timeout=min(timeout, 30)),
+        transport=SourceTransport.HTML,
+        jurisdictions=("AZ",),
+        languages=("az",),
+        homepage_url="https://azeristilik.gov.az/az/imkanlar/tender-elanlari",
         official=True,
         enabled=False,
         capabilities=SourceCapabilities(pagination=False, incremental_sync=False),

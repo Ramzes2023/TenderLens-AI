@@ -18,7 +18,7 @@ if ($Server -notmatch '\A[a-zA-Z0-9][a-zA-Z0-9.-]{0,252}\z' -or $SshUser -ne 'ub
 Write-Host 'VALYQON AWS PRIVATE PREVIEW' -ForegroundColor Cyan
 Write-Host 'Only the isolated valyqon-private-preview project is updated.'
 if ($PlanOnly) {
-    Write-Host ('PLAN_ONLY=YES; SERVER={0}; ROOT={1}; PROJECT={2}' -f $Server,$remoteRoot,$project)
+    Write-Output ('PLAN_ONLY=YES; SERVER={0}; ROOT={1}; PROJECT={2}' -f $Server,$remoteRoot,$project)
     return
 }
 if (-not (Test-Path -LiteralPath $IdentityFile -PathType Leaf)) {

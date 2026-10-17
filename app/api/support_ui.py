@@ -14,12 +14,11 @@ SUPPORT_HTML = r"""
       </span>
 
       <h2>
-        How can we help?
+        Support that stays with your workflow.
       </h2>
 
       <p>
-        Get product guidance, report a problem
-        or review your support requests.
+        Find trustworthy product guidance, follow an existing case or send an issue to the support team.
       </p>
     </div>
 
@@ -49,25 +48,19 @@ SUPPORT_HTML = r"""
     <article>
       <small>Open requests</small>
       <strong id="supportOpenCount">—</strong>
-      <span>
-        Active support conversations
-      </span>
+      <span>Requests awaiting a resolution</span>
     </article>
 
     <article>
       <small>Latest request</small>
       <strong id="supportLatestTicket">—</strong>
-      <span>
-        Your most recent ticket
-      </span>
+      <span>Your latest support case</span>
     </article>
 
     <article>
       <small>Assistant</small>
-      <strong>AI assistant</strong>
-      <span>
-        Product guidance when available
-      </span>
+      <strong>Product guidance</strong>
+      <span>AI answers when the provider is available</span>
     </article>
   </section>
 
@@ -85,7 +78,7 @@ SUPPORT_HTML = r"""
         </div>
 
         <span class="support-live-pill">
-          AI assistant
+          Provider-dependent
         </span>
       </div>
 
@@ -96,6 +89,12 @@ SUPPORT_HTML = r"""
         create a support request.
       </p>
 
+      <nav class="support-knowledge-links" aria-label="Help resources">
+        <a href="/how-it-works">Getting started ↗</a>
+        <a href="/scoring-methodology">Scoring methodology ↗</a>
+        <a href="/status">Service status ↗</a>
+      </nav>
+
       <div
         id="supportChat"
         class="support-chat"
@@ -104,9 +103,9 @@ SUPPORT_HTML = r"""
         <div class="support-message assistant">
           <strong>VALYQON Support</strong>
           <p>
-            Hi. I can help you navigate VALYQON
-            and explain common product workflows.
-            What do you need help with?
+            Explore the help guides above, or ask a product question
+            when the AI provider is available. For a personal account
+            issue, use the support request form.
           </p>
         </div>
       </div>

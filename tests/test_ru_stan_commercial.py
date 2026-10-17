@@ -40,4 +40,4 @@ def test_independent_title_and_number_required():
 
 def test_fail_closed_on_eis_only():
     with pytest.raises(ValueError):
-        parse_list(b'<a href="/etp/AAaaBB12">№ 32616478602 / АЭ-2026-000033</a>')
+        parse_list('<a href="/etp/AAaaBB12">№ 32616478602 / АЭ-2026-000033</a>'.encode('utf-8'))

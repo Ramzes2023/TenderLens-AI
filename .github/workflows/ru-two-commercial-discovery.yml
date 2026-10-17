@@ -1,0 +1,54 @@
+name: RU two independent commercial platforms read-only native procurement gates
+on:
+  push:
+    branches: [research/ru-torgionline-rtender-own-procurements-20261017]
+    paths:
+      - scripts/research_ru_commercial_2_platforms.py
+      - tests/test_ru_commercial_2_platforms.py
+      - .github/workflows/ru-two-commercial-discovery.yml
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  commercial-native-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Reject session redirects, EIS 223 mirror, foreign hosts and fake details
+        run: python -m pytest -q tests/test_ru_commercial_2_platforms.py
+  torgi-online-two-native-public-details:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Strict public listing links -> 2 independently corroborated commercial details
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_commercial_2_platforms torgi_online
+  r-tender-two-native-public-details:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Strict public listing links -> 2 independently corroborated commercial details
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_commercial_2_platforms r_tender

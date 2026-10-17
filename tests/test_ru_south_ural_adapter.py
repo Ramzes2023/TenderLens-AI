@@ -95,3 +95,70 @@ def test_collect_up_to_ten_distinct_current_public_invites():
         parse_public_listing(body, limit=100)
     with pytest.raises(ValueError):
         parse_public_listing(body, limit=True)
+
+
+
+def test_regional_detail_metadata_is_precise_and_never_invented():
+    from app.sources.south_ural_public import public_detail_metadata
+    extra = """<table><tr><td>Организация:</td><td>МБУ ШКОЛА № 7 Г. ЧЕЛЯБИНСКА</td></tr>
+    <tr><td>Максимальная цена товаров, работ, услуг*</td><td>29 000,00</td></tr>
+    <tr><td>Валюта</td><td>Российский рубль</td></tr>
+    <tr><td>Дата окончания подачи оферт*</td>
+    <td>17.07.2026 08:00 (UTC+05:00) Екатеринбург</td></tr></table>""".encode("utf-8")
+    assert public_detail_metadata(extra) == {
+        "customer": "МБУ ШКОЛА № 7 Г. ЧЕЛЯБИНСКА",
+        "initial_price": 29000.0,
+        "currency": "RUB",
+        "deadline": "2026-07-17T08:00:00+05:00",
+    }
+    assert public_detail_metadata(b"<table></table>") == {
+        "customer": None, "initial_price": None,
+        "currency": None, "deadline": None,
+    }
+
+
+def test_unpublished_amount_not_invented_or_assumed_zero():
+    from app.sources.south_ural_public import public_detail_metadata
+    undecided = "<tr><td>Максимальная цена товаров, работ, услуг*</td><td>Цена не определена</td></tr>"
+    x = public_detail_metadata(undecided.encode())
+    assert x["initial_price"] is None and x["currency"] is None
+    bad = "<tr><td>Максимальная цена товаров, работ, услуг*</td><td>29.000 RUB</td></tr>"
+    with pytest.raises(ValueError):
+        public_detail_metadata(bad.encode())
+
+
+def test_duplicate_conflicting_detail_metadata_rejected():
+    from app.sources.south_ural_public import public_detail_metadata
+    body = """<tr><td>Организация:</td><td>Заказчик А</td></tr>
+        <tr><td>Организация:</td><td>Заказчик Б</td></tr>""".encode("utf-8")
+    with pytest.raises(ValueError):
+        public_detail_metadata(body)
+
+
+def test_metadata_only_after_independently_verified_firstparty_detail(monkeypatch):
+    import asyncio
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    import app.sources.south_ural_public as module
+    original = parse_public_listing(rows())
+    list_by_url = {x[2]: x for x in original}
+    def detail_html(n,t):
+        return (page(n,t).decode("utf-8") + """<table>
+        <tr><td>Организация:</td><td>МБУ ШКОЛА № 7</td></tr>
+        <tr><td>Максимальная цена товаров, работ, услуг*</td><td>8 990,50</td></tr>
+        <tr><td>Валюта</td><td>Российский рубль</td></tr>
+        <tr><td>Дата окончания подачи оферт*</td><td>31.10.2026 13:00 (UTC+05:00) Екатеринбург</td></tr>
+        </table>""").encode("utf-8")
+    class Fake:
+        async def get(self,url):
+            body=rows() if url==LIST_URL else detail_html(list_by_url[url][0],list_by_url[url][1])
+            return SimpleNamespace(content=body,headers={"content-type":"text/html"},raise_for_status=lambda:None)
+    @asynccontextmanager
+    async def session(**kwargs):
+        assert kwargs["trust_env"] is False and kwargs["follow_redirects"] is False
+        yield Fake()
+    monkeypatch.setattr(module,"source_client",session)
+    notices=asyncio.run(module.SouthUralPublicSource().fetch(limit=2))
+    assert len(notices)==2
+    assert all(n.customer=="МБУ ШКОЛА № 7" and n.initial_price==8990.5 and n.currency=="RUB"
+               and n.deadline=="2026-10-31T13:00:00+05:00" for n in notices)

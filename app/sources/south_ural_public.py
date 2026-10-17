@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from contextlib import nullcontext
 import math
 import asyncio
+from datetime import datetime
 from html.parser import HTMLParser
 import re
 from urllib.parse import urljoin, urlsplit
@@ -154,6 +155,72 @@ def verify_public_detail(body,number,title,url):
     return (number,title,url)
 
 
+
+def public_detail_metadata(body):
+    """Read only explicitly visible, independently corroborated item fields.
+
+    Unknown, ambiguous or unpublished fields remain NULL, never estimated.
+    Unique exact-label table cells only; no inline scripts or private user data.
+    """
+    doc = read_doc(body)
+    fields = {}
+    names = {
+        "организация": "customer",
+        "максимальная цена товаров, работ, услуг": "price",
+        "валюта": "currency",
+        "дата окончания подачи оферт": "deadline",
+    }
+    for row in doc.rows:
+        cells = row["cells"]
+        if len(cells) != 2:
+            continue
+        key = cells[0].lower().rstrip(" :*")
+        if key not in names:
+            continue
+        value = cells[1].strip()
+        if len(value) > 2000 or "\x00" in value:
+            raise ValueError("Unsafe South Ural detail field")
+        label = names[key]
+        if label in fields and fields[label] != value:
+            raise ValueError("Conflicting official detail metadata")
+        fields[label] = value
+
+    customer = fields.get("customer")
+    if customer and ("<" in customer or ">" in customer):
+        raise ValueError("Unsafe HTML in procurement customer")
+    if not customer:
+        customer = None
+
+    price = None
+    currency = None
+    amount = fields.get("price")
+    if amount is not None and amount not in ("Цена не определена", "Не установлена", "-"):
+        normalized = amount.replace("\u00a0", " ").replace("\u202f", " ")
+        if not re.fullmatch(r"(?:\d{1,3}(?: \d{3})+|\d{1,18})(?:,\d{1,2})?", normalized):
+            raise ValueError("Malformed official purchase maximum value")
+        price = float(normalized.replace(" ", "").replace(",", "."))
+        if not math.isfinite(price) or price < 0:
+            raise ValueError("Invalid official price")
+        if fields.get("currency") == "Российский рубль":
+            currency = "RUB"
+
+    deadline = None
+    raw = fields.get("deadline")
+    if raw:
+        m = re.fullmatch(
+            r"(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}:\d{2})\s+\(UTC([+-]\d{2}:\d{2})\)(?:\s+[\wА-Яа-яЁё-]+)?",
+            raw,
+        )
+        if m:
+            candidate = f"{m[3]}-{m[2]}-{m[1]}T{m[4]}{m[5]}"
+            try:
+                deadline = datetime.fromisoformat(candidate).isoformat()
+            except ValueError:
+                raise ValueError("Invalid official procurement deadline") from None
+    return {"customer": customer, "initial_price": price,
+            "currency": currency, "deadline": deadline}
+
+
 @dataclass(frozen=True)
 class SouthUralPublicSource:
     timeout: float = 20
@@ -188,9 +255,11 @@ class SouthUralPublicSource:
                         if "html" not in detail.headers.get("content-type","").lower():
                             raise ValueError("South Ural official detail not public HTML")
                         verify_public_detail(detail.content,number,title,url)
+                        metadata=public_detail_metadata(detail.content)
                         notice=TenderNotice(
                             source=SOURCE_ID,external_id=number,tender_number=number,
                             title=title,url=url,region="Челябинская область",
+                            **metadata,
                         )
                         validate_notice(notice,SOURCE_ID)
                         notices.append(notice)

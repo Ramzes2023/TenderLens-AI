@@ -24,8 +24,15 @@ async def run():
         while isinstance(current, BaseException) and id(current) not in seen and len(chain) < 7:
             seen.add(id(current))
             chain.append({"type": type(current).__name__,
+                          "module": type(current).__module__,
                           "audited_dns_failed": type(current).__name__ == "ConnectError"
-                          and str(current) == "DNS resolution failed"})
+                          and str(current) == "DNS resolution failed",
+                          "tls_error": "SSL" in type(current).__name__,
+                          "safe_network_kind": (
+                              "dns" if str(current) == "DNS resolution failed"
+                              else "tcp" if str(current) == "TCP connection failed"
+                              else "timeout" if "timeout" in type(current).__name__.lower()
+                              else "other")})
             current = current.__cause__
         print(json.dumps({"source": "am_armeps", "upstream_html_retrieved": False,
                           "exception_chain_types": chain}, sort_keys=True))

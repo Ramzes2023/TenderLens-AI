@@ -18,8 +18,8 @@ acceptance. The unified operator CLI adds a safe batch control and search surfac
 - Singapore Government GeBIZ official *Business Opportunity* category RSS:
   `sg_gebiz_professional` and `sg_gebiz_misc`.
 
-**Count:** 13 distinct connectors from 3 locations (Hong Kong, Japan,
-Singapore), not ten countries. All are disabled by default. Availability varies,
+**Count:** 13 distinct connectors across 5 procurement jurisdictions (Hong Kong,
+Japan, Singapore, India and the UAE), not 13 countries. All are disabled by default. Availability varies,
 open bid status must be checked on the official website before bidding; archived
 opportunities are not automatically expired or removed from local snapshots.
 

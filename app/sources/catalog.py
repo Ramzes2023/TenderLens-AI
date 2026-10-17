@@ -26,6 +26,7 @@ from .eis_44_public_html import Eis44PublicHtmlSource
 from .eis_223_rss import Eis223RssSource
 from .india_cppp import IndiaCpppSource
 from .india_epublish import IndiaEpublishSource, LIST_URL as INDIA_EPUBLISH_LIST_URL
+from .uae_mof_rfqs import UAEMinistryFinanceSource, URL as UAE_MOF_URL
 from .kz_goszakup import KazakhstanGoszakupApiSource
 from .multi import MultiSourceFetcher, MultiSourceFetchReport
 from .mikroton_tender import MikrotonTenderSource
@@ -593,6 +594,19 @@ def build_source_catalog(
             homepage_url=INDIA_EPUBLISH_LIST_URL,
             official=True, enabled=True,
             capabilities=SourceCapabilities(),
+        ))
+
+    # Official UAE Ministry of Finance federal current business opportunities.
+    # Separate from Dubai eSupply and Abu Dhabi's procurement portals.
+    if os.environ.get("VALYQON_ASIA_UAE_FEDERAL_ENABLED", "").strip() == "1":
+        registry.register(SourceRegistration(
+            key="ae_federal_mof",
+            display_name="UAE Ministry of Finance — current federal RFQs",
+            source=UAEMinistryFinanceSource(timeout=min(timeout, 30.0)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("AE",), languages=("en", "ar"),
+            homepage_url=UAE_MOF_URL,
+            official=True, enabled=True, capabilities=SourceCapabilities(),
         ))
 
     # Russian connectors are opt-in. Do not enable unverified live adapters.

@@ -7,6 +7,8 @@ No data stored. This diagnoses reachability, NOT successful tender ingestion.
 from __future__ import annotations
 
 import http.client
+import json
+from concurrent.futures import ThreadPoolExecutor
 import ipaddress
 import re
 import socket
@@ -35,6 +37,22 @@ TARGETS = {
     "gpb_rss": Target("etpgpb.ru", "/procedures.rss", "rss"),
     "rzd_eshop": Target("eshoprzd.ru", "/"),
     "tektorg": Target("www.tektorg.ru", "/223-fz/procedures"),
+    "fabrikant_44_mirror": Target("soap4.fabrikant.ru", "/44/catalog/procedure/requestOffer"),
+    "fabrikant_223_mirror": Target("soap2.fabrikant.ru", "/223/catalog/procedure/finished"),
+    "tatarstan_trading": Target("etpzakupki.tatar", "/app/SearchLots/"),
+    "samara_small": Target("webtorgi.samregion.ru", "/smallpurchases"),
+    "sverdlovsk_small": Target("torgi.egov66.ru", "/smallpurchases/GzwSP/NoticesGrid"),
+    "bashkortostan_small": Target("zakaz.bashkortostan.ru", "/quotation-requests/new"),
+    "yanao_small": Target("zakupki.yanao.ru", "/vitriny-zakupok/oos-rks-001-001"),
+    "moscow_suppliers": Target("zakupki.mos.ru", "/"),
+    "moscow_oblast_small": Target("easuz.mosreg.ru", "/for-business"),
+    "lot_online": Target("tender.lot-online.ru", "/search"),
+    "rts_tomsk_small": Target("region70.rts-tender.ru", "/"),
+    "rts_dagestan_small": Target("marketrd.rts-tender.ru", "/"),
+    "rts_omsk_small": Target("zmo-omsk.rts-tender.ru", "/"),
+    "rts_yaroslavl_small": Target("market-yaroslavl.rts-tender.ru", "/"),
+    "sber_berezka": Target("agregatoreat.ru", "/"),
+    "tender_pro": Target("www.tender.pro", "/api/tenders/list"),
 }
 
 class UnsafeAddress(RuntimeError):
@@ -115,7 +133,39 @@ def describe(mode: str, payload: bytes) -> dict[str, int]:
         "procurement_number_tokens": len(set(re.findall(r"(?<!\d)\d{19}(?!\d)", raw))),
     }
 
+def batch_priority() -> int:
+    # A bounded read-only operator survey, not 24 working procurement connectors.
+    # Only immutable allowlisted labels are scheduled. No tenant or production data.
+    if len(TARGETS) != 24:
+        print("RU_BATCH=BLOCKED_TARGET_SET")
+        return 2
+
+    def once(label: str) -> dict[str, object]:
+        try:
+            target = TARGETS[label]
+            mime, body = read_public(target)
+            counts = describe(target.mode, body)
+            return {"source": label, "status": "HTTPS_VISIBLE_NOT_INGESTED",
+                    "bytes": len(body), "counts": counts}
+        except (OSError, ValueError, UnsafeAddress, ET.ParseError, ssl.SSLError) as error:
+            return {"source": label, "status": "BLOCKED", "failure_class": type(error).__name__}
+
+    # Four concurrent requests to distinct approved hosts. Only one fixed read
+    # per host (plus a single IP failover), max 2 MiB each and strict TLS.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(once, tuple(TARGETS)))
+    for result in results:
+        print("RU_BATCH_SOURCE=" + json.dumps(result, sort_keys=True))
+    passed = sum(item["status"] == "HTTPS_VISIBLE_NOT_INGESTED" for item in results)
+    print(f"RU_BATCH_HTTPS_VISIBLE={passed}/{len(TARGETS)}")
+    print("RU_BATCH_NOTICE_DETAIL_VERIFIED=NO")
+    print("PRODUCTION_CHANGED=NO")
+    return 0 if passed == len(TARGETS) else 2
+
+
 def main(label: str) -> int:
+    if label == "batch_priority":
+        return batch_priority()
     if label not in TARGETS:
         print("RU_PROBE=REJECTED_UNKNOWN_SOURCE")
         return 2

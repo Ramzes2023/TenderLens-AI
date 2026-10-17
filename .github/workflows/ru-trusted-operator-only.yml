@@ -16,13 +16,30 @@ on:
           - gpb_rss
           - rzd_eshop
           - tektorg
+          - batch_priority
+          - fabrikant_44_mirror
+          - fabrikant_223_mirror
+          - tatarstan_trading
+          - samara_small
+          - sverdlovsk_small
+          - bashkortostan_small
+          - yanao_small
+          - moscow_suppliers
+          - moscow_oblast_small
+          - lot_online
+          - rts_tomsk_small
+          - rts_dagestan_small
+          - rts_omsk_small
+          - rts_yaroslavl_small
+          - sber_berezka
+          - tender_pro
 permissions:
   contents: read
 jobs:
   ru-operator-trusted-only:
     if: github.ref == 'refs/heads/main'
     runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 4
+    timeout-minutes: 6
     steps:
       # This step runs before checkout: a non-RU runner refuses to execute any repo code.
       - name: Require named RU runner

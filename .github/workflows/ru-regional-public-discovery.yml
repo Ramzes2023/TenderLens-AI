@@ -1,0 +1,25 @@
+name: RU regional public portal bounded discovery
+on:
+  push:
+    branches: [research/ru-regional-live-gates-20261017]
+    paths:
+      - scripts/research_ru_regional_live.py
+      - .github/workflows/ru-regional-public-discovery.yml
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  regional-public-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Read-only bounded public HTTPS discovery on 16 sources
+        timeout-minutes: 4
+        run: python -B scripts/research_ru_regional_live.py

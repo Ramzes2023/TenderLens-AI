@@ -1,0 +1,60 @@
+name: RU TEK-Torg genuine leased source diagnostic
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/ci_ru_tektorg_real_worker.py
+      - scripts/research_ru_tektorg_live_stages.py
+      - tests/test_ru_tektorg_real_lease_diagnostics.py
+      - .github/workflows/ru-tektorg-real-lease-diagnostic.yml
+  push:
+    branches: [fix/ru-tektorg-real-lease-diagnostic-20261018]
+    paths:
+      - scripts/ci_ru_tektorg_real_worker.py
+      - scripts/research_ru_tektorg_live_stages.py
+      - tests/test_ru_tektorg_real_lease_diagnostics.py
+      - .github/workflows/ru-tektorg-real-lease-diagnostic.yml
+permissions:
+  contents: read
+jobs:
+  tektorg-leased-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Refuse fabricated TEK-Torg worker proof and raw failure disclosure
+        run: python -m pytest -q tests/test_ru_tektorg_real_lease_diagnostics.py
+  tektorg-independent-real-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require genuine first-party details, real Worker lease, SQLite and stored lookup
+        timeout-minutes: 5
+        run: python -B -m scripts.ci_ru_tektorg_real_worker
+  tektorg-independent-original-detail-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Independently require two real original TEK-Torg cards and details
+        timeout-minutes: 5
+        run: python -B -m scripts.research_ru_tektorg_live_stages

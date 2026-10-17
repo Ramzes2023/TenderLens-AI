@@ -143,5 +143,5 @@ def test_official_detail_deadline_requires_actual_number_title_and_utc_offset():
 def test_deadline_from_malicious_unrelated_script_is_never_used():
     from app.sources.south_ural_public import independently_verified_deadline
     n,t,url=parse_public_listing(rows())[0]
-    fake=page(n,t)+b'<script>Date: 24.10.2026 20:00 (UTC+05:00) Екатеринбург</script>'
+    fake=page(n,t)+'<script>Date: 24.10.2026 20:00 (UTC+05:00) Екатеринбург</script>'.encode('utf-8')
     assert independently_verified_deadline(fake,n,t,url) is None

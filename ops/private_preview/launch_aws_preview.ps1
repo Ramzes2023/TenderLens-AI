@@ -5,7 +5,8 @@ param(
     [string]$SshUser = 'ubuntu',
     [string]$IdentityFile = (Join-Path $HOME '.ssh\tenderlens_vps_ed25519'),
     [switch]$PlanOnly,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$ReuseExistingTunnel
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -122,6 +123,42 @@ printf 'PREVIEW_DEPLOYED_COMMIT=%s\n' "$run_id"
 '@
     $deploy | & $ssh @sshOpts $target $remoteCmd
     if ($LASTEXITCODE -ne 0) { throw 'Preview Compose startup or server HTTP checks failed.' }
+    if ($ReuseExistingTunnel) {
+        # Explicit opt-in for browser review without interrupting an existing SSH session.
+        # Reuse only if the same SSH process owns BOTH known preview local ports.
+        $listeners = foreach ($port in @(18765,18766)) {
+            $portListeners = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
+                Where-Object { $_.LocalAddress -eq '127.0.0.1' })
+            if ($portListeners.Count -ne 1) {
+                throw "Existing preview tunnel on 127.0.0.1:$port is missing or ambiguous."
+            }
+            $portListeners[0]
+        }
+        if ($listeners[0].OwningProcess -ne $listeners[1].OwningProcess) {
+            throw 'The two preview ports are not owned by the same SSH tunnel.'
+        }
+        $owner = Get-CimInstance Win32_Process -Filter (
+            'ProcessId=' + [string]$listeners[0].OwningProcess
+        )
+        if (-not $owner -or $owner.Name -ne 'ssh.exe' -or
+            $owner.CommandLine -notlike ('*' + $target + '*') -or
+            $owner.CommandLine -notlike '*127.0.0.1:18765:127.0.0.1:18765*' -or
+            $owner.CommandLine -notlike '*127.0.0.1:18766:127.0.0.1:18766*') {
+            throw 'The preview ports are not owned by the expected existing SSH tunnel.'
+        }
+        $base = 'http://127.0.0.1:18765'
+        $res = Invoke-RestMethod -Uri ($base + '/private-preview/ready') -TimeoutSec 8
+        if ($res.status -ne 'ready' -or $res.external_integrations -ne 'disabled') {
+            throw 'Existing SSH tunnel does not expose a healthy private preview.'
+        }
+        Write-Host 'AWS_PRIVATE_PREVIEW=VERIFIED' -ForegroundColor Green
+        Write-Host ('SOURCE_COMMIT={0}' -f $sha)
+        Write-Host ('REUSED_TUNNEL_PID={0}' -f $listeners[0].OwningProcess)
+        Write-Host 'UI:      http://127.0.0.1:18765/'
+        Write-Host 'MAILPIT: http://127.0.0.1:18766/'
+        if (-not $NoBrowser) { Start-Process ($base + '/') }
+        return
+    }
     foreach ($port in @(18765,18766)) {
         if (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) {
             throw "Local port $port is occupied. Close the old tunnel or use a clean terminal."

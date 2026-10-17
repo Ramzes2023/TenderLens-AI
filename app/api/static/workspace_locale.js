@@ -2,6 +2,18 @@
 (function () {
   'use strict';
   const copy = {
+    "Support that stays with your workflow.":"Поддержка, которая всегда рядом с вашей работой.",
+    "Find trustworthy product guidance, follow an existing case or send an issue to the support team.":"Найдите понятные инструкции, следите за обращением или сообщите команде поддержки о проблеме.",
+    "Requests awaiting a resolution":"Обращения, ожидающие решения",
+    "Your latest support case":"Последнее обращение в поддержку",
+    "Product guidance":"Помощь по продукту",
+    "AI answers when the provider is available":"ИИ-ответы, когда сервис доступен",
+    "Provider-dependent":"Зависит от доступности сервиса",
+    "Getting started ↗":"Как начать ↗",
+    "Scoring methodology ↗":"Методология скоринга ↗",
+    "Service status ↗":"Состояние сервиса ↗",
+    "Explore the help guides above, or ask a product question when the AI provider is available. For a personal account issue, use the support request form.":"Изучите инструкции выше или задайте вопрос о продукте, когда ИИ доступен. Для вопросов об аккаунте используйте форму обращения.",
+    "No requests yet":"Обращений пока нет",
     'Optional: leave empty to use products / services':'Необязательно: оставьте пустым для поиска по продукции и услугам',
     'aluminium profiles, aluminum structures, facade profiles':'алюминиевые профили, конструкции, фасадные профили',
     'Germany, Canada':'Германия, Канада', 'ISO 9001, supplier registration':'ISO 9001, регистрация поставщика',

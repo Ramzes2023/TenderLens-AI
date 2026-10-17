@@ -86,6 +86,62 @@ async function saveDeadlinePreferences(){
 }
 $('saveDeadlinePreferences').onclick=saveDeadlinePreferences;
 
+
+let activitySerial=0;
+const activityLabels={
+ tender_saved:'Saved tender',
+ tender_refreshed:'Updated saved tender',
+ tender_removed:'Removed saved tender',
+ export_csv_generated:'Generated CSV export',
+ export_xlsx_generated:'Generated Excel export'
+};
+async function loadSavedActivity(){
+ const scope=identity(),ticket=++activitySerial;
+ const root=$('savedActivityEvents');
+ root.replaceChildren();
+ if(!ready()){
+  $('savedActivityStatus').textContent='Activate a shared company to view activity.';
+  return;
+ }
+ $('savedActivityStatus').textContent='Loading team activity…';
+ try{
+  const response=await fetch(
+   '/api/v1/organizations/'+encodeURIComponent(state.organizationId)+'/activity',
+   {credentials:'same-origin',cache:'no-store'}
+  );
+  if(ticket!==activitySerial||scope!==identity())return;
+  if(response.status===401){location.replace('/login');return;}
+  if(response.status===403){
+   $('savedActivityStatus').textContent='Only organization owners and admins can view this history.';
+   return;
+  }
+  if(!response.ok){
+   $('savedActivityStatus').textContent='Company activity unavailable. Retry.';
+   return;
+  }
+  const data=await response.json();
+  if(ticket!==activitySerial||scope!==identity())return;
+  const events=Array.isArray(data.events)?data.events:[];
+  for(const event of events){
+   if(!Object.hasOwn(activityLabels,event.action))continue;
+   const line=document.createElement('li');
+   line.textContent=activityLabels[event.action]+
+    ' · Account #'+Number(event.actor_account_id)+
+    (Number.isInteger(event.saved_opportunity_id)
+      ?' · saved #'+event.saved_opportunity_id:'')+
+    (Number.isInteger(event.item_count)?' · '+event.item_count+' rows':'')+
+    ' · '+String(event.created_at||'');
+   root.append(line);
+  }
+  $('savedActivityStatus').textContent=events.length?
+   'Last '+events.length+' recorded company actions.':'No recorded activity for this company yet.';
+ }catch(error){
+  if(ticket===activitySerial&&scope===identity())
+   $('savedActivityStatus').textContent='Network unavailable. Retry.';
+ }
+}
+$('refreshSavedActivity').onclick=loadSavedActivity;
+
 function updateContext(){
  refreshExportLinks();
  if(!usingSharedOrganization()){
@@ -818,6 +874,7 @@ window.addEventListener(
 
   updateContext();
   loadDeadlinePreferences();
+  loadSavedActivity();
 
   if(currentPage()==='saved'){
    loadSaved();
@@ -827,6 +884,7 @@ window.addEventListener(
 
 updateContext();
 loadDeadlinePreferences();
+loadSavedActivity();
 
 if(currentPage()==='saved'){
  loadSaved();

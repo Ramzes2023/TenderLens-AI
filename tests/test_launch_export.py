@@ -13,6 +13,10 @@ import app.api.launch_export_routes as exports
 class ScopedRepository:
     def __init__(self):
         self.calls = []
+        self.audit_calls = []
+
+    def record_shortlist_export_for_organization(self, **kwargs):
+        self.audit_calls.append(kwargs)
 
     def list_saved_opportunities_for_organization(self, *args):
         self.calls.append(args)
@@ -65,6 +69,8 @@ def test_api_uses_account_organization_and_active_company(monkeypatch):
     monkeypatch.setattr(exports, "_shortlist_repository", lambda _: repo)
     response = asyncio.run(exports.export_shortlist(21, SimpleNamespace(), "csv"))
     assert repo.calls == [(52, 21, 77, 200)]
+    assert repo.audit_calls == [dict(account_id=52, organization_id=21,
+                                     company_id=77, format='csv', item_count=1)]
     assert response.headers["Cache-Control"] == "private, no-store"
     assert response.headers["Content-Disposition"].endswith('valyqon-saved.csv"')
 

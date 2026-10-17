@@ -128,6 +128,17 @@ async def public_guide_page():
     return HTMLResponse(help_html('guide'), headers={"Cache-Control": "no-store"})
 
 
+@router.get("/scoring-methodology", response_class=HTMLResponse, include_in_schema=False)
+async def public_methodology_page():
+    from .scoring_methodology import methodology_html
+    return HTMLResponse(methodology_html(), headers={
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    })
+
+
 @router.get("/usage-guidelines", response_class=HTMLResponse, include_in_schema=False)
 async def public_guidelines_page():
     return HTMLResponse(help_html('guidelines'), headers={"Cache-Control": "no-store"})

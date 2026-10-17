@@ -127,12 +127,12 @@ printf 'PREVIEW_DEPLOYED_COMMIT=%s\n' "$run_id"
         # Explicit opt-in for browser review without interrupting an existing SSH session.
         # Reuse only if the same SSH process owns BOTH known preview local ports.
         $listeners = foreach ($port in @(18765,18766)) {
-            $matches = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
+            $portListeners = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
                 Where-Object { $_.LocalAddress -eq '127.0.0.1' })
-            if ($matches.Count -ne 1) {
+            if ($portListeners.Count -ne 1) {
                 throw "Existing preview tunnel on 127.0.0.1:$port is missing or ambiguous."
             }
-            $matches[0]
+            $portListeners[0]
         }
         if ($listeners[0].OwningProcess -ne $listeners[1].OwningProcess) {
             throw 'The two preview ports are not owned by the same SSH tunnel.'

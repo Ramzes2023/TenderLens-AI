@@ -2,6 +2,21 @@
 (function () {
   'use strict';
   const copy = {
+    'YOUR SUPPORT WORKSPACE':'ВАША ПОДДЕРЖКА',
+    'Get help, without the friction.':'Помощь — просто и удобно.',
+    'Explore product guides, ask a question, or create a ticket that your team can follow up.':'Читайте инструкции, задавайте вопросы и создавайте обращения, за которыми можно следить.',
+    'Create a request':'Создать обращение',
+    'Scoring methodology ↗':'Методология скоринга ↗',
+    'Requests awaiting resolution':'Обращения, ожидающие решения',
+    'Last recorded support request':'Последнее зарегистрированное обращение',
+    'Product guide':'Помощь по продукту',
+    'Answers and help articles when available':'Ответы и инструкции, когда сервис доступен',
+    'Ask VALYQON about the platform':'Спросить VALYQON о платформе',
+    'Automated answers may be limited or unavailable. For account-specific investigation, create a support request. Never share passwords or API keys.':'Автоматические ответы могут быть ограничены или недоступны. Для проверки аккаунта создайте обращение. Не сообщайте пароли или ключи API.',
+    'Tell us what happened and what you expected. Your request stays visible in your VALYQON Support Center.':'Расскажите, что произошло и какого результата вы ожидали. Обращение сохранится в центре поддержки VALYQON.',
+    'Create a support request':'Создать обращение в поддержку',
+    'Your request history':'История ваших обращений',
+    'No requests yet':'Обращений пока нет',
     'Optional: leave empty to use products / services':'Необязательно: оставьте пустым для поиска по продукции и услугам',
     'aluminium profiles, aluminum structures, facade profiles':'алюминиевые профили, конструкции, фасадные профили',
     'Germany, Canada':'Германия, Канада', 'ISO 9001, supplier registration':'ISO 9001, регистрация поставщика',

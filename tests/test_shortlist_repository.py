@@ -9,62 +9,40 @@ from app.database.repository import (
 
 
 def _prepare_scope(path):
-    repository = TenderRepository(path)
+    # Preserve the historical identities while using the canonical full schema.
+    # Audited saves must never be silently accepted on an unmigrated database.
+    from app.database.backend import Database
+    from app.database.config import DatabaseSettings
+    db = Database(DatabaseSettings("", path))
+    db.migrate()
+    repository = TenderRepository(db)
     repository.initialize()
 
     with sqlite3.connect(path) as conn:
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS
-            organization_members (
-                organization_id INTEGER NOT NULL,
-                account_id INTEGER NOT NULL,
-                role TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS
-            company_workspaces (
-                id INTEGER PRIMARY KEY,
-                organization_id INTEGER NOT NULL
-            );
-            """
-        )
-
         conn.execute(
-            """INSERT INTO organization_members(
-                organization_id,
-                account_id,
-                role
-            ) VALUES (?, ?, ?)""",
-            (
-                7,
-                101,
-                "member",
-            ),
+            "INSERT INTO auth_accounts "
+            "(id,email,password_hash,owner_user_id,is_active,email_verified,created_at,updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (101, "legacy-scope@example.test", "fixture-hash", 4101, 1, 1, "now", "now"),
         )
-
+        for org_id in (7, 8):
+            conn.execute(
+                "INSERT INTO organizations "
+                "(id,name,created_at,updated_at,created_by_account_id) VALUES (?,?,?,?,?)",
+                (org_id, "Test Organization " + str(org_id), "now", "now", 101),
+            )
         conn.execute(
-            """INSERT INTO company_workspaces(
-                id,
-                organization_id
-            ) VALUES (?, ?)""",
-            (
-                33,
-                7,
-            ),
+            "INSERT INTO organization_members "
+            "(organization_id,account_id,role,created_at) VALUES (?,?,?,?)",
+            (7, 101, "member", "now"),
         )
-
-        conn.execute(
-            """INSERT INTO company_workspaces(
-                id,
-                organization_id
-            ) VALUES (?, ?)""",
-            (
-                44,
-                7,
-            ),
-        )
-
+        for company_id in (33, 44):
+            conn.execute(
+                "INSERT INTO company_workspaces "
+                "(id,owner_user_id,name,profile_json,created_at,updated_at,organization_id) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (company_id, 4101, "Test Company " + str(company_id), "{}", "now", "now", 7),
+            )
     return repository
 
 
@@ -246,13 +224,9 @@ def test_shortlist_rejects_company_from_other_org(
     with sqlite3.connect(path) as conn:
         conn.execute(
             """INSERT INTO company_workspaces(
-                id,
-                organization_id
-            ) VALUES (?, ?)""",
-            (
-                55,
-                8,
-            ),
+                id,owner_user_id,name,profile_json,created_at,updated_at,organization_id
+            ) VALUES (?,?,?,?,?,?,?)""",
+            (55, 4101, "Wrong Company", "{}", "now", "now", 8),
         )
 
     with pytest.raises(

@@ -106,11 +106,24 @@ def verify(source_id):
             if any(row[2] != final.result.get("source_id", source_id) and not str(row[2]).startswith("connector-sync-v1:" + source_id + ":") for row in rows):
                 raise AssertionError("Unexpected connector provenance")
 
-            # Municipal buyers and low-value purchases are included when present,
-            # never invented or marked as a separate procurement platform.
-            local_buyers = sum(1 for item in stored
-                               if "primăria" in (item.customer or "").casefold()
-                               or "primaria" in (item.customer or "").casefold())
+            # Verify both procurement-topic queries and named local government
+            # customer searches against the same persisted, real public notices.
+            municipal = [item for item in stored
+                         if "primăria" in (item.customer or "").casefold()
+                         or "primaria" in (item.customer or "").casefold()]
+            local_buyers = len(municipal)
+            buyer_notice = municipal[0] if municipal else stored[0]
+            buyer_query = buyer_notice.customer.strip()
+            if not buyer_query:
+                raise AssertionError("Real upstream customer unavailable for saved search")
+            municipal_search = asyncio.run(snapshot_catalog(catalog, notices).fetch(
+                source_keys=(source_id,), limit_per_source=20,
+                search_terms=(buyer_query,),
+            ))
+            if (municipal_search.failures
+                    or not any(item.identity == buyer_notice.identity
+                               for item in municipal_search.notices)):
+                raise AssertionError("Buyer-specific real stored opportunity search failed")
             # Verify actual search, not just HTTP or a mocked repository.
             search_term = stored[0].title.strip().split()[0]
             result = asyncio.run(snapshot_catalog(catalog, notices).fetch(
@@ -123,7 +136,9 @@ def verify(source_id):
                     "snapshot_matches": len(result.notices),
                     "identity_verified": True,
                     "production_source_remains_disabled": True,
-                    "municipal_buyer_records": local_buyers}
+                    "municipal_buyer_records": local_buyers,
+                    "buyer_query_matches": len(municipal_search.notices),
+                    "municipal_buyer_query_verified": bool(municipal)}
         finally:
             db.close()
 

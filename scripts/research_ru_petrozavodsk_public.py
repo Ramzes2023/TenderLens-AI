@@ -34,8 +34,18 @@ class VisibleHTML(HTMLParser):
         self.anchor = None
         self.heading = None
         self.hidden = []
+        self.scripts = []
 
     def handle_starttag(self, tag, attrs):
+        if tag == "script":
+            candidate = dict(attrs).get("src")
+            if isinstance(candidate, str) and len(candidate) <= 300:
+                # Asset path only, not inline JS or private query/token.
+                asset = urlsplit(urljoin(LIST_URL, candidate))
+                if (asset.scheme == "https" and asset.netloc == HOST
+                        and not asset.query and not asset.fragment
+                        and asset.path.startswith(("/js/", "/assets/", "/static/"))):
+                    self.scripts.append(asset.path)
         if tag in ("script", "style", "svg", "template", "noscript", "iframe"):
             self.hidden.append(tag)
         if self.hidden:
@@ -138,8 +148,13 @@ async def run():
                 response.raise_for_status()
                 if "html" not in response.headers.get("content-type", "").lower():
                     raise ValueError("Public municipal listing is not HTML")
+                page_info = document(response.content)
                 links = listing_links(response.content)
                 print("RU_PTZ_CANONICAL_LIST_LINKS=" + str(len(links)))
+                print("RU_PTZ_ALL_LIST_ANCHORS=" + str(len(page_info.links)))
+                print("RU_PTZ_LOCAL_SCRIPT_ASSET_COUNT=" + str(len(page_info.scripts)))
+                # Never print URL query strings, dynamic user data, or page body.
+                print("RU_PTZ_FIRST_SCRIPT_PATHS=" + repr(page_info.scripts[:3]))
                 if len(links) >= DETAILS_REQUIRED:
                     break
             if len(links) < DETAILS_REQUIRED:

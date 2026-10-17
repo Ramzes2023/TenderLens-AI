@@ -6,7 +6,7 @@ A nonzero exit code is NOT waived by CI. All requests share one pinned host.
 import asyncio
 import httpx
 
-from app.sources.http import FetchPolicy, bounded_fetch, source_client
+from app.sources.http import FetchPolicy, bounded_fetch, source_client, ConnectorTransportError
 from app.sources.tektorg_public_html import (
     HOST, LIST_URL, MAX_BYTES, parse_public_listing, validate_public_detail,
 )
@@ -55,6 +55,10 @@ async def inspect():
 def main():
     try:
         code = asyncio.run(inspect())
+    except ConnectorTransportError as error:
+        print("RU_TEKTORG_STAGE=BLOCKED_CONNECTOR_TRANSPORT")
+        print("RU_TEKTORG_RETRYABLE=" + str(error.retryable))
+        code = 2
     except (httpx.HTTPError, OSError, ValueError, TimeoutError) as error:
         print("RU_TEKTORG_STAGE=BLOCKED_" + type(error).__name__)
         code = 2

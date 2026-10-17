@@ -53,6 +53,12 @@ TARGETS = {
     "rts_yaroslavl_small": Target("market-yaroslavl.rts-tender.ru", "/"),
     "sber_berezka": Target("agregatoreat.ru", "/"),
     "tender_pro": Target("www.tender.pro", "/api/tenders/list"),
+    "smolensk_small": Target("goszakupki.admin-smolensk.ru", "/smallpurchases/GzwSP/NoticesGrid"),
+    "petrozavodsk_small": Target("eshop-ptz.ru", "/"),
+    "yaroslavl_small": Target("zakupki.yarregion.ru", "/purchasesoflowvolume-asp/"),
+    "voronezh_small": Target("goszakupki.govvrn.ru", "/"),
+    "udmurtia_small": Target("wt.udmr.ru", "/"),
+    "moscow_oblast_market": Target("market.mosreg.ru", "/"),
 }
 
 class UnsafeAddress(RuntimeError):
@@ -136,7 +142,7 @@ def describe(mode: str, payload: bytes) -> dict[str, int]:
 def batch_priority() -> int:
     # A bounded read-only operator survey, not 24 working procurement connectors.
     # Only immutable allowlisted labels are scheduled. No tenant or production data.
-    if len(TARGETS) != 24:
+    if len(TARGETS) != 30:
         print("RU_BATCH=BLOCKED_TARGET_SET")
         return 2
 

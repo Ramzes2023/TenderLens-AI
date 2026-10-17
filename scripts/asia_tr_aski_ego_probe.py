@@ -58,6 +58,15 @@ def main():
       if len(cells)<3:continue
       if len(record["table_examples"])>=4:break
       record["table_examples"].append({"count":len(cells),"values":[v[:110] for v in cells[:7]]})
+    if key in ("ego_list","aski_list"):
+     regex=(r"/tr/ihale/detay/[0-9]+" if key=="ego_list" else r"IhaleDetay\\.aspx\\?ID=")
+     match=re.search(regex,raw,re.I)
+     if match:
+      around=raw[max(0,match.start()-1800):match.end()+200]
+      record["first_link_surrounding_html"]=around[-1700:]
+      record["first_link_surrounding_text"]=norm(around)[-600:]
+      record["has_table_tag"]="<table" in raw.lower()
+      record["date_syntaxes"]=re.findall(r"\\b[0-9]{2}\\.[0-9]{2}\\.2026(?:\\s+[0-9]{2}:[0-9]{2})?",around)[:8]
     record["markers"]={s:bool(re.search(s,raw,re.I)) for s in
      ("Kik Kayıt Numarası","KİK KAYIT NO","İhale Tarihi","İHALE TARİHİ","İhale Adı","İHALE ADI")}
     if key.endswith("example"):

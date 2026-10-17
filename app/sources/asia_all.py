@@ -20,10 +20,11 @@ from .india_epublish import SOURCE_ID as INDIA_EPUBLISH
 from .uae_mof_rfqs import SOURCE_ID as UAE_MOF
 from .tr_ankara_municipality import SOURCE_ID as ANKARA_TENDERS
 from .tr_aski_water import SOURCE_ID as ASKI_WATER
+from .tr_ego_transport import SOURCE_ID as EGO_TRANSIT
 from .sg_gebiz_rss import FEEDS as SG_GEBIZ
 from .ingestion import validate_payload, connector_version, sync_window
 
-SOURCES = (*ASIA_RSS_FEEDS, JP_JETRO, HK_HYD, *SG_GEBIZ, HK_HKMA, INDIA_EPUBLISH, UAE_MOF, ANKARA_TENDERS, ASKI_WATER)
+SOURCES = (*ASIA_RSS_FEEDS, JP_JETRO, HK_HYD, *SG_GEBIZ, HK_HKMA, INDIA_EPUBLISH, UAE_MOF, ANKARA_TENDERS, ASKI_WATER, EGO_TRANSIT)
 FLAGS = {
     **{key: "VALYQON_ASIA_SOURCES_ENABLED" for key in ASIA_RSS_FEEDS},
     JP_JETRO: "VALYQON_ASIA_JETRO_BID_ENABLED",
@@ -33,11 +34,12 @@ FLAGS = {
     UAE_MOF: "VALYQON_ASIA_UAE_FEDERAL_ENABLED",
     ANKARA_TENDERS: "VALYQON_ASIA_TURKEY_ANKARA_ENABLED",
     ASKI_WATER: "VALYQON_ASIA_TURKEY_ASKI_ENABLED",
+    EGO_TRANSIT: "VALYQON_ASIA_TURKEY_EGO_ENABLED",
     **{key: "VALYQON_ASIA_GEBIZ_ENABLED" for key in SG_GEBIZ},
 }
 MAX_RETURNED = 30
 _QUERY = re.compile(r"^[^\x00-\x1f\x7f]{2,120}$")
-assert len(SOURCES) == len(set(SOURCES)) == len(FLAGS) == 15
+assert len(SOURCES) == len(set(SOURCES)) == len(FLAGS) == 16
 
 
 def validate_batch(catalog, *, sources=SOURCES, now=None):

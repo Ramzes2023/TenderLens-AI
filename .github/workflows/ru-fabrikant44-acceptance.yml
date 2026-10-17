@@ -1,0 +1,41 @@
+name: RU Fabrikant official 44-FZ verified public source contracts
+on:
+  push:
+    branches: [feat/ru-fabrikant44-verified-public-20261016]
+    paths:
+      - app/sources/fabrikant_44_public.py
+      - tests/test_ru_fabrikant44_public.py
+      - scripts/ci_ru_fabrikant44_real_worker.py
+      - scripts/ci_ru_fabrikant44_authenticated.py
+      - .github/workflows/ru-fabrikant44-acceptance.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/fabrikant_44_public.py
+      - tests/test_ru_fabrikant44_public.py
+      - scripts/ci_ru_fabrikant44_real_worker.py
+      - scripts/ci_ru_fabrikant44_authenticated.py
+      - app/sources/catalog.py
+      - app/sources/ingestion.py
+      - app/monitoring/config.py
+      - app/scoring/runs.py
+      - .github/workflows/ru-fabrikant44-acceptance.yml
+permissions:
+  contents: read
+jobs:
+  fabrikant44-strict-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Public listing navigation backurl stripped, same-host detail corroboration
+        run: python -m pytest -q tests/test_ru_fabrikant44_public.py
+      - name: Compile real durable worker SQL proof
+        run: python -m py_compile scripts/ci_ru_fabrikant44_real_worker.py scripts/ci_ru_fabrikant44_authenticated.py

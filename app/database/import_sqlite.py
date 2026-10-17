@@ -18,7 +18,7 @@ TABLES = (
     "auth_accounts", "organizations", "organization_members", "organization_invitations",
     "company_workspaces", "company_active", "auth_sessions", "auth_telegram_links",
     "auth_password_resets", "auth_email_verifications", "account_legal_acceptances",
-    "tenders", "saved_opportunities", "deadline_alert_preferences", "deadline_alert_receipts",
+    "tenders", "saved_opportunities", "saved_opportunity_workflow", "saved_opportunity_workflow_events", "deadline_alert_preferences", "deadline_alert_receipts",
     "discovery_search_history", "monitor_subscriptions", "monitor_seen", "rag_chunks",
     "support_tickets", "support_ticket_messages", "durable_jobs", "source_opportunities",
     "scoring_public_revisions", "scoring_snapshots", "scoring_candidates", "scoring_results", "quota_admissions", "synchronous_usage", "source_notice_observations",
@@ -28,6 +28,7 @@ OPTIONAL = {"synchronous_usage", "quota_admissions", "rag_chunks", "support_tick
 OPTIONAL.update({
     "source_notice_observations", "account_legal_acceptances",
     "deadline_alert_preferences", "deadline_alert_receipts",
+    "saved_opportunity_workflow", "saved_opportunity_workflow_events",
 })
 
 
@@ -95,6 +96,7 @@ def preflight_source(conn):
         for version, required_tables in (
             (15, {"account_legal_acceptances"}),
             (16, {"deadline_alert_preferences", "deadline_alert_receipts"}),
+            (17, {"saved_opportunity_workflow", "saved_opportunity_workflow_events"}),
         ):
             if conn.execute("SELECT 1 FROM app_schema_migrations WHERE version=?",
                             (version,)).fetchone() and required_tables - names:
@@ -129,7 +131,8 @@ def preflight_source(conn):
                         raise StorageError("Source observation schema differs from migration 14.")
                 # Verify CHECKs, FKs, indices and actual DDL, not only SQL column names.
                 for table in ("account_legal_acceptances", "deadline_alert_preferences",
-                              "deadline_alert_receipts"):
+                              "deadline_alert_receipts", "saved_opportunity_workflow",
+                              "saved_opportunity_workflow_events"):
                     if table in names and controlled_table_schema(conn, table) != controlled_table_schema(reference, table):
                         raise StorageError("Source launch compliance schema differs from approved migration.")
                 columns = {table: table_columns(reference, table) for table in TABLES if table in names}

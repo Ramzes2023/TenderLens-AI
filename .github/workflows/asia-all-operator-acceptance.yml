@@ -1,4 +1,4 @@
-name: Asia all fifteen verified adapters operator queue acceptance
+name: Asia all sixteen verified adapters operator queue acceptance
 on:
   pull_request:
     branches: [main]
@@ -13,11 +13,13 @@ on:
       - "app/sources/uae_mof_rfqs.py"
       - "app/sources/tr_ankara_municipality.py"
       - "app/sources/tr_aski_water.py"
+      - "app/sources/tr_ego_transport.py"
       - "tests/test_asia_all.py"
       - "tests/test_india_epublish.py"
       - "tests/test_uae_mof_rfqs.py"
       - "tests/test_tr_ankara_municipality.py"
       - "tests/test_tr_aski_water.py"
+      - "tests/test_tr_ego_transport.py"
       - "tests/test_hk_hkma_tender.py"
       - ".github/workflows/asia-all-operator-acceptance.yml"
   workflow_dispatch:
@@ -27,7 +29,7 @@ concurrency:
   group: asia-all-operator-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
-  all-fifteen-queue-db-search-offline:
+  all-sixteen-queue-db-search-offline:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -39,5 +41,5 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: python -m pip install -r requirements-dev.txt
-      - name: Fifteen approved sources → actual Worker lease fencing → SQLite → keyword search
-        run: python -m pytest -q tests/test_asia_all.py tests/test_asia_seven_operations.py tests/test_sg_gebiz_rss.py tests/test_jp_jetro_bid_rss.py tests/test_hk_hyd_tenders.py tests/test_hk_hkma_tender.py tests/test_india_epublish.py tests/test_uae_mof_rfqs.py tests/test_tr_ankara_municipality.py tests/test_tr_aski_water.py
+      - name: Sixteen approved sources → actual Worker lease fencing → SQLite → keyword search
+        run: python -m pytest -q tests/test_asia_all.py tests/test_asia_seven_operations.py tests/test_sg_gebiz_rss.py tests/test_jp_jetro_bid_rss.py tests/test_hk_hyd_tenders.py tests/test_hk_hkma_tender.py tests/test_india_epublish.py tests/test_uae_mof_rfqs.py tests/test_tr_ankara_municipality.py tests/test_tr_aski_water.py tests/test_tr_ego_transport.py

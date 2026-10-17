@@ -123,10 +123,18 @@ async def live():
                 page.raise_for_status()
                 if "html" not in page.headers.get("content-type","").lower():
                     raise ValueError("Official RZD first-party listing not HTML")
+                doc=parse(page.content)
+                print("RU_RZD_LIST_LINKS_TOTAL="+str(len(doc.links)))
+                print("RU_RZD_LIST_CANONICAL_UUID_LINKS="+str(sum(
+                    canonical(href) is not None for href,_ in doc.links
+                )))
+                print("RU_RZD_LIST_HEADINGS_TOTAL="+str(len(doc.headings)))
                 try:
                     rows=listed_purchases(page.content)
+                    print("RU_RZD_LIST_TWO_FIRSTPARTY_CARDS=YES")
                     break
                 except ValueError:
+                    print("RU_RZD_LIST_TWO_FIRSTPARTY_CARDS=NO")
                     continue
             if len(rows)<MIN_LIVE:
                 raise ValueError("RZD official homepage and public listing did not reveal two canonical procurement links")
@@ -136,7 +144,14 @@ async def live():
                 detail.raise_for_status()
                 if "html" not in detail.headers.get("content-type","").lower():
                     raise ValueError("RZD official procurement detail not HTML")
-                verified.append(independently_verified_detail(detail.content,url,title))
+                doc=parse(detail.content)
+                print("RU_RZD_DETAIL_HEADINGS_TOTAL="+str(len(doc.headings)))
+                try:
+                    verified.append(independently_verified_detail(detail.content,url,title))
+                    print("RU_RZD_DETAIL_ID_TITLE_CORROBORATED=YES")
+                except ValueError:
+                    print("RU_RZD_DETAIL_ID_TITLE_CORROBORATED=NO")
+                    raise
             if len({x[0] for x in verified})!=MIN_LIVE:
                 raise ValueError("RZD original notice numbers not unique")
             return verified

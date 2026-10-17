@@ -1,0 +1,54 @@
+name: RU South Ural regional purchase accurate public metadata proof
+on:
+  push:
+    branches: [feat/ru-south-ural-original-metadata-20261017]
+    paths:
+      - app/sources/south_ural_public.py
+      - tests/test_ru_south_ural_adapter.py
+      - .github/workflows/ru-south-ural-metadata-acceptance.yml
+  pull_request:
+    branches: [main, feat/ru-south-ural-depth-10-20261017]
+permissions:
+  contents: read
+jobs:
+  south-ural-real-metadata-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Validate original verified customer, maximum price, published timezone and null preservation
+        run: python -m pytest -q tests/test_ru_south_ural_adapter.py
+  south-ural-real-metadata-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Independently corroborated current small purchases with optional metadata through fenced SQLite
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_south_ural_real_worker
+  south-ural-real-metadata-tenant:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Optional public fields with authorized tenant scoring and cross-tenant denial
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_south_ural_authenticated

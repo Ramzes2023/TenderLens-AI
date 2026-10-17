@@ -53,13 +53,13 @@ def main():
                 if key=="in_epublish":
                     document=data.decode("utf-8","replace")
                     structure=[]
-                    for match in re.finditer(r"<tr\\b[^>]*>(.*?)</tr>",document,flags=re.I|re.S):
+                    for match in re.finditer(r"<tr\b[^>]*>(.*?)</tr>",document,flags=re.I|re.S):
                         raw=match.group(1)
                         if "DirectLink" not in raw and "%24DirectLink" not in raw:
                             continue
                         cells=[]
-                        for cell in re.findall(r"<td\\b[^>]*>(.*?)</td>",raw,flags=re.I|re.S):
-                            cells.append(re.sub(r"\\s+"," ",html.unescape(re.sub(r"<[^>]+>"," ",cell))).strip()[:120])
+                        for cell in re.findall(r"<td\b[^>]*>(.*?)</td>",raw,flags=re.I|re.S):
+                            cells.append(re.sub(r"\s+"," ",html.unescape(re.sub(r"<[^>]+>"," ",cell))).strip()[:120])
                         for href in re.findall(r"""href=["']([^"']+)["']""",raw,flags=re.I):
                             if "DirectLink" not in href and "%24DirectLink" not in href:
                                 continue

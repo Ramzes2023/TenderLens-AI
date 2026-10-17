@@ -14,12 +14,21 @@ from .config import ApiSettings, load_api_settings
 from .auth_routes import router as auth_router
 from .support_routes import router as support_router
 from .operator_routes import router as operator_router
+from .billing_routes import router as billing_router
+from .operator_support_routes import router as operator_support_router
+from .public_status_routes import router as public_status_router
 from .organization_routes import router as organization_router
 from .organization_company_routes import router as organization_company_router
 from .organization_data_routes import router as organization_data_router
 from .organization_workflow_routes import router as organization_workflow_router
 from .scoring_run_routes import router as scoring_run_router
 from .analytics_routes import router as analytics_router
+from .launch_export_routes import router as launch_export_router
+from .legal_routes import router as legal_router
+from .deadline_alert_routes import router as deadline_alert_router
+from .shortlist_workflow_routes import router as shortlist_workflow_router
+from .saved_filter_routes import router as saved_filter_router
+from .organization_activity_routes import router as organization_activity_router
 from .routes import router
 from .runtime import ApiRuntime, build_runtime
 from .security import LoginRateLimiter
@@ -62,11 +71,20 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
     app.include_router(auth_router)
     app.include_router(support_router)
     app.include_router(operator_router)
+    app.include_router(billing_router)
+    app.include_router(operator_support_router)
+    app.include_router(public_status_router)
     app.include_router(organization_router)
     app.include_router(organization_company_router)
     app.include_router(organization_workflow_router)
     app.include_router(scoring_run_router)
     app.include_router(analytics_router)
+    app.include_router(launch_export_router)
+    app.include_router(legal_router)
+    app.include_router(deadline_alert_router)
+    app.include_router(shortlist_workflow_router)
+    app.include_router(saved_filter_router)
+    app.include_router(organization_activity_router)
     app.include_router(organization_data_router)
     app.include_router(router)
     return app

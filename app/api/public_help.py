@@ -13,6 +13,8 @@ GUIDE = [
      'Open Source Health to inspect configured, disabled or failing sources. In Discover, choose countries, sources and supported filters. Public-source adapters still need enabled configuration and reachable upstream services. SAM.gov and Goszakup need credentials; EIS needs configured feeds. A map outline does not establish tender coverage.', '/dashboard#source-health', 'Check Source Health'),
     ('Search and evaluate evidence', 'Available',
      'Run a search in Discover. Review the official notice, deadline, source status and partial failures. Company fit measures preliminary compatibility with your profile, not the probability of winning. Read the criteria, supporting metadata and missing information separately. Missing information is not evidence of eligibility.', '/dashboard#discover', 'Open Discover'),
+    ('Understand scoring methodology', 'Available',
+     'Review the exact criterion weights, missing-fact handling and differences between preliminary search fit and document analysis. A high score does not predict bidding success.', '/scoring-methodology', 'See scoring methodology'),
     ('Save and monitor', 'Requires configuration',
      'Save an opportunity from Discover to the active company shortlist and review it in Saved. Monitoring requires a supported configured source and company profile. Supported EIS manual scans suppress previously seen notices. Personal Telegram alerts require linking and configuration; shared team notifications are planned.', '/dashboard#saved', 'Open Saved'),
     ('Analyze a PDF', 'Requires configuration',

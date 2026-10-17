@@ -260,6 +260,14 @@ def shell_html(html: str) -> str:
   </div>
 </section>
 
+<section id="firstRunPreview" class="p" data-page="overview" hidden>
+  <span class="eyebrow">YOUR FIRST MATCHING OPPORTUNITIES</span>
+  <h2>Real tenders matched to your company</h2>
+  <p>Actual procurement notices from enabled sources, never fabricated demo data.</p>
+  <p id="firstRunStatus" role="status" aria-live="polite"></p>
+  <div id="firstRunResults" aria-label="Company-matched live procurement results"></div>
+  <a class="cta" href="#discover">Open all results in Discover</a>
+</section>
 <!-- COMMAND_CENTER -->
 <details class="session-report" data-page="overview">
 <summary>Latest browser search - operational row counters</summary>
@@ -347,8 +355,8 @@ def shell_html(html: str) -> str:
     </h2>
 
     <p>
-      No automatic saving or hidden background searches.
-      Run discovery when you are ready.
+      An initial company-matched search may run once when the company is activated.
+      No results are automatically saved or submitted as bids.
     </p>
   </div>
 
@@ -488,6 +496,13 @@ def shell_html(html: str) -> str:
     context = context.replace(
         placeholder,
         DISCOVERY_HTML,
+    )
+
+    from .billing_ui import BILLING_HTML
+    context = context.replace(
+        '<section\n  id="futurePage"',
+        BILLING_HTML + '\n<section\n  id="futurePage"',
+        1,
     )
 
     context = context.replace(
@@ -639,8 +654,10 @@ def shell_html(html: str) -> str:
         '<script src="/assets/premium.js?v=ui-fix-20261013"></script>'
         '<script src="/assets/support.js?v=phase24r"></script>'
         '<script src="/assets/discovery.js?v=phase24-customer-onepass&intl=20261014"></script>'
+        '<script src="/assets/first_run.js?v=launch-20261017"></script>'
         '<script src="/assets/history.js?v=ui-fix-20261013"></script>'
         '<script src="/assets/saved.js?v=phase24r"></script>'
+        '<script src="/assets/billing.js?v=pilot-20261017"></script>'
         '<script src="/assets/source_health.js?v=ui-fix-20261013&intl=20261014"></script>'
         '<script src="/assets/rag.js?v=pilot1"></script>'
         '<script src="/assets/locale.js?v=ui-fix-20261013"></script>'

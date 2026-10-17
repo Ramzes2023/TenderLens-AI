@@ -53,6 +53,16 @@ TARGETS = {
     "rts_yaroslavl_small": Target("market-yaroslavl.rts-tender.ru", "/"),
     "sber_berezka": Target("agregatoreat.ru", "/"),
     "tender_pro": Target("www.tender.pro", "/api/tenders/list"),
+    "smolensk_small": Target("goszakupki.admin-smolensk.ru", "/smallpurchases/GzwSP/NoticesGrid"),
+    "petrozavodsk_small": Target("eshop-ptz.ru", "/"),
+    "yaroslavl_small": Target("zakupki.yarregion.ru", "/purchasesoflowvolume-asp/"),
+    "voronezh_small": Target("goszakupki.govvrn.ru", "/"),
+    "udmurtia_small": Target("wt.udmr.ru", "/"),
+    "moscow_oblast_market": Target("market.mosreg.ru", "/"),
+    "torgi_online_commercial": Target("etp.etptorgionline.ru", "/app/section/commerc/SearchLots/page"),
+    "r_tender_commercial": Target("etp.r-tender.ru", "/app/section/kommerctorg/SearchLots/page"),
+    # Official public grid is an accessibility probe, not evidence of tender details.
+    "dagestan_official_small": Target("goszakaz.e-dag.ru", "/smallpurchases/GzwSP/NoticesGrid"),
 }
 
 class UnsafeAddress(RuntimeError):
@@ -136,7 +146,7 @@ def describe(mode: str, payload: bytes) -> dict[str, int]:
 def batch_priority() -> int:
     # A bounded read-only operator survey, not 24 working procurement connectors.
     # Only immutable allowlisted labels are scheduled. No tenant or production data.
-    if len(TARGETS) != 24:
+    if len(TARGETS) != 33:
         print("RU_BATCH=BLOCKED_TARGET_SET")
         return 2
 

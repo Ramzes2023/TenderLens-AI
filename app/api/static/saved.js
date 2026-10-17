@@ -20,7 +20,130 @@ function ready(){
  return usingSharedOrganization()&&Number.isInteger(state.activeCompanyId);
 }
 
+function refreshExportLinks(){
+ const canExport=usingSharedOrganization()&&Number.isInteger(state.activeCompanyId);
+ for(const format of ['csv','xlsx']){
+  const anchor=$('exportSaved'+(format==='csv'?'Csv':'Xlsx'));
+  if(!anchor)continue;
+  anchor.hidden=!canExport;
+  if(canExport){
+   anchor.href='/api/v1/organizations/'+encodeURIComponent(state.organizationId)+'/shortlist/export?format='+format;
+  }else anchor.removeAttribute('href');
+ }
+}
+
+let deadlinePreferenceTicket=0;
+async function loadDeadlinePreferences(){
+ const ticket=++deadlinePreferenceTicket;
+ const org=state.organizationId,scope=identity();
+ const save=$('saveDeadlinePreferences');
+ if(!save)return;
+ save.disabled=true;
+ for(const id of ['deadlineEmailOptin','deadlineTelegramOptin'])$(id).checked=false;
+ if(!usingSharedOrganization()||!Number.isInteger(state.activeCompanyId)){
+  $('deadlinePreferencesStatus').textContent='Activate a shared company to set reminders.';
+  return;
+ }
+ $('deadlinePreferencesStatus').textContent='Loading your reminder preferences...';
+ try{
+  const response=await fetch('/api/v1/organizations/'+encodeURIComponent(org)+'/deadline-alerts/preferences',
+   {credentials:'same-origin',cache:'no-store'});
+  if(ticket!==deadlinePreferenceTicket||scope!==identity())return;
+  if(!response.ok)throw Error('unavailable');
+  const data=await response.json();
+  $('deadlineEmailOptin').checked=!!data.email_enabled;
+  $('deadlineTelegramOptin').checked=!!data.telegram_enabled;
+  save.disabled=false;
+  $('deadlinePreferencesStatus').textContent='Reminders are optional and only sent for saved opportunities.';
+ }catch(error){
+  if(ticket===deadlinePreferenceTicket&&scope===identity())
+   $('deadlinePreferencesStatus').textContent='Could not load preferences. No changes were made.';
+ }
+}
+async function saveDeadlinePreferences(){
+ if(!usingSharedOrganization()||!Number.isInteger(state.activeCompanyId))return;
+ const scope=identity(),org=state.organizationId;
+ const save=$('saveDeadlinePreferences');
+ save.disabled=true;
+ $('deadlinePreferencesStatus').textContent='Saving preferences...';
+ try{
+  const response=await fetch('/api/v1/organizations/'+encodeURIComponent(org)+'/deadline-alerts/preferences',{
+   method:'PUT',credentials:'same-origin',cache:'no-store',
+   headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({
+    email_enabled:$('deadlineEmailOptin').checked,
+    telegram_enabled:$('deadlineTelegramOptin').checked
+   })
+  });
+  if(scope!==identity())return;
+  if(!response.ok)throw Error('unavailable');
+  $('deadlinePreferencesStatus').textContent='Deadline reminder preferences saved.';
+ }catch(error){
+  if(scope===identity())$('deadlinePreferencesStatus').textContent='Preferences were not saved. Please retry.';
+ }finally{
+  if(scope===identity())save.disabled=false;
+ }
+}
+$('saveDeadlinePreferences').onclick=saveDeadlinePreferences;
+
+
+let activitySerial=0;
+const activityLabels={
+ tender_saved:'Saved tender',
+ tender_refreshed:'Updated saved tender',
+ tender_removed:'Removed saved tender',
+ export_csv_generated:'Generated CSV export',
+ export_xlsx_generated:'Generated Excel export'
+};
+async function loadSavedActivity(){
+ const scope=identity(),ticket=++activitySerial;
+ const root=$('savedActivityEvents');
+ root.replaceChildren();
+ if(!ready()){
+  $('savedActivityStatus').textContent='Activate a shared company to view activity.';
+  return;
+ }
+ $('savedActivityStatus').textContent='Loading team activity…';
+ try{
+  const response=await fetch(
+   '/api/v1/organizations/'+encodeURIComponent(state.organizationId)+'/activity',
+   {credentials:'same-origin',cache:'no-store'}
+  );
+  if(ticket!==activitySerial||scope!==identity())return;
+  if(response.status===401){location.replace('/login');return;}
+  if(response.status===403){
+   $('savedActivityStatus').textContent='Only organization owners and admins can view this history.';
+   return;
+  }
+  if(!response.ok){
+   $('savedActivityStatus').textContent='Company activity unavailable. Retry.';
+   return;
+  }
+  const data=await response.json();
+  if(ticket!==activitySerial||scope!==identity())return;
+  const events=Array.isArray(data.events)?data.events:[];
+  for(const event of events){
+   if(!Object.hasOwn(activityLabels,event.action))continue;
+   const line=document.createElement('li');
+   line.textContent=activityLabels[event.action]+
+    ' · Account #'+Number(event.actor_account_id)+
+    (Number.isInteger(event.saved_opportunity_id)
+      ?' · saved #'+event.saved_opportunity_id:'')+
+    (Number.isInteger(event.item_count)?' · '+event.item_count+' rows':'')+
+    ' · '+String(event.created_at||'');
+   root.append(line);
+  }
+  $('savedActivityStatus').textContent=events.length?
+   'Last '+events.length+' recorded company actions.':'No recorded activity for this company yet.';
+ }catch(error){
+  if(ticket===activitySerial&&scope===identity())
+   $('savedActivityStatus').textContent='Network unavailable. Retry.';
+ }
+}
+$('refreshSavedActivity').onclick=loadSavedActivity;
+
 function updateContext(){
+ refreshExportLinks();
  if(!usingSharedOrganization()){
   $('savedContext').textContent='Select or create a shared organization in Team first.';
   return;
@@ -75,6 +198,114 @@ function renderSavedDetail(index){
   );
 }
 
+
+let workflowSerial=0;
+let workflowRevision=0;
+let workflowRecord=null;
+const workflowStages=['new','reviewing','preparing','submitted','won','lost','archived'];
+const workflowUrl=id=>'/api/v1/organizations/'+encodeURIComponent(state.organizationId)+
+ '/shortlist/'+encodeURIComponent(id)+'/workflow';
+function workflowValid(ticket,scope,id){
+ return ticket===workflowSerial&&scope===identity()&&
+        Number(workflowRecord?.id)===id&&$('savedDetail').open;
+}
+async function loadWorkflowEvents(ticket,scope,id){
+ try{
+  const res=await fetch(workflowUrl(id)+'/events',{credentials:'same-origin',cache:'no-store'});
+  if(!res.ok||!workflowValid(ticket,scope,id))return;
+  const events=await res.json();
+  if(!workflowValid(ticket,scope,id))return;
+  const root=$('savedWorkflowEvents');root.replaceChildren();
+  for(const item of Array.isArray(events)?events.slice(0,20):[]){
+   const li=document.createElement('li');
+   li.textContent='Account #'+Number(item.actor_account_id)+': '+
+    String(item.previous_stage||'new')+' → '+String(item.next_stage||'new')+
+    (item.note_changed?' · note edited':'')+' · '+String(item.changed_at||'');
+   root.appendChild(li);
+  }
+  if(!root.childElementCount){
+   const empty=document.createElement('li');
+   empty.textContent='No changes yet.';
+   root.appendChild(empty);
+  }
+ }catch(error){/* The saved workflow remains available even if audit read fails. */}
+}
+async function loadWorkflow(index){
+ const node=$('savedWorkflowPanel');
+ if(!node)return;
+ const record=records[index],id=Number(record?.id),scope=identity();
+ const ticket=++workflowSerial;
+ workflowRecord=record;
+ workflowRevision=0;
+ node.hidden=false;
+ $('savedWorkflowStatus').textContent='Loading team workflow…';
+ $('saveSavedWorkflow').disabled=true;
+ $('savedWorkflowNote').value='';
+ $('savedWorkflowStage').value='new';
+ $('savedWorkflowEvents').replaceChildren();
+ if(!ready()||!Number.isInteger(id))return;
+ try{
+  const res=await fetch(workflowUrl(id),{credentials:'same-origin',cache:'no-store'});
+  if(!workflowValid(ticket,scope,id))return;
+  if(res.status===401){location.replace('/login');return;}
+  if(!res.ok){
+   $('savedWorkflowStatus').textContent='Workflow unavailable; please retry.';
+   return;
+  }
+  const data=await res.json();
+  if(!workflowValid(ticket,scope,id))return;
+  workflowRevision=Number(data.revision);
+  $('savedWorkflowStage').value=workflowStages.includes(data.stage)?data.stage:'new';
+  $('savedWorkflowNote').value=String(data.note||'').slice(0,2000);
+  const writable=canWriteWorkspace();
+  $('savedWorkflowStage').disabled=!writable;
+  $('savedWorkflowNote').disabled=!writable;
+  $('saveSavedWorkflow').disabled=!writable;
+  $('savedWorkflowStatus').textContent=writable?
+   'Team-only details. Conflicting edits are rejected.':'Read-only access.';
+  await loadWorkflowEvents(ticket,scope,id);
+ }catch(error){
+  if(workflowValid(ticket,scope,id))
+   $('savedWorkflowStatus').textContent='Network unavailable; please retry.';
+ }
+}
+$('saveSavedWorkflow').onclick=async()=>{
+ const record=workflowRecord,id=Number(record?.id),scope=identity(),ticket=workflowSerial;
+ if(!ready()||!canWriteWorkspace()||!Number.isInteger(id)||!workflowValid(ticket,scope,id))return;
+ const stage=$('savedWorkflowStage').value,note=$('savedWorkflowNote').value;
+ if(!workflowStages.includes(stage)||note.length>2000)return;
+ const button=$('saveSavedWorkflow');button.disabled=true;
+ $('savedWorkflowStatus').textContent='Saving…';
+ try{
+  const res=await fetch(workflowUrl(id),{
+   method:'PATCH',credentials:'same-origin',cache:'no-store',
+   headers:{'Content-Type':'application/json'},
+   body:JSON.stringify({stage,note,expected_revision:workflowRevision})
+  });
+  if(!workflowValid(ticket,scope,id))return;
+  if(res.status===409){
+   $('savedWorkflowStatus').textContent='Another team member updated this tender. Close and reopen to reload.';
+   return;
+  }
+  if(!res.ok){
+   $('savedWorkflowStatus').textContent='Not saved. Check access and retry.';
+   return;
+  }
+  const data=await res.json();
+  if(!workflowValid(ticket,scope,id))return;
+  workflowRevision=Number(data.revision);
+  $('savedWorkflowStatus').textContent='Status and note saved.';
+  await loadWorkflowEvents(ticket,scope,id);
+ }catch(error){
+  if(workflowValid(ticket,scope,id))
+   $('savedWorkflowStatus').textContent='Network unavailable. Not saved.';
+ }finally{
+  if(workflowValid(ticket,scope,id)&&
+     !$('savedWorkflowStatus').textContent.startsWith('Another team member'))
+   button.disabled=false;
+ }
+};
+
 function openDetail(index){
  const record=records[index];
 
@@ -88,6 +319,7 @@ function openDetail(index){
  if(!$('savedDetail').open){
   $('savedDetail').showModal();
  }
+ loadWorkflow(index);
 }
 
 function opportunityKey(item){
@@ -561,6 +793,7 @@ async function removeSaved(index,button){
   }
 
   records.splice(index,1);
+  workflowSerial++;
 
   if($('savedDetail').open){
    $('savedDetail').close();
@@ -618,8 +851,10 @@ $('savedDetailBody').onclick=event=>{
 };
 
 $('closeSavedDetail').onclick=()=>{
+ workflowSerial++;
  $('savedDetail').close();
 };
+$('savedDetail').addEventListener('close',()=>{workflowSerial++;});
 
 window.addEventListener(
  'workspace-context',
@@ -630,6 +865,7 @@ window.addEventListener(
    context=next;
    serial++;
    clearResults('Open Saved to load the active company shortlist.');
+   workflowSerial++;
 
    if($('savedDetail').open){
     $('savedDetail').close();
@@ -637,6 +873,8 @@ window.addEventListener(
   }
 
   updateContext();
+  loadDeadlinePreferences();
+  loadSavedActivity();
 
   if(currentPage()==='saved'){
    loadSaved();
@@ -645,6 +883,8 @@ window.addEventListener(
 );
 
 updateContext();
+loadDeadlinePreferences();
+loadSavedActivity();
 
 if(currentPage()==='saved'){
  loadSaved();

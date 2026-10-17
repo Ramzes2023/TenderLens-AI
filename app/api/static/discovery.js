@@ -355,7 +355,7 @@ function updateGuide(){
  $('discoverButton').dataset.uiEn='Find opportunities';$('discoverButton').dataset.uiRu='Найти закупки';
 }
 function reset(){if(typeof CustomEvent!=='undefined')window.dispatchEvent(new CustomEvent('discovery-report',{detail:null}));serial++;shortlistSerial++;controller?.abort();controller=null;items=[];report=null;clearOptions();if($('discoverySourceOutcomes'))$('discoverySourceOutcomes').replaceChildren();savedByKey.clear();detailIndex=null;if($('discoveredCount'))$('discoveredCount').textContent='Not run';if($('scoredCount'))$('scoredCount').textContent='Not run';$('discoveryResults').replaceChildren();$('sourceHealth').textContent='';$('discoveryMessage').textContent='Run discovery to find opportunities.';if($('tenderDetail').open)$('tenderDetail').close();$('detailBody').replaceChildren();update();}
-function update(){const ready=usingSharedOrganization()&&Number.isInteger(state.activeCompanyId)&&location.port!=='8765';updateGuide();$('discoverButton').disabled=!ready||Boolean(controller);$('filterSource').disabled=Boolean(controller);$('filterCurrency').disabled=Boolean(controller);$('discoverContext').textContent=!usingSharedOrganization()?'Select or create a shared organization in Team for global discovery.':ready?`Matching ${state.activeCompanyName}`:'Create and activate a company in Companies first.';}
+function update(){presetControls();const ready=usingSharedOrganization()&&Number.isInteger(state.activeCompanyId)&&location.port!=='8765';updateGuide();$('discoverButton').disabled=!ready||Boolean(controller);$('filterSource').disabled=Boolean(controller);$('filterCurrency').disabled=Boolean(controller);$('discoverContext').textContent=!usingSharedOrganization()?'Select or create a shared organization in Team for global discovery.':ready?`Matching ${state.activeCompanyName}`:'Create and activate a company in Companies first.';}
 function filters(){return Object.fromEntries(['keyword','source','buyer','currency','value','fit','deadline','published'].map(k=>[k,['source','currency'].includes(k)?$('filter'+k[0].toUpperCase()+k.slice(1)).value:$('filter'+k[0].toUpperCase()+k.slice(1)).value.trim()]));}
 function render(){updateGuide();const f=filters();$('filterValue').disabled=!f.currency;const visible=items.map((item,i)=>({item,i})).filter(({item})=>matches(item,f));$('discoveryResults').innerHTML=visible.map(({item,i})=>canWriteWorkspace()?card(item,i,savedFor(item)):card(item,i)).join('');if(report&&!report.total_failure){$('discoveryMessage').textContent=sourceMessage(report)+` Showing ${visible.length} of ${items.length} fetched results.`;if(items.length&&!visible.length)$('discoveryMessage').textContent+=' No results match these local filters.';}}
 // Labels describe fetched identifiers; they never add catalog entries or change API values.
@@ -714,13 +714,124 @@ async function analyzeTenderPdf(
 }
 
 async function removeItem(index,button){const item=items[index],scope=identity(),org=state.organizationId,runSerial=serial;if(!item||!usingSharedOrganization()||!Number.isInteger(state.activeCompanyId)||!canWriteWorkspace()||controller||location.port==='8765')return;const record=savedFor(item);if(!record||!Number.isInteger(Number(record.id)))return;if(button){button.disabled=true;button.textContent='Removing…';}try{const r=await fetch(`/api/v1/organizations/${org}/shortlist/${record.id}`,{method:'DELETE',credentials:'same-origin',cache:'no-store'});if(scope!==identity()||runSerial!==serial)return;if(r.status===401){location.replace('/login');return;}if(!r.ok&&r.status!==404){if(button){button.disabled=false;button.textContent='Remove from saved';}shortlistMessage(r.status===403?'Your workspace role cannot remove saved opportunities.':'The opportunity could not be removed. Please retry.');return;}savedByKey.delete(savedKey(item));render();refreshDetail();}catch(e){if(button&&scope===identity()&&runSerial===serial){button.disabled=false;button.textContent='Remove from saved';shortlistMessage('Network unavailable. The opportunity could not be removed. Please retry.');}}}
+
+let filterPresets=[];
+let presetTicket=0;
+function presetBase(){
+ return '/api/v1/organizations/'+encodeURIComponent(state.organizationId)+'/saved-searches';
+}
+function presetReady(){
+ return usingSharedOrganization()&&Number.isInteger(state.activeCompanyId)&&location.port!=='8765';
+}
+function presetControls(){
+ const ready=presetReady();
+ $('savedSearchName').disabled=!ready;
+ $('saveSearchPreset').disabled=!ready||!canWriteWorkspace()||controller!==null;
+ $('savedSearchSelect').disabled=!ready||!filterPresets.length;
+ const selected=filterPresets.find(x=>String(x.id)===$('savedSearchSelect').value);
+ $('applySearchPreset').disabled=!ready||!selected||!report||report.total_failure||controller!==null;
+ $('deleteSearchPreset').disabled=!ready||!selected||!canWriteWorkspace()||controller!==null;
+}
+function paintPresets(){
+ const node=$('savedSearchSelect'),old=node.value;
+ node.replaceChildren(new Option('Select saved view',''));
+ filterPresets.forEach(p=>node.add(new Option(p.name,String(p.id))));
+ if(filterPresets.some(p=>String(p.id)===old))node.value=old;
+ presetControls();
+}
+async function loadPresets(){
+ const ticket=++presetTicket,scope=identity();
+ filterPresets=[];
+ paintPresets();
+ if(!presetReady()){
+  $('savedSearchStatus').textContent='Activate a shared company to save filter views.';
+  return;
+ }
+ $('savedSearchStatus').textContent='Loading saved filters…';
+ try{
+  const r=await fetch(presetBase(),{credentials:'same-origin',cache:'no-store'});
+  if(ticket!==presetTicket||scope!==identity())return;
+  if(r.status===401){location.replace('/login');return;}
+  if(!r.ok)throw Error('unavailable');
+  const data=await r.json();
+  if(ticket!==presetTicket||scope!==identity())return;
+  filterPresets=Array.isArray(data)?data:[];
+  paintPresets();
+  $('savedSearchStatus').textContent=filterPresets.length?
+    'Your personal saved views for this company are ready.':'No views saved for this company yet.';
+ }catch(error){
+  if(ticket===presetTicket&&scope===identity())
+   $('savedSearchStatus').textContent='Saved views unavailable. Retry by switching back to Discover.';
+ }
+}
+$('loadSearchPresets').onclick=loadPresets;
+$('savedSearchSelect').onchange=presetControls;
+$('saveSearchPreset').onclick=async()=>{
+ if(!presetReady()||!canWriteWorkspace())return;
+ const name=$('savedSearchName').value.trim(),f=filters(),scope=identity();
+ if(!name||name.length>80){$('savedSearchStatus').textContent='Enter a name of up to 80 characters.';return;}
+ $('saveSearchPreset').disabled=true;
+ $('savedSearchStatus').textContent='Saving view…';
+ try{
+  const r=await fetch(presetBase(),{
+   method:'POST',credentials:'same-origin',cache:'no-store',
+   headers:{'Content-Type':'application/json'},body:JSON.stringify({name,filters:f})
+  });
+  if(scope!==identity())return;
+  if(!r.ok){$('savedSearchStatus').textContent=r.status===409?'At most 20 saved views are supported.':r.status===403?'Your role cannot save views.':'Invalid view or storage unavailable.';return;}
+  const record=await r.json();
+  if(scope!==identity())return;
+  await loadPresets();
+  if(scope!==identity())return;
+  $('savedSearchSelect').value=String(record.id);
+  $('savedSearchStatus').textContent='Filter view saved. It will not send notifications.';
+ }catch(error){
+  if(scope===identity())$('savedSearchStatus').textContent='Network unavailable. View not saved.';
+ }finally{if(scope===identity())presetControls();}
+};
+$('applySearchPreset').onclick=()=>{
+ const preset=filterPresets.find(p=>String(p.id)===$('savedSearchSelect').value);
+ if(!preset||!report||report.total_failure){$('savedSearchStatus').textContent='Fetch real opportunities first.';return;}
+ const f=preset.filters;
+ if((f.source&&![...$('filterSource').options].some(x=>x.value===f.source))||
+    (f.currency&&![...$('filterCurrency').options].some(x=>x.value===f.currency))){
+  $('savedSearchStatus').textContent='Saved source/currency is not in the current fetched results. Fetch matching sources and retry.';
+  return;
+ }
+ for(const key of ['keyword','source','buyer','currency','value','fit','deadline','published']){
+  $('filter'+key[0].toUpperCase()+key.slice(1)).value=String(f[key]||'');
+ }
+ $('filterValue').disabled=!f.currency;
+ render();
+ $('savedSearchStatus').textContent='View applied to the last fetched result set. No new source search ran.';
+};
+$('deleteSearchPreset').onclick=async()=>{
+ if(!presetReady()||!canWriteWorkspace())return;
+ const chosen=filterPresets.find(p=>String(p.id)===$('savedSearchSelect').value);
+ if(!chosen)return;
+ const scope=identity();
+ $('deleteSearchPreset').disabled=true;
+ $('savedSearchStatus').textContent='Deleting view…';
+ try{
+  const r=await fetch(presetBase()+'/'+encodeURIComponent(chosen.id),{
+   method:'DELETE',credentials:'same-origin',cache:'no-store'
+  });
+  if(scope!==identity())return;
+  if(!r.ok)throw Error('unavailable');
+  await loadPresets();
+  if(scope===identity())$('savedSearchStatus').textContent='Saved view deleted.';
+ }catch(error){
+  if(scope===identity())$('savedSearchStatus').textContent='Could not delete view. Retry.';
+ }finally{if(scope===identity())presetControls();}
+};
+
 async function discover(){if($('discoverButton').disabled||!usingSharedOrganization()||!Number.isInteger(state.activeCompanyId)||location.port==='8765')return;const ticket=++serial,scope=identity(),org=state.organizationId;controller=new AbortController();shortlistSerial++;savedByKey.clear();detailIndex=null;if($('tenderDetail').open)$('tenderDetail').close();$('detailBody').replaceChildren();if($('discoverySourceOutcomes'))$('discoverySourceOutcomes').replaceChildren();items=[];report=null;if($('discoveredCount'))$('discoveredCount').textContent='Not run';if($('scoredCount'))$('scoredCount').textContent='Not run';$('discoveryResults').replaceChildren();$('sourceHealth').textContent='';$('discoveryMessage').textContent='Searching configured sources…';update();
-try{const r=await fetch(`/api/v1/organizations/${org}/discover/tenders`,{method:'POST',credentials:'same-origin',cache:'no-store',signal:controller.signal});if(ticket!==serial||scope!==identity())return;if(r.status===401){location.replace('/login');return;}if(!r.ok){clearOptions();$('discoveryMessage').textContent=r.status===403?'You do not have access to this organization.':r.status===409?'Create and activate an organization company first.':'Discovery is unavailable. Please retry.';return;}const data=await r.json();if(ticket!==serial||scope!==identity())return;report=data;if($('discoverySourceOutcomes'))$('discoverySourceOutcomes').innerHTML=sourceOutcomes(data);if(typeof CustomEvent!=='undefined')window.dispatchEvent(new CustomEvent('discovery-report',{detail:data}));items=data.total_failure?[]:rankedItems(data.items||[]);if($('discoveredCount'))$('discoveredCount').textContent=data.total_failure?'Unavailable':String(items.length);if($('scoredCount'))$('scoredCount').textContent=data.total_failure?'Unavailable':String(items.filter(i=>i.preliminary_scoring?.fit_score!=null).length);options('filterSource',items.map(i=>i.source));options('filterCurrency',items.map(i=>i.currency));$('sourceHealth').textContent=`Attempted: ${(data.attempted_sources||[]).join(', ')||'none'} · Reached: ${(data.successful_sources||[]).join(', ')||'none'} · Unavailable: ${(data.failed_sources||[]).join(', ')||'none'}`;const skipped=(data.source_statuses||[]).filter(s=>!(data.attempted_sources||[]).includes(s.source)).length;$('sourceHealth').textContent+=` ? Counts: checked ${(data.attempted_sources||[]).length}, reached ${(data.successful_sources||[]).length}, failed ${(data.failed_sources||[]).length}, skipped ${skipped}`;const mix=sourceMix(items);if(mix){$('sourceHealth').textContent+=` \u00b7 Results: ${mix}`;}$('discoveryMessage').textContent=sourceMessage(data);render();loadShortlist();}
+try{const r=await fetch(`/api/v1/organizations/${org}/discover/tenders`,{method:'POST',credentials:'same-origin',cache:'no-store',signal:controller.signal});if(ticket!==serial||scope!==identity())return;if(r.status===401){location.replace('/login');return;}if(!r.ok){clearOptions();$('discoveryMessage').textContent=r.status===403?'You do not have access to this organization.':r.status===409?'Create and activate an organization company first.':'Discovery is unavailable. Please retry.';return;}const data=await r.json();if(ticket!==serial||scope!==identity())return;report=data;if($('discoverySourceOutcomes'))$('discoverySourceOutcomes').innerHTML=sourceOutcomes(data);if(typeof CustomEvent!=='undefined')window.dispatchEvent(new CustomEvent('discovery-report',{detail:data}));items=data.total_failure?[]:rankedItems(data.items||[]);if($('discoveredCount'))$('discoveredCount').textContent=data.total_failure?'Unavailable':String(items.length);if($('scoredCount'))$('scoredCount').textContent=data.total_failure?'Unavailable':String(items.filter(i=>i.preliminary_scoring?.fit_score!=null).length);options('filterSource',items.map(i=>i.source));options('filterCurrency',items.map(i=>i.currency));$('sourceHealth').textContent=`Attempted: ${(data.attempted_sources||[]).join(', ')||'none'} · Reached: ${(data.successful_sources||[]).join(', ')||'none'} · Unavailable: ${(data.failed_sources||[]).join(', ')||'none'}`;const skipped=(data.source_statuses||[]).filter(s=>!(data.attempted_sources||[]).includes(s.source)).length;$('sourceHealth').textContent+=` ? Counts: checked ${(data.attempted_sources||[]).length}, reached ${(data.successful_sources||[]).length}, failed ${(data.failed_sources||[]).length}, skipped ${skipped}`;const mix=sourceMix(items);if(mix){$('sourceHealth').textContent+=` \u00b7 Results: ${mix}`;}$('discoveryMessage').textContent=sourceMessage(data);render();loadShortlist();presetControls();}
 catch(e){if(e.name!=='AbortError'&&ticket===serial&&scope===identity()){clearOptions();$('discoveryMessage').textContent='Network unavailable. Please retry discovery.';}}
 finally{if(ticket===serial){controller=null;update();}}}
 $('discoverButton').onclick=discover;
-$('discoveryWorkspace').querySelectorAll('input,select').forEach(n=>n.addEventListener('input',render));
-$('resetFilters').onclick=()=>{$('discoveryWorkspace').querySelectorAll('input,select').forEach(n=>n.value='');render();};
+$('discoveryWorkspace').querySelectorAll('.filter-grid input,.filter-grid select').forEach(n=>n.addEventListener('input',render));
+$('resetFilters').onclick=()=>{$('discoveryWorkspace').querySelectorAll('.filter-grid input,.filter-grid select').forEach(n=>n.value='');render();};
 $('discoveryResults').onclick=e=>{const save=e.target.closest('[data-save]');if(save){saveItem(Number(save.dataset.save),save);return;}const button=e.target.closest('[data-detail]');if(!button)return;openDetail(Number(button.dataset.detail));};
 $('detailBody').onclick=e=>{
  const analyze=e.target.closest(
@@ -762,5 +873,5 @@ $('detailBody').onclick=e=>{
 };
 $('closeDetail').onclick=()=>{detailIndex=null;$('tenderDetail').close();};
 $('tenderDetail').addEventListener('close',()=>{detailIndex=null;});
-window.addEventListener('workspace-context',()=>{if(context!==identity()){context=identity();reset();}else update();if((location.hash.slice(1)||'overview')==='discover')loadShortlist();});context=identity();clearOptions();update();
+window.addEventListener('workspace-context',()=>{if(context!==identity()){context=identity();presetTicket++;filterPresets=[];paintPresets();$('savedSearchStatus').textContent='Company changed. Click Refresh saved views.';reset();}else update();if((location.hash.slice(1)||'overview')==='discover')loadShortlist();});context=identity();clearOptions();update();
 })(typeof globalThis!=='undefined'?globalThis:this);

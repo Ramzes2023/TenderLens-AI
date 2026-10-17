@@ -252,5 +252,8 @@
   "Company profile → country and source filters": "Профиль компании → фильтры стран и источников",
   "Official notice → fit criteria → missing information": "Официальное извещение → критерии совместимости → недостающие сведения",
   "Original document → cited evidence → human decision": "Оригинал документа → сведения со ссылками → решение специалиста",
-  "Create account →": "Создать аккаунт →"
+  "Create account →": "Создать аккаунт →",
+  "Understand scoring methodology": "Разберитесь в методологии оценки",
+  "Review the exact criterion weights, missing-fact handling and differences between preliminary search fit and document analysis. A high score does not predict bidding success.": "Изучите точные веса критериев, правила обработки недостающих данных и различия между предварительной оценкой поиска и анализом документов. Высокая оценка не означает гарантии победы.",
+  "See scoring methodology": "Посмотреть методологию оценки"
 }

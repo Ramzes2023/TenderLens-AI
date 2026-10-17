@@ -1,0 +1,22 @@
+# TEMPLATE ONLY. Installation is an explicit production-operator action.
+[Unit]
+Description=VALYQON AI opt-in saved tender deadline reminders
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=valyqon-monitor
+Group=valyqon-monitor
+WorkingDirectory=/opt/valyqon/current
+Environment=PYTHON_DOTENV_DISABLED=1
+EnvironmentFile=/etc/valyqon/deadline-alerts.env
+StateDirectory=valyqon-deadline
+UMask=0077
+ExecStart=/usr/bin/flock -n /var/lib/valyqon-deadline/reminders.lock /opt/valyqon/current/.venv/bin/python -m app.launch.deadline_alerts
+TimeoutStartSec=120
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/valyqon-deadline

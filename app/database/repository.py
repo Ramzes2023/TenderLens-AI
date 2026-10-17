@@ -84,6 +84,11 @@ class TenderRepository:
     def initialize(self) -> None:
         try:
             self.database.migrate("tenders")
+            # Saved shortlist mutations now require durable tenant activity rows.
+            # Legacy SQLite initializes individual repository domains; apply the
+            # additive audit migration here as well rather than silently
+            # skipping evidence or waiting for a separate database upgrade.
+            self.database.migrate("organization_activity")
         except (OSError, sqlite3.Error, StorageError, ValueError):
             raise DatabaseError("Could not initialize tenders storage.") from None
 
@@ -486,6 +491,68 @@ class TenderRepository:
                 "Company shortlist access denied."
             )
 
+    @staticmethod
+    def _append_activity(conn, *, account_id, organization_id, company_id,
+                         action, saved_id=None, item_count=None, now=None):
+        """Always insert in the caller's transaction, fail closed on storage failure."""
+        if action not in {"tender_saved", "tender_refreshed", "tender_removed",
+                          "export_csv_generated", "export_xlsx_generated"}:
+            raise DatabaseError("Invalid audit action.")
+        conn.execute(
+            "INSERT INTO organization_activity_events "
+            "(organization_id,company_id,actor_account_id,action,saved_opportunity_id,item_count,created_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (int(organization_id), int(company_id), int(account_id), action,
+             saved_id, item_count, now or datetime.now(timezone.utc).isoformat(timespec="seconds")),
+        )
+
+    def record_shortlist_export_for_organization(
+        self, *, account_id, organization_id, company_id, format, item_count,
+    ):
+        if format not in ("csv", "xlsx") or type(item_count) is not int or not 0 <= item_count <= 200:
+            raise DatabaseError("Invalid export audit details.")
+        try:
+            with closing(self._connect()) as conn:
+                with conn:
+                    conn.execute("BEGIN IMMEDIATE")
+                    self._require_org_role(conn, account_id, organization_id)
+                    self._require_company_scope(conn, organization_id, company_id)
+                    self._append_activity(
+                        conn, account_id=account_id, organization_id=organization_id,
+                        company_id=company_id, action="export_" + format + "_generated",
+                        item_count=item_count,
+                    )
+        except DatabaseAuthorizationError:
+            raise
+        except (sqlite3.Error, StorageError, ValueError, TypeError):
+            raise DatabaseError("Could not write shortlist export audit.") from None
+
+    def list_organization_activity_for_company(
+        self, *, account_id, organization_id, company_id, limit=50,
+    ):
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise DatabaseError("Invalid activity history limit.")
+        try:
+            with closing(self._connect()) as conn:
+                self._require_org_role(conn, account_id, organization_id, {"owner", "admin"})
+                self._require_company_scope(conn, organization_id, company_id)
+                rows = conn.execute(
+                    "SELECT id,actor_account_id,action,saved_opportunity_id,item_count,created_at "
+                    "FROM organization_activity_events WHERE organization_id=? AND company_id=? "
+                    "ORDER BY id DESC LIMIT ?",
+                    (int(organization_id), int(company_id), limit),
+                ).fetchall()
+                return [
+                    {"id": int(row["id"]), "actor_account_id": int(row["actor_account_id"]),
+                     "action": row["action"], "saved_opportunity_id": row["saved_opportunity_id"],
+                     "item_count": row["item_count"], "created_at": row["created_at"]}
+                    for row in rows
+                ]
+        except DatabaseAuthorizationError:
+            raise
+        except (sqlite3.Error, StorageError, ValueError, TypeError):
+            raise DatabaseError("Could not read company activity history.") from None
+
     def save_opportunity_for_organization(
         self,
         *,
@@ -549,6 +616,12 @@ class TenderRepository:
                         company_id,
                     )
 
+                    existing = conn.execute(
+                        "SELECT id FROM saved_opportunities WHERE organization_id=? "
+                        "AND company_id=? AND source=? AND external_id=?",
+                        (int(organization_id), int(company_id), clean_source, clean_external_id),
+                    ).fetchone()
+
                     conn.execute(
                         """INSERT INTO saved_opportunities(
                             organization_id,
@@ -593,6 +666,15 @@ class TenderRepository:
                             clean_external_id,
                         ),
                     ).fetchone()
+
+                    if row is None:
+                        raise DatabaseError("Could not save opportunity.")
+                    self._append_activity(
+                        conn, account_id=account_id, organization_id=organization_id,
+                        company_id=company_id,
+                        action="tender_refreshed" if existing else "tender_saved",
+                        saved_id=int(row["id"]), now=now,
+                    )
 
             if row is None:
                 raise DatabaseError(
@@ -732,6 +814,12 @@ class TenderRepository:
                     removed = (
                         cursor.rowcount == 1
                     )
+                    if removed:
+                        self._append_activity(
+                            conn, account_id=account_id, organization_id=organization_id,
+                            company_id=company_id, action="tender_removed",
+                            saved_id=int(saved_id),
+                        )
 
             return removed
 

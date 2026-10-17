@@ -65,11 +65,11 @@ def test_modified_observation_schema_rejected(migrated, mutation):
 
 
 @pytest.mark.parametrize('replacement', [
-    MIGRATIONS[-1].sql.replace(' NOT NULL', ''),
-    MIGRATIONS[-1].sql.replace('notice_json TEXT', 'notice_json INTEGER'),
-    MIGRATIONS[-1].sql.replace('PRIMARY KEY(source_id, external_id, revision)',
+    MIGRATIONS[13].sql.replace(' NOT NULL', ''),
+    MIGRATIONS[13].sql.replace('notice_json TEXT', 'notice_json INTEGER'),
+    MIGRATIONS[13].sql.replace('PRIMARY KEY(source_id, external_id, revision)',
                               'PRIMARY KEY(source_id, external_id)'),
-    MIGRATIONS[-1].sql.replace('comparison_json TEXT NOT NULL',
+    MIGRATIONS[13].sql.replace('comparison_json TEXT NOT NULL',
                               "comparison_json TEXT NOT NULL CHECK(comparison_json='{}')"),
 ])
 def test_untrusted_constraints_and_types_rejected(migrated, replacement):

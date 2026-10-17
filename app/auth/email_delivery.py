@@ -304,6 +304,34 @@ class SMTPEmailSender:
         except (OSError, smtplib.SMTPException):
             raise EmailDeliveryError("Password reset email delivery failed.") from None
 
+    def send_deadline_reminder(self, *, recipient: str, text: str) -> None:
+        """Transactional (non-promotional) opt-in alert; no HTML or untrusted headers."""
+        message = EmailMessage()
+        message["Subject"] = "VALYQON AI — deadline approaching"
+        message["From"] = self.from_address
+        message["To"] = recipient
+        message.set_content(text)
+        try:
+            if self.ssl_enabled:
+                with smtplib.SMTP_SSL(
+                    self.host, self.port, timeout=self.timeout_seconds,
+                    context=ssl.create_default_context(),
+                ) as client:
+                    if self.username:
+                        client.login(self.username, self.password)
+                    client.send_message(message)
+                return
+            with smtplib.SMTP(self.host, self.port, timeout=self.timeout_seconds) as client:
+                client.ehlo()
+                if self.starttls:
+                    client.starttls(context=ssl.create_default_context())
+                    client.ehlo()
+                if self.username:
+                    client.login(self.username, self.password)
+                client.send_message(message)
+        except (OSError, smtplib.SMTPException):
+            raise EmailDeliveryError("Deadline email delivery failed.") from None
+
 
 def load_email_sender_from_env():
     mode = (

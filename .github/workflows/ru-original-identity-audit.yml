@@ -1,0 +1,26 @@
+name: RU independent original procurement audit safety
+on:
+  push:
+    branches: [feat/ru-original-notice-identity-audit-20261017]
+    paths:
+      - app/sources/ru_notice_identity.py
+      - tests/test_ru_original_notice_identity.py
+      - .github/workflows/ru-original-identity-audit.yml
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  ru-independent-original-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Pure original EIS notice identity with duplicate and false-collision tests
+        run: python -m pytest -q tests/test_ru_original_notice_identity.py

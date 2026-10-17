@@ -25,7 +25,7 @@ class Migration:
 
 
 MIGRATIONS = tuple(Migration(i, domain) for i, domain in enumerate(
-    ("auth", "organizations", "companies", "tenders", "monitoring", "rag", "support", "operations", "jobs", "opportunities", "scoring", "quotas", "synchronous_usage", "source_observations"), 1
+    ("auth", "organizations", "companies", "tenders", "monitoring", "rag", "support", "operations", "jobs", "opportunities", "scoring", "quotas", "synchronous_usage", "source_observations", "legal", "deadline_alerts", "tender_workflows", "saved_search_filters", "organization_activity"), 1
 ))
 
 
@@ -67,7 +67,7 @@ def migrate(database, domain=None):
     # PostgreSQL always creates dependencies in FK order. SQLite standalone repositories
     # retain partial-schema legacy test/development contracts.
     selected = MIGRATIONS if domain is None or database.backend == "postgresql" else tuple(
-        m for m in MIGRATIONS if m.domain == domain or (domain == "auth" and m.domain == "organizations")
+        m for m in MIGRATIONS if m.domain == domain or (domain == "auth" and m.domain in {"organizations", "legal"})
     )
     with closing(database.connect()) as conn:
         with conn:

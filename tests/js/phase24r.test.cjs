@@ -31,10 +31,15 @@ for (const link of links) {
   assert.equal(get('pageHeading').textContent,link.textContent);
   assert.equal(theme['command-view'],true);
   assert.equal(link.attributes['aria-current'],'page');
-  const future=['recommended','notifications','billing'].includes(link.dataset.nav);
+  const future=['recommended','notifications'].includes(link.dataset.nav);
   assert.equal(get('futurePage').hidden,!future);
   if(future) assert.match(get('futureText').textContent,/not available/);
-  if(link.dataset.nav==='billing') assert.equal(get('futureNext').hidden,true);
+  if(link.dataset.nav==='billing') {
+    assert.equal(get('futurePage').hidden,true);
+    assert.equal(get('futureNext').hidden,true);
+    assert.match(html,/data-page="billing"/);
+    assert.match(html,/id="upgradeBilling" disabled/);
+  }
   if(link.dataset.nav==='recommended') assert.equal(get('futureNext').href,'#discover');
   if(link.dataset.nav==='notifications') assert.equal(get('futureNext').href,'#settings');
 }

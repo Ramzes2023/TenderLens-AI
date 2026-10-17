@@ -33,6 +33,15 @@ on:
           - rts_yaroslavl_small
           - sber_berezka
           - tender_pro
+          - smolensk_small
+          - petrozavodsk_small
+          - yaroslavl_small
+          - voronezh_small
+          - udmurtia_small
+          - moscow_oblast_market
+          - torgi_online_commercial
+          - r_tender_commercial
+          - dagestan_official_small
 permissions:
   contents: read
 jobs:

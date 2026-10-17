@@ -22,7 +22,7 @@ class StorageIntegrityError(StorageError):
 WRITE_LOCK = 240_001
 IDENTITY_TABLES = frozenset({
     "auth_accounts", "organizations", "organization_invitations", "company_workspaces",
-    "tenders", "saved_opportunities", "discovery_search_history", "support_tickets",
+    "tenders", "saved_opportunities", "organization_activity_events", "saved_search_filters", "saved_opportunity_workflow_events", "discovery_search_history", "support_tickets",
     "support_ticket_messages", "rag_chunks",
 })
 

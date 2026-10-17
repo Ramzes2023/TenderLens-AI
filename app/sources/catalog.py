@@ -22,6 +22,8 @@ from .b2b_center import B2BCenterSource
 from .tektorg_public_html import TekTorgPublicSource
 from .gpb_etp_public import GpbEtpPublicSource
 from .lenobl_small_public import LenoblSmallPublicSource
+from .nmck_native_public import NmckNativePublicSource
+from .stan_commercial_public import StanCommercialPublicSource
 from .canada_buys_dataset import CanadaBuysDatasetSource
 from .eis_rss import EisRssSource, SourceError
 from .eis_44_public_html import Eis44PublicHtmlSource
@@ -715,6 +717,34 @@ def build_source_catalog(
             languages=("ru",),
             homepage_url="https://zakupki.lenreg.ru/Search/NewRequests",
             official=True,
+            enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    if settings.stan_commercial_public_enabled:
+        registry.register(SourceRegistration(
+            key="stan_commercial_public",
+            display_name="STAN-Torgi — genuine commercial procurement procedures",
+            source=StanCommercialPublicSource(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url="https://stantorgi.ru/etp",
+            official=False,
+            enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    if settings.nmck_native_public_enabled:
+        registry.register(SourceRegistration(
+            key="nmck_native_public",
+            display_name="NMCK — first-party public small-purchase notices",
+            source=NmckNativePublicSource(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url="https://xn--j1adc1b.xn--p1ai/procedures",
+            official=False,
             enabled=True,
             capabilities=SourceCapabilities(),
         ))

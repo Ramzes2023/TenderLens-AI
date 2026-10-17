@@ -120,6 +120,10 @@ async def live():
             page.raise_for_status()
             if "html" not in page.headers.get("content-type","").lower():
                 raise ValueError("Native published listing not HTML")
+            p=html(page.content)
+            print("RU_TATAR_ALL_PUBLIC_ANCHORS="+str(len(p.links)))
+            print("RU_TATAR_CANONICAL_OFFER_CARDS="+str(sum(canonical(h) is not None for h,_ in p.links)))
+            print("RU_TATAR_PUBLIC_HEADINGS="+str(len(p.headings)))
             links=list_cards(page.content)
             print("RU_TATAR_VISIBLE_FIRSTPARTY_CARD_LINKS="+str(len(links)))
             confirmed=[]
@@ -134,6 +138,7 @@ async def live():
                         confirmed.append(item)
                 except ValueError:
                     # Mirrored EIS original explicitly excluded, not counted.
+                    print("RU_TATAR_DETAIL_REJECTED=YES")
                     continue
                 if len(confirmed)==REQUIRED:
                     break

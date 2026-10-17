@@ -1207,3 +1207,37 @@ def test_worker_wire_stream_cancellation_cleanup(cancel_kind, raw_hook):
         assert response.is_closed
     asyncio.run(run())
     assert closed == [True]
+
+
+def test_idn_punycode_bounded_host_matches_only_exact_wire_origin():
+    """Mock-only regression: Unicode .host must not defeat an exact ASCII
+    allowlist, and similar Unicode or concatenated domains stay blocked.
+    """
+    official = 'xn--j1adc1b.xn--p1ai'
+    seen = []
+
+    def transport(request):
+        seen.append((request.url.host, request.url.raw_host))
+        return httpx.Response(200, text="official HTML")
+
+    async def check():
+        with bounded_fetch(FetchPolicy(frozenset({official}), 5)):
+            async with source_client(transport=httpx.MockTransport(transport)) as client:
+                first = await client.get('https://' + official + '/procedures')
+                assert first.status_code == 200
+                # The same canonical public host is valid as Unicode input.
+                second = await client.get('https://нмцк.рф/procedures')
+                assert second.status_code == 200
+                for hostile in [
+                    'http://' + official + '/procedures',
+                    'https://' + official + '.evil.example/procedures',
+                    'https://нмцк.рф.evil.example/procedures',
+                    'https://' + official + ':444/procedures',
+                    'https://user@' + official + '/procedures',
+                ]:
+                    with pytest.raises(ConnectorTransportError):
+                        await client.get(hostile)
+    asyncio.run(check())
+    assert len(seen) == 2
+    assert all(raw == official.encode('ascii') for _, raw in seen)
+    assert all(host == 'нмцк.рф' for host, _ in seen)

@@ -64,6 +64,7 @@ TARGETS = {
     # Official public grid is an accessibility probe, not evidence of tender details.
     "dagestan_official_small": Target("goszakaz.e-dag.ru", "/smallpurchases/GzwSP/NoticesGrid"),
     "tver_official_small": Target("gostorgi.tverreg.ru", "/smallpurchases/Menu/Page/1"),
+    "spb_official_eshop": Target("estore.gz-spb.ru", "/electronicshop/catalog/procedure/"),
 }
 
 class UnsafeAddress(RuntimeError):
@@ -147,7 +148,7 @@ def describe(mode: str, payload: bytes) -> dict[str, int]:
 def batch_priority() -> int:
     # A bounded read-only operator survey, not 24 working procurement connectors.
     # Only immutable allowlisted labels are scheduled. No tenant or production data.
-    if len(TARGETS) != 34:
+    if len(TARGETS) != 35:
         print("RU_BATCH=BLOCKED_TARGET_SET")
         return 2
 

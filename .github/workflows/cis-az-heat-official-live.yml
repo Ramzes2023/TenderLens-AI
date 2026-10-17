@@ -1,0 +1,52 @@
+name: CIS Azerbaijan official heat-procurement discovery
+on:
+  push:
+    branches:
+      - research/cis-az-heat-public-20261017
+    paths:
+      - scripts/ci_cis_az_heat_live_discovery.py
+      - tests/test_cis_az_heat_offline.py
+      - .github/workflows/cis-az-heat-official-live.yml
+  pull_request:
+    paths:
+      - scripts/ci_cis_az_heat_live_discovery.py
+      - tests/test_cis_az_heat_offline.py
+      - .github/workflows/cis-az-heat-official-live.yml
+
+permissions:
+  contents: read
+
+jobs:
+  az-official-offline-contract:
+    name: Strict official Azeri tender row and deadline contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reject fake index and fake deadlines
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -B -m unittest discover -s tests -p 'test_cis_az_heat_offline.py' -v
+
+  az-official-https-evidence:
+    name: Current official Azeri list and linked notices
+    needs: az-official-offline-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Require actual HTTPS listing and full published submission deadline
+        timeout-minutes: 4
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -B scripts/ci_cis_az_heat_live_discovery.py

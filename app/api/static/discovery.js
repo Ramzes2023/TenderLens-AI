@@ -764,6 +764,7 @@ async function loadPresets(){
    $('savedSearchStatus').textContent='Saved views unavailable. Retry by switching back to Discover.';
  }
 }
+$('loadSearchPresets').onclick=loadPresets;
 $('savedSearchSelect').onchange=presetControls;
 $('saveSearchPreset').onclick=async()=>{
  if(!presetReady()||!canWriteWorkspace())return;
@@ -872,5 +873,5 @@ $('detailBody').onclick=e=>{
 };
 $('closeDetail').onclick=()=>{detailIndex=null;$('tenderDetail').close();};
 $('tenderDetail').addEventListener('close',()=>{detailIndex=null;});
-window.addEventListener('workspace-context',()=>{if(context!==identity()){context=identity();reset();loadPresets();}else update();if((location.hash.slice(1)||'overview')==='discover')loadShortlist();});context=identity();clearOptions();update();loadPresets();
+window.addEventListener('workspace-context',()=>{if(context!==identity()){context=identity();presetTicket++;filterPresets=[];paintPresets();$('savedSearchStatus').textContent='Company changed. Click Refresh saved views.';reset();}else update();if((location.hash.slice(1)||'overview')==='discover')loadShortlist();});context=identity();clearOptions();update();
 })(typeof globalThis!=='undefined'?globalThis:this);

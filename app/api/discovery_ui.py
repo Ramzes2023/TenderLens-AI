@@ -21,7 +21,7 @@ DISCOVERY_HTML = '''<section id="discoveryWorkspace" class="p" data-page="discov
 <div><label for="filterPublished">Published on or after</label><input id="filterPublished" type="date"></div>
 <div><button id="resetFilters">Reset filters</button></div></div>
 <section id="discoveryPresets" class="p" aria-label="Saved filter views">
-<h3>My saved filters</h3>
+<h3>My saved filters</h3><button id="loadSearchPresets" type="button">Refresh saved views</button>
 <p class="fine">Presets only filter tenders already fetched. They do not schedule a search or send daily notifications. Run Find opportunities before applying a preset.</p>
 <div class="toolbar">
 <label for="savedSearchName">Name</label>

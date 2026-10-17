@@ -29,6 +29,8 @@ def normalized_filters(filters):
         raw = filters[field]
         if not isinstance(raw, str) or len(raw) > 160:
             raise ValueError("Invalid Discovery filter value.")
+        if any(ord(ch) < 32 for ch in raw):
+            raise ValueError("Control characters are not allowed.")
         val = raw.strip()
         if any(ord(ch) < 32 for ch in val):
             raise ValueError("Control characters are not allowed.")

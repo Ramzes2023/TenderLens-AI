@@ -43,6 +43,7 @@ on:
           - r_tender_commercial
           - dagestan_official_small
           - tver_official_small
+          - spb_official_eshop
 permissions:
   contents: read
 jobs:

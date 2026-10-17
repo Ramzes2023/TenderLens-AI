@@ -34,7 +34,7 @@ def test_source_directory_is_scoped_to_actual_registry_not_live_health():
     assert result["sources"][1]["homepage"]=="https://ted.europa.eu/"
     # Opt-in adapters are discoverable, but are not counted as registered.
     assert result["optional_count"] == 9
-    assert result["candidate_count"] == 35
+    assert result["candidate_count"] == 36
     keys = {item["key"] for item in result["optional_sources"]}
     assert {"lenobl_small_public", "nmck_native_public", "b2b_center"} <= keys
     assert all(item["registered"] is False and item["enabled"] is False
@@ -71,7 +71,7 @@ def test_ru_optional_adapter_not_duplicated_when_registered():
     result = source_directory(catalog)
     assert result["source_count"] == 3
     assert result["optional_count"] == 8
-    assert result["candidate_count"] == 35
+    assert result["candidate_count"] == 36
     assert sum(item["key"] == "lenobl_small_public" for item in
                result["sources"] + result["optional_sources"]) == 1
 
@@ -80,7 +80,7 @@ def test_every_curated_ru_candidate_is_visible_but_never_enabled():
     entries = source_directory(Catalog())
     candidates = entries["candidate_sources"]
     expected = {x[0] for x in RU_STAGED_ADAPTERS + RU_RESEARCH_TARGETS}
-    assert len(expected) == 35
+    assert len(expected) == 36
     assert {x["key"] for x in candidates} == expected
     assert len({x["key"] for x in candidates + entries["sources"] +
                 entries["optional_sources"]}) == len(candidates) + entries["source_count"] + entries["optional_count"]
@@ -92,7 +92,7 @@ def test_every_curated_ru_candidate_is_visible_but_never_enabled():
 
 
 def test_ru_probe_targets_appear_in_directory_or_corresponding_parent_adapter():
-    # All 34 approved probe targets are accounted for; parent adapters are
+    # All 35 approved probe targets are accounted for; parent adapters are
     # intentionally not multiplied into new live sources by their audit URLs.
     from scripts.ru_trusted_live_probe import TARGETS
     entries = source_directory(Catalog())
@@ -102,5 +102,5 @@ def test_ru_probe_targets_appear_in_directory_or_corresponding_parent_adapter():
               "roseltorg": "roseltorg_public", "lenobl": "lenobl_small_public",
               "vologda": "vologda_small", "gpb_rss": "gpb_rss_feed",
               "tektorg": "tektorg"}
-    assert len(TARGETS) == 34
+    assert len(TARGETS) == 35
     assert all(parent.get(label, label) in keys for label in TARGETS)

@@ -16,6 +16,7 @@ from app.sources.http import FetchPolicy,bounded_fetch,source_client,ConnectorTr
 HOST="eshoprzd.ru"
 LIST_URL="https://eshoprzd.ru/"
 OTHER_LIST_URL="https://eshoprzd.ru/purchases"
+PUBLIC_REST_URL="https://eshoprzd.ru/rest/"
 DETAIL_PATH=re.compile(r"/purchases/([a-f0-9-]{36})\Z")
 NOTICE_HEADING=re.compile(r"(?:Ценовой\s+запрос|Закупка)\s*№\s*([0-9]{5,18})\s+(.{8,600})\Z",re.I)
 MAX_BYTES=1_800_000
@@ -114,11 +115,11 @@ def independently_verified_detail(body,url,title):
     return(number,confirmed_title,url)
 
 async def live():
-    with bounded_fetch(FetchPolicy(frozenset({HOST}),4,max_bytes=MAX_BYTES)):
+    with bounded_fetch(FetchPolicy(frozenset({HOST}),5,max_bytes=MAX_BYTES)):
         async with source_client(timeout=25,trust_env=False,follow_redirects=False,
             headers={"Accept":"text/html","User-Agent":"Mozilla/5.0"}) as client:
             rows=[]
-            for list_url in (LIST_URL,OTHER_LIST_URL):
+            for list_url in (LIST_URL,OTHER_LIST_URL,PUBLIC_REST_URL):
                 page=await client.get(list_url)
                 page.raise_for_status()
                 if "html" not in page.headers.get("content-type","").lower():

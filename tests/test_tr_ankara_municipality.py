@@ -69,7 +69,7 @@ def test_detail_rejects_unsafe_gov_link_and_html_bombs():
     with pytest.raises(SourceError):
         parse_ankara_tender(detail(),detail_url=DETAIL+"?token=SECRET",as_of=TODAY)
     with pytest.raises(SourceError):
-        parse_ankara_tender(b"<html>İhale list</html>",detail_url=DETAIL,as_of=TODAY)
+        parse_ankara_tender("<html>İhale list</html>".encode("utf-8"),detail_url=DETAIL,as_of=TODAY)
     with pytest.raises(SourceError):
         parse_ankara_tender(b"x"*(1024*1024+1),detail_url=DETAIL,as_of=TODAY)
 

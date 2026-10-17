@@ -85,12 +85,14 @@ def probe(item):
             try:
                 full = urljoin(url,href)
                 p = urlsplit(full)
-                if p.scheme=="https" and p.hostname==parsed.hostname and p.netloc==parsed.netloc and DETAIL_HINT.search(p.path) and p.path not in ("", parsed.path):
+                if (p.scheme == "https" and p.hostname == parsed.hostname and p.netloc == parsed.netloc
+                    and DETAIL_HINT.search(p.path) and re.search(r"[0-9]{4,}", p.path + " " + title)
+                    and p.path not in ("", parsed.path)):
                     safe.setdefault(p.path, (full[:260],title))
             except ValueError:
                 pass
         return {"key":key,"state":"PUBLIC_HTML","bytes":len(raw),"public_anchors":len(doc.links),
-                "candidate_detail_paths":len(safe),"examples":list(safe.values())[:3],
+                "numbered_detail_candidate_paths":len(safe),"examples":list(safe.values())[:3],
                 "headings":doc.headings[:2]}
     except HTTPError as e:
         return {"key":key,"state":"HTTP_ERROR","status":e.code}
@@ -104,8 +106,8 @@ def main():
             results.append(f.result())
     for result in sorted(results, key=lambda p:p["key"]):
         print("RU_REGIONAL_PUBLIC_DIAGNOSTIC="+json.dumps(result,ensure_ascii=False,sort_keys=True))
-    good=[p for p in results if p["state"]=="PUBLIC_HTML" and p["candidate_detail_paths"]>=2]
-    print(f"RU_REGIONAL_CANDIDATES_WITH_LINKS={len(good)}/{len(URLS)}")
+    good=[p for p in results if p["state"]=="PUBLIC_HTML" and p["numbered_detail_candidate_paths"]>=2]
+    print(f"RU_REGIONAL_NUMBERED_CANDIDATES={len(good)}/{len(URLS)}")
     print("PRODUCTION_CHANGED=NO")
     return 0 if good else 2
 

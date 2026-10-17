@@ -20,5 +20,18 @@ DISCOVERY_HTML = '''<section id="discoveryWorkspace" class="p" data-page="discov
 <div><label for="filterDeadline">Deadline on or before</label><input id="filterDeadline" type="date"></div>
 <div><label for="filterPublished">Published on or after</label><input id="filterPublished" type="date"></div>
 <div><button id="resetFilters">Reset filters</button></div></div>
+<section id="discoveryPresets" class="p" aria-label="Saved filter views">
+<h3>My saved filters</h3>
+<p class="fine">Presets only filter tenders already fetched. They do not schedule a search or send daily notifications. Run Find opportunities before applying a preset.</p>
+<div class="toolbar">
+<label for="savedSearchName">Name</label>
+<input id="savedSearchName" maxlength="80" placeholder="Construction · region · price">
+<button id="saveSearchPreset" type="button" disabled>Save current filters</button>
+<label for="savedSearchSelect">Saved view</label>
+<select id="savedSearchSelect"><option value="">Select saved view</option></select>
+<button id="applySearchPreset" type="button" disabled>Apply to fetched results</button>
+<button id="deleteSearchPreset" type="button" disabled>Delete view</button>
+</div><p id="savedSearchStatus" role="status" aria-live="polite">Sign in and activate a company to manage saved filters.</p>
+</section>
 <p id="discoveryMessage" role="status" aria-live="polite">Run discovery to find opportunities.</p><p id="sourceHealth" class="fine"></p><div id="discoveryResults" aria-label="Discovered opportunities"></div>
 </section><dialog id="tenderDetail" aria-labelledby="detailTitle"><div class="toolbar"><h2 id="detailTitle">Tender workspace</h2><button id="closeDetail" autofocus>Close detail</button></div><div id="detailBody"></div></dialog>'''

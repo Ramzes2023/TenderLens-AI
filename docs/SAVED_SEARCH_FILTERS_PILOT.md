@@ -17,3 +17,5 @@
   implemented or enabled in this first safe increment.
 - Schema migration 18 is immutable and included in strict offline SQLite→PG importer
   verification; production deployment and browser smoke tests remain separate.
+
+UI: Discovery → **My saved filters**. Saving never performs a source search. Applying requires a completed fetch. The UI selects only source/currency values represented in the current result set; otherwise it requests another source search.

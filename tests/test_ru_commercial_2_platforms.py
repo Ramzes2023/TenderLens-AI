@@ -55,4 +55,4 @@ def test_official_number_and_title_independent_and_eis_mirrors_rejected():
 
 def test_empty_listing_never_grants_green():
     with pytest.raises(ValueError):
-        listing_cards(b"<html><a href='/search'>Поиск</a></html>",HOST)
+        listing_cards("<html><a href='/search'>Поиск</a></html>".encode("utf-8"),HOST)

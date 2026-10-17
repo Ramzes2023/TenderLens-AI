@@ -5,7 +5,7 @@ from scripts.ru_trusted_live_probe import TARGETS, UnsafeAddress, checked_ips, d
 
 class ProbeSafetyTests(unittest.TestCase):
     def test_fixed_unique_approved_targets(self):
-        self.assertEqual(len(TARGETS), 8)
+        self.assertEqual(len(TARGETS), 24)
         pairs = {(t.host, t.path) for t in TARGETS.values()}
         self.assertEqual(len(pairs), len(TARGETS))
         self.assertTrue(all(t.mode in {"html", "rss"} for t in TARGETS.values()))
@@ -44,6 +44,34 @@ class ProbeSafetyTests(unittest.TestCase):
         self.assertEqual(describe("html",b'<a href="/t/123">test</a>')["anchor_tokens"],1)
         with self.assertRaises(Exception):
             describe("rss",b"not rss")
+
+
+    def test_batch_enforces_real_reachability_and_never_marks_ingestion(self):
+        from io import StringIO
+        from contextlib import redirect_stdout
+        with patch("scripts.ru_trusted_live_probe.read_public", return_value=("text/html", b"<a href='/proc/123'>test</a>")) as fn:
+            output = StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(main("batch_priority"), 0)
+            self.assertEqual(fn.call_count, 24)
+            self.assertIn("RU_BATCH_HTTPS_VISIBLE=24/24", output.getvalue())
+            self.assertIn("RU_BATCH_NOTICE_DETAIL_VERIFIED=NO", output.getvalue())
+        def blocked(target):
+            if target.host == "44.fabrikant.ru":
+                raise TimeoutError("no official response")
+            return ("text/html", b"<a href='/proc/123'>test</a>")
+        with patch("scripts.ru_trusted_live_probe.read_public", side_effect=blocked):
+            with redirect_stdout(StringIO()):
+                self.assertEqual(main("batch_priority"), 2)
+
+    def test_every_batch_target_has_safe_fixed_origin_and_path(self):
+        from urllib.parse import urlsplit
+        self.assertEqual(len({(t.host,t.path) for t in TARGETS.values()}),24)
+        for item in TARGETS.values():
+            url = urlsplit("https://" + item.host + item.path)
+            self.assertEqual(url.hostname, item.host)
+            self.assertEqual(url.scheme, "https")
+            self.assertFalse(url.username or url.password or url.query or url.fragment)
 
 if __name__ == "__main__":
     unittest.main()

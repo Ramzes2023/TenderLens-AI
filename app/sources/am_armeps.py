@@ -19,10 +19,11 @@ from .models import TenderNotice
 from .opportunities import validate_notice
 
 def _retryable_official_dns_failure(error):
-    """Only audited resolver's OSError -> 'DNS resolution failed' can retry.
+    """Only the audited resolver's exact HTTPCore DNS failure can retry.
 
-    Never retry PublicIPError, TLS verification, or unclassified connect
-    exceptions. No alternative DNS, host, redirects or insecure fallback.
+    HTTPX may discard the nested OSError while preserving HTTPCore's exact
+    'DNS resolution failed' marker. Never retry PublicIPError, TLS failures,
+    or unclassified connect errors. No alternate host or insecure fallback.
     """
     if not isinstance(error, httpx.ConnectError) or _is_public_ip_error(error):
         return False
@@ -31,8 +32,7 @@ def _retryable_official_dns_failure(error):
     while isinstance(current, BaseException) and id(current) not in seen:
         seen.add(id(current))
         if (type(current) is httpcore.ConnectError
-                and str(current) == "DNS resolution failed"
-                and isinstance(current.__cause__, OSError)):
+                and str(current) == "DNS resolution failed"):
             return True
         current = current.__cause__
     return False

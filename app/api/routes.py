@@ -144,6 +144,19 @@ async def public_guidelines_page():
     return HTMLResponse(help_html('guidelines'), headers={"Cache-Control": "no-store"})
 
 
+
+@router.get("/public/source-directory.json", include_in_schema=False)
+async def public_source_directory(request: Request):
+    from fastapi.responses import JSONResponse
+    from .public_sources import source_directory
+    runtime = getattr(request.app.state, "runtime", None)
+    catalog = getattr(runtime, "source_catalog", None)
+    return JSONResponse(source_directory(catalog), headers={
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+    })
+
+
 @router.get("/", include_in_schema=False)
 async def root_page(request: Request):
     account = await current_account(request, touch=False)

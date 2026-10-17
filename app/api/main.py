@@ -21,6 +21,7 @@ from .organization_workflow_routes import router as organization_workflow_router
 from .scoring_run_routes import router as scoring_run_router
 from .analytics_routes import router as analytics_router
 from .launch_export_routes import router as launch_export_router
+from .legal_routes import router as legal_router
 from .routes import router
 from .runtime import ApiRuntime, build_runtime
 from .security import LoginRateLimiter
@@ -69,6 +70,7 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
     app.include_router(scoring_run_router)
     app.include_router(analytics_router)
     app.include_router(launch_export_router)
+    app.include_router(legal_router)
     app.include_router(organization_data_router)
     app.include_router(router)
     return app

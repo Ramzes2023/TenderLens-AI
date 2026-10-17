@@ -112,10 +112,14 @@ class AuthService:
             ),
         )
 
-    def register(self, email: str, password: str) -> AuthAccount:
+    def register(self, email: str, password: str, *, legal_acceptances=()) -> AuthAccount:
         clean_email = normalize_email(email)
         try:
             password_hash = hash_password(password)
+            if legal_acceptances:
+                return self.repository.create_account(
+                    clean_email, password_hash, legal_acceptances=legal_acceptances,
+                )
             return self.repository.create_account(clean_email, password_hash)
         except PasswordPolicyError as error:
             raise RegistrationError(str(error)) from None

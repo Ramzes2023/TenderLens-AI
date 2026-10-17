@@ -11,11 +11,14 @@ from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
 
 from .eis_rss import SourceError
-from .http import FetchPolicy, bounded_fetch, source_client, _policy
+from .http import ConnectorTransportError, FetchPolicy, bounded_fetch, source_client, _policy
 from .models import TenderNotice
 from .opportunities import validate_notice
 
 B2B_CENTER_LIST_URL = 'https://www.b2b-center.ru/search/'
+# The unrestricted aggregate exceeds the audited 2 MiB cap.
+# This official category is an explicitly LIMITED partial fallback.
+B2B_CENTER_OFFICE_LIST_URL = 'https://www.b2b-center.ru/search/industry/ofis/'
 B2B_CENTER_HOSTS = frozenset({'www.b2b-center.ru'})
 # The public aggregate search mixes other procurement platforms into its feed.
 # These are NOT B2B-Center notices; do not fetch, normalize or store them as B2B.
@@ -126,7 +129,9 @@ class B2BCenterNotice(TenderNotice):
     origin: str = 'unknown'
 
 
-def parse_b2b_center_listing(payload: bytes, *, limit=100) -> list[TenderNotice]:
+def parse_b2b_center_listing(payload: bytes, *, limit=100, listing_url=B2B_CENTER_LIST_URL) -> list[TenderNotice]:
+    if listing_url not in (B2B_CENTER_LIST_URL, B2B_CENTER_OFFICE_LIST_URL):
+        raise SourceError('Unapproved B2B-Center public listing origin.')
     if not payload or len(payload) > MAX_BYTES:
         raise SourceError('B2B-Center empty or oversized HTML.')
     try:
@@ -194,8 +199,10 @@ def parse_b2b_center_listing(payload: bytes, *, limit=100) -> list[TenderNotice]
         origin = 'aggregated' if host and host not in B2B_CENTER_HOSTS else 'unknown'
         # Original reference is retained in the base contract as well as provenance,
         # so repository/snapshot/scoring reconstruction cannot silently lose it.
-        summary = json.dumps({'listing_url': B2B_CENTER_LIST_URL, 'upstream_url': upstream,
-                              'upstream_host': host, 'origin': origin}, ensure_ascii=False)
+        summary = json.dumps({'listing_url': listing_url, 'upstream_url': upstream,
+                              'upstream_host': host, 'origin': origin,
+                              'coverage_scope': ('office_only' if listing_url == B2B_CENTER_OFFICE_LIST_URL
+                                                 else 'aggregate')}, ensure_ascii=False)
         prices = set()
         for node in demand.walk():
             if (node.attrs.get('itemprop') == 'priceSpecification'
@@ -242,13 +249,26 @@ class B2BCenterSource:
         # Always use the existing bounded transport, including direct discovery.
         # No redirect, pagination, scripts, cookies or external detail requests.
         # Preserve worker policy and counters instead of replacing its budget.
-        policy = (bounded_fetch(FetchPolicy(B2B_CENTER_HOSTS, 1, max_bytes=MAX_BYTES))
+        policy = (bounded_fetch(FetchPolicy(B2B_CENTER_HOSTS, 2, max_bytes=MAX_BYTES))
                   if _policy.get() is None else nullcontext())
         with policy:
             async with source_client(timeout=self.timeout, follow_redirects=False,
                                      trust_env=False, headers={'Accept': 'text/html'}) as client:
-                response = await client.get(B2B_CENTER_LIST_URL)
-                response.raise_for_status()
-                if response.status_code != 200:
-                    raise SourceError('B2B-Center listing unavailable.')
-                return parse_b2b_center_listing(response.content, limit=limit)
+                try:
+                    response = await client.get(B2B_CENTER_LIST_URL)
+                    response.raise_for_status()
+                    if response.status_code != 200:
+                        raise SourceError('B2B-Center listing unavailable.')
+                    return parse_b2b_center_listing(response.content, limit=limit)
+                except ConnectorTransportError as error:
+                    if error.retryable:
+                        raise
+                    # The alternate official listing is deliberately partial:
+                    # never fabricate full-aggregate coverage or missing records.
+                    fallback = await client.get(B2B_CENTER_OFFICE_LIST_URL)
+                    fallback.raise_for_status()
+                    if fallback.status_code != 200:
+                        raise SourceError('B2B-Center bounded office listing unavailable.')
+                    return parse_b2b_center_listing(
+                        fallback.content, limit=limit, listing_url=B2B_CENTER_OFFICE_LIST_URL,
+                    )

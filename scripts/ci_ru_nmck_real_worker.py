@@ -1,11 +1,10 @@
-"""Public Leningrad Oblast -> real leased/fenced worker -> disposable searchable DB.
+"""Native NMCK public notices -> real leased/fenced worker -> disposable searchable DB.
 
 Only independently checked official live notices qualify; no fixture substitution,
 no production credentials, deployment, proxy or TLS bypass.
 """
 import asyncio
 import json
-import re
 import tempfile
 from pathlib import Path
 
@@ -15,6 +14,7 @@ from app.jobs import HandlerRegistry, JobRepository, JobSettings
 from app.jobs.models import JobScope
 from app.jobs.worker import Worker
 from app.monitoring.config import MonitoringSettings
+from app.sources.nmck_native_public import LIST_URL, safe_slug
 from app.sources.catalog import build_source_catalog
 from app.sources.ingestion import (
     JOB_TYPE, ConnectorSyncHandler, ConnectorSyncService, connector_version,
@@ -23,6 +23,19 @@ from app.sources.opportunities import OpportunityRepository
 from app.sources.snapshots import snapshot_catalog
 
 SOURCE = "nmck_native_public"
+
+
+def is_canonical_nmck_notice(notice):
+    # Reuse the same exact-host, single approved query parameter validation
+    # as the official adapter, without a second divergent URL regex.
+    identity = safe_slug(notice.url)
+    return bool(
+        identity and identity[1] == notice.external_id
+        and notice.tender_number == notice.external_id + "М"
+        and notice.url == LIST_URL + "?procedure=" + identity[0]
+    )
+
+
 
 
 def acceptance():
@@ -62,12 +75,7 @@ def acceptance():
                 raise AssertionError("Public NMCK SQL row count mismatch")
             snapshots = snapshot_catalog(catalog, store)
             for notice in rows:
-                if (notice.tender_number != notice.external_id + "М"
-                        or not re.fullmatch(
-                            r"https://xn--j1adc1b\\.xn--p1ai/procedures\\?procedure="
-                            r"[a-z0-9-]{6,140}-" + re.escape(notice.external_id) + r"m",
-                            notice.url,
-                        )):
+                if not is_canonical_nmck_notice(notice):
                     raise AssertionError("Public NMCK notice URL or identity invalid")
                 result = asyncio.run(snapshots.fetch(
                     source_keys=(SOURCE,),

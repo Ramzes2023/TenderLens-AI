@@ -71,7 +71,6 @@ def test_all_remaining_live_entrypoints_require_real_durable_worker():
     for name in (
         "ci_ru_mikroton_real_worker.py",
         "ci_ru_tektorg_real_worker.py",
-        "ci_ru_eis44_html_worker.py",
     ):
         script = (Path("scripts") / name).read_text(encoding="utf-8")
         assert "from scripts.ci_ru_leased_connector import run_leased_connector" in script

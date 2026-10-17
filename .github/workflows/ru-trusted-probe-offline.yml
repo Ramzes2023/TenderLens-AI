@@ -1,0 +1,26 @@
+name: RU trusted operator-only probe offline safety contracts
+on:
+  push:
+    branches: [feat/ru-trusted-readonly-probe-20261017]
+    paths:
+      - scripts/ru_trusted_live_probe.py
+      - tests/test_ru_trusted_live_probe.py
+      - .github/workflows/ru-trusted-operator-only.yml
+      - .github/workflows/ru-trusted-probe-offline.yml
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  trusted-probe-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Strict URL/DNS allowance and no unreviewed PR checkout
+        run: python -B -m unittest discover -s tests -p 'test_ru_trusted_live_probe.py'

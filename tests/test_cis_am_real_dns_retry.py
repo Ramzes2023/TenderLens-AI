@@ -26,6 +26,16 @@ def test_temporary_dns_retry_only_for_audited_resolver_chain():
     assert not _retryable_official_dns_failure(ValueError("invalid host"))
 
 
+def test_httpx_can_drop_original_os_error_but_keep_exact_httpcore_dns_marker():
+    # The GitHub-hosted real official probe observed this two-layer chain.
+    core = httpcore.ConnectError("DNS resolution failed")
+    wrapped = httpx.ConnectError("DNS resolution failed")
+    wrapped.__cause__ = core
+    assert _retryable_official_dns_failure(wrapped)
+    # A similarly worded outer HTTPX exception alone is not sufficient.
+    assert not _retryable_official_dns_failure(httpx.ConnectError("DNS resolution failed"))
+
+
 def test_public_ip_policy_violation_not_downgraded_to_retry():
     try:
         raise PublicIPError("Unapproved IP address")

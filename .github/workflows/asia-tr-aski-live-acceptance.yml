@@ -1,7 +1,7 @@
 name: Türkiye Ankara ASKİ real open government procurement acceptance
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feat/asia-tr-official-tenders-20261017]
     paths:
       - app/sources/tr_aski_water.py
       - app/sources/catalog.py

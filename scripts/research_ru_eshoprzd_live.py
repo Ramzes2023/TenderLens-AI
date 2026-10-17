@@ -112,7 +112,7 @@ def main():
             doc = Extract()
             doc.feed(page)
             h = [v for tag,v in doc.headings if tag in {"h1", "h2", "h3"}]
-            idMatch = re.search(r"Ценовой запрос\\s*№\\s*(\\d{3,12})", " ".join(h))
+            idMatch = re.search(r"Ценовой запрос\s*№\s*(\d{3,12})", " ".join(h))
             print("RZD_DETAIL_HTTP_200=" + repr({"uuid":identifier,"bytes":count,"heading":h[:4],"visible_request_number":idMatch.group(1) if idMatch else None}))
             if idMatch and h:
                 ok += 1

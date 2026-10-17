@@ -158,6 +158,8 @@ class ConnectorSyncHandler:
         request_limit = (4 if source_id in {'ted', 'uk_fts', 'world_bank'}
                          else 2 if source_id in {'am_armeps', 'uz_uzex'}
                          else 1 + min(self.max_records, 5) if source_id == 'md_achizitii'
+                          # Public index plus at most ten same-host detail cards.
+                          else 11 if source_id == 'md_elicitatie'
                          else self.max_records + 1 if source_id == 'austender'
                          else 5 if source_id in {'eis', 'eis_223', 'india_cppp', 'kz_goszakup'}
                          else 2 if source_id in {'jp_jetro_national', 'jp_jetro_local'}

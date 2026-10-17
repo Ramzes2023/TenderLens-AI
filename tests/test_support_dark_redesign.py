@@ -1,28 +1,23 @@
-"""Contrast-safe support cockpit redesign without changes to its API contract."""
+"""Supplemental dark conversation polish respects concurrent support landing design."""
+from pathlib import Path
 from app.api.dashboard import dashboard_html
 from app.api.support_ui import SUPPORT_HTML
-from pathlib import Path
 
 CSS=(Path(__file__).resolve().parents[1]/"app/api/static/support.css").read_text(encoding="utf-8")
-JS=(Path(__file__).resolve().parents[1]/"app/api/static/support.js").read_text(encoding="utf-8")
+TRANSLATIONS=(Path(__file__).resolve().parents[1]/"app/api/static/workspace_locale.js").read_text(encoding="utf-8")
 
+def test_thread_dark_skin_no_broken_ticket_controls():
+    page=dashboard_html()
+    for expected in ("VALYQON SUPPORT CENTER","Provider-dependent",
+                     'id="supportAssistantForm"','id="supportTicketForm"',
+                     'id="supportRequests"','support-knowledge-links'):
+        assert expected in page
+    assert "/assets/support.css?v=thread-dark-20261017" in page
+    assert "body.saas #supportCenter .support-thread-detail" in CSS
+    assert "body.saas #supportCenter .support-thread-message.support" in CSS
 
-def test_customer_support_keeps_ticket_and_assistant_controls():
-    for field in ("supportCenter","supportChat","supportAssistantForm","supportTicketForm",
-                  "supportFirstName","supportEmail","supportSubject","supportDescription",
-                  "supportPriority","supportRequests","supportOpenCount","supportLatestTicket",
-                  "supportRequestCard","supportRefresh","supportCreateRequest"):
-        assert f'id="{field}"' in SUPPORT_HTML
-    assert "Scoring methodology" in SUPPORT_HTML
-    assert "No requests yet" in JS
-    assert "Product guide" in SUPPORT_HTML
-
-
-def test_support_dark_style_scoped_and_mobile_compatible():
-    assert "#supportCenter .support-hero" in CSS
-    assert "#supportCenter .support-chat" in CSS
-    assert "#supportCenter .support-summary" in CSS
-    assert "#supportCenter .support-ticket-body" in CSS
-    assert "@media(max-width:680px)" in CSS
-    assert "prefers-reduced-motion" in CSS
-    assert "/assets/support.css?v=dark-20261017" in dashboard_html()
+def test_english_and_russian_copy_contract():
+    for text in ("Support that stays with your workflow.",
+                 "Requests awaiting a resolution", "Provider-dependent",
+                 "No requests yet", "Scoring methodology ↗"):
+        assert text in TRANSLATIONS

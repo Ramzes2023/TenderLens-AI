@@ -10,15 +10,15 @@ SUPPORT_HTML = r"""
   <header class="support-hero">
     <div>
       <span class="eyebrow">
-        YOUR SUPPORT WORKSPACE
+        VALYQON SUPPORT CENTER
       </span>
 
       <h2>
-        Get help, without the friction.
+        Support that stays with your workflow.
       </h2>
 
       <p>
-        Explore product guides, ask a question, or create a ticket that your team can follow up.
+        Find trustworthy product guidance, follow an existing case or send an issue to the support team.
       </p>
     </div>
 
@@ -28,7 +28,7 @@ SUPPORT_HTML = r"""
         type="button"
         class="support-primary"
       >
-        Create a request
+        Report a problem
       </button>
 
       <button
@@ -38,7 +38,6 @@ SUPPORT_HTML = r"""
       >
         Refresh requests
       </button>
-      <a class="support-guide-link" href="/scoring-methodology">Scoring methodology ↗</a>
     </div>
   </header>
 
@@ -49,25 +48,19 @@ SUPPORT_HTML = r"""
     <article>
       <small>Open requests</small>
       <strong id="supportOpenCount">—</strong>
-      <span>
-        Requests awaiting resolution
-      </span>
+      <span>Requests awaiting a resolution</span>
     </article>
 
     <article>
       <small>Latest request</small>
       <strong id="supportLatestTicket">—</strong>
-      <span>
-        Last recorded support request
-      </span>
+      <span>Your latest support case</span>
     </article>
 
     <article>
       <small>Assistant</small>
-      <strong>Product guide</strong>
-      <span>
-        Answers and help articles when available
-      </span>
+      <strong>Product guidance</strong>
+      <span>AI answers when the provider is available</span>
     </article>
   </section>
 
@@ -80,12 +73,12 @@ SUPPORT_HTML = r"""
           </span>
 
           <h3>
-            Ask VALYQON about the platform
+            Ask VALYQON
           </h3>
         </div>
 
         <span class="support-live-pill">
-          Product guide
+          Provider-dependent
         </span>
       </div>
 
@@ -96,6 +89,12 @@ SUPPORT_HTML = r"""
         create a support request.
       </p>
 
+      <nav class="support-knowledge-links" aria-label="Help resources">
+        <a href="/how-it-works">Getting started ↗</a>
+        <a href="/scoring-methodology">Scoring methodology ↗</a>
+        <a href="/status">Service status ↗</a>
+      </nav>
+
       <div
         id="supportChat"
         class="support-chat"
@@ -104,9 +103,9 @@ SUPPORT_HTML = r"""
         <div class="support-message assistant">
           <strong>VALYQON Support</strong>
           <p>
-            Hi. I can help you navigate VALYQON
-            and explain common product workflows.
-            What do you need help with?
+            Explore the help guides above, or ask a product question
+            when the AI provider is available. For a personal account
+            issue, use the support request form.
           </p>
         </div>
       </div>
@@ -170,7 +169,7 @@ SUPPORT_HTML = r"""
       </form>
 
       <p class="support-assistant-note">
-        Automated answers may be limited or unavailable.
+        AI-generated product guidance may contain mistakes.
         For account-specific investigation, create a support
         request. Never share passwords or API keys.
       </p>
@@ -187,13 +186,15 @@ SUPPORT_HTML = r"""
           </span>
 
           <h3>
-            Create a support request
+            Report a problem
           </h3>
         </div>
       </div>
 
       <p class="support-muted">
-        Tell us what happened and what you expected. Your request stays visible in your VALYQON Support Center.
+        Describe the issue clearly.
+        Your request will be saved in your
+        VALYQON Support Center.
       </p>
 
       <form id="supportTicketForm">
@@ -362,7 +363,7 @@ SUPPORT_HTML = r"""
         </span>
 
         <h3>
-          Your request history
+          Support history
         </h3>
       </div>
 

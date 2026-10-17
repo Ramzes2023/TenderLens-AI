@@ -522,7 +522,7 @@ def shell_html(html: str) -> str:
         "</head>",
         '<link rel="stylesheet" href="/assets/geography.css?v=20261013">'
         '<link rel="stylesheet" href="/assets/saas.css">'
-        '<link rel="stylesheet" href="/assets/premium.css?v=phase24-visual-20261012&main_i18n=2">''<link rel="stylesheet" href="/assets/support.css?v=dark-20261017">'
+        '<link rel="stylesheet" href="/assets/premium.css?v=phase24-visual-20261012&main_i18n=2">''<link rel="stylesheet" href="/assets/support.css?v=thread-dark-20261017">'
         '<link rel="stylesheet" href="/assets/rag.css?v=pilot1">'
         '<link rel="stylesheet" href="/assets/responsive.css?v=phase24q">'
         "</head>",

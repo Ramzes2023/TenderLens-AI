@@ -1127,151 +1127,231 @@
   }
 }
 
-
-/* Premium dark support workspace — no change to API, persistence or roles.
-   This is intentionally scoped to #supportCenter: operator panels elsewhere
-   and public product surfaces keep their own styles. */
-#supportCenter {
-  --s-bg:#0c172b;--s-panel:#111f36;--s-panel-up:#182b47;
-  --s-line:#344965;--s-text:#f1f6ff;--s-muted:#bbcae0;
-  --s-soft:#91b3e4;--s-accent:#638eff;
-  color:var(--s-text);
-  gap:18px;
-  isolation:isolate;
-  padding:0 0 40px;
+/* VALYQON 2026 dark premium support workspace. Scope deliberately excludes operator pages. */
+body.saas .support-page{
+  --support-bg:#101d34;
+  --support-panel:#162740;
+  --support-panel-2:#1d314f;
+  --support-line:#334a6b;
+  --support-ink:#f0f6ff;
+  --support-muted:#b0c3dd;
+  --support-blue:#87b5ff;
+  --support-cyan:#8ad9ff;
+  color:var(--support-ink);
+  background:transparent;
+  gap:16px;
+  padding-bottom:54px;
 }
-#supportCenter[hidden] {display:none!important}
-#supportCenter .support-hero {
-  position:relative;isolation:isolate;overflow:hidden;
-  border:1px solid #446291;
-  padding:clamp(24px,3.2vw,42px);
-  border-radius:22px;
+body.saas .support-page .support-hero,
+body.saas .support-page .support-card,
+body.saas .support-page .support-summary article{
+  background:var(--support-panel);
+  color:var(--support-ink);
+  border-color:var(--support-line);
+  box-shadow:0 14px 32px #050f2340;
+  border-radius:20px;
+}
+body.saas .support-page .support-hero{
+  background:radial-gradient(circle at 85% -40%,#477bd050,transparent 54%),linear-gradient(120deg,#132845,#182f53);
+  padding:clamp(23px,3.5vw,39px);
+  min-height:175px;
   align-items:center;
-  background:radial-gradient(ellipse at 85% 5%,rgba(79,128,222,.24),transparent 45%),
-    linear-gradient(130deg,#122642,#0c1b34 74%);
-  box-shadow:0 20px 48px #0208172e;
+  position:relative;
+  overflow:hidden;
 }
-#supportCenter .support-hero:after {
-  content:"";pointer-events:none;position:absolute;z-index:-1;right:-125px;bottom:-215px;
-  width:460px;height:460px;border-radius:50%;
-  border:1px solid #9bbffe30;box-shadow:0 0 0 68px #9bbffe0b,0 0 0 130px #9bbffe08;
+body.saas .support-page .support-hero:after{
+  content:"";position:absolute;pointer-events:none;right:-65px;top:-85px;
+  width:250px;height:250px;border:1px solid #8ab2e328;border-radius:50%;
+  box-shadow:0 0 0 38px #8ab2e00b,0 0 0 78px #8ab2e00a;
 }
-#supportCenter .support-hero .eyebrow {font-weight:800;letter-spacing:.14em;color:#9cbdff;font-size:11px}
-#supportCenter .support-hero h2 {color:#fff;font-size:clamp(27px,3.3vw,42px);line-height:1.13;letter-spacing:-.04em;max-width:600px;margin:11px 0}
-#supportCenter .support-hero p {color:#c9d9ee;font-size:14px;max-width:580px;line-height:1.75}
-#supportCenter .support-hero-actions {align-items:center}
-#supportCenter .support-primary,
-#supportCenter .support-secondary,
-#supportCenter .support-guide-link {
-  min-height:44px;display:inline-flex;align-items:center;justify-content:center;
-  padding:10px 16px;border-radius:10px;font-weight:750;font-size:12px;
-  box-sizing:border-box;text-decoration:none;transition:transform .15s ease,background .15s ease,border-color .15s ease;
+body.saas .support-page .support-hero>*{position:relative;z-index:1}
+body.saas .support-page .support-hero .eyebrow{color:var(--support-blue);font-size:10px;letter-spacing:.14em}
+body.saas .support-page .support-hero h2{
+  color:var(--support-ink);
+  font-size:clamp(27px,3.1vw,39px);
+  line-height:1.1;letter-spacing:-.04em;margin:12px 0;
 }
-#supportCenter .support-primary {background:#3d72e5;border:1px solid #719dfc;color:#fff;box-shadow:0 10px 24px #030a1c3d}
-#supportCenter .support-secondary,#supportCenter .support-guide-link {background:#1a3050;border:1px solid #4d6485;color:#e2edff}
-#supportCenter .support-primary:hover:not(:disabled) {background:#517fee}
-#supportCenter .support-secondary:hover,#supportCenter .support-guide-link:hover {background:#284365}
-#supportCenter :is(.support-primary,.support-secondary,.support-guide-link):focus-visible {outline:3px solid #b2c6ff;outline-offset:3px}
-#supportCenter .support-summary {grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
-#supportCenter .support-summary article {
-  min-height:105px;position:relative;overflow:hidden;border-radius:16px;
-  border:1px solid var(--s-line);border-top:2px solid #587fce;
-  background:linear-gradient(140deg,#172943,#101d33);
-  box-shadow:0 8px 25px #050c1d25;padding:19px 22px;
+body.saas .support-page .support-hero p{color:#c0d3ed;font-size:14px;max-width:580px;line-height:1.75}
+body.saas .support-page .support-primary{
+  border:1px solid #5f98ff;
+  background:#376fdb;color:#fff;
+  box-shadow:0 8px 20px #061c4f38;
 }
-#supportCenter .support-summary small {font-size:10px;letter-spacing:.1em;color:#a8bfe0}
-#supportCenter .support-summary strong {color:#f2f6ff;font-size:clamp(17px,2.2vw,27px);line-height:1.2;overflow-wrap:anywhere}
-#supportCenter .support-summary span {color:#b4c6df;font-size:12px;line-height:1.6}
-#supportCenter .support-main-grid {grid-template-columns:minmax(0,1fr) minmax(0,1.13fr);gap:16px;align-items:stretch}
-#supportCenter .support-card {
-  background:linear-gradient(145deg,#13233c,#0f1d32);color:#edf4ff;
-  border:1px solid var(--s-line);border-radius:19px;box-shadow:0 14px 37px #01061526;
+body.saas .support-page .support-primary:hover:not(:disabled){background:#4985f4}
+body.saas .support-page .support-secondary{
+  border:1px solid #607ca3;
+  background:#203c60;color:#f1f6ff;
 }
-#supportCenter .support-assistant-card,
-#supportCenter .support-request-card,#supportCenter .support-requests-card {padding:clamp(20px,2.4vw,30px)}
-#supportCenter .support-card-heading h3 {color:#f3f6ff;font-size:clamp(19px,1.65vw,23px);letter-spacing:-.03em}
-#supportCenter .support-kicker {font-size:10px;color:#87afff;letter-spacing:.11em}
-#supportCenter .support-muted {font-size:13px;color:#bbcee8;line-height:1.75;max-width:65ch}
-#supportCenter .support-live-pill,
-#supportCenter .support-count-pill {border:1px solid #44628a;background:#203653;color:#cbe0ff;font-size:10px;white-space:nowrap}
-#supportCenter .support-chat {
-  min-height:260px;max-height:375px;background:#091728;border:1px solid #354d70;
-  padding:18px;border-radius:15px;
+body.saas .support-page .support-secondary:hover{background:#2b4d77}
+body.saas .support-page .support-summary{gap:13px}
+body.saas .support-page .support-summary article{min-height:102px;padding:19px 22px}
+body.saas .support-page .support-summary small{
+  color:#b1c4df;font-size:10px;letter-spacing:.12em
 }
-#supportCenter .support-message {font-size:13px;line-height:1.65;max-width:92%;padding:13px 15px}
-#supportCenter .support-message.assistant {background:#1b2e4a;color:#e6efff;border:1px solid #476080}
-#supportCenter .support-message.assistant strong {color:#c1d6fb}
-#supportCenter .support-message.user {background:#2856a0;color:#fff;border:1px solid #4877c3}
-#supportCenter .support-topic-row button {
-  min-height:37px;border:1px solid #3c5679;background:#1a304e;color:#e4efff;
-  border-radius:9px;font-size:12px;padding:7px 11px;
+body.saas .support-page .support-summary strong{
+  color:#fff;font-size:clamp(20px,2.3vw,27px);letter-spacing:-.02em;
+  margin:12px 0 5px;overflow-wrap:anywhere
 }
-#supportCenter .support-topic-row button:hover {background:#244061;border-color:#6689b4}
-#supportCenter .support-page label,
-#supportCenter label,
-#supportCenter .support-form-grid label {color:#dae6f7;font-size:12px;line-height:1.5}
-#supportCenter .support-page input,
-#supportCenter input,#supportCenter textarea,#supportCenter select {
-  background:#192c47!important;border:1px solid #486385!important;
-  color:#f4f8ff!important;box-shadow:none!important;min-height:46px;font-size:13px;
-  border-radius:11px;
+body.saas .support-page .support-summary span{color:#adbfda;font-size:12px;line-height:1.5}
+body.saas .support-page .support-card{min-width:0;padding:clamp(19px,2vw,27px)}
+body.saas .support-page .support-card-heading h3{color:#eef6ff;font-size:21px;letter-spacing:-.02em}
+body.saas .support-page .support-kicker{color:#88bbff;font-size:10px}
+body.saas .support-page .support-muted{color:var(--support-muted);font-size:13px;line-height:1.7}
+body.saas .support-page .support-live-pill{
+  background:#274466;color:#c9deff;border:1px solid #446389
 }
-#supportCenter input::placeholder,#supportCenter textarea::placeholder {color:#b8c9e4!important;opacity:1}
-#supportCenter input:focus-visible,#supportCenter textarea:focus-visible,
-#supportCenter select:focus-visible,#supportCenter button:focus-visible {outline:3px solid #a4baff!important;outline-offset:2px}
-#supportCenter option {background:#182b45;color:#f3f6ff}
-#supportCenter .support-assistant-note,#supportCenter .support-form-footer p {color:#aebfda;font-size:11px;line-height:1.65}
-#supportCenter .support-form-grid {gap:16px}
-#supportCenter .support-form-grid label {gap:8px}
-#supportCenter .support-form-status {color:#c7d8f4}
-#supportCenter .support-form-status.success {color:#98e9bb}
-#supportCenter .support-form-status.error {color:#ffb0ba}
-#supportCenter .support-requests {gap:12px}
-#supportCenter .support-ticket {background:#152741;border:1px solid #405b7d;border-radius:13px}
-#supportCenter .support-ticket summary {color:#e4eeff}
-#supportCenter .support-ticket summary:hover {background:#203755}
-#supportCenter .support-ticket-id {color:#a9c6ff}
-#supportCenter .support-ticket-subject {color:#f0f5ff}
-#supportCenter .support-ticket-date {color:#b2c5de}
-#supportCenter .support-ticket-body {background:#101e35;border-top:1px solid #3a5476}
-#supportCenter .support-ticket-description {color:#d0dff4}
-#supportCenter .support-ticket-meta span {background:#223a58;color:#d4e4fa}
-#supportCenter .support-status {background:#254976;color:#d7e9ff}
-#supportCenter .support-status.resolved,#supportCenter .support-status.closed {background:#164c42;color:#a8f3d8}
-#supportCenter .support-status.in_progress {background:#504025;color:#ffe3ac}
-#supportCenter .support-empty {background:#11253d;border:1px dashed #517097;color:#c2d3eb}
-#supportCenter .support-error {background:#3b2437;border:1px solid #85516c;color:#ffd1dc}
-#supportCenter .support-conversation-card,
-#supportCenter .support-conversation-grid,#supportCenter .support-thread-list,
-#supportCenter .support-thread-detail {background:#13243d;color:#e5efff;border-color:#415d7d}
-#supportCenter .support-thread-item {background:#142640;color:#e5efff;border-color:#3b577b}
-#supportCenter .support-thread-item:hover,#supportCenter .support-thread-item.active {background:#254163;border-color:#7193c4}
-#supportCenter .support-thread-ticket-subject,#supportCenter .support-thread-ticket-header h4 {color:#f0f5ff}
-#supportCenter .support-thread-item-meta time,#supportCenter .support-thread-customer,
-#supportCenter .support-thread-action-status {color:#b7c9e4}
-#supportCenter .support-thread-message.support,
-#supportCenter .support-original-request {background:#1c304d;color:#e8f1ff;border-color:#4a6281}
-#supportCenter .support-original-request strong,#supportCenter .support-original-request p,
-#supportCenter .support-thread-message.support strong,
-#supportCenter .support-thread-message.support p {color:#e6efff}
-#supportCenter .support-thread-message.user {background:#2857a7;color:#fff}
-#supportCenter .support-thread-message time {color:#b9cee8}
-#supportCenter .support-thread-meta span,#supportCenter .support-operator-controls {background:#1c314e;color:#d3e4fc;border-color:#425e81}
-#supportCenter .support-operator-controls label {color:#e0ecfb}
-#supportCenter .support-thread-reply {border-top-color:#486080}
-@media(max-width:1050px){
-  #supportCenter .support-main-grid {grid-template-columns:1fr}
+body.saas .support-page .support-count-pill{
+  background:#29496f;color:#d9e8ff
 }
-@media(max-width:680px){
-  #supportCenter .support-hero {flex-direction:column;align-items:flex-start;padding:24px}
-  #supportCenter .support-hero-actions {width:100%}
-  #supportCenter .support-hero-actions button,#supportCenter .support-guide-link {flex:1}
-  #supportCenter .support-summary {grid-template-columns:1fr}
-  #supportCenter .support-main-grid {grid-template-columns:1fr}
-  #supportCenter .support-form-grid {grid-template-columns:1fr}
-  #supportCenter .support-ticket summary {grid-template-columns:1fr auto;gap:8px}
-  #supportCenter .support-form-footer {flex-direction:column;align-items:stretch}
+body.saas .support-page .support-knowledge-links{
+  display:flex;flex-wrap:wrap;gap:8px;margin:0 0 18px
 }
-@media(prefers-reduced-motion:reduce){
-  #supportCenter :where(button,a) {transition:none}
+body.saas .support-page .support-knowledge-links a{
+  border-radius:9px;border:1px solid #3a608c;
+  background:#193253;color:#d5e7ff;text-decoration:none;
+  font-size:11px;line-height:1.45;padding:9px 11px;font-weight:750
+}
+body.saas .support-page .support-knowledge-links a:hover{background:#26466e}
+body.saas .support-page .support-chat{
+  background:#0b192e;border-color:#334a69;min-height:248px;max-height:365px
+}
+body.saas .support-page .support-message.assistant{
+  background:#1c3352;border-color:#39587e;color:#e0edff
+}
+body.saas .support-page .support-message.user{
+  background:#2856a0;color:#fff
+}
+body.saas .support-page .support-message strong{color:#d7e8ff}
+body.saas .support-page .support-topic-row button{
+  background:#213953;color:#c9dcf5;border:1px solid #456081;
+  border-radius:20px
+}
+body.saas .support-page .support-topic-row button:hover{
+  background:#2c4d75;color:#fff;border-color:#7eb5ff
+}
+body.saas .support-page input,
+body.saas .support-page textarea,
+body.saas .support-page select{
+  background:#0e203b;
+  color:#f1f6ff;
+  border:1px solid #476184;
+  min-height:44px;
+  border-radius:10px;
+  box-shadow:none;
+}
+body.saas .support-page input::placeholder,
+body.saas .support-page textarea::placeholder{color:#a9bfdc;opacity:1}
+body.saas .support-page input:hover,
+body.saas .support-page textarea:hover,
+body.saas .support-page select:hover{border-color:#7796c0}
+body.saas .support-page input:focus-visible,
+body.saas .support-page select:focus-visible,
+body.saas .support-page textarea:focus-visible,
+body.saas .support-page button:focus-visible,
+body.saas .support-page a:focus-visible{
+  outline:3px solid #8fbfff;outline-offset:2px
+}
+body.saas .support-page .support-form-grid label,
+body.saas .support-page label{color:#ccddf6;font-size:12px}
+body.saas .support-page .support-assistant-note,
+body.saas .support-page .support-form-footer p{
+  color:#b9cbe3;font-size:11px;line-height:1.55
+}
+body.saas .support-page .support-ticket{
+  background:#13253d;border-color:#365373
+}
+body.saas .support-page .support-ticket summary:hover{background:#223b5d}
+body.saas .support-page .support-ticket-id{color:#9cc6ff}
+body.saas .support-page .support-ticket-subject{color:#f1f7ff}
+body.saas .support-page .support-ticket-date{color:#b1c5dd}
+body.saas .support-page .support-ticket-body{
+  background:#101e34;border-top-color:#365373
+}
+body.saas .support-page .support-ticket-meta span{
+  background:#233a58;color:#d1e1f5
+}
+body.saas .support-page .support-ticket-description{color:#c7d8ee}
+body.saas .support-page .support-status{
+  background:#204b83;color:#d4e6ff
+}
+body.saas .support-page .support-status.resolved,
+body.saas .support-page .support-status.closed{
+  background:#153e38;color:#9ce5ce
+}
+body.saas .support-page .support-status.in_progress{
+  background:#493b24;color:#f8d596
+}
+body.saas .support-page .support-empty{
+  background:#101e35;border-color:#3a5679;color:#b8cce7
+}
+body.saas .support-page .support-error{
+  background:#432837;border-color:#be7079;color:#ffd1d7
+}
+body.saas .support-page .support-form-status.success{color:#9ce5ce}
+body.saas .support-page .support-form-status.error{color:#ffafb7}
+body.saas .support-page .support-main-grid{gap:16px}
+@media(max-width:1100px){body.saas .support-page .support-main-grid{grid-template-columns:1fr}}
+@media(max-width:760px){body.saas .support-page .support-hero{padding:23px}body.saas .support-page .support-summary{grid-template-columns:1fr}body.saas .support-page .support-hero-actions{width:100%}body.saas .support-page .support-hero-actions button{flex:1}body.saas .support-page .support-form-grid{grid-template-columns:1fr}}
+
+
+/* Operator/customer support conversation readability on the dark support page.
+   Supplements, rather than replaces, the mainline premium support palette. */
+body.saas #supportCenter .support-conversation-card,
+body.saas #supportCenter .support-conversation-grid,
+body.saas #supportCenter .support-thread-list,
+body.saas #supportCenter .support-thread-detail {
+  background:#162740;color:#edf5ff;border-color:#3c5577;
+}
+body.saas #supportCenter .support-thread-list {
+  background:#102139;border-right:1px solid #415b7f;
+}
+body.saas #supportCenter .support-thread-item {
+  background:#172d49;color:#e8f2ff;border-color:#405e80;
+}
+body.saas #supportCenter .support-thread-item:hover,
+body.saas #supportCenter .support-thread-item.active {
+  background:#26456a;border-color:#8ab7f5;
+}
+body.saas #supportCenter .support-thread-ticket-subject,
+body.saas #supportCenter .support-thread-ticket-header h4 {
+  color:#f2f7ff;
+}
+body.saas #supportCenter .support-thread-ticket-id {color:#a5caff}
+body.saas #supportCenter .support-thread-item-meta time,
+body.saas #supportCenter .support-thread-customer,
+body.saas #supportCenter .support-thread-action-status {
+  color:#b8cbe5;
+}
+body.saas #supportCenter .support-thread-detail,
+body.saas #supportCenter .support-thread-ticket-header,
+body.saas #supportCenter .support-thread-reply {
+  border-color:#456185;
+}
+body.saas #supportCenter .support-original-request,
+body.saas #supportCenter .support-thread-message.support {
+  background:#1d3352;color:#eaf3ff;border-color:#4c6688;
+}
+body.saas #supportCenter .support-original-request strong,
+body.saas #supportCenter .support-original-request p,
+body.saas #supportCenter .support-thread-message.support strong,
+body.saas #supportCenter .support-thread-message.support p {
+  color:#eaf3ff;
+}
+body.saas #supportCenter .support-thread-message.user {
+  background:#2857a7;color:#fff;
+}
+body.saas #supportCenter .support-thread-message time {color:#c6d8f0}
+body.saas #supportCenter .support-thread-meta span,
+body.saas #supportCenter .support-operator-controls {
+  background:#1b304f;color:#dce9ff;border-color:#466283;
+}
+body.saas #supportCenter .support-operator-controls label {color:#e0edff}
+body.saas #supportCenter .support-thread-empty {color:#c1d0e6}
+body.saas #supportCenter .support-thread-error {
+  background:#422637;color:#ffd1dc;border-color:#995772;
+}
+@media(max-width:900px){
+ body.saas #supportCenter .support-thread-list{
+   border-right:0;border-bottom:1px solid #405979;
+ }
 }

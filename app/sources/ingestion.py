@@ -51,6 +51,7 @@ HOSTS = {
     'ae_federal_mof': frozenset({'mof.gov.ae'}),
     'tr_ankara_municipality': frozenset({'www.ankara.bel.tr'}),
     'tr_aski_water': frozenset({'www.aski.gov.tr'}),
+    'tr_ego_transport': frozenset({'www.ego.gov.tr'}),
     'kz_goszakup': frozenset({'ows.goszakup.gov.kz'}),
     'mikroton_tender': frozenset({'tender.mt52.ru'}),
     # Staged Asian feeds: host allowlists apply to the actual worker network call.

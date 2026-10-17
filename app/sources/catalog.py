@@ -28,6 +28,7 @@ from .india_cppp import IndiaCpppSource
 from .india_epublish import IndiaEpublishSource, LIST_URL as INDIA_EPUBLISH_LIST_URL
 from .uae_mof_rfqs import UAEMinistryFinanceSource, URL as UAE_MOF_URL
 from .tr_ankara_municipality import AnkaraMunicipalitySource, INDEX_URL as ANKARA_OFFICIAL_TENDER_URL
+from .tr_aski_water import ASKIWaterTendersSource, LIST_URL as ASKI_PUBLIC_TENDERS_URL
 from .kz_goszakup import KazakhstanGoszakupApiSource
 from .multi import MultiSourceFetcher, MultiSourceFetchReport
 from .mikroton_tender import MikrotonTenderSource
@@ -621,6 +622,18 @@ def build_source_catalog(
             jurisdictions=("TR",), languages=("tr",),
             homepage_url=ANKARA_OFFICIAL_TENDER_URL,
             official=True, enabled=True, capabilities=SourceCapabilities(),
+        ))
+
+    # Ankara ASKİ (separate water utility) has distinct official detail pages.
+    if os.environ.get("VALYQON_ASIA_TURKEY_ASKI_ENABLED", "").strip() == "1":
+        registry.register(SourceRegistration(
+            key="tr_aski_water",
+            display_name="Türkiye Ankara ASKİ — public water-sector tenders",
+            source=ASKIWaterTendersSource(timeout=min(timeout, 30.0)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("TR",), languages=("tr",),
+            homepage_url=ASKI_PUBLIC_TENDERS_URL, official=True, enabled=True,
+            capabilities=SourceCapabilities(),
         ))
 
     # Russian connectors are opt-in. Do not enable unverified live adapters.

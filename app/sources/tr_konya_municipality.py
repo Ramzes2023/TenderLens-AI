@@ -30,7 +30,7 @@ _PATH = re.compile(r"^/ihale/[a-z0-9-]{12,180}$")
 _KIK = re.compile(r"İhale\s+Kayıt\s+Numarası\s*\(\s*İKN\s*\)\s*:?\s*(20\d\d/[1-9]\d{3,10})", re.I)
 _DATE = re.compile(r"Son\s+Müracaat\s+Tarihi\s*:?\s*(\d\d\.\d\d\.20\d\d)\s*-\s*(\d\d:\d\d)", re.I)
 _BUYER = re.compile(r"İhale\s+Sahibi\s*:?\s*(.{4,200}?)\s+İhalenin\s+Yapılacağı\s+Yer", re.I)
-_EXCLUDE = re.compile(r"(?:gayrimenkul|satış\s+ihale|satışı|mesken\s+satış|kira\s+ihale|pazarlığa|ihale\s+iptali|ihale\s+sonucu)", re.I)
+_EXCLUDE = re.compile(r"(?:gayrimenkul|yikim-ihale|satış\s+ihale|satışı|mesken\s+satış|kira\s+ihale|pazarlığa|ihale\s+iptali|ihale\s+sonucu)", re.I)
 
 def _plain(payload: bytes) -> str:
     if not payload or len(payload) > _MAX_BYTES:

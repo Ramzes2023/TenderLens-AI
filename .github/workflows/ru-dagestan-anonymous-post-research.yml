@@ -1,0 +1,75 @@
+name: RU Dagestan first-party read-only anonymous POST research
+
+on:
+  push:
+    branches: [research/ru-dagestan-anonymous-post-readonly-20261018]
+    paths:
+      - scripts/research_ru_dagestan_anonymous_post.py
+      - tests/test_ru_dagestan_anonymous_post.py
+      - .github/workflows/ru-dagestan-anonymous-post-research.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/research_ru_dagestan_anonymous_post.py
+      - tests/test_ru_dagestan_anonymous_post.py
+      - .github/workflows/ru-dagestan-anonymous-post-research.yml
+
+permissions:
+  contents: read
+
+jobs:
+  strict-offline-published-route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Validate strict publication gate and reject synthetic login/schema fraud
+        run: python -m pytest -q tests/test_ru_dagestan_anonymous_post.py
+
+  actual-anonymous-post-public-list:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require official public JSON from two genuine anonymous rows
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_dagestan_anonymous_post
+
+  fixed-firstparty-method-diagnostic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Check pinned read-only public listing POST method and public HTTP status without cookies
+        shell: bash
+        run: |
+          set -euo pipefail
+          host='goszakaz.e-dag.ru'
+          # The path is present in the official unmodified public NoticesGrid.
+          # No secret, session, auth, proxy, redirect follow, or TLS weakening.
+          result="$(curl --noproxy '*' --silent --show-error --proto '=https' \
+            --retry 0 --max-redirs 0 --connect-timeout 8 --max-time 25 \
+            --header 'Accept: application/json, text/javascript' \
+            --header 'X-Requested-With: XMLHttpRequest' \
+            --header 'Content-Type: application/x-www-form-urlencoded' \
+            --header 'Referer: https://goszakaz.e-dag.ru/smallpurchases/GzwSP/NoticesGrid' \
+            --data-urlencode 'page=1' --data-urlencode 'rows=5' \
+            --data-urlencode 'sidx=' --data-urlencode 'sord=desc' \
+            --output /dev/null --write-out '%{http_code}' \
+            "https://$host/smallpurchases/GzwSP/NoticesJson")" && rc=0 || rc=$?
+          echo "RU_DAG_ANON_POST_HTTP=$result"
+          echo "RU_DAG_ANON_POST_CURL_EXIT=$rc"
+          echo "DIAGNOSTIC_ONLY=YES"
+          echo "ORIGINAL_NOTICES_PROVED=NO"
+          echo "PRODUCTION_CHANGED=NO"

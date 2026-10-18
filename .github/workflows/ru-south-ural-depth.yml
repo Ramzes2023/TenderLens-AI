@@ -1,0 +1,85 @@
+name: RU South Ural 10 public invitations per cycle bounded depth
+on:
+  push:
+    branches: [feat/ru-south-ural-depth-10-20261017]
+    paths:
+      - app/sources/south_ural_public.py
+      - app/sources/ingestion.py
+      - tests/test_ru_south_ural_adapter.py
+      - scripts/ci_ru_south_ural_10_real_worker.py
+      - scripts/ci_ru_south_ural_deadline.py
+      - .github/workflows/ru-south-ural-depth.yml
+  pull_request:
+    branches: [main, feat/ru-south-ural-small-live-sql-20261017]
+permissions:
+  contents: read
+jobs:
+  south-ural-10-limit-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Prove bounded first-page 10 source records without spoofed links
+        run: python -m pytest -q tests/test_ru_south_ural_adapter.py
+  south-ural-live-official-deadlines:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Exact official independently verified submission end + proper UTC offset
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_south_ural_deadline
+  south-ural-live-depth-query:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real South Ural 3 independently validated details to fenced SQL and search
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_south_ural_real_worker
+  south-ural-ten-originals-fenced-sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real ten distinct official South Ural invitations to leased Worker, SQLite and ten keyword searches
+        timeout-minutes: 7
+        run: python -B -m scripts.ci_ru_south_ural_10_real_worker
+  south-ural-live-depth-tenant:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real South Ural 3 independently fetched procurement details in authorized customer scoring
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_south_ural_authenticated

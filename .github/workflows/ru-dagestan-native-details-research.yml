@@ -143,6 +143,9 @@ jobs:
                       hostname = uri.hostname
                       if len(hostname) <= 120 and all(c.isascii() and (c.isalnum() or c in ".-") for c in hostname):
                           print("RU_DAG_REDIRECT_SCHEME=" + uri.scheme)
+                          print("RU_DAG_REDIRECT_PORT=" + str(uri.port))
+                          print("RU_DAG_REDIRECT_USERINFO_PRESENT=" + str(bool(uri.username or uri.password)))
+                          print("RU_DAG_REDIRECT_PATH=" + uri.path[:140])
                           print("RU_DAG_REDIRECT_PUBLIC_HOST=" + hostname)
                           print("RU_DAG_REDIRECT_HAS_QUERY=" + str(bool(uri.query)))
           print("ORIGINAL_DETAIL_PROVED=NO")

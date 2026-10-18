@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, urljoin, urlsplit
 
 from playwright.async_api import async_playwright
 
@@ -54,6 +54,45 @@ def only_public_keynames(data: str | None, content_type: str) -> tuple[str, ...]
                             k.isascii() and k.replace("_", "").isalnum()))[:50])
 
 
+def public_native_settings_shape(data: str | None):
+    """Only safe field names/type names of native settings, NEVER values."""
+    if type(data) is not str or not 0 < len(data) <= 180_000:
+        return (), ()
+    settings = [v for k, v in parse_qsl(data, keep_blank_values=True)
+                if k == "settings"]
+    if len(settings) != 1 or not 0 < len(settings[0]) <= 80_000:
+        return (), ()
+    try:
+        obj = json.loads(settings[0])
+    except (ValueError, TypeError):
+        return (), ()
+    if type(obj) is not dict:
+        return (), ()
+    keys = tuple(sorted(k for k in obj if type(k) is str and
+                        k.isascii() and k.replace("_", "").isalnum())[:60])
+    types = tuple(k + ":" + type(obj[k]).__name__ for k in keys)
+    return keys, types
+
+
+def public_original_link_shape(value):
+    """Classify first-party link PATHS only; strip all query and tokens."""
+    if type(value) is not str or not 0 < len(value) < 1800:
+        return "MISSING_OR_NONSTRING"
+    try:
+        parsed = urlsplit(urljoin(LISTING, value))
+        if (parsed.scheme != "https" or parsed.hostname != HOST or
+                parsed.username or parsed.password or
+                parsed.port not in (None, 443)):
+            return "NON_FIRST_PARTY"
+        if not parsed.path.startswith("/smallpurchases/"):
+            return "NOT_NATIVE_SMALL_PURCHASES"
+        if any(ord(c) < 33 or c.isspace() for c in parsed.path):
+            return "UNSAFE_PATH"
+        return parsed.path[:180]
+    except ValueError:
+        return "INVALID_LINK"
+
+
 async def observe():
     total_requests = 0
     native_requests = 0
@@ -92,6 +131,10 @@ async def observe():
                 keys = only_public_keynames(req.post_data, content_type)
                 print("RU_DAG_BROWSER_NATIVE_METHOD=" + req.method)
                 print("RU_DAG_BROWSER_NATIVE_PARAM_NAMES=" + ",".join(keys))
+                if "settings" in keys:
+                    _, shape = public_native_settings_shape(req.post_data)
+                    print("RU_DAG_BROWSER_NATIVE_SETTINGS_FIELD_TYPES=" +
+                          ",".join(shape))
             await route.continue_()
 
         async def inspect_response(resp):
@@ -124,6 +167,10 @@ async def observe():
                                           k.isascii() and k.replace("_", "").isalnum())
                             print("RU_DAG_BROWSER_ITEM_" + str(i) + "_KEYS=" +
                                   ",".join(safe[:35]))
+                            for label in ("link", "bid_link", "etp_url"):
+                                print("RU_DAG_BROWSER_ITEM_" + str(i) + "_" +
+                                      label.upper() + "_PUBLIC_PATH=" +
+                                      public_original_link_shape(item.get(label)))
                     if len(items) >= 2:
                         responses.append(len(items))
             except (ValueError, RuntimeError):

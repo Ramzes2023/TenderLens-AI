@@ -266,14 +266,14 @@ async def monitor_status_handler(message: Message, monitoring_service: TenderMon
     ru_mode = service.settings.ru_background_catalog_enabled
     ru_count = len(enabled_ru_catalog_keys(source_catalog)) if ru_mode else 0
     title = "📡 Мониторинг российских источников" if ru_mode else "📡 Мониторинг ЕИС"
-    sources_line = (f"Включённых RU-источников: {ru_count}\\n" if ru_mode
-                    else f"RSS-поисков: {feed_count} ({feed_mode})\\n")
+    sources_line = (f"Включённых RU-источников: {ru_count}\n" if ru_mode
+                    else f"RSS-поисков: {feed_count} ({feed_mode})\n")
     await message.answer(
-        title + "\\n"
-        + f"Фоновый цикл: {global_state}\\n"
-        + f"Ваша подписка: {state}\\n"
-        + f"Активная компания: {company_line}\\n"
-        + f"Интервал: {service.settings.interval_seconds} сек.\\n"
+        title + "\n"
+        + f"Фоновый цикл: {global_state}\n"
+        + f"Ваша подписка: {state}\n"
+        + f"Активная компания: {company_line}\n"
+        + f"Интервал: {service.settings.interval_seconds} сек.\n"
         + sources_line
         + "Pre-filter использует профиль и опубликованные данные источников."
     )

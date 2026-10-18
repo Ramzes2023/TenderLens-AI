@@ -122,6 +122,12 @@ jobs:
               snippet = re.sub(r"(?is)(?:__RequestVerificationToken|password|secret|csrf)\s*[:=]\s*[^,;}]+", "REDACTED", snippet)
               snippet = re.sub(r"[A-Za-z0-9+/_-]{70,}", "REDACTED_LONG_TOKEN", snippet)
               print("RU_DAG_GRID_INIT_PUBLIC_STATIC=" + " ".join(snippet[:1600].split()))
+          form_csrf = html.find("__RequestVerificationToken")
+          if form_csrf >= 0:
+              form_window = html[max(0, form_csrf-350):form_csrf+350]
+              identifiers = list(dict.fromkeys(re.findall(r"\b[A-Za-z_$][A-Za-z0-9_$]{2,42}\b", form_window)))
+              print("RU_DAG_CSRF_NEARBY_PUBLIC_IDENTIFIERS=" + ",".join(identifiers[:65]))
+          print("RU_DAG_PUBLIC_HAS_AJAX_SETUP=" + str("ajaxSetup(" in html))
           print("RU_DAG_PUBLIC_HTML_HAS_CSRF_FIELD=" +
                 str(bool(re.search("RequestVerificationToken", html, re.I))))
           print("DIAGNOSTIC_ONLY=YES")

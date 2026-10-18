@@ -23,7 +23,8 @@ HOST = "etpgpb.ru"
 LIST_URL = f"https://{HOST}/procedures/"
 MAX_BYTES = 1_800_000
 MAX_DETAILS = 3
-_PATH = re.compile(r"/procedures/etp/([0-9]{5,10})-[a-z0-9-]+/")
+# First-party GPB detail URLs include both <number>/ and <number>-<slug>/.
+_PATH = re.compile(r"/procedures/etp/([0-9]{5,10})(?:-[a-z0-9-]+)?/")
 
 
 class _Cards(HTMLParser):

@@ -135,6 +135,26 @@ def disclosed_grid_paths(raw):
     return tuple(sorted(routes))[:12]
 
 
+def disclosed_json_grid_method(raw):
+    """Read a method hint *only* from original public inline grid markup."""
+    if type(raw) is not bytes or not 0 < len(raw) <= MAX_BYTES:
+        raise ValueError("Unsafe public method diagnostic")
+    target = b"/smallpurchases/GzwSP/NoticesJson"
+    where = raw.find(target)
+    if where < 0:
+        return "NOT_DISCLOSED"
+    # A nearby inline jqGrid configuration is evidence of intended HTTP
+    # method, not evidence of a working anonymous public endpoint.
+    context = raw[max(where - 600, 0):min(where + 600, len(raw))]
+    seen = set(re.findall(
+        rb"""\b(?:mtype|method)\s*:\s*["'](GET|POST)["']""",
+        context, re.IGNORECASE,
+    ))
+    if len(seen) != 1:
+        return "UNKNOWN"
+    return next(iter(seen)).decode("ascii").upper()
+
+
 def describe_public_json_shape(raw):
     """Read-only diagnostics: structure/ID counts are NOT real tender proof."""
     if type(raw) is not bytes or not 0 < len(raw) <= MAX_BYTES or b"\x00" in raw:
@@ -165,6 +185,7 @@ async def probe_disclosed_public_json(client, html):
     if path not in disclosed_grid_paths(html):
         print("RU_SAMARA_JSON_DIAG=NOT_DISCLOSED")
         return
+    print("RU_SAMARA_JSON_GRID_METHOD_HINT=" + disclosed_json_grid_method(html))
     try:
         client.cookies.clear()  # Never reuse a server-issued guest session.
         response = await client.get("https://" + HOST + path)

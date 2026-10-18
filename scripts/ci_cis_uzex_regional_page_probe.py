@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime
 from app.sources.uz_uzex import API_URL, HOST, MAX_BODY, PER_TYPE, parse_uzex_tradelist
 from app.sources.http import FetchPolicy, bounded_fetch, source_client
 
@@ -54,8 +54,9 @@ async def execute():
                     for n in regional:
                         try:
                             end = datetime.fromisoformat(n.deadline.replace("Z", "+00:00"))
-                            now = datetime.now(end.tzinfo or timezone.utc)
-                            if end >= now:
+                            # A naive official deadline has unspecified timezone.
+                            # Never guess it is UTC or claim the bid is still open.
+                            if end.tzinfo is not None and end >= datetime.now(end.tzinfo):
                                 open_regional.append(n)
                         except ValueError:
                             pass

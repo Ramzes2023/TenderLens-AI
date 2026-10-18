@@ -44,7 +44,16 @@ def parse_public_json(body: bytes, content_type: str):
         raise ValueError("Not a real JSON response") from None
     if type(data) is not dict:
         raise ValueError("No JSON registry object")
-    rows = data.get("rows")
+    # The live government grid (unlike generic jqGrid examples) exposes
+    # {items, page, totalAmount, totalRows}. Only accept this observed
+    # first-party shape or the strictly bounded legacy rows form.
+    if "items" in data:
+        rows = data["items"]
+        if (type(data.get("totalRows")) is not int or data["totalRows"] < 2
+                or type(data.get("page")) is not int or data["page"] < 0):
+            raise ValueError("Invalid original public registry pagination")
+    else:
+        rows = data.get("rows")
     if type(rows) is not list or not 2 <= len(rows) <= LIMIT:
         raise ValueError("No two real first-party public listing rows")
     keys = sorted(k for k in data if isinstance(k, str) and k.isascii()

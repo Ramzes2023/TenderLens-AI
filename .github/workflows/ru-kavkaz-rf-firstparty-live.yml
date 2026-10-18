@@ -6,6 +6,9 @@ on:
       - app/sources/kavkaz_rf_firstparty.py
       - app/sources/ingestion.py
       - tests/test_ru_kavkaz_rf_firstparty.py
+      - tests/test_ru_kavkaz_firstparty_registration.py
+      - app/monitoring/config.py
+      - app/sources/catalog.py
       - scripts/ci_ru_kavkaz_real_worker.py
       - scripts/research_ru_kavkaz_live.py
       - .github/workflows/ru-kavkaz-rf-firstparty-live.yml
@@ -26,7 +29,7 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install -r requirements-dev.txt
       - name: Strict origin, native procurement ID, price, dates and hostile HTML
-        run: python -m pytest -q tests/test_ru_kavkaz_rf_firstparty.py
+        run: python -m pytest -q tests/test_ru_kavkaz_rf_firstparty.py tests/test_ru_kavkaz_firstparty_registration.py
   kavkaz-rf-two-real-originals-fenced-sql:
     runs-on: ubuntu-latest
     timeout-minutes: 12

@@ -117,12 +117,14 @@ def test_catalog_registers_all_phase23_sources(
         "uz_uzex",
         "kg_gov_legacy",
         "md_achizitii",
+        "az_adif_small",
         "kz_gov_html",
     )
 
     assert not catalog.registry.get("uz_uzex").enabled
     assert not catalog.registry.get("kg_gov_legacy").enabled
     assert not catalog.registry.get("md_achizitii").enabled
+    assert not catalog.registry.get("az_adif_small").enabled
     assert not catalog.registry.get("kz_gov_html").enabled
 
     assert catalog.enabled_keys == (

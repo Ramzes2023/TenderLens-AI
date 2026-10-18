@@ -1,0 +1,35 @@
+name: CIS operator approved-only hourly enqueue contracts
+on:
+  push:
+    branches: [feat/cis-approved-operator-cycle-20261018]
+    paths:
+      - app/sources/cis_cycle.py
+      - app/sources/enqueue.py
+      - tests/test_cis_operator_cycle.py
+      - .github/workflows/cis-operator-cycle-contract.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/cis_cycle.py
+      - app/sources/enqueue.py
+      - tests/test_cis_operator_cycle.py
+      - .github/workflows/cis-operator-cycle-contract.yml
+permissions:
+  contents: read
+jobs:
+  cis-one-shot-operator-cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Validate approved flags, zero unapproved jobs and hourly deduplication
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHON_DOTENV_DISABLED: '1'
+        run: python -m pytest -q tests/test_cis_operator_cycle.py tests/test_cis_md_az_activation.py

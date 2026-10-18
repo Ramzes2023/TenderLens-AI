@@ -8,6 +8,7 @@ def main(argv=None):
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--source', help='Approved source ID; current UTC hour only')
     group.add_argument('--status', help='Connector job UUID')
+    group.add_argument('--cis-approved', action='store_true', help='Queue only individually enabled, reviewed CIS sources')
     args = parser.parse_args(argv)
     database = None
     try:
@@ -16,8 +17,12 @@ def main(argv=None):
         from app.jobs import JobRepository, JobService, load_job_settings
         from app.monitoring.config import load_monitoring_settings
         from .catalog import build_source_catalog
+        from .cis_cycle import approved_cis_keys, enqueue_approved_cis
         from .ingestion import ConnectorSyncService, connector_version, sync_window, validate_payload
         catalog = build_source_catalog(load_monitoring_settings())
+        if args.cis_approved:
+            # Validate all operator flags before even opening the DB.
+            approved_cis_keys(catalog)
         if args.source:
             validate_payload({'schema': 1, 'source_id': args.source, 'sync_window': sync_window(),
                               'connector_version': connector_version(args.source)}, catalog.registry)
@@ -28,6 +33,8 @@ def main(argv=None):
         if args.source:
             job = service.enqueue(args.source)
             output = {'job_id': job.id, 'state': job.state}
+        elif args.cis_approved:
+            output = {'jobs': enqueue_approved_cis(service, catalog)}
         else:
             output = service.status(args.status)
             if output is None:

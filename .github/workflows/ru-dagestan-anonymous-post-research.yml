@@ -1,14 +1,6 @@
 name: RU Dagestan first-party read-only anonymous POST research
 
 on:
-  push:
-    branches: [research/ru-dagestan-anonymous-post-readonly-20261018]
-    paths:
-      - scripts/research_ru_dagestan_anonymous_post.py
-      - tests/test_ru_dagestan_anonymous_post.py
-      - scripts/research_ru_dagestan_public_csrf_post.py
-      - tests/test_ru_dagestan_public_csrf_post.py
-      - .github/workflows/ru-dagestan-anonymous-post-research.yml
   pull_request:
     branches: [main]
     paths:
@@ -18,6 +10,12 @@ on:
 
 permissions:
   contents: read
+
+# Run one authoritative head check per pull request, rather than duplicating
+# every job on push and PR (the research branch never affects production).
+concurrency:
+  group: dagestan-public-post-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   strict-offline-published-route:

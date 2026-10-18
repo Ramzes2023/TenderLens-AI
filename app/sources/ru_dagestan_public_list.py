@@ -127,16 +127,17 @@ def safe_string(row, key, max_length=1000):
 
 
 def parse_public_list(data, *, limit=2):
-    """Two distinct government-original listing identities; NOT detail proof."""
-    if type(limit) is not int or not 2 <= limit <= PAGE_SIZE:
+    """Validate government list rows; live acceptance separately requires two."""
+    if type(limit) is not int or not 1 <= limit <= PAGE_SIZE:
         raise ValueError("Invalid list size")
     if type(data) is not dict or type(data.get("items")) is not list:
         raise ValueError("Dagestan original native JSON items missing")
     rows = data["items"]
     total = data.get("totalRows")
-    if (type(total) is not int or total < 2
-            or not 2 <= len(rows) <= PAGE_SIZE):
-        raise ValueError("Insufficient genuine public notice list rows")
+    if (type(total) is not int or total < len(rows)
+            or not 0 <= len(rows) <= PAGE_SIZE
+            or (not rows and total != 0)):
+        raise ValueError("Inconsistent public notice list rows")
     notices, ids, numbers = [], set(), set()
     for row in rows[:limit]:
         if type(row) is not dict:
@@ -180,8 +181,8 @@ class DagestanPublicListSource:
             raise ValueError("Invalid public list-only source configuration")
 
     async def fetch(self, limit=20):
-        if type(limit) is not int or not 2 <= limit <= 100:
-            raise ValueError("Public list evidence needs two real identities")
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("Invalid public list fetch limit")
         cap = min(limit, PAGE_SIZE)
         ctx = (bounded_fetch(FetchPolicy(frozenset({HOST}), 2,
                                          max_bytes=MAX_BYTES))

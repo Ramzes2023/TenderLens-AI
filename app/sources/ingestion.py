@@ -38,6 +38,8 @@ HOSTS = {
     'b2b_center': frozenset({'www.b2b-center.ru'}),
     'tektorg': frozenset({'www.tektorg.ru'}),
     'gpb_etp_public': frozenset({'etpgpb.ru'}),
+    'roseltorg_public': frozenset({'www.roseltorg.ru'}),
+    'fabrikant_44_public': frozenset({'44.fabrikant.ru'}),
     'lenobl_small_public': frozenset({'zakupki.lenreg.ru'}),
     'nmck_native_public': frozenset({'xn--j1adc1b.xn--p1ai'}),
     'stan_commercial_public': frozenset({'stantorgi.ru'}),
@@ -168,7 +170,8 @@ class ConnectorSyncHandler:
                          else 5 if source_id in {'eis', 'eis_223', 'india_cppp', 'kz_goszakup'}
                          else 2 if source_id in {'jp_jetro_national', 'jp_jetro_local'}
                          else min(self.max_records, 5) + 1 if source_id == 'tektorg'
-                         else 4 if source_id == 'gpb_etp_public'
+                         else 4 if source_id in {'gpb_etp_public', 'roseltorg_public'}
+                         else 4 if source_id == 'fabrikant_44_public'
                          else 4 if source_id == 'lenobl_small_public'
                          else min(self.max_records, 2) + 1 if source_id == 'nmck_native_public'
                          else min(self.max_records, 2) + 1 if source_id == 'stan_commercial_public'

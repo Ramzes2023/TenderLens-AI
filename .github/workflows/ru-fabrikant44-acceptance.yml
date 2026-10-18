@@ -1,0 +1,77 @@
+name: RU Fabrikant official 44-FZ verified public source contracts
+on:
+  push:
+    branches: [feat/ru-fabrikant44-soap4-public-20261018]
+    paths:
+      - app/sources/fabrikant_44_public.py
+      - tests/test_ru_fabrikant44_public.py
+      - tests/test_ru_fabrikant44_registration.py
+      - scripts/ci_ru_fabrikant44_real_worker.py
+      - scripts/research_ru_fabrikant44_live_stages.py
+      - scripts/ci_ru_fabrikant44_authenticated.py
+      - .github/workflows/ru-fabrikant44-acceptance.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/fabrikant_44_public.py
+      - tests/test_ru_fabrikant44_public.py
+      - tests/test_ru_fabrikant44_registration.py
+      - scripts/ci_ru_fabrikant44_real_worker.py
+      - scripts/research_ru_fabrikant44_live_stages.py
+      - scripts/ci_ru_fabrikant44_authenticated.py
+      - app/sources/catalog.py
+      - app/sources/ingestion.py
+      - app/monitoring/config.py
+      - app/scoring/runs.py
+      - .github/workflows/ru-fabrikant44-acceptance.yml
+permissions:
+  contents: read
+jobs:
+  fabrikant44-strict-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Public listing navigation backurl stripped, same-host detail corroboration
+        run: python -m pytest -q tests/test_ru_fabrikant44_public.py tests/test_ru_fabrikant44_registration.py
+      - name: Compile real durable worker SQL proof
+        run: python -m py_compile scripts/ci_ru_fabrikant44_real_worker.py scripts/ci_ru_fabrikant44_authenticated.py
+
+  fabrikant44-live-fenced-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Diagnose first-party list and individual official details without fallback
+        timeout-minutes: 3
+        run: python -B -m scripts.research_ru_fabrikant44_live_stages
+      - name: Real official Fabrikant notices through durable lease to SQLite and keyword query
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_fabrikant44_real_worker
+  fabrikant44-live-auth-tenant:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real official Fabrikant notices to signed-in scoring and tenant isolation
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_fabrikant44_authenticated

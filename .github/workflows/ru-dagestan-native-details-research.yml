@@ -139,5 +139,11 @@ jobs:
                   print("RU_DAG_REDIRECT_HAS_QUERY=" + str(bool(uri.query)))
               else:
                   print("RU_DAG_REDIRECT_KIND=EXTERNAL_OR_INVALID")
+                  if uri.scheme in {"http", "https"} and uri.hostname and not uri.username and not uri.password:
+                      hostname = uri.hostname
+                      if len(hostname) <= 120 and all(c.isascii() and (c.isalnum() or c in ".-") for c in hostname):
+                          print("RU_DAG_REDIRECT_SCHEME=" + uri.scheme)
+                          print("RU_DAG_REDIRECT_PUBLIC_HOST=" + hostname)
+                          print("RU_DAG_REDIRECT_HAS_QUERY=" + str(bool(uri.query)))
           print("ORIGINAL_DETAIL_PROVED=NO")
           PY

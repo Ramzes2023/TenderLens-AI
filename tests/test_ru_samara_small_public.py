@@ -1,7 +1,7 @@
 """Offline hostile HTML fixtures never count as live procurement evidence."""
 import pytest
 from scripts.research_ru_samara_small_public import (
-    HOST, INDEX, listing, strict_original_link, original_detail,
+    HOST, INDEX, GRID_URL, listing, strict_original_link, original_detail,
 )
 
 A = "ИМЗ-2026-0-223-000399"
@@ -75,3 +75,4 @@ def test_independent_details_must_match_buyer_and_price():
 def test_exact_origin():
     assert HOST == "webtorgi.samregion.ru"
     assert INDEX == "https://webtorgi.samregion.ru/smallpurchases/Menu/Page/1"
+    assert GRID_URL == "https://webtorgi.samregion.ru/smallpurchases/GzwSP/NoticesGrid"

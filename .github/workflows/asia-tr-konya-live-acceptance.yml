@@ -1,0 +1,53 @@
+name: Türkiye Konya first-party municipal real procurement acceptance
+on:
+  push:
+    branches: [feat/asia-tr-konya-government-original-20261018]
+    paths:
+      - "app/sources/tr_konya_municipality.py"
+      - "app/sources/catalog.py"
+      - "app/sources/ingestion.py"
+      - "tests/test_tr_konya_municipality.py"
+      - "scripts/asia_tr_konya_real_worker.py"
+      - ".github/workflows/asia-tr-konya-live-acceptance.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "app/sources/tr_konya_municipality.py"
+      - "app/sources/catalog.py"
+      - "app/sources/ingestion.py"
+      - "tests/test_tr_konya_municipality.py"
+      - "scripts/asia_tr_konya_real_worker.py"
+      - ".github/workflows/asia-tr-konya-live-acceptance.yml"
+permissions:
+  contents: read
+jobs:
+  konya-original-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Strict original notices, URL, source catalog and real worker contracts
+        run: python -m pytest -q tests/test_tr_konya_municipality.py tests/test_source_catalog.py tests/test_connector_workers.py
+  konya-official-real-worker-sqlite-search:
+    needs: [konya-original-offline]
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Genuine Konya HTTPS source -> actual job lease -> disposable SQLite -> keyword query
+        timeout-minutes: 5
+        env:
+          VALYQON_ASIA_TURKEY_KONYA_ENABLED: "1"
+        run: python -B -m scripts.asia_tr_konya_real_worker

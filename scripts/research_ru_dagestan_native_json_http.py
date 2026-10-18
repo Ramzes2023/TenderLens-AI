@@ -79,17 +79,29 @@ async def probe():
             timeout=24, trust_env=False, follow_redirects=False,
             headers={"User-Agent": "Mozilla/5.0"},
         ) as client:
-            home = await client.get(INDEX, headers={"Accept": "text/html"})
+            try:
+                home = await client.get(INDEX, headers={"Accept": "text/html"})
+            except ConnectorTransportError as err:
+                print("RU_DAG_JSON_NATIVE_BLOCKED_AT=GET_PUBLIC_GRID")
+                print("RU_DAG_JSON_NATIVE_RETRYABLE=" + str(err.retryable))
+                raise
             if "html" not in home.headers.get("content-type", "").lower() or not published_route(home.content):
                 raise ValueError("Official native list route not published")
             for i, filter_value in enumerate(("", None), 1):
-                response = await client.post(
-                    URL, json={"settings": settings(filter_value)}, headers={
-                        "Accept": "application/json, text/javascript",
-                        "X-Requested-With": "XMLHttpRequest",
-                        "Referer": INDEX,
-                    },
-                )
+                try:
+                    response = await client.post(
+                        URL, json={"settings": settings(filter_value)}, headers={
+                            "Accept": "application/json, text/javascript",
+                            "X-Requested-With": "XMLHttpRequest",
+                            "Referer": INDEX,
+                        },
+                    )
+                except ConnectorTransportError as err:
+                    print("RU_DAG_JSON_NATIVE_BLOCKED_AT=POST_VARIANT_" + str(i))
+                    print("RU_DAG_JSON_NATIVE_RETRYABLE=" + str(err.retryable))
+                    if err.retryable:
+                        raise
+                    continue
                 if "json" not in response.headers.get("content-type", "").lower():
                     raise ValueError("No first-party JSON content type")
                 try:

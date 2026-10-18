@@ -75,6 +75,9 @@ class DummyService:
         self.event.set()
         return []
 
+    async def unseen_matches(self, owner_user_id, matches):
+        return [m for m in matches if m not in self.claimed]
+
     async def claim_new(self, owner_user_id, matches):
         self.claimed.extend(matches)
         return matches
@@ -100,6 +103,30 @@ def test_ru_catalog_loop_sends_actual_profile_filtered_matches_not_non_ru():
         )
         assert len(service.claimed) == 1
         assert service.legacy == 0
+    asyncio.run(scenario())
+
+
+def test_telegram_network_failure_retries_without_losing_procurement_notice():
+    class FlakyBot(DummyBot):
+        def __init__(self, event):
+            super().__init__(event)
+            self.try_count = 0
+        async def send_message(self, chat_id, text, **kw):
+            self.try_count += 1
+            if self.try_count == 1:
+                self.event.set()
+                raise OSError("synthetic Telegram transport outage")
+            await super().send_message(chat_id, text, **kw)
+
+    async def scenario():
+        stop = asyncio.Event()
+        bot, service = FlakyBot(stop), DummyService(stop)
+        await monitor_loop(bot, service, stop, source_catalog=Catalog())
+        assert service.claimed == [] and bot.sent == []
+        stop.clear()
+        await monitor_loop(bot, service, stop, source_catalog=Catalog())
+        assert bot.try_count == 2
+        assert len(bot.sent) == len(service.claimed) == 1
     asyncio.run(scenario())
 
 

@@ -110,6 +110,14 @@ def canonical(href):
 def listing(body):
     found, seen = [], set()
     parsed = document(body)
+    print("RU_MURMANSK_REGISTRY_ROWS=" + str(len(parsed.rows)))
+    print("RU_MURMANSK_CANONICAL_CARD_LINKS=" + str(sum(
+        canonical(href) is not None
+        for row in parsed.rows for href, _ in row["links"]
+    )))
+    print("RU_MURMANSK_NATIVE_ROW_IDS=" + str(sum(
+        bool(NATIVE.search(" ".join(row["cells"]))) for row in parsed.rows
+    )))
     for row in parsed.rows:
         native = set(NATIVE.findall(" ".join(row["cells"])))
         if len(native) != 1:
@@ -178,6 +186,15 @@ def main():
         return 0 if len(notices) == REQUIRED else 2
     except (ValueError, ConnectorTransportError, httpx.HTTPError, OSError, TimeoutError) as error:
         print("RU_MURMANSK_ZMO=BLOCKED_" + type(error).__name__)
+        # Only whitelisted source failure classes, not raw pages or user data.
+        if isinstance(error, ValueError):
+            mapping = {
+                "No two current independently linked Murmansk ZMO notices": "CURRENT_LIST_EMPTY_OR_UNLINKED",
+                "Official Murmansk current registry not HTML": "NON_HTML_REGISTRY",
+                "Murmansk first-party original IDs not independent": "DUPLICATE_NOTICE_ID",
+                "Untrusted Murmansk registry HTML": "UNTRUSTED_HTML",
+            }
+            print("RU_MURMANSK_STAGE=" + mapping.get(str(error), "ORIGINAL_DETAIL_MISMATCH"))
         if isinstance(error, ConnectorTransportError):
             print("RU_MURMANSK_RETRYABLE=" + str(error.retryable))
         print("PRODUCTION_CHANGED=NO")

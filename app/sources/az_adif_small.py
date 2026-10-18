@@ -148,7 +148,9 @@ def parse_public_articles(html, *, today=None):
             continue  # Historical notices are not advertised as active opportunities.
         # First eligible document is the official tender specification, not a
         # generic bidder form: preferring "kotirovka" avoids shared documents.
-        eligible = [x for x in docs if "kotirovka" in urlsplit(x).path.casefold()]
+        eligible = [x for x in docs
+                    if "kotirovka" in urlsplit(x).path.casefold()
+                    and f"/{posted.year}/{posted.month:02d}/" in urlsplit(x).path]
         if len(eligible) != 1:
             raise SourceError("AZ ADIF missing unique original tender specification.")
         document = eligible[0]

@@ -58,6 +58,9 @@ def public_grid_token(html: bytes):
     form = AnonymousPublicGridFilter()
     form.feed(html.decode("utf-8-sig", "replace"))
     form.close()
+    print("RU_DAG_PUBLIC_GRID_TOKEN_COUNT=" + str(len(form.tokens)))
+    print("RU_DAG_PUBLIC_GRID_TOKEN_LENGTHS=" + ",".join(str(len(t)) for t in form.tokens[:4]))
+    print("RU_DAG_PUBLIC_GRID_FIELD_COUNT=" + str(len(form.names)))
     if len(form.tokens) != 1 or not TOKEN.fullmatch(form.tokens[0]):
         raise ValueError("No unambiguous public grid anti-forgery token")
     return form.tokens[0], sorted(form.names)

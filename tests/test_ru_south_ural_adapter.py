@@ -147,3 +147,50 @@ def test_deadline_from_malicious_unrelated_script_is_never_used():
     n,t,url=parse_public_listing(rows())[0]
     fake=page(n,t)+'<script>Date: 24.10.2026 20:00 (UTC+05:00) Екатеринбург</script>'.encode('utf-8')
     assert independently_verified_deadline(fake,n,t,url) is None
+
+
+def test_firstparty_optional_fields_only_with_verified_explicit_currency():
+    from app.sources.south_ural_public import verified_optional_fields
+    html = """<table>
+       <tr><td>Организация:</td><td>МБУ ШКОЛА № 7</td></tr>
+       <tr><td>Максимальная цена товаров, работ, услуг*</td><td>29 000,50</td></tr>
+       <tr><td>Валюта</td><td>Российский рубль</td></tr>
+       <tr><td>Тип закупки*</td><td>Закупка малого объема на основании 223-ФЗ</td></tr>
+       </table>""".encode("utf-8")
+    assert verified_optional_fields(html) == {
+        "customer": "МБУ ШКОЛА № 7",
+        "initial_price": 29000.5,
+        "currency": "RUB",
+        "summary": "Вид закупки: Закупка малого объема на основании 223-ФЗ",
+    }
+    html_without_currency = html.replace(
+        b"<td>Russian currency unavailable</td>",
+        b"",
+    ).replace("<tr><td>Валюта</td><td>Российский рубль</td></tr>".encode(), b"")
+    values = verified_optional_fields(html_without_currency)
+    assert values["initial_price"] is None and values["currency"] is None
+
+
+def test_unknown_amount_is_not_fabricated_and_html_scripts_ignored():
+    from app.sources.south_ural_public import verified_optional_fields
+    unknown = """<table><tr><td>Максимальная цена товаров, работ, услуг*</td>
+       <td>Цена не определена</td></tr>
+       <tr><td>Валюта</td><td>Российский рубль</td></tr></table>""".encode()
+    assert verified_optional_fields(unknown)["initial_price"] is None
+    assert verified_optional_fields(unknown)["currency"] is None
+    injected = b"<script><table><tr><td>\\xd0\\x92\\xd0\\xb0\\xd0\\xbb\\xd1\\x8e\\xd1\\x82\\xd0\\xb0</td><td>Russian ruble</td></tr></table></script>"
+    assert verified_optional_fields(injected)["initial_price"] is None
+
+
+def test_metadata_rejects_conflicting_buyer_and_malformed_explicit_rub_amount():
+    from app.sources.south_ural_public import verified_optional_fields
+    with pytest.raises(ValueError):
+        verified_optional_fields("""<table>
+           <tr><td>Организация</td><td>Первый покупатель</td></tr>
+           <tr><td>Организация</td><td>Второй покупатель</td></tr>
+           </table>""".encode("utf-8"))
+    with pytest.raises(ValueError):
+        verified_optional_fields("""<table>
+           <tr><td>Максимальная цена товаров, работ, услуг*</td><td>29.000 RUB</td></tr>
+           <tr><td>Валюта</td><td>Российский рубль</td></tr>
+           </table>""".encode("utf-8"))

@@ -191,6 +191,66 @@ def independently_verified_deadline(body, number, title, url):
     return dt.replace(tzinfo=timezone(offset)).isoformat(timespec="seconds")
 
 
+
+def verified_optional_fields(body):
+    """Optional fields read only from visible, separately verified public details.
+
+    The original tender number/title and exact zoned deadline are verified
+    elsewhere before these enrichment fields can enter an opportunity.
+    Price and RUB are emitted together only with an explicit currency field.
+    """
+    approved = {"организация", "максимальная цена товаров, работ, услуг",
+                "валюта", "тип закупки"}
+    fields = {}
+    for row in read_doc(body).rows:
+        cells = row["cells"]
+        if len(cells) != 2:
+            continue
+        label = cells[0].strip().rstrip("*: ").strip().casefold()
+        if label not in approved:
+            continue
+        value = cells[1].strip()
+        if not value or len(value) > 2000 or "\x00" in value:
+            raise ValueError("Invalid public optional procurement field")
+        if label in fields and fields[label] != value:
+            raise ValueError("Conflicting independently visible procurement fields")
+        fields[label] = value
+
+    customer = fields.get("организация")
+    if customer is not None and (not 3 <= len(customer) <= 2000
+            or not re.search(r"[А-Яа-яЁёA-Za-z]", customer)
+            or any(c in customer for c in "<>")):
+        customer = None
+
+    procurement_type = fields.get("тип закупки")
+    if procurement_type is not None and (len(procurement_type) > 160
+            or not (procurement_type.startswith("Закупка")
+                    or procurement_type.startswith("Запрос коммерческих предложений"))):
+        procurement_type = None
+
+    price = None
+    currency = None
+    raw = fields.get("максимальная цена товаров, работ, услуг")
+    declared_currency = fields.get("валюта")
+    if raw and raw not in ("Цена не определена", "Не установлена", "-"):
+        # An unlabeled or non-RUB figure must not be presented as RUB.
+        if declared_currency == "Российский рубль":
+            normalized = raw.replace("\u00a0", " ").replace("\u202f", " ")
+            if not re.fullmatch(r"(?:\d{1,3}(?: \d{3})+|\d{1,12})(?:,\d{1,2})?", normalized):
+                raise ValueError("Malformed official South Ural maximum price")
+            price = float(normalized.replace(" ", "").replace(",", "."))
+            if not math.isfinite(price) or not 0 < price <= 1_000_000_000_000:
+                raise ValueError("Invalid official South Ural maximum price")
+            currency = "RUB"
+
+    return {
+        "customer": customer,
+        "initial_price": price,
+        "currency": currency,
+        "summary": ("Вид закупки: " + procurement_type) if procurement_type else None,
+    }
+
+
 @dataclass(frozen=True)
 class SouthUralPublicSource:
     timeout: float = 20
@@ -228,6 +288,7 @@ class SouthUralPublicSource:
                         notice=TenderNotice(
                             source=SOURCE_ID,external_id=number,tender_number=number,
                             title=title,url=url,region="Челябинская область",deadline=deadline,
+                            **verified_optional_fields(detail.content),
                         )
                         validate_notice(notice,SOURCE_ID)
                         notices.append(notice)

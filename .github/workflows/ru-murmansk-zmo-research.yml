@@ -5,6 +5,7 @@ on:
     paths:
       - scripts/research_ru_murmansk_zmo_public.py
       - scripts/diag_ru_murmansk_json.py
+      - scripts/diag_ru_murmansk_export.py
       - tests/test_ru_murmansk_zmo_public.py
       - .github/workflows/ru-murmansk-zmo-research.yml
   push:
@@ -12,6 +13,7 @@ on:
     paths:
       - scripts/research_ru_murmansk_zmo_public.py
       - scripts/diag_ru_murmansk_json.py
+      - scripts/diag_ru_murmansk_export.py
       - tests/test_ru_murmansk_zmo_public.py
       - .github/workflows/ru-murmansk-zmo-research.yml
 permissions:
@@ -58,3 +60,17 @@ jobs:
       - name: Real official observed NoticesJson discovery endpoint, no fixture or production writes
         timeout-minutes: 4
         run: python -B -m scripts.diag_ru_murmansk_json
+  murmansk-official-registry-export-readonly-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Check fixed public first-party registry export, refuse login HTML
+        timeout-minutes: 4
+        run: python -B -m scripts.diag_ru_murmansk_export

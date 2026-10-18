@@ -88,7 +88,18 @@ def classify(body: bytes, *, address: str):
 
 async def check():
     with bounded_fetch(FetchPolicy(HOSTS, max_requests=4, max_bytes=1024*1024)):
-        links = discover(await _fetch(INDEX, 20, "text/html"))
+        index_html = await _fetch(INDEX, 20, "text/html")
+        links = discover(index_html)
+        markup = index_html.decode("utf-8", "replace")
+        anchor_text = {}
+        for match in re.finditer(r"<a\\b[^>]*href\\s*=\\s*[\\\"']([^\\\"']+)[\\\"'][^>]*>(.*?)</a\\s*>",
+                                 markup, re.I | re.S):
+            try:
+                candidate = _safe_link(html.unescape(match.group(1)), HOSTS, base=INDEX)
+            except SourceError:
+                continue
+            if candidate in links:
+                anchor_text[candidate] = re.sub(r"\\s+", " ", visible(match.group(2).encode("utf-8")))[:260]
         # Require all detail links to be derived from the CURRENT first-party list.
         priority = sorted(links, key=lambda x: (
             0 if "procurement-of-goods" in x else
@@ -102,6 +113,7 @@ async def check():
     failures = sum(x["state"] == "contradictory_original_deadline" for x in verified)
     print("KONYA_REAL_FIRST_PARTY_RESEARCH=" + json.dumps({
         "original_index_details": len(links), "probed": verified,
+        "index_anchor_samples": [anchor_text.get(link, "") for link in priority[:3]],
         "potential_current_notices": accepted, "blocked_conflicting_deadlines": failures,
         "production_connector_registered": False, "production_changed": False
     }, ensure_ascii=False, sort_keys=True))

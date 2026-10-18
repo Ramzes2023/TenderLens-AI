@@ -47,8 +47,6 @@ def settings(filter_value: str):
     if type(filter_value) is not str or not re.fullmatch(r"[0-9]{2}\.[0-9]{2}\.[0-9]{4}", filter_value):
         raise ValueError("Only official public day.month.year range allowed")
     try:
-        date.strptime(filter_value, "%d.%m.%Y")
-    except AttributeError:
         datetime.strptime(filter_value, "%d.%m.%Y")
     except ValueError:
         raise ValueError("Invalid official public date range") from None

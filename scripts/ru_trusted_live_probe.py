@@ -37,7 +37,7 @@ TARGETS = {
     "gpb_rss": Target("etpgpb.ru", "/procedures.rss", "rss"),
     "rzd_eshop": Target("eshoprzd.ru", "/"),
     "tektorg": Target("www.tektorg.ru", "/223-fz/procedures"),
-    "fabrikant_44_mirror": Target("soap4.fabrikant.ru", "/44/catalog/procedure/requestOffer"),
+    "fabrikant_44_mirror": Target("soap4.fabrikant.ru", "/44/catalog/procedure/published"),
     "fabrikant_223_mirror": Target("soap2.fabrikant.ru", "/223/catalog/procedure/finished"),
     "tatarstan_trading": Target("etpzakupki.tatar", "/app/SearchLots/"),
     "samara_small": Target("webtorgi.samregion.ru", "/smallpurchases"),

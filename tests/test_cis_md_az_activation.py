@@ -21,7 +21,7 @@ def settings(**changes):
 class CISOptInActivationContracts(unittest.TestCase):
     def test_default_both_sources_are_inert(self):
         catalog = build_source_catalog(settings())
-        for source in ("md_elicitatie", "az_azeristilik"):
+        for source in ("md_elicitatie", "az_azeristilik", "az_adif_small"):
             self.assertFalse(catalog.registry.get(source).enabled)
             self.assertNotIn(source, catalog.enabled_keys)
             with self.assertRaises(PermanentJobError):
@@ -36,6 +36,7 @@ class CISOptInActivationContracts(unittest.TestCase):
         for own, other, flag in (
             ("md_elicitatie", "az_azeristilik", "cis_md_elicitatie_enabled"),
             ("az_azeristilik", "md_elicitatie", "cis_az_azeristilik_enabled"),
+            ("az_adif_small", "md_elicitatie", "cis_az_adif_small_enabled"),
         ):
             with self.subTest(source=own):
                 catalog = build_source_catalog(settings(**{flag: True}))
@@ -53,10 +54,12 @@ class CISOptInActivationContracts(unittest.TestCase):
     def test_strict_pinned_real_hosts_and_no_credential_routes(self):
         self.assertEqual(HOSTS["md_elicitatie"], frozenset({"e-licitatie.md"}))
         self.assertEqual(HOSTS["az_azeristilik"], frozenset({"azeristilik.gov.az"}))
+        self.assertEqual(HOSTS["az_adif_small"], frozenset({"adif.gov.az"}))
 
     def test_boolean_operator_inputs_fail_closed(self):
         for key in ("VALYQON_CIS_MD_ELICITATIE_ENABLED",
-                    "VALYQON_CIS_AZ_AZERISTILIK_ENABLED"):
+                    "VALYQON_CIS_AZ_AZERISTILIK_ENABLED",
+                    "VALYQON_CIS_AZ_ADIF_SMALL_ENABLED"):
             with self.subTest(key=key):
                 with patch.dict(os.environ, {key: "true"}):
                     self.assertTrue(_bool(key, False))

@@ -95,3 +95,44 @@ jobs:
           echo "DIAGNOSTIC_ONLY=YES"
           echo "ORIGINAL_TENDER_VERIFIED=NO"
           echo "PRODUCTION_CHANGED=NO"
+
+  north-ossetia-redirect-target-diagnostic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read but never follow public 307 target, disclose no tokens or cookies
+        shell: bash
+        run: |
+          set -euo pipefail
+          headers="$(mktemp)"
+          trap 'rm -f "$headers"' EXIT
+          code="$(curl --noproxy '*' --silent --show-error --proto '=https' \
+            --retry 0 --max-redirs 0 --connect-timeout 8 --max-time 20 \
+            --dump-header "$headers" --output /dev/null --write-out '%{http_code}' \
+            'https://15.portalregion.ru/')" && rc=0 || rc=$?
+          echo "RU_NC_OSSETIA_HTTP=$code"
+          echo "RU_NC_OSSETIA_CURL_EXIT=$rc"
+          python - "$headers" <<'PY'
+          import pathlib, sys
+          from urllib.parse import urljoin, urlsplit
+          raw = pathlib.Path(sys.argv[1]).read_text(errors="replace")
+          redirects = [
+              line.split(":", 1)[1].strip()
+              for line in raw.splitlines()
+              if line.lower().startswith("location:")
+          ]
+          if len(redirects) != 1:
+              print("RU_NC_REDIRECT_KIND=NONE_OR_AMBIGUOUS")
+          else:
+              u = urlsplit(urljoin("https://15.portalregion.ru/", redirects[0]))
+              if (u.scheme == "https" and u.hostname == "15.portalregion.ru"
+                      and not u.username and not u.password and u.port is None
+                      and not any(c in u.path for c in "\r\n")):
+                  print("RU_NC_REDIRECT_KIND=SAME_HOST_HTTPS")
+                  print("RU_NC_REDIRECT_PUBLIC_PATH=" + u.path[:140])
+                  print("RU_NC_REDIRECT_HAS_QUERY=" + str(bool(u.query)))
+              else:
+                  print("RU_NC_REDIRECT_KIND=EXTERNAL_OR_UNSAFE")
+          PY
+          echo "DIAGNOSTIC_ONLY=YES"
+          echo "ORIGINAL_TENDER_VERIFIED=NO"

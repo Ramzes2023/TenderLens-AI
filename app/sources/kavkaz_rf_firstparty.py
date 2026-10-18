@@ -58,7 +58,7 @@ class _Doc(HTMLParser):
             self.cell = []
         if tag == "a" and self.row is not None:
             self.anchor = [dict(attrs).get("href"), []]
-        if tag == "h1" and self.heading is None:
+        if tag in {"h1", "h2"} and self.heading is None:
             self.heading = []
 
     def handle_data(self, data):
@@ -88,7 +88,7 @@ class _Doc(HTMLParser):
         if tag == "tr" and self.row is not None:
             self.rows.append(self.row)
             self.row = None
-        if tag == "h1" and self.heading is not None:
+        if tag in {"h1", "h2"} and self.heading is not None:
             self.headings.append(_norm(" ".join(self.heading)))
             self.heading = None
 

@@ -47,6 +47,50 @@ class Audit(HTMLParser):
                                "parents": "/".join(self.stack[-4:]),
                                "text": v})
 
+class _Sections(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.depth = 0
+        self.current = None
+        self.records = []
+        self.in_hidden = 0
+        self.tag = ""
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script","style"):
+            self.in_hidden += 1
+        if tag == "section":
+            if self.current is None:
+                self.current = {"sections":0,"heads":[],"texts":[],"links":[]}
+            self.depth += 1
+        if self.current is not None:
+            if tag in ("h3", "p"):
+                self.tag = tag
+            if tag == "a":
+                href = dict(attrs).get("href", "")
+                if href and len(self.current["links"]) < 12:
+                    self.current["links"].append(href[:160])
+    def handle_endtag(self, tag):
+        if tag == "section" and self.current is not None:
+            self.depth -= 1
+            if self.depth == 0:
+                self.records.append(self.current)
+                self.current = None
+        if tag == self.tag:
+            self.tag = ""
+        if tag in ("script","style") and self.in_hidden:
+            self.in_hidden -= 1
+    def handle_data(self, data):
+        if self.current is None or self.in_hidden:
+            return
+        value = " ".join(data.split())
+        if not value:
+            return
+        if self.tag == "h3":
+            self.current["heads"].append(value[:350])
+        if self.tag == "p" and len(self.current["texts"]) < 35:
+            self.current["texts"].append(value[:190])
+
+
 async def run():
     try:
         with bounded_fetch(FetchPolicy(frozenset({HOST}), 1, max_bytes=MAX_BYTES)):
@@ -56,6 +100,8 @@ async def run():
             raise RuntimeError("No real HTML")
         parser = Audit()
         parser.feed(response.text)
+        sections = _Sections()
+        sections.feed(response.text)
         sampled = [node for node in parser.nodes if any(s in node["text"].casefold()
                    for s in ("kotirovka", "satınalma", "təkliflər", "yerləşdirilmə tarixi"))]
         evidence = {
@@ -66,6 +112,12 @@ async def run():
             "sample_tags": [{"tag": n["tag"], "parents": n["parents"], "text_prefix": n["text"][:145]}
                             for n in sampled[:15]],
             "recent_oct_2026": sum(bool(re.search(r"02[.]10[.]2026", n["text"])) for n in parser.nodes),
+            "section_count": len(sections.records),
+            "sections_first6": [
+                {"heads": v["heads"][:3], "texts": v["texts"][:12],
+                 "links": v["links"][:5]}
+                for v in sections.records[:6]
+            ],
             "same_page_only": True,
             "production_enabled": False,
         }

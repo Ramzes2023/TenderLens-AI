@@ -110,6 +110,30 @@ def strict_original_link(href):
     return link.geturl()
 
 
+def disclosed_grid_paths(raw):
+    """Diagnostic-only same-page GzwSP route hints; NO inferred API requests.
+
+    These strings may occur in public inline JavaScript and do not by themselves
+    establish an open endpoint, original notice, or safe GET/POST contract.
+    """
+    if type(raw) is not bytes or not 0 < len(raw) <= MAX_BYTES or b"\\x00" in raw:
+        raise ValueError("Invalid original research HTML")
+    routes = set()
+    for hit in re.findall(
+        rb"/smallpurchases/GzwSP/[A-Za-z][A-Za-z0-9_]{2,55}",
+        raw, re.IGNORECASE,
+    ):
+        try:
+            route = hit.decode("ascii")
+        except UnicodeDecodeError:
+            continue
+        # Print ONLY a fixed local namespace and a short, identifier-free
+        # action name; no query, credentials, tokens, body or external origins.
+        if re.fullmatch(r"/smallpurchases/GzwSP/[A-Za-z][A-Za-z0-9_]{2,55}", route):
+            routes.add(route)
+    return tuple(sorted(routes))[:12]
+
+
 def listing(raw):
     doc = document(raw)
     print("RU_SAMARA_LIST_ROWS=" + str(len(doc.rows)))
@@ -134,6 +158,10 @@ def listing(raw):
     print("RU_SAMARA_LIST_NATIVE_ID_ROWS=" + str(sum(
         bool(NATIVE_ID.search(" ".join(row["cells"]))) for row in doc.rows
     )))
+    hints = disclosed_grid_paths(raw)
+    print("RU_SAMARA_GRID_ROUTE_HINTS=" + str(len(hints)))
+    for number, hint in enumerate(hints, 1):
+        print("RU_SAMARA_GRID_ROUTE_HINT_" + str(number) + "=" + hint)
     verified, seen = [], set()
     for row in doc.rows:
         ids = set(NATIVE_ID.findall(" ".join(row["cells"])))

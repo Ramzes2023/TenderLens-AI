@@ -38,6 +38,7 @@ class MonitoringSettings:
     tektorg_public_enabled: bool = False
     mikroton_tender_enabled: bool = False
     gpb_etp_public_enabled: bool = False
+    fabrikant_44_public_enabled: bool = False
     lenobl_small_public_enabled: bool = False
     nmck_native_public_enabled: bool = False
     stan_commercial_public_enabled: bool = False
@@ -125,6 +126,7 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         tektorg_public_enabled=_bool("TEKTORG_PUBLIC_ENABLED", False),
         mikroton_tender_enabled=_bool("MIKROTON_TENDER_ENABLED", False),
         gpb_etp_public_enabled=_bool("GPB_ETP_PUBLIC_ENABLED", False),
+        fabrikant_44_public_enabled=_bool("FABRIKANT_44_PUBLIC_ENABLED", False),
         lenobl_small_public_enabled=_bool("LENOBL_SMALL_PUBLIC_ENABLED", False),
         nmck_native_public_enabled=_bool("NMCK_NATIVE_PUBLIC_ENABLED", False),
         stan_commercial_public_enabled=_bool("STAN_COMMERCIAL_PUBLIC_ENABLED", False),

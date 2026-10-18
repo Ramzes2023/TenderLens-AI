@@ -11,6 +11,7 @@ from .kg_gov_legacy import KyrgyzstanGovLegacySource
 from .kz_gov_html import KazakhstanGovHtmlSource
 from .uz_uzex import UzbekistanUzexSource
 from .md_achizitii import MoldovaAchizitiiSource
+from .az_adif_small import AzerbaijanAdifSmallSource
 from .asia_public import ASIA_RSS_FEEDS, AsiaPublicSource
 from .jp_jetro_bid_rss import JetroBidRssSource, RSS_URL as JETRO_BID_RSS_URL
 from .hk_hyd_tenders import HighwaysTendersSource, RSS_URL as HYD_TENDERS_RSS_URL
@@ -484,6 +485,22 @@ def build_source_catalog(
         languages=("ro", "ru"),
         homepage_url="https://achizitii.md/ro/",
         official=False,
+        enabled=False,
+        capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
+    ))
+
+    # Independent official small public quotation notices: ADIF Azerbaijan.
+    # This is NOT the national procurement API. Activation remains disabled
+    # until strictly green official HTTPS -> worker -> persisted query acceptance.
+    registry.register(SourceRegistration(
+        key="az_adif_small",
+        display_name="Azerbaijan Deposit Insurance Fund — small public quotations",
+        source=AzerbaijanAdifSmallSource(timeout=min(timeout, 30)),
+        transport=SourceTransport.HTML,
+        jurisdictions=("AZ",),
+        languages=("az",),
+        homepage_url="https://adif.gov.az/az/sale/",
+        official=True,
         enabled=False,
         capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
     ))

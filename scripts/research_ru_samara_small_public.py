@@ -116,7 +116,7 @@ def disclosed_grid_paths(raw):
     These strings may occur in public inline JavaScript and do not by themselves
     establish an open endpoint, original notice, or safe GET/POST contract.
     """
-    if type(raw) is not bytes or not 0 < len(raw) <= MAX_BYTES or b"\\x00" in raw:
+    if type(raw) is not bytes or not 0 < len(raw) <= MAX_BYTES or b"\x00" in raw:
         raise ValueError("Invalid original research HTML")
     routes = set()
     for hit in re.findall(

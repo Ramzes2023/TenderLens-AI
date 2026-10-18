@@ -1,0 +1,44 @@
+name: RU Samara independent original small-purchase research
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/research_ru_samara_small_public.py
+      - tests/test_ru_samara_small_public.py
+      - .github/workflows/ru-samara-small-original-research.yml
+  push:
+    branches: [research/ru-samara-small-municipal-originals-20261018]
+    paths:
+      - scripts/research_ru_samara_small_public.py
+      - tests/test_ru_samara_small_public.py
+      - .github/workflows/ru-samara-small-original-research.yml
+permissions:
+  contents: read
+jobs:
+  samara-official-parser-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Strict native municipal notice, host and independent detail contracts
+        run: python -m pytest -q tests/test_ru_samara_small_public.py
+  samara-official-two-original-notices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require two distinct real official current Samara notice links, details, buyers and prices
+        timeout-minutes: 5
+        run: python -B -m scripts.research_ru_samara_small_public

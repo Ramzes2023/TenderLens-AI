@@ -180,37 +180,51 @@ def describe_public_json_shape(raw):
 
 
 async def probe_disclosed_public_json(client, html):
-    """One anonymous same-origin GET, *only* for original HTML-disclosed path."""
+    """At most two anonymous same-host diagnostic reads of a disclosed JSON path.
+
+    GET and one empty-body POST are informational-only requests: no credentials,
+    cookies, mutations, search profile, arbitrary method or operator URL. Even
+    a valid JSON structure NEVER counts as independently verified tenders.
+    """
     path = "/smallpurchases/GzwSP/NoticesJson"
     if path not in disclosed_grid_paths(html):
         print("RU_SAMARA_JSON_DIAG=NOT_DISCLOSED")
         return
-    print("RU_SAMARA_JSON_GRID_METHOD_HINT=" + disclosed_json_grid_method(html))
-    try:
-        client.cookies.clear()  # Never reuse a server-issued guest session.
-        response = await client.get("https://" + HOST + path)
-        client.cookies.clear()
-        print("RU_SAMARA_JSON_HTTP_STATUS=" + str(response.status_code))
-        if response.status_code != 200:
-            print("RU_SAMARA_JSON_DIAG=HTTP_NOT_OK")
+    hint = disclosed_json_grid_method(html)
+    print("RU_SAMARA_JSON_GRID_METHOD_HINT=" + hint)
+    url = "https://" + HOST + path
+    # A page explicitly declaring GET cannot authorize a speculative POST.
+    methods = ("GET",) if hint == "GET" else ("GET", "POST")
+    for method in methods:
+        try:
+            client.cookies.clear()
+            kwargs = {"headers": {"Accept": "application/json"}}
+            if method == "POST":
+                kwargs["content"] = b""  # No forms, CSRF fields or guessed paging.
+            response = await client.request(method, url, **kwargs)
+            client.cookies.clear()
+            print("RU_SAMARA_JSON_" + method + "_HTTP_STATUS=" + str(response.status_code))
+            mime = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+            if mime not in {"application/json", "text/json"}:
+                print("RU_SAMARA_JSON_" + method + "=NOT_JSON")
+                continue
+            diagnostic = describe_public_json_shape(response.content)
+            print("RU_SAMARA_JSON_" + method + "_ROOT=" + diagnostic["root"])
+            print("RU_SAMARA_JSON_" + method + "_ROWS=" + str(diagnostic["rows"]))
+            print("RU_SAMARA_JSON_" + method + "_NATIVE_IDS=" + str(diagnostic["native_ids_visible"]))
+            print("RU_SAMARA_JSON_" + method + "_KEYS=" + ",".join(diagnostic["keys"]))
+            print("RU_SAMARA_JSON_DIAG=STRUCTURE_ONLY_NOT_ORIGINALS")
             return
-        mime = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
-        print("RU_SAMARA_JSON_MIME=" + (
-            "json" if mime in {"application/json", "text/json"} else "other"
-        ))
-        if mime not in {"application/json", "text/json"}:
-            print("RU_SAMARA_JSON_DIAG=NOT_JSON")
-            return
-        diagnostic = describe_public_json_shape(response.content)
-        print("RU_SAMARA_JSON_ROOT=" + diagnostic["root"])
-        print("RU_SAMARA_JSON_ROW_COUNT=" + str(diagnostic["rows"]))
-        print("RU_SAMARA_JSON_NATIVE_ID_COUNT=" + str(diagnostic["native_ids_visible"]))
-        print("RU_SAMARA_JSON_KEYS=" + ",".join(diagnostic["keys"]))
-        print("RU_SAMARA_JSON_DIAG=STRUCTURE_ONLY")
-    except (ConnectorTransportError, httpx.HTTPError, ValueError, OSError, TimeoutError) as exc:
-        print("RU_SAMARA_JSON_DIAG=BLOCKED_" + type(exc).__name__)
-        if isinstance(exc, ConnectorTransportError):
-            print("RU_SAMARA_JSON_RETRYABLE=" + str(exc.retryable))
+        except (ConnectorTransportError, httpx.HTTPError, ValueError, OSError, TimeoutError) as exc:
+            print("RU_SAMARA_JSON_" + method + "=BLOCKED_" + type(exc).__name__)
+            if isinstance(exc, ConnectorTransportError):
+                print("RU_SAMARA_JSON_" + method + "_RETRYABLE=" + str(exc.retryable))
+                # A transient upstream outage must not trigger a second request.
+                if exc.retryable:
+                    return
+        finally:
+            client.cookies.clear()
+    print("RU_SAMARA_JSON_DIAG=BLOCKED_NO_VERIFIABLE_DATA")
 
 
 def listing(raw):
@@ -278,7 +292,7 @@ def original_detail(raw, notice_id, title, url):
 
 
 async def real():
-    with bounded_fetch(FetchPolicy(frozenset({HOST}), REQUIRED + 3,
+    with bounded_fetch(FetchPolicy(frozenset({HOST}), REQUIRED + 4,
                                    max_bytes=MAX_BYTES)):
         async with source_client(
             timeout=25, trust_env=False, follow_redirects=False,

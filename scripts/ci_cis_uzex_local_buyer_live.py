@@ -119,7 +119,14 @@ def verify(source_id):
             local = [n for n in stored if n.customer and
                      any(term in n.customer.casefold() for term in local_terms)]
             if not local:
-                raise AssertionError("No current authentic district/municipal buyers in official first 20")
+                # Safe metrics, no customer names, upstream payload or tokens.
+                # A red test here identifies insufficient *regional depth* in
+                # an otherwise valid official feed, not a broken central API.
+                return {"source": source_id, "passed": False,
+                        "failed_at": "regional_buyer_not_in_bounded_latest_trade_list",
+                        "stored_notices": len(stored),
+                        "regional_customer_rows": 0,
+                        "verified_official_source": True}
             buyer = local[0]
             local_result = asyncio.run(snapshot_catalog(catalog, notices).fetch(
                 source_keys=(source_id,), limit_per_source=20,
@@ -127,7 +134,11 @@ def verify(source_id):
             ))
             if local_result.failures or not any(n.identity == buyer.identity
                                                for n in local_result.notices):
-                raise AssertionError("Uzbek local buyer cannot be recovered by actual saved query")
+                return {"source": source_id, "passed": False,
+                        "failed_at": "actual_regional_buyer_saved_query_failed",
+                        "stored_notices": len(stored),
+                        "regional_customer_rows": len(local),
+                        "regional_buyer_matches": len(local_result.notices)}
             if any(n.source != source_id for n in local_result.notices):
                 raise AssertionError("Uzbek local source search leaked unrelated data")
             return {"local_buyers": len(local), "local_buyer_matches": len(local_result.notices), "source": source_id, "passed": True, "stored_notices": len(stored),

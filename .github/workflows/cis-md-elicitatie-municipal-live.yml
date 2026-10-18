@@ -1,0 +1,66 @@
+name: CIS Moldova municipal e-Licitatie genuine source acceptance
+
+on:
+  push:
+    branches:
+      - integration/cis-md-elicitatie-regional-20261018
+    paths:
+      - app/sources/md_elicitatie.py
+      - app/sources/catalog.py
+      - app/sources/ingestion.py
+      - tests/test_cis_md_elicitatie.py
+      - scripts/ci_cis_md_elicitatie_live_acceptance.py
+      - .github/workflows/cis-md-elicitatie-municipal-live.yml
+  pull_request:
+    paths:
+      - app/sources/md_elicitatie.py
+      - app/sources/catalog.py
+      - app/sources/ingestion.py
+      - tests/test_cis_md_elicitatie.py
+      - scripts/ci_cis_md_elicitatie_live_acceptance.py
+      - .github/workflows/cis-md-elicitatie-municipal-live.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cis-md-elicitatie-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  md-elicitatie-strict-parser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install audited project test dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Reject missing buyer, OCID, amount, dates, impostor hosts, and accidental activation
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHON_DOTENV_DISABLED: '1'
+        run: python -B -m unittest discover -s tests -p test_cis_md_elicitatie.py -v
+
+  md-elicitatie-real-worker-search:
+    needs: [md-elicitatie-strict-parser]
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install worker and persistence dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Require real upstream HTTPS, fenced worker, disposable SQLite, and actual saved-search result
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHON_DOTENV_DISABLED: '1'
+        run: python -B -m scripts.ci_cis_md_elicitatie_live_acceptance --source md_elicitatie

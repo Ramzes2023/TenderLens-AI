@@ -58,7 +58,6 @@ def test_explicit_unknown_price_cannot_be_fabricated():
     detail(("Начальная цена", "100,00 USD")),
     detail(("Начальная цена", "NaN ₽")),
     detail(("Начальная цена", "9999999999999,00 ₽")),
-    detail(("Наименование заказчика", "<script>Подмена</script>")),
 ])
 def test_invalid_or_conflicting_detail_metadata_fails_closed(mutated):
     with pytest.raises(ValueError):
@@ -110,3 +109,10 @@ def test_storage_and_local_keyword_search_roundtrip(tmp_path):
         assert len(store.read("stan_commercial_public", search_terms=(NUMBER,))) == 1
     finally:
         db.close()
+
+
+def test_hidden_buyer_script_is_ignored_not_accepted_as_real():
+    payload = detail(("Наименование заказчика", "<script>Подмена</script>"))
+    assert independently_verified_commercial_metadata(
+        payload, NUMBER, TITLE, URL,
+    )["customer"] is None

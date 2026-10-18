@@ -56,3 +56,42 @@ jobs:
       - name: Real independent original notices only; fail on JS-only shell, redirects or missing details
         timeout-minutes: 5
         run: python -B -m scripts.research_ru_north_caucasus_small --region "${{ matrix.region }}"
+
+  fixed-host-readonly-connectivity-diagnostic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        region: [north_ossetia, kbr, nalchik, kchr, dagestan_vitrine]
+    steps:
+      - name: Classify public DNS, direct HTTPS and HTTP status without credentials or redirect
+        shell: bash
+        env:
+          REGION: ${{ matrix.region }}
+        run: |
+          set -euo pipefail
+          case "$REGION" in
+            north_ossetia) host='15.portalregion.ru' ;;
+            kbr) host='kbr.sberb2b.ru' ;;
+            nalchik) host='nalchik.sberb2b.ru' ;;
+            kchr) host='kchr.sberb2b.ru' ;;
+            dagestan_vitrine) host='dagestan.sberb2b.ru' ;;
+            *) exit 2 ;;
+          esac
+          if getent ahostsv4 "$host" >/dev/null; then
+            echo "RU_NC_DNS=RESOLVED"
+          else
+            echo "RU_NC_DNS=UNRESOLVED"
+          fi
+          # One first-party public GET only. Do not accept redirects or TLS downgrade.
+          result="$(curl --noproxy '*' --silent --show-error --proto '=https' \
+            --retry 0 --max-redirs 0 --connect-timeout 8 --max-time 22 \
+            --output /dev/null --write-out '%{http_code}' "https://$host/")" && rc=0 || rc=$?
+          echo "RU_NC_REGION=$REGION"
+          echo "RU_NC_HTTP_STATUS=$result"
+          echo "RU_NC_CURL_EXIT=$rc"
+          echo "DIAGNOSTIC_ONLY=YES"
+          echo "ORIGINAL_TENDER_VERIFIED=NO"
+          echo "PRODUCTION_CHANGED=NO"

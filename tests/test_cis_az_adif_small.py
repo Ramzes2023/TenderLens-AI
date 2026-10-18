@@ -74,10 +74,25 @@ class ADIFSmallContracts(unittest.TestCase):
         self.assertEqual(rows[0].published_at, "2026-10-02")
 
     def test_stale_notices_are_not_falsely_active(self):
-        with self.assertRaises(SourceError):
-            parse_public_articles(fixture(),today=date(2026,10,20))
+        # Real official 19 Oct bid deadlines must be treated as closed from
+        # 20 Oct, but a healthy dated bulletin remains a healthy empty source.
+        self.assertEqual(parse_public_articles(fixture(), today=date(2026,10,20)), [])
+        self.assertEqual(parse_public_articles(fixture(), today=date(2027,1,20)), [])
         with self.assertRaises(SourceError):
             parse_public_articles(fixture(date_value="02.10.2028"),today=date(2026,10,18))
+
+    def test_healthy_empty_is_not_malformed_html_or_missing_official_proof(self):
+        for bad in (
+            '<html><article><p>Random non-procurement news</p></article></html>',
+            '<html><article><p>Elanın yerləşdirilmə tarixi: 02.10.2026</p></article></html>',
+            fixture(date_value="missing"),
+        ):
+            with self.subTest(case=bad[:65]), self.assertRaises(SourceError):
+                parse_public_articles(bad, today=date(2026,10,20))
+        # Archive in newest-first HTML can be empty without inventing offers.
+        closed = fixture() + fixture(date_value="02.01.2026")
+        self.assertEqual(parse_public_articles(closed, today=date(2026,10,20)), [])
+
 
     def test_disabled_first_party_catalog_and_worker_host(self):
         cfg=MonitoringSettings(False,600,20,5,12,(),None)

@@ -42,6 +42,8 @@ HOSTS = {
     'nmck_native_public': frozenset({'xn--j1adc1b.xn--p1ai'}),
     'stan_commercial_public': frozenset({'stantorgi.ru'}),
     'south_ural_public': frozenset({'www.vendorportal.ru'}),
+    # STAGED RESEARCH ONLY. Not in the runtime catalog or production configuration.
+    'ru_dagestan_public_list': frozenset({'goszakaz.e-dag.ru'}),
     'eis_223': frozenset({'zakupki.gov.ru'}),
     'eis_44_html': frozenset({'zakupki.gov.ru'}),
     'eis': frozenset({'zakupki.gov.ru', 'www.zakupki.gov.ru'}),
@@ -171,6 +173,7 @@ class ConnectorSyncHandler:
                          else min(self.max_records, 2) + 1 if source_id == 'nmck_native_public'
                          else min(self.max_records, 2) + 1 if source_id == 'stan_commercial_public'
                          else min(self.max_records, 10) + 1 if source_id == 'south_ural_public'
+                         else 2 if source_id == 'ru_dagestan_public_list'
                          else 2 if source_id == 'mikroton_tender'
                          else 1)
         async def fetch():

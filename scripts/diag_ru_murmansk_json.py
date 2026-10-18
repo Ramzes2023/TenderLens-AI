@@ -45,7 +45,14 @@ async def probe():
             timeout=24, trust_env=False, follow_redirects=False,
             headers={"Accept": "application/json", "User-Agent": "Mozilla/5.0"},
         ) as client:
-            result = await client.get(URL, params=QUERY)
+            # jqGrid commonly posts pagination as form data. This is a
+            # fixed, non-mutating, first-party public registry *read*, not a
+            # general cross-site POST, login, cookie or anti-bot workaround.
+            result = await client.post(
+                URL, data=QUERY,
+                headers={"X-Requested-With": "XMLHttpRequest",
+                         "Content-Type": "application/x-www-form-urlencoded"},
+            )
             result.raise_for_status()
             if "json" not in result.headers.get("content-type", "").lower():
                 print("RU_MURMANSK_JSON=NOT_JSON")

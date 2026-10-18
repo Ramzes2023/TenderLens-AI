@@ -15,30 +15,28 @@ from app.database.config import DatabaseSettings
 from app.jobs import HandlerRegistry, JobRepository, JobSettings
 from app.jobs.models import JobScope
 from app.jobs.worker import Worker
-from app.sources.catalog import SourceCatalog
+from app.monitoring.config import MonitoringSettings
+from app.sources.catalog import build_source_catalog
 from app.sources.ingestion import JOB_TYPE, ConnectorSyncHandler, ConnectorSyncService, connector_version
 from app.sources.kavkaz_rf_firstparty import KavkazRfFirstpartySource, SOURCE_ID, HOST, _canonical
-from app.sources.multi import MultiSourceFetcher
 from app.sources.opportunities import OpportunityRepository
-from app.sources.registry import SourceRegistration, SourceRegistry, SourceTransport, SourceCapabilities
 from app.sources.snapshots import snapshot_catalog
 
 
-def isolated_catalog():
-    registry = SourceRegistry((
-        SourceRegistration(
-            key=SOURCE_ID, display_name="Kavkaz.RF genuine corporate procurements",
-            source=KavkazRfFirstpartySource(), transport=SourceTransport.HTML,
-            jurisdictions=("RU",), languages=("ru",),
-            homepage_url="https://" + HOST + "/purchases_sales/zakupki/tekushchie-/",
-            official=False, enabled=True, capabilities=SourceCapabilities(),
-        ),
-    ))
-    return SourceCatalog(registry=registry, fetcher=MultiSourceFetcher(registry, concurrency=1))
+def configured_catalog():
+    """Use the real runtime registration path with explicit opt-in (no remote jobs)."""
+    settings = MonitoringSettings(
+        enabled=False, interval_seconds=600, max_items=2,
+        max_notifications_per_cycle=2, request_timeout=25,
+        eis_rss_urls=(), ca_bundle_file=None,
+        profile_feeds_enabled=False,
+        kavkaz_rf_firstparty_enabled=True,
+    )
+    return build_source_catalog(settings)
 
 
 def proof():
-    catalog = isolated_catalog()
+    catalog = configured_catalog()
     assert SOURCE_ID in catalog.enabled_keys
     with tempfile.TemporaryDirectory(prefix="valyqon-kavkaz-rf-") as tmp:
         database = Database(DatabaseSettings("ru-kavkaz-real", Path(tmp) / "proof.sqlite"))

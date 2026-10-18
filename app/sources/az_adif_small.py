@@ -131,21 +131,32 @@ def parse_public_articles(html, *, today=None):
         if not 24 <= len(title) <= 1000:
             raise SourceError("AZ ADIF invalid public tender title.")
         pub = [PUBLISHED.fullmatch(x) for x in ps if PUBLISHED.fullmatch(x)]
-        bids = [DEADLINE.fullmatch(x) for x in ps if DEADLINE.fullmatch(x)]
-        docs = list(dict.fromkeys(x for x in item["docs"] if _official_doc(x)))
-        if len(pub) != 1 or len(bids) != 1 or not docs:
-            raise SourceError("AZ ADIF tender missing deadline, posting, or first-party documents.")
+        if len(pub) != 1:
+            raise SourceError("AZ ADIF candidate missing unique public posting date.")
         try:
             day, month, year = (int(x) for x in pub[0].groups())
             posted = date(year, month, day)
+        except ValueError:
+            raise SourceError("AZ ADIF impossible public posting date.") from None
+        # Legacy archived articles use multiple older document formats.
+        # Ignore them *before* requiring the stricter active-notice layout.
+        if (today - posted).days > 90:
+            continue
+        if posted > today + timedelta(days=1):
+            raise SourceError("AZ ADIF future-dated publication rejected.")
+        bids = [DEADLINE.fullmatch(x) for x in ps if DEADLINE.fullmatch(x)]
+        docs = list(dict.fromkeys(x for x in item["docs"] if _official_doc(x)))
+        if len(bids) != 1 or not docs:
+            raise SourceError("AZ ADIF recent candidate missing deadline or first-party documents.")
+        try:
             d, monthname, yr, hr, minute = bids[0].groups()
             close = datetime(int(yr), MONTHS[monthname.lower()], int(d), int(hr), int(minute))
         except (ValueError, KeyError):
-            raise SourceError("AZ ADIF impossible publication or deadline.") from None
-        if close.date() < posted or posted > today + timedelta(days=1):
-            raise SourceError("AZ ADIF inconsistent bid window.")
-        if (today - posted).days > 90 or close.date() < today:
-            continue  # Historical notices are not advertised as active opportunities.
+            raise SourceError("AZ ADIF impossible public deadline.") from None
+        if close.date() < posted:
+            raise SourceError("AZ ADIF deadline before publication.")
+        if close.date() < today:
+            continue  # Historical closed tenders never count as active opportunities.
         # First eligible document is the official tender specification, not a
         # generic bidder form: preferring "kotirovka" avoids shared documents.
         eligible = [x for x in docs

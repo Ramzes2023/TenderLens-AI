@@ -88,7 +88,9 @@ async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: in
         if monitoring_service is not None and monitoring_service.settings.enabled:
             from .monitoring import monitor_loop
             monitor_stop = asyncio.Event()
-            monitor_task = asyncio.create_task(monitor_loop(bot, monitoring_service, monitor_stop))
+            monitor_task = asyncio.create_task(monitor_loop(
+                bot, monitoring_service, monitor_stop, source_catalog=source_catalog,
+            ))
             logger.info("Автомониторинг тендеров запущен.")
         logger.info("VALYQON AI запущен. Остановка: Ctrl+C.")
         try:
@@ -233,12 +235,20 @@ def main() -> int:
             ),
         )
 
-        # Background monitoring intentionally remains EIS-only.
-        if eis_registration.enabled:
-            monitoring_service = (
-                tender_discovery_service
-            )
-
+        # Existing EIS behavior is preserved by default. Switching to the
+        # reviewed Russian catalog requires explicit opt-in and at least one
+        # operator-enabled RU registration. Never start an empty monitor.
+        ru_keys = tuple(
+            m.key for m in source_catalog.registry.metadata()
+            if m.enabled and "RU" in m.jurisdictions
+        )
+        if monitor_settings.ru_background_catalog_enabled:
+            if ru_keys:
+                monitoring_service = tender_discovery_service
+            else:
+                logger.warning("Russian background monitoring has no enabled RU sources.")
+        elif eis_registration.enabled:
+            monitoring_service = tender_discovery_service
         elif monitor_settings.enabled:
             logger.warning(
                 "Background monitoring is enabled, "

@@ -348,6 +348,7 @@ class TenderMonitorService:
         self,
         catalog: "SourceCatalog",
         profile: CompanyProfile | None,
+        *, source_keys: tuple[str, ...] | None = None,
     ) -> tuple[
         list[MonitorMatch],
         "MultiSourceFetchReport",
@@ -362,6 +363,7 @@ class TenderMonitorService:
 
         report = await catalog.fetch(
             limit_per_source=self.settings.max_items,
+            source_keys=source_keys,
             search_terms=search_terms,
             max_eis_feeds=self.settings.profile_feed_limit,
         )
@@ -383,6 +385,7 @@ class TenderMonitorService:
         self,
         catalog: "SourceCatalog",
         owner_user_id: int | None = None,
+        *, source_keys: tuple[str, ...] | None = None,
     ) -> tuple[
         list[MonitorMatch],
         "MultiSourceFetchReport",
@@ -396,6 +399,7 @@ class TenderMonitorService:
         return await self.fetch_matches_from_catalog_for_profile(
             catalog,
             profile,
+            source_keys=source_keys,
         )
 
     async def scan_new_from_catalog(
@@ -476,6 +480,24 @@ class TenderMonitorService:
         scope = await asyncio.to_thread(self.scope_resolver, owner_user_id)
         return f"{source}:company:{scope}" if scope else source
 
+    async def unseen_matches(
+        self, owner_user_id: int, matches: list[MonitorMatch],
+    ) -> list[MonitorMatch]:
+        """Nonmutating preview for at-least-once delivery; claim only after send.
+
+        The repository remains authoritative. Concurrent deliveries could
+        repeat a notice, but a failed Telegram send never loses it.
+        """
+        unseen = []
+        for match in matches:
+            notice = match.notice
+            dedup_source = await self.dedup_source(owner_user_id, notice.source)
+            if not await asyncio.to_thread(
+                self.repository.seen, owner_user_id, dedup_source, notice.external_id,
+            ):
+                unseen.append(match)
+        return unseen
+
     async def claim_new(self, owner_user_id: int, matches: list[MonitorMatch]) -> list[MonitorMatch]:
         new: list[MonitorMatch] = []
         for match in matches:
@@ -502,6 +524,18 @@ class TenderMonitorService:
             )
             count += int(first)
         return count
+
+    async def baseline_from_catalog(
+        self, catalog: "SourceCatalog", owner_user_id: int,
+        *, source_keys: tuple[str, ...] | None = None,
+    ) -> tuple[int, "MultiSourceFetchReport"]:
+        """Mark only genuinely fetched current matches as seen before subscribing."""
+        matches, report = await self.fetch_matches_from_catalog(
+            catalog, owner_user_id, source_keys=source_keys,
+        )
+        if not report.attempted_sources or report.total_failure:
+            raise ValueError("No successfully fetched source for baseline.")
+        return len(await self.claim_new(owner_user_id, matches)), report
 
     async def subscribe(self, owner_user_id: int, chat_id: int) -> Subscription:
         return await asyncio.to_thread(self.repository.set_subscription, owner_user_id, chat_id, True)

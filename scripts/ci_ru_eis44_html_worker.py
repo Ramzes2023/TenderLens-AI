@@ -9,16 +9,15 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from types import SimpleNamespace
 
 from app.database.backend import Database
 from app.database.config import DatabaseSettings
-from app.jobs.models import JobScope
 from app.monitoring.config import MonitoringSettings
 from app.sources.catalog import build_source_catalog
-from app.sources.ingestion import ConnectorSyncHandler, connector_version, sync_window
+from app.sources.ingestion import connector_version
 from app.sources.opportunities import OpportunityRepository
 from app.sources.snapshots import snapshot_catalog
+from scripts.ci_ru_leased_connector import run_leased_connector
 
 SOURCE = "eis_44_html"
 
@@ -41,12 +40,7 @@ def acceptance():
         try:
             repo = OpportunityRepository(db)
             repo.initialize()
-            worker = ConnectorSyncHandler(catalog, repo, max_records=10)
-            ctx = SimpleNamespace(job=SimpleNamespace(scope=JobScope()), should_stop=False)
-            payload = {"schema": 1, "source_id": SOURCE,
-                       "sync_window": sync_window(),
-                       "connector_version": connector_version(SOURCE)}
-            info = worker(ctx, payload)
+            info = run_leased_connector(db, catalog, repo, SOURCE, max_records=10)
             if (not 1 <= info["fetched_count"] <= 10
                     or info["accepted_count"] != info["fetched_count"]
                     or info["inserted_count"] != info["fetched_count"]

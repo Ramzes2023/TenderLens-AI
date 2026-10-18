@@ -36,7 +36,7 @@ def test_nested_grid_filter_form_remains_within_scope():
     public_html('<input name="__RequestVerificationToken" value="../evil">'),
     public_html(
         '<input name="__RequestVerificationToken" value="' + GOOD_TOKEN + '">'
-        '<input name="__RequestVerificationToken" value="' + GOOD_TOKEN + '">'
+        '<input name="__RequestVerificationToken" value="' + ("B" * 36) + '">'
     ),
     (ROUTE + '<input name="__RequestVerificationToken" value="' +
      GOOD_TOKEN + '">').encode("utf-8"),
@@ -44,3 +44,13 @@ def test_nested_grid_filter_form_remains_within_scope():
 def test_missing_duplicate_unsafe_or_login_only_token_is_rejected(body):
     with pytest.raises(ValueError):
         public_grid_token(body)
+
+
+def test_repeated_same_public_grid_token_is_unambiguous():
+    grid = (
+        f'<input name="__RequestVerificationToken" value="{GOOD_TOKEN}">'
+        f'<input name="__RequestVerificationToken" value="{GOOD_TOKEN}">'
+    )
+    token, names = public_grid_token(public_html(grid))
+    assert token == GOOD_TOKEN
+    assert names == ["__RequestVerificationToken"]

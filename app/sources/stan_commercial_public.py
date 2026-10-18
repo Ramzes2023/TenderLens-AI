@@ -1,6 +1,7 @@
 """Verified first-party STAN-Torgi commercial tender adapter; EIS mirrors excluded."""
 from __future__ import annotations
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from contextlib import nullcontext
 import math
 import asyncio
@@ -122,6 +123,82 @@ def verify_detail(data, number, title, url):
 
 
 
+
+def independently_verified_commercial_metadata(data, number, title, url):
+    """Enrich ONLY after verified original commercial number/title/section.
+
+    Optional buyer and deadline come from separately fetched first-party
+    visible detail labels, not the listing, EIS mirror or script content.
+    No invented price: unknown prices stay None; only explicit ₽ is RUB.
+    """
+    verify_detail(data, number, title, url)
+    doc = parse_doc(data)
+    values = [norm(part) for part in doc.visible if norm(part)]
+    approved = {
+        "наименование заказчика": "customer",
+        "дата и время окончания подачи заявок": "deadline",
+        "начальная цена": "price",
+    }
+    found = {}
+    for index, item in enumerate(values[:-1]):
+        key = approved.get(item.casefold())
+        if key is None:
+            continue
+        value = values[index + 1]
+        if not 1 <= len(value) <= 2000 or "<" in value or ">" in value:
+            raise ValueError("Invalid STAN first-party detail metadata")
+        if key in found and found[key] != value:
+            raise ValueError("Conflicting STAN original detail metadata")
+        found[key] = value
+
+    customer = found.get("customer")
+    if customer is not None and (not 3 <= len(customer) <= 300
+            or not re.search(r"[А-Яа-яЁёA-Za-z]", customer)):
+        raise ValueError("Invalid STAN original buyer")
+
+    deadline = None
+    if "deadline" in found:
+        match = re.fullmatch(
+            r"(\d{2}\.\d{2}\.\d{4}) (\d{2}:\d{2}) \(МСК\)",
+            found["deadline"],
+        )
+        if not match:
+            raise ValueError("Ambiguous STAN public tender timezone")
+        try:
+            # The first-party document explicitly labels Moscow time (МСК).
+            # Moscow civil time in 2026 is UTC+03:00 without DST.
+            moment = datetime.strptime(
+                match[1] + " " + match[2], "%d.%m.%Y %H:%M",
+            )
+        except ValueError:
+            raise ValueError("Invalid STAN original bid deadline") from None
+        deadline = moment.replace(
+            tzinfo=timezone(timedelta(hours=3)),
+        ).isoformat(timespec="seconds")
+
+    price = currency = None
+    price_raw = found.get("price")
+    if price_raw and price_raw not in {
+        "Не указана", "Не указан", "Не установлена", "-", "НМЦ не указана",
+    }:
+        if re.fullmatch(r"(\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d{1,12}),\d{2} ₽", price_raw):
+            normalized = price_raw[:-2].replace(" ", "").replace(
+                "\u00a0", "").replace("\u202f", "").replace(",", ".")
+            price = float(normalized)
+            if not math.isfinite(price) or not 0 < price <= 1_000_000_000_000:
+                raise ValueError("Invalid STAN first-party tender price")
+            currency = "RUB"
+        else:
+            # Never guess price or currency from a noncanonical display.
+            raise ValueError("STAN first-party tender price not corroborated")
+    return {
+        "customer": customer,
+        "deadline": deadline,
+        "initial_price": price,
+        "currency": currency,
+    }
+
+
 @dataclass(frozen=True)
 class StanCommercialPublicSource:
     timeout: float = 20
@@ -152,10 +229,12 @@ class StanCommercialPublicSource:
                         page.raise_for_status()
                         if "html" not in page.headers.get("content-type","").lower():
                             raise ValueError("STAN public detail not HTML")
-                        verify_detail(page.content, number, title, url)
+                        metadata=independently_verified_commercial_metadata(
+                            page.content, number, title, url,
+                        )
                         notice=TenderNotice(
                             source=SOURCE_ID, external_id=number, tender_number=number,
-                            title=title, url=url,
+                            title=title, url=url, **metadata,
                         )
                         validate_notice(notice,SOURCE_ID)
                         records.append(notice)

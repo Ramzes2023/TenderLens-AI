@@ -114,7 +114,7 @@ jobs:
               if "/login" in url.path.lower() or "/auth" in url.path.lower():
                   continue
               safe_script_names.append(url.path.split("/")[-1][:75])
-          print("RU_DAG_PUBLIC_SCRIPT_BASENAMES=" + ",".join(safe_script_names[-40:]))
+          print("RU_DAG_PUBLIC_SCRIPT_BASENAMES=" + ",".join(safe_script_names[:100]))
           init = html.find("gridview(")
           if init >= 0:
               snippet = html[init:init+2100]

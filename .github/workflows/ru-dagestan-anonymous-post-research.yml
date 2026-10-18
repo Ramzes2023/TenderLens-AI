@@ -73,3 +73,40 @@ jobs:
           echo "DIAGNOSTIC_ONLY=YES"
           echo "ORIGINAL_NOTICES_PROVED=NO"
           echo "PRODUCTION_CHANGED=NO"
+
+  official-grid-js-request-shape-diagnostic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Inspect published first-party AJAX configuration without printing values or identifying users
+        shell: bash
+        run: |
+          set -euo pipefail
+          page="$(mktemp)"
+          trap 'rm -f "$page"' EXIT
+          curl --noproxy '*' --fail --silent --show-error --proto '=https' \
+            --retry 0 --max-redirs 0 --connect-timeout 8 --max-time 25 \
+            --output "$page" 'https://goszakaz.e-dag.ru/smallpurchases/GzwSP/NoticesGrid'
+          python - "$page" <<'PY'
+          import pathlib
+          import re
+          import sys
+          html = pathlib.Path(sys.argv[1]).read_text(errors="replace")
+          marker = "/smallpurchases/GzwSP/NoticesJson"
+          indices = [m.start() for m in re.finditer(re.escape(marker), html)][:4]
+          print("RU_DAG_PUBLIC_ROUTE_OCCURRENCES=" + str(len(indices)))
+          for i, index in enumerate(indices, 1):
+              scope = html[max(0, index-1100):index+1100]
+              identifiers = list(dict.fromkeys(
+                  re.findall(r"\b[A-Za-z_$][A-Za-z0-9_$]{2,42}\b", scope)
+              ))
+              # Static identifier names, no quotations, values, numbers,
+              # form bodies, private tokens or full JavaScript are logged.
+              print("RU_DAG_ROUTE_" + str(i) + "_STATIC_IDENTIFIERS=" +
+                    ",".join(identifiers[:90]))
+          print("RU_DAG_PUBLIC_HTML_HAS_CSRF_FIELD=" +
+                str(bool(re.search("RequestVerificationToken", html, re.I))))
+          print("DIAGNOSTIC_ONLY=YES")
+          print("ORIGINAL_NOTICES_PROVED=NO")
+          print("PRODUCTION_CHANGED=NO")
+          PY

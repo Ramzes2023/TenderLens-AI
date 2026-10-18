@@ -1,8 +1,12 @@
 """Offline hostile HTML fixtures never count as live procurement evidence."""
+import asyncio
+import httpx
 import pytest
+from app.sources.http import ConnectorTransportError
 from scripts.research_ru_samara_small_public import (
     HOST, INDEX, GRID_URL, listing, strict_original_link, original_detail,
     disclosed_grid_paths, describe_public_json_shape, disclosed_json_grid_method,
+    probe_disclosed_public_json,
 )
 
 A = "ИМЗ-2026-0-223-000399"
@@ -116,3 +120,54 @@ def test_samara_disclosed_public_grid_method_is_not_live_proof():
     assert disclosed_json_grid_method(
         b'<script>var list={url:"' + url + b'"};</script>'
     ) == "UNKNOWN"
+
+class _CookieJar:
+    def __init__(self): self.clear_count = 0
+    def clear(self): self.clear_count += 1
+
+
+class _ReadOnlyFake:
+    def __init__(self, *, retryable=False):
+        self.cookies = _CookieJar()
+        self.methods = []
+        self.retryable = retryable
+
+    async def request(self, method, url, **kwargs):
+        self.methods.append((method, url, kwargs))
+        if method == "GET":
+            raise ConnectorTransportError(retryable=self.retryable)
+        return httpx.Response(
+            200, headers={"content-type": "application/json"},
+            content=b'{"page":1,"rows":[{"id":"example"}],"total":1}',
+        )
+
+
+def test_public_notices_json_may_probe_empty_anonymous_post_but_never_claim_live(capsys):
+    html = b'<script>var grid={url:"/smallpurchases/GzwSP/NoticesJson"};</script>'
+    client = _ReadOnlyFake()
+    assert asyncio.run(probe_disclosed_public_json(client, html)) is None
+    assert [x[0] for x in client.methods] == ["GET", "POST"]
+    assert {x[1] for x in client.methods} == {
+        "https://webtorgi.samregion.ru/smallpurchases/GzwSP/NoticesJson"
+    }
+    assert client.methods[1][2]["content"] == b""
+    assert "Cookie" not in client.methods[1][2]["headers"]
+    assert client.cookies.clear_count >= 4
+    output = capsys.readouterr().out
+    assert "STRUCTURE_ONLY_NOT_ORIGINALS" in output
+    assert "PASS" not in output
+    assert "NATIVE_IDS=0" in output
+
+
+def test_json_probe_does_not_retry_outage_or_override_get_only(capsys):
+    url = b'/smallpurchases/GzwSP/NoticesJson'
+    for html, retryable in (
+        (b'<script>var grid={url:"' + url + b'"};</script>', True),
+        (b'<script>var grid={url:"' + url + b'",mtype:"GET"};</script>', False),
+    ):
+        client = _ReadOnlyFake(retryable=retryable)
+        asyncio.run(probe_disclosed_public_json(client, html))
+        assert [method for method, _, _ in client.methods] == ["GET"]
+    not_listed = _ReadOnlyFake()
+    asyncio.run(probe_disclosed_public_json(not_listed, b'<html/>'))
+    assert not not_listed.methods

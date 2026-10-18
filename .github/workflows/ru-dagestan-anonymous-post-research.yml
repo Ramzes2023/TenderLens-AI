@@ -6,6 +6,8 @@ on:
     paths:
       - scripts/research_ru_dagestan_anonymous_post.py
       - tests/test_ru_dagestan_anonymous_post.py
+      - scripts/research_ru_dagestan_public_csrf_post.py
+      - tests/test_ru_dagestan_public_csrf_post.py
       - .github/workflows/ru-dagestan-anonymous-post-research.yml
   pull_request:
     branches: [main]
@@ -30,7 +32,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r requirements-dev.txt
       - name: Validate strict publication gate and reject synthetic login/schema fraud
-        run: python -m pytest -q tests/test_ru_dagestan_anonymous_post.py
+        run: python -m pytest -q tests/test_ru_dagestan_anonymous_post.py tests/test_ru_dagestan_public_csrf_post.py
 
   actual-anonymous-post-public-list:
     runs-on: ubuntu-latest
@@ -134,3 +136,18 @@ jobs:
           print("ORIGINAL_NOTICES_PROVED=NO")
           print("PRODUCTION_CHANGED=NO")
           PY
+
+  actual-anonymous-public-csrf-grid-post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Match publicly issued grid anti-CSRF token to anonymous same-origin POST and require real JSON
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_dagestan_public_csrf_post

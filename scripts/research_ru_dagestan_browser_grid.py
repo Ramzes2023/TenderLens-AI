@@ -27,7 +27,11 @@ def allowed(url: str, method: str) -> bool:
                 or p.username or p.password or p.port not in (None, 443)):
             return False
         if p.path == NATIVE:
-            return method.upper() in {"POST", "GET"}
+            return method.upper() == "POST"
+        path = p.path.lower()
+        if any(bad in path for bad in ("/login", "/logout", "/account",
+                                        "/auth", "/admin", "/register")):
+            return False
         return method.upper() == "GET"
     except ValueError:
         return False
@@ -55,7 +59,7 @@ async def observe():
     native_requests = 0
     responses = []
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=True)
+        browser = await pw.chromium.launch(headless=True, args=["--no-proxy-server"])
         context = await browser.new_context(
             accept_downloads=False,
             ignore_https_errors=False,

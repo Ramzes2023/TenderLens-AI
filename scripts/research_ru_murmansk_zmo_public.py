@@ -115,7 +115,8 @@ def published_route_clues(body):
     # Public source-code paths only: no query strings, tokens, cookies or values.
     routes = set(re.findall(r"/(?:site/)?GzwSP/[A-Za-z][A-Za-z0-9_/-]{3,75}", html))
     scripts = set(re.findall(
-        r'<script[^>]+src=["\\\'](/(?:site/)?[A-Za-z0-9_./-]+\\.js)["\\\']', html, re.I
+        r"""<script[^>]+src=['"](/(?:site/)?[A-Za-z0-9_./-]+[.]js)['"]""",
+        html, re.I,
     ))
     return tuple(sorted(routes)[:12]), tuple(sorted(scripts)[:6])
 

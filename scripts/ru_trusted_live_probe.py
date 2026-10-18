@@ -65,6 +65,11 @@ TARGETS = {
     "dagestan_official_small": Target("goszakaz.e-dag.ru", "/smallpurchases/GzwSP/NoticesGrid"),
     "tver_official_small": Target("gostorgi.tverreg.ru", "/smallpurchases/Menu/Page/1"),
     "spb_official_eshop": Target("estore.gz-spb.ru", "/electronicshop/catalog/procedure/"),
+    # Caucasus original small-purchase candidates: reachability ONLY, never a tender count.
+    # Ossetia: Republic government Resolution No. 151 (2023-04-25).
+    "ossetia_official_small": Target("15.portalregion.ru", "/"),
+    # Stavropol official committee refers to RTS regional small-purchases market.
+    "stavropol_rts_small": Target("market26.rts-tender.ru", "/"),
 }
 
 class UnsafeAddress(RuntimeError):
@@ -148,7 +153,7 @@ def describe(mode: str, payload: bytes) -> dict[str, int]:
 def batch_priority() -> int:
     # A bounded read-only operator survey, not 24 working procurement connectors.
     # Only immutable allowlisted labels are scheduled. No tenant or production data.
-    if len(TARGETS) != 35:
+    if len(TARGETS) != 37:
         print("RU_BATCH=BLOCKED_TARGET_SET")
         return 2
 

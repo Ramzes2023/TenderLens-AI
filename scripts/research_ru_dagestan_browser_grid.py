@@ -191,6 +191,10 @@ async def observe():
                 keys = only_public_keynames(req.post_data, content_type)
                 print("RU_DAG_BROWSER_NATIVE_METHOD=" + req.method)
                 print("RU_DAG_BROWSER_NATIVE_PARAM_NAMES=" + ",".join(keys))
+                header_names = tuple(sorted(k.lower() for k in req.headers
+                    if type(k) is str and k.isascii() and
+                       all(c.isalnum() or c == "-" for c in k)))[:45]
+                print("RU_DAG_BROWSER_NATIVE_HEADER_NAMES=" + ",".join(header_names))
                 if "settings" in keys:
                     _, shape = public_native_settings_shape(req.post_data, content_type)
                     print("RU_DAG_BROWSER_NATIVE_SETTINGS_FIELD_TYPES=" +
@@ -198,6 +202,13 @@ async def observe():
                     kind, length = public_native_settings_encoding(req.post_data, content_type)
                     print("RU_DAG_BROWSER_NATIVE_SETTINGS_ENCODING=" + kind)
                     print("RU_DAG_BROWSER_NATIVE_SETTINGS_LENGTH=" + str(length))
+                    obj = extract_public_native_settings(req.post_data, content_type)
+                    if type(obj) is dict and type(obj.get("filter")) is dict:
+                        date = obj["filter"].get("dtDatePubBegin")
+                        print("RU_DAG_BROWSER_DATE_FILTER_TYPE=" + type(date).__name__)
+                        print("RU_DAG_BROWSER_DATE_FILTER_EMPTY=" + str(date == ""))
+                        if type(date) is str:
+                            print("RU_DAG_BROWSER_DATE_FILTER_LENGTH=" + str(len(date)))
                     defaults = public_native_settings_public_defaults(req.post_data, content_type)
                     for key, value in defaults.items():
                         print("RU_DAG_BROWSER_DEFAULT_" + key.upper() + "=" + str(value))

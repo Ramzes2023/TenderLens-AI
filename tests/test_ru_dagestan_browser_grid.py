@@ -4,6 +4,7 @@ import pytest
 from scripts.research_ru_dagestan_browser_grid import (
     HOST, LISTING, NATIVE, allowed, only_public_keynames,
     public_native_settings_shape, public_original_link_shape,
+    public_native_settings_encoding, extract_public_native_settings,
 )
 
 
@@ -67,3 +68,21 @@ def test_only_genuine_first_party_dagestan_link_paths_and_no_query_values():
     assert public_original_link_shape("https://evil.example/smallpurchases/GzwSP/Notice/123") == "NON_FIRST_PARTY"
     assert public_original_link_shape("javascript:alert(1)") == "NON_FIRST_PARTY"
     assert public_original_link_shape(None) == "MISSING_OR_NONSTRING"
+
+
+def test_real_browser_json_envelope_nested_settings_without_leaking_values():
+    import json
+    secret = "NO_SESSION_DATA_MAY_BE_PRINTED"
+    payload = json.dumps({"settings": {
+        "page": 1, "limit": 10, "csrf": secret, "sort": "pub_date",
+    }})
+    value = extract_public_native_settings(payload, "application/json")
+    assert value["page"] == 1
+    keys, types = public_native_settings_shape(payload, "application/json")
+    assert keys == ("csrf", "limit", "page", "sort")
+    assert types == ("csrf:str", "limit:int", "page:int", "sort:str")
+    assert secret not in str(keys) + str(types)
+    assert public_native_settings_encoding(payload, "application/json") == ("JSON_OBJECT", 4)
+    assert extract_public_native_settings(payload, "text/html") is None
+    assert extract_public_native_settings('{"settings":{},"password":"x"}', "application/json") is None
+    assert public_native_settings_encoding('{"settings":null}', "application/json") == ("MISSING_OR_INVALID", 0)

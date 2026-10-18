@@ -68,5 +68,19 @@ jobs:
               --write-out '%{http_code}' "$url")" && rc=0 || rc=$?
             echo "GPB_DIAGNOSTIC_$endpoint HTTP=$result CURL_EXIT=$rc"
           done
+          # Inspect an advertised redirect target only as structured
+          # metadata; never follow it or print untrusted query/userinfo.
+          destination="$(curl --noproxy '*' --silent --show-error --proto '=https' \
+            --max-redirs 0 --connect-timeout 8 --max-time 20 --output /dev/null \
+            --write-out '%{redirect_url}' 'https://new.etpgpb.ru/procedures/')" && rc=0 || rc=$?
+          python3 - "$destination" "$rc" <<'PY'
+          import sys
+          from urllib.parse import urlsplit
+          u = urlsplit(sys.argv[1])
+          allowed = {'etpgpb.ru', 'new.etpgpb.ru', 'www.etpgpb.ru'}
+          print('GPB_REDIRECT_HOST=' + (u.hostname if u.hostname in allowed else 'UNAPPROVED_OR_EMPTY'))
+          print('GPB_REDIRECT_PATH=' + (u.path if u.hostname in allowed and len(u.path) < 128 else 'REDACTED'))
+          print('GPB_REDIRECT_CURL_EXIT=' + sys.argv[2])
+          PY
           echo 'GPB_DIAGNOSTIC_ONLY=YES'
           echo 'PRODUCTION_CHANGED=NO'

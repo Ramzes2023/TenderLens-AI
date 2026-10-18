@@ -30,6 +30,7 @@ from .eis_223_rss import Eis223RssSource
 from .india_cppp import IndiaCpppSource
 from .india_epublish import IndiaEpublishSource, LIST_URL as INDIA_EPUBLISH_LIST_URL
 from .uae_mof_rfqs import UAEMinistryFinanceSource, URL as UAE_MOF_URL
+from .tr_konya_municipality import KonyaMunicipalitySource, INDEX_URL as KONYA_TENDERS_URL
 from .kz_goszakup import KazakhstanGoszakupApiSource
 from .multi import MultiSourceFetcher, MultiSourceFetchReport
 from .mikroton_tender import MikrotonTenderSource
@@ -609,6 +610,18 @@ def build_source_catalog(
             transport=SourceTransport.HTML,
             jurisdictions=("AE",), languages=("en", "ar"),
             homepage_url=UAE_MOF_URL,
+            official=True, enabled=True, capabilities=SourceCapabilities(),
+        ))
+
+    # Original municipal source, disabled until explicitly activated.
+    # Exclude property sales and ICB records without independently parsed addenda.
+    if os.environ.get("VALYQON_ASIA_TURKEY_KONYA_ENABLED", "").strip() == "1":
+        registry.register(SourceRegistration(
+            key="tr_konya_municipality",
+            display_name="Türkiye Konya Metropolitan Municipality procurement",
+            source=KonyaMunicipalitySource(timeout=min(timeout, 30.0)),
+            transport=SourceTransport.HTML, jurisdictions=("TR",),
+            languages=("tr",), homepage_url=KONYA_TENDERS_URL,
             official=True, enabled=True, capabilities=SourceCapabilities(),
         ))
 

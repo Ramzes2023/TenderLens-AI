@@ -101,6 +101,39 @@ def public_native_settings_encoding(data: str | None, content_type: str = ""):
     return "OTHER_TYPE", 0
 
 
+def public_native_settings_public_defaults(data: str | None, content_type: str = ""):
+    """Whitelist nonsecret public pagination and sort values for reproduction."""
+    obj = extract_public_native_settings(data, content_type)
+    if type(obj) is not dict:
+        return {}
+    result = {}
+    for name in ("page", "rp", "totalRows"):
+        value = obj.get(name)
+        if type(value) is int and 0 <= value <= 10_000_000:
+            result[name] = value
+    allowed_sort_columns = {"pub_date", "number", "name", "summa",
+                            "uchr_sname", "collecting_endDate"}
+    sf = obj.get("sortField")
+    if type(sf) is str:
+        result["sortField"] = sf if sf in allowed_sort_columns else "OTHER_COLUMN"
+    sd = obj.get("sortDir")
+    if type(sd) is str:
+        result["sortDir"] = sd if sd in {"asc", "desc"} else "OTHER_DIRECTION"
+    for name in ("filter", "sortList"):
+        value = obj.get(name)
+        if type(value) is dict:
+            result[name + "_keys"] = tuple(sorted(k for k in value
+                if type(k) is str and k.isascii() and
+                   k.replace("_", "").isalnum())[:40])
+    for name in ("rpList", "localFilter"):
+        value = obj.get(name)
+        if type(value) is list and len(value) <= 40:
+            result[name + "_count"] = len(value)
+            if name == "rpList" and all(type(x) is int and 1 <= x <= 100 for x in value):
+                result["rpList_public_numeric_values"] = tuple(value)
+    return result
+
+
 def public_original_link_shape(value):
     """Classify first-party link PATHS only; strip all query and tokens."""
     if type(value) is not str or not 0 < len(value) < 1800:
@@ -165,6 +198,9 @@ async def observe():
                     kind, length = public_native_settings_encoding(req.post_data, content_type)
                     print("RU_DAG_BROWSER_NATIVE_SETTINGS_ENCODING=" + kind)
                     print("RU_DAG_BROWSER_NATIVE_SETTINGS_LENGTH=" + str(length))
+                    defaults = public_native_settings_public_defaults(req.post_data, content_type)
+                    for key, value in defaults.items():
+                        print("RU_DAG_BROWSER_DEFAULT_" + key.upper() + "=" + str(value))
             await route.continue_()
 
         async def inspect_response(resp):

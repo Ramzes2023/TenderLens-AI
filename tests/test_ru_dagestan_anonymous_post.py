@@ -56,3 +56,34 @@ def test_fixture_only_schema_is_explicitly_research_not_original_details():
 def test_unknown_login_unbounded_or_one_record_never_counts(body, mime):
     with pytest.raises(ValueError):
         parse_public_json(body, mime)
+
+
+def test_observed_official_items_totalrows_page_schema_is_accepted_research_only():
+    government_grid = {
+        "items": [
+            {"number": "000001", "name": "Example A", "uchr_sname": "School A"},
+            {"number": "000002", "name": "Example B", "uchr_sname": "School B"},
+        ],
+        "page": 1,
+        "totalRows": 2,
+        "totalAmount": 1200,
+    }
+    count, keys, shapes = parse_public_json(
+        json.dumps(government_grid).encode("utf-8"), "application/json",
+    )
+    assert count == 2
+    assert "items" in keys and "totalRows" in keys
+    assert all(kind == "object" for kind, _ in shapes)
+
+
+@pytest.mark.parametrize("bad", [
+    {"items": [{"id": "one"}, {"id": "two"}], "page": 1, "totalRows": 0},
+    {"items": [{"id": "one"}, {"id": "two"}], "page": 1, "totalRows": "2"},
+    {"items": [{"id": "one"}, {"id": "two"}], "page": -1, "totalRows": 2},
+    {"items": [{"id": "one"}, {"id": "two"}], "page": "1", "totalRows": 2},
+    {"items": [{"id": "one"}], "page": 1, "totalRows": 2},
+    {"items": [{"id": "one"}, {"id": "two"}] * (LIMIT + 1), "page": 1, "totalRows": 20},
+])
+def test_observed_official_items_schema_fails_closed_on_incomplete_pagination(bad):
+    with pytest.raises(ValueError):
+        parse_public_json(json.dumps(bad).encode(), "application/json")

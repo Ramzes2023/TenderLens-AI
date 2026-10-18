@@ -23,19 +23,21 @@ from app.sources.ingestion import (
 from app.sources.opportunities import OpportunityRepository
 from app.sources.snapshots import snapshot_catalog
 
-SOURCES = ("md_elicitatie", "az_azeristilik")
+SOURCES = ("md_elicitatie", "az_azeristilik", "az_adif_small")
 
 
 def execute():
     settings = MonitoringSettings(
         False, 600, 20, 5, 12, (), None,
         cis_md_elicitatie_enabled=True, cis_az_azeristilik_enabled=True,
+        cis_az_adif_small_enabled=True,
     )
     catalog = build_source_catalog(settings)
     if not all(catalog.registry.get(source).enabled for source in SOURCES):
-        raise AssertionError("Both distinct operator opt-ins must be active in isolated test")
+        raise AssertionError("All three independent operator opt-ins must be active in isolated test")
     if (HOSTS["md_elicitatie"] != frozenset({"e-licitatie.md"})
-            or HOSTS["az_azeristilik"] != frozenset({"azeristilik.gov.az"})):
+            or HOSTS["az_azeristilik"] != frozenset({"azeristilik.gov.az"})
+            or HOSTS["az_adif_small"] != frozenset({"adif.gov.az"})):
         raise AssertionError("Source host policy diverged")
     with tempfile.TemporaryDirectory(prefix="valyqon-cis-md-az-shared-live-") as directory:
         db = Database(DatabaseSettings("", Path(directory) / "cis-shared.sqlite"))
@@ -49,7 +51,7 @@ def execute():
             registry = HandlerRegistry()
             registry.register(JOB_TYPE, ConnectorSyncHandler(catalog, opportunities, max_records=5))
             worker = Worker(jobs, registry, job_types=(JOB_TYPE,))
-            for _ in range(8):
+            for _ in range(12):
                 current = {source: jobs.get(job.id, scope=SYSTEM_SCOPE)
                            for source, job in scheduled.items()}
                 if all(job is not None and job.state == "succeeded"

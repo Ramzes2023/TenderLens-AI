@@ -126,3 +126,6 @@ jobs:
       - name: Independently corroborated South Ural public procurement deadline data
         timeout-minutes: 4
         run: python -B -m scripts.ci_ru_south_ural_deadline
+      - name: Verify original customer, amount and deadline survive ephemeral SQL persistence
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_south_ural_verified_metadata

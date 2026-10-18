@@ -83,3 +83,24 @@ def test_approved_ten_originals_and_independent_deadline_stay_mandatory():
     assert "python -B -m scripts.ci_ru_south_ural_authenticated" in scripts
     assert scripts.index("python -B -m scripts.ci_ru_south_ural_10_real_worker") < scripts.index("python -B -m scripts.ci_ru_south_ural_authenticated")
     assert "continue-on-error" not in job and not any(step.get("continue-on-error") for step in job["steps"])
+
+
+def test_daily_south_ural_buyer_amount_deadline_real_sql_roundtrip():
+    """New metadata gate may neither be skipped nor satisfied with fixtures."""
+    y = load()
+    steps = y["jobs"]["south-ural-ten-public-signal"]["steps"]
+    commands = [step.get("run") for step in steps if step.get("run")]
+    originals = "python -B -m scripts.ci_ru_south_ural_10_real_worker"
+    metadata = "python -B -m scripts.ci_ru_south_ural_verified_metadata"
+    assert originals in commands
+    assert metadata in commands
+    assert commands.index(originals) < commands.index(metadata)
+    assert "python -B -m scripts.ci_ru_south_ural_deadline" in commands
+    assert not any(step.get("continue-on-error") for step in steps)
+    source = Path("scripts/ci_ru_south_ural_verified_metadata.py").read_text("utf-8")
+    for required in ("SouthUralPublicSource(", "OpportunityRepository(db)",
+                     "store.upsert(", "store.read(", "notice.customer",
+                     "notice.deadline", "notice.initial_price", "TemporaryDirectory"):
+        assert required in source, required
+    for forbidden in ("MockTransport", "continue-on-error", "skip_live", "sqlite:///:memory:"):
+        assert forbidden not in source

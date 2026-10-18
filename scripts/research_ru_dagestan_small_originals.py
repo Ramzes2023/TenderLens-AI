@@ -20,7 +20,7 @@ LIST = "https://" + HOST + "/smallpurchases/GzwSP/NoticesGrid"
 DETAIL = "/smallpurchases/GzwSP/Notice"
 MAX_BYTES = 1_800_000
 REQUIRED = 2
-IDENTITY = re.compile(r"[0-9]{5,12}\\Z")
+IDENTITY = re.compile(r"[0-9]{5,12}\Z")
 NATIVE_ID = re.compile(r"ИМЗ[-–]20[0-9]{2}[-–][0-9]{4,8}", re.I)
 
 
@@ -73,7 +73,7 @@ class PublicHTML(HTMLParser):
 
 
 def parse(data):
-    if type(data) is not bytes or not 0 < len(data) <= MAX_BYTES or b"\\x00" in data:
+    if type(data) is not bytes or not 0 < len(data) <= MAX_BYTES or b"\x00" in data:
         raise ValueError("Untrusted Dagestan public procurement HTML")
     html = PublicHTML()
     html.feed(data.decode("utf-8-sig", "replace"))
@@ -82,7 +82,7 @@ def parse(data):
 
 
 def canonical(href):
-    if type(href) is not str or not 0 < len(href) <= 450 or "\\\\" in href:
+    if type(href) is not str or not 0 < len(href) <= 450 or "\\" in href:
         return None
     if any(x.isspace() or ord(x) < 32 for x in href):
         return None
@@ -127,9 +127,9 @@ def detail_proof(body, number, title, url):
         raise ValueError("Official Dagestan notice title not confirmed on detail page")
     if not NATIVE_ID.search(visible):
         raise ValueError("Original regional small-purchase number absent")
-    if not re.search(r"(Заказчик|Наименование заказчика)\\s*:", visible, re.I):
+    if not re.search(r"(Заказчик|Наименование заказчика)\s*:", visible, re.I):
         raise ValueError("Official purchaser missing from detail page")
-    if not re.search(r"(Цена|НМЦК|Начальная \\(максимальная\\) цена)", visible, re.I):
+    if not re.search(r"(Цена|НМЦК|Начальная \(максимальная\) цена)", visible, re.I):
         raise ValueError("Original price missing from detail page")
     return number, title, url
 

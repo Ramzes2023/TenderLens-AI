@@ -104,6 +104,24 @@ jobs:
               # form bodies, private tokens or full JavaScript are logged.
               print("RU_DAG_ROUTE_" + str(i) + "_STATIC_IDENTIFIERS=" +
                     ",".join(identifiers[:90]))
+          from urllib.parse import urljoin, urlsplit
+          scripts = re.findall(r"<script\\b[^>]*\\bsrc=[\\\"']([^\\\"']+)", html, flags=re.I)
+          safe_script_names = []
+          for src in scripts:
+              url = urlsplit(urljoin("https://goszakaz.e-dag.ru/smallpurchases/", src))
+              if url.scheme != "https" or url.hostname != "goszakaz.e-dag.ru" or url.query:
+                  continue
+              if "/login" in url.path.lower() or "/auth" in url.path.lower():
+                  continue
+              safe_script_names.append(url.path.split("/")[-1][:75])
+          print("RU_DAG_PUBLIC_SCRIPT_BASENAMES=" + ",".join(safe_script_names[-40:]))
+          init = html.find("gridview(")
+          if init >= 0:
+              snippet = html[init:init+2100]
+              snippet = re.sub(r"(?is)value\\s*=\\s*[\\\"'][^\\\"']*[\\\"']", "value=REDACTED", snippet)
+              snippet = re.sub(r"(?is)(?:__RequestVerificationToken|password|secret|csrf)\\s*[:=]\\s*[^,;}]+", "REDACTED", snippet)
+              snippet = re.sub(r"[A-Za-z0-9+/_-]{70,}", "REDACTED_LONG_TOKEN", snippet)
+              print("RU_DAG_GRID_INIT_PUBLIC_STATIC=" + " ".join(snippet[:1600].split()))
           print("RU_DAG_PUBLIC_HTML_HAS_CSRF_FIELD=" +
                 str(bool(re.search("RequestVerificationToken", html, re.I))))
           print("DIAGNOSTIC_ONLY=YES")

@@ -507,20 +507,6 @@ def build_source_catalog(
         capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
     ))
 
-    # First-party deposit-insurance public quotation source, not national eTender.
-    registry.register(SourceRegistration(
-        key="az_adif_small",
-        display_name="Azerbaijan Deposit Insurance Fund small public quotations",
-        source=AzerbaijanAdifSmallSource(timeout=min(timeout, 30)),
-        transport=SourceTransport.HTML,
-        jurisdictions=("AZ",),
-        languages=("az",),
-        homepage_url="https://adif.gov.az/az/sale/",
-        official=True,
-        enabled=bool(settings.cis_az_adif_small_enabled),
-        capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
-    ))
-
     # Additional official KZ public HTML adapter complements the separately
     # token-authenticated KZ API source; operator activation remains explicit.
     registry.register(SourceRegistration(
@@ -548,6 +534,20 @@ def build_source_catalog(
         homepage_url="https://azeristilik.gov.az/az/imkanlar/tender-elanlari",
         official=True,
         enabled=bool(settings.cis_az_azeristilik_enabled),
+        capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
+    ))
+
+    # First-party deposit-insurance public quotation source, not national eTender.
+    registry.register(SourceRegistration(
+        key="az_adif_small",
+        display_name="Azerbaijan Deposit Insurance Fund small public quotations",
+        source=AzerbaijanAdifSmallSource(timeout=min(timeout, 30)),
+        transport=SourceTransport.HTML,
+        jurisdictions=("AZ",),
+        languages=("az",),
+        homepage_url="https://adif.gov.az/az/sale/",
+        official=True,
+        enabled=bool(settings.cis_az_adif_small_enabled),
         capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
     ))
 

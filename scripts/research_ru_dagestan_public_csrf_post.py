@@ -114,6 +114,22 @@ def main():
         return asyncio.run(probe())
     except (ValueError, ConnectorTransportError, httpx.HTTPError,
             OSError, TimeoutError) as e:
+        if isinstance(e, ValueError):
+            # Only hard-coded local classifications; never surface raw server bodies.
+            allowed = {
+                "Unadvertised first-party public grid",
+                "No unambiguous public grid anti-forgery token",
+                "Original official grid not public HTML",
+                "No bounded original JSON response",
+                "No advertised JSON media type",
+                "Not a real JSON response",
+                "No JSON registry object",
+                "No two real first-party public listing rows",
+                "Empty native regional record",
+                "Unexpected or unverified native row schema",
+            }
+            reason = str(e) if str(e) in allowed else "UNCLASSIFIED_VALUE_ERROR"
+            print("RU_DAG_PUBLIC_SCHEMA_CLASSIFICATION=" + reason.replace(" ", "_"))
         print("RU_DAG_ANON_CSRF=BLOCKED_" + type(e).__name__)
         if isinstance(e, ConnectorTransportError):
             print("RU_DAG_RETRYABLE=" + str(e.retryable))

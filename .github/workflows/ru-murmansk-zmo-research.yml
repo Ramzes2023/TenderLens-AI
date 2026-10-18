@@ -4,12 +4,14 @@ on:
     branches: [main]
     paths:
       - scripts/research_ru_murmansk_zmo_public.py
+      - scripts/diag_ru_murmansk_json.py
       - tests/test_ru_murmansk_zmo_public.py
       - .github/workflows/ru-murmansk-zmo-research.yml
   push:
     branches: [research/ru-murmansk-zmo-native-live-20261018]
     paths:
       - scripts/research_ru_murmansk_zmo_public.py
+      - scripts/diag_ru_murmansk_json.py
       - tests/test_ru_murmansk_zmo_public.py
       - .github/workflows/ru-murmansk-zmo-research.yml
 permissions:
@@ -42,3 +44,17 @@ jobs:
       - name: Require current first-party index with two independently fetched complete original notices
         timeout-minutes: 5
         run: python -B -m scripts.research_ru_murmansk_zmo_public
+  murmansk-official-json-route-readonly-diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real official observed NoticesJson discovery endpoint, no fixture or production writes
+        timeout-minutes: 4
+        run: python -B -m scripts.diag_ru_murmansk_json

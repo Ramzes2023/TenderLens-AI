@@ -100,13 +100,16 @@ def test_catalog_constructs_without_network_and_ids_are_static(monkeypatch):
         catalog = build_source_catalog(settings)
     assert catalog.registry.keys() == ('eis', 'ted', 'sam_gov', 'uk_fts', 'world_bank', 'canada_buys', 'austender',
                                        'nz_gets', 'za_etenders', 'india_cppp', 'kz_goszakup',
-                                       'am_armeps', 'tj_eprocurement', 'uz_uzex', 'kg_gov_legacy', 'md_achizitii', 'kz_gov_html')
+                                       'am_armeps', 'tj_eprocurement', 'uz_uzex', 'kg_gov_legacy', 'md_achizitii', 'md_elicitatie', 'kz_gov_html', 'az_azeristilik', 'az_adif_small')
     assert not catalog.registry.get('am_armeps').enabled
     assert not catalog.registry.get('tj_eprocurement').enabled
     assert not catalog.registry.get('uz_uzex').enabled
     assert not catalog.registry.get('kg_gov_legacy').enabled
     assert not catalog.registry.get('md_achizitii').enabled
+    assert not catalog.registry.get('md_elicitatie').enabled
     assert not catalog.registry.get('kz_gov_html').enabled
+    assert not catalog.registry.get('az_azeristilik').enabled
+    assert not catalog.registry.get('az_adif_small').enabled
     with pytest.raises(SourceRegistryError):
         SourceRegistry([catalog.registry.get('ted')] * 2)
 

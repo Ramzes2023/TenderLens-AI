@@ -14,7 +14,7 @@ import httpx
 
 from app.sources.http import FetchPolicy, bounded_fetch, source_client, ConnectorTransportError
 from scripts.research_ru_dagestan_anonymous_post import (
-    HOST, INDEX, URL, MAX_BYTES, parse_public_json, published_route,
+    HOST, INDEX, URL, MAX_BYTES, published_route,
 )
 
 SORT_LIST = {
@@ -90,12 +90,16 @@ async def probe():
                         "Referer": INDEX,
                     },
                 )
-                count, _, _ = parse_public_json(
-                    response.content, response.headers.get("content-type", ""),
-                )
-                identities = real_list_proof(response.json())
+                if "json" not in response.headers.get("content-type", "").lower():
+                    raise ValueError("No first-party JSON content type")
+                try:
+                    payload = response.json()
+                    identities = real_list_proof(payload)
+                except (ValueError, TypeError):
+                    print("RU_DAG_JSON_NATIVE_VARIANT_" + str(i) + "=NO_REAL_LIST_ITEMS")
+                    continue
                 print("RU_DAG_JSON_NATIVE_VARIANT=" + str(i))
-                print("RU_DAG_JSON_NATIVE_REAL_LIST_ROWS=" + str(count))
+                print("RU_DAG_JSON_NATIVE_REAL_LIST_ROWS=" + str(len(payload["items"])))
                 print("RU_DAG_JSON_NATIVE_DISTINCT_LIST_IDENTITIES=" +
                       str(len(identities)))
                 print("ORIGINAL_DETAIL_GET_VERIFIED=NO")

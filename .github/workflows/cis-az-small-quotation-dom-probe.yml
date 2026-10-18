@@ -1,0 +1,26 @@
+name: CIS Azerbaijan independent small quotations live DOM audit
+on:
+  push:
+    branches: [research/cis-az-small-quotation-dom-20261018]
+    paths:
+      - scripts/ci_cis_az_adif_dom_probe.py
+      - .github/workflows/cis-az-small-quotation-dom-probe.yml
+permissions:
+  contents: read
+jobs:
+  real-public-adif-quotation-shape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Observe official public 2026 small-quotation HTML and safely fingerprint DOM
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHON_DOTENV_DISABLED: '1'
+        run: python -B -m scripts.ci_cis_az_adif_dom_probe

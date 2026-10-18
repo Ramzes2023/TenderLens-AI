@@ -8,6 +8,8 @@ Real list cards are NEVER equivalent to verified original detail pages.
 from __future__ import annotations
 
 import asyncio
+import calendar
+from datetime import date, datetime, timedelta, timezone
 import re
 from urllib.parse import urlsplit, urljoin
 import httpx
@@ -29,12 +31,33 @@ SORT_LIST = {
 DETAIL = re.compile(r"/smallpurchases/GzwSP/([0-9]{6,12})")
 
 
-def settings(filter_value):
-    if filter_value is not None and (type(filter_value) is not str or filter_value):
-        raise ValueError("Only empty/null native public date filtering permitted")
+def one_month_ago(today: date | None = None):
+    """Dagestan public grid default is the same local day of previous month."""
+    if today is None:
+        today = datetime.now(timezone(timedelta(hours=3))).date()
+    if type(today) is not date:
+        raise ValueError("Invalid local public tender date")
+    y = today.year if today.month > 1 else today.year - 1
+    m = today.month - 1 if today.month > 1 else 12
+    d = min(today.day, calendar.monthrange(y, m)[1])
+    return date(y, m, d).strftime("%d.%m.%Y")
+
+
+def settings(filter_value: str):
+    if type(filter_value) is not str or not re.fullmatch(r"[0-9]{2}\.[0-9]{2}\.[0-9]{4}", filter_value):
+        raise ValueError("Only official public day.month.year range allowed")
+    try:
+        date.strptime(filter_value, "%d.%m.%Y")
+    except AttributeError:
+        datetime.strptime(filter_value, "%d.%m.%Y")
+    except ValueError:
+        raise ValueError("Invalid official public date range") from None
     return {
         "page": 0, "rp": 10, "totalRows": 0, "sortField": "pub_date",
-        "sortDir": "desc", "filter": {"dtDatePubBegin": filter_value},
+        "sortDir": "desc",
+        "filter": {"dtDatePubBegin": {
+            "PName": "dtDatePubBegin", "PType": "Date", "PValue": filter_value,
+        }},
         "sortList": SORT_LIST, "rpList": [10, 20, 30], "localFilter": [],
     }
 
@@ -89,7 +112,7 @@ async def probe():
             if "html" not in home.headers.get("content-type", "").lower() or not published_route(home.content):
                 raise ValueError("Official native list route not published")
             token, _ = public_grid_token(home.content)
-            for i, filter_value in enumerate(("", None), 1):
+            for i, filter_value in enumerate((one_month_ago(),), 1):
                 try:
                     response = await client.post(
                         URL, json={"settings": settings(filter_value)}, headers={

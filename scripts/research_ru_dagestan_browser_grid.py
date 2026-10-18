@@ -153,10 +153,12 @@ def public_original_link_shape(value):
 
 
 async def observe():
+    # Optional browser driver belongs only to the dedicated live-browser CI.
+    # Offline parser/route-security tests must not require Chromium installed.
+    from playwright.async_api import async_playwright
     # Dedicated browser workflow installs Playwright; shared offline pytest
     # collection must not require the optional Chromium dependency.
-    from playwright.async_api import async_playwright
-    total_requests = 0
+        total_requests = 0
     native_requests = 0
     responses = []
     async with async_playwright() as pw:

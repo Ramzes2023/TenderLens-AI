@@ -480,6 +480,24 @@ class TenderMonitorService:
         scope = await asyncio.to_thread(self.scope_resolver, owner_user_id)
         return f"{source}:company:{scope}" if scope else source
 
+    async def unseen_matches(
+        self, owner_user_id: int, matches: list[MonitorMatch],
+    ) -> list[MonitorMatch]:
+        """Nonmutating preview for at-least-once delivery; claim only after send.
+
+        The repository remains authoritative. Concurrent deliveries could
+        repeat a notice, but a failed Telegram send never loses it.
+        """
+        unseen = []
+        for match in matches:
+            notice = match.notice
+            dedup_source = await self.dedup_source(owner_user_id, notice.source)
+            if not await asyncio.to_thread(
+                self.repository.seen, owner_user_id, dedup_source, notice.external_id,
+            ):
+                unseen.append(match)
+        return unseen
+
     async def claim_new(self, owner_user_id: int, matches: list[MonitorMatch]) -> list[MonitorMatch]:
         new: list[MonitorMatch] = []
         for match in matches:

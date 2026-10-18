@@ -89,7 +89,7 @@ def test_detail_mismatch_price_and_native_number_must_fail():
         original(number, title).replace("№ Извещения".encode(), "Номер".encode()),
         original(number, title).replace("1 764 000,00".encode(), "Не указано".encode()),
         original(number, title).replace("08.10.2026".encode(), "НЕТ ДАТЫ".encode()),
-        b"<script><h1>" + title.encode() + b"</h1><p>№ Извещения: " + number.encode() + b"</p></script>",
+        ("<script><h1>" + title + "</h1><p>№ Извещения: " + number + "</p></script>").encode("utf-8"),
     ):
         with pytest.raises(ValueError):
             parse_detail(body, number=number, title=title, url=url)

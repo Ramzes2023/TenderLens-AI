@@ -5,6 +5,7 @@ from scripts.research_ru_dagestan_browser_grid import (
     HOST, LISTING, NATIVE, allowed, only_public_keynames,
     public_native_settings_shape, public_original_link_shape,
     public_native_settings_encoding, extract_public_native_settings,
+    public_native_settings_public_defaults,
 )
 
 
@@ -86,3 +87,37 @@ def test_real_browser_json_envelope_nested_settings_without_leaking_values():
     assert extract_public_native_settings(payload, "text/html") is None
     assert extract_public_native_settings('{"settings":{},"password":"x"}', "application/json") is None
     assert public_native_settings_encoding('{"settings":null}', "application/json") == ("MISSING_OR_INVALID", 0)
+
+
+def test_whitelisted_native_defaults_expose_only_public_pagination():
+    import json
+    payload = json.dumps({"settings": {
+        "page": 1, "rp": 10, "totalRows": 999,
+        "sortField": "pub_date", "sortDir": "desc",
+        "sortList": {"pub_date": "Дата публикации", "name": "Наименование"},
+        "filter": {"token": "HIDDEN_SECRET"},
+        "rpList": [10, 25, 50],
+        "localFilter": [],
+    }})
+    safe = public_native_settings_public_defaults(payload, "application/json")
+    assert safe["page"] == 1
+    assert safe["rp"] == 10
+    assert safe["sortField"] == "pub_date"
+    assert safe["rpList_public_numeric_values"] == (10, 25, 50)
+    assert safe["filter_keys"] == ("token",)
+    assert "HIDDEN_SECRET" not in str(safe)
+
+
+def test_no_sensitive_public_default_echo_when_unrecognized_sort_or_filter():
+    import json
+    payload = json.dumps({"settings": {
+        "sortField": "private_user_info",
+        "sortDir": "stolenSECRET",
+        "filter": {"Authorization": "SECRET_PASSWORD"},
+        "rpList": [10, "SECRET_PASSWORD"],
+    }})
+    safe = public_native_settings_public_defaults(payload, "application/json")
+    assert safe["sortField"] == "OTHER_COLUMN"
+    assert safe["sortDir"] == "OTHER_DIRECTION"
+    assert "SECRET_PASSWORD" not in str(safe)
+    assert "stolenSECRET" not in str(safe)

@@ -2,6 +2,7 @@
 import pytest
 from scripts.research_ru_samara_small_public import (
     HOST, INDEX, GRID_URL, listing, strict_original_link, original_detail,
+    disclosed_grid_paths,
 )
 
 A = "ИМЗ-2026-0-223-000399"
@@ -76,3 +77,17 @@ def test_exact_origin():
     assert HOST == "webtorgi.samregion.ru"
     assert INDEX == "https://webtorgi.samregion.ru/smallpurchases/Menu/Page/1"
     assert GRID_URL == "https://webtorgi.samregion.ru/smallpurchases/GzwSP/NoticesGrid"
+
+def test_disclosed_native_grid_paths_are_diagnostic_only():
+    script = (b'<script>var grid={url:"/smallpurchases/GzwSP/NoticesJson"};'
+              b'var next="/smallpurchases/GzwSP/NoticesExport?page=1";</script>')
+    assert disclosed_grid_paths(script) == (
+        "/smallpurchases/GzwSP/NoticesExport",
+        "/smallpurchases/GzwSP/NoticesJson",
+    )
+    with pytest.raises(ValueError):
+        listing(script)  # Inline JavaScript does not prove actual native notices.
+    with pytest.raises(ValueError):
+        disclosed_grid_paths(b"")
+    with pytest.raises(ValueError):
+        disclosed_grid_paths(b"test\\x00more")

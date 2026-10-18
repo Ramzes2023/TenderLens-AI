@@ -107,6 +107,19 @@ def canonical(href):
         return None
 
 
+def published_route_clues(body):
+    """Read only origin-local public HTML route clues, never follow them as URLs."""
+    if type(body) is not bytes or not 0 < len(body) <= MAX_BYTES:
+        raise ValueError("Untrusted Murmansk registry HTML")
+    html = body.decode("utf-8-sig", "replace")
+    # Public source-code paths only: no query strings, tokens, cookies or values.
+    routes = set(re.findall(r"/(?:site/)?GzwSP/[A-Za-z][A-Za-z0-9_/-]{3,75}", html))
+    scripts = set(re.findall(
+        r'<script[^>]+src=["\\\'](/(?:site/)?[A-Za-z0-9_./-]+\\.js)["\\\']', html, re.I
+    ))
+    return tuple(sorted(routes)[:12]), tuple(sorted(scripts)[:6])
+
+
 def listing(body):
     found, seen = [], set()
     parsed = document(body)
@@ -164,6 +177,13 @@ async def live():
             response.raise_for_status()
             if "html" not in response.headers.get("content-type", "").lower():
                 raise ValueError("Official Murmansk current registry not HTML")
+            routes, scripts = published_route_clues(response.content)
+            print("RU_MURMANSK_VISIBLE_ROUTE_CLUES=" + str(len(routes)))
+            for i, route in enumerate(routes, 1):
+                print("RU_MURMANSK_PUBLIC_ROUTE_" + str(i) + "=" + route)
+            print("RU_MURMANSK_PUBLIC_JS_FILES=" + str(len(scripts)))
+            for i, script in enumerate(scripts, 1):
+                print("RU_MURMANSK_PUBLIC_SCRIPT_" + str(i) + "=" + script)
             rows = listing(response.content)
             confirmed = []
             for internal_id, native_id, title, url in rows:

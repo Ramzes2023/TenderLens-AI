@@ -265,14 +265,17 @@ async def monitor_status_handler(message: Message, monitoring_service: TenderMon
     company_line = workspace.name if workspace is not None else (profile.company_name if profile else "не выбрана")
     ru_mode = service.settings.ru_background_catalog_enabled
     ru_count = len(enabled_ru_catalog_keys(source_catalog)) if ru_mode else 0
+    title = "📡 Мониторинг российских источников" if ru_mode else "📡 Мониторинг ЕИС"
+    sources_line = (f"Включённых RU-источников: {ru_count}\\n" if ru_mode
+                    else f"RSS-поисков: {feed_count} ({feed_mode})\\n")
     await message.answer(
-        ("📡 Мониторинг российских источников" if ru_mode else "📡 Мониторинг ЕИС") + "\n"
-        f"Фоновый цикл: {global_state}\n"
-        f"Ваша подписка: {state}\n"
-        f"Активная компания: {company_line}\n"
-        f"Интервал: {service.settings.interval_seconds} сек.\n"
-        (f"Включённых RU-источников: {ru_count}\n" if ru_mode else f"RSS-поисков: {feed_count} ({feed_mode})\n")
-        "Pre-filter использует данные RSS и активный профиль; полный score выполняется после анализа документа."
+        title + "\\n"
+        + f"Фоновый цикл: {global_state}\\n"
+        + f"Ваша подписка: {state}\\n"
+        + f"Активная компания: {company_line}\\n"
+        + f"Интервал: {service.settings.interval_seconds} сек.\\n"
+        + sources_line
+        + "Pre-filter использует профиль и опубликованные данные источников."
     )
 
 

@@ -5,6 +5,7 @@ on:
     paths:
       - scripts/research_ru_dagestan_small_originals.py
       - scripts/research_ru_dagestan_json_probe.py
+      - scripts/research_ru_dagestan_export.py
       - tests/test_ru_dagestan_small_originals.py
       - .github/workflows/ru-dagestan-small-original-research.yml
   push:
@@ -12,6 +13,7 @@ on:
     paths:
       - scripts/research_ru_dagestan_small_originals.py
       - scripts/research_ru_dagestan_json_probe.py
+      - scripts/research_ru_dagestan_export.py
       - tests/test_ru_dagestan_small_originals.py
       - .github/workflows/ru-dagestan-small-original-research.yml
 permissions:
@@ -58,3 +60,17 @@ jobs:
       - name: Require current official site to advertise an accessible original JSON registry
         timeout-minutes: 4
         run: python -B -m scripts.research_ru_dagestan_json_probe
+  dagestan-official-public-export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require authentic original Dagestan notices export from published first-party route
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_dagestan_export

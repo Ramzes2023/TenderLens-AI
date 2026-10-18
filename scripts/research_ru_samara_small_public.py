@@ -29,10 +29,15 @@ class PublicRows(HTMLParser):
         self.rows = []
         self.row = self.cell = self.anchor = None
         self.links = []
+        self.scripts = []
         self.visible = []
         self.hidden = []
 
     def handle_starttag(self, tag, attrs):
+        if tag == "script":
+            src = dict(attrs).get("src")
+            if type(src) is str:
+                self.scripts.append(src)
         if tag in {"script", "style", "noscript", "svg", "iframe", "template"}:
             self.hidden.append(tag)
         if self.hidden:
@@ -106,6 +111,23 @@ def listing(raw):
     doc = document(raw)
     print("RU_SAMARA_LIST_ROWS=" + str(len(doc.rows)))
     print("RU_SAMARA_LIST_LINKS=" + str(len(doc.links)))
+    # First-party public script paths only; do not print HTML, form values,
+    # external URLs, cookies, query strings, or follow an API guess.
+    print("RU_SAMARA_SCRIPT_COUNT=" + str(len(doc.scripts)))
+    disclosed = []
+    for src in doc.scripts:
+        if type(src) is not str or len(src) > 280:
+            continue
+        try:
+            parsed = urlsplit(urljoin(INDEX, src))
+        except ValueError:
+            continue
+        if (parsed.scheme == "https" and parsed.netloc == HOST
+                and not parsed.query and not parsed.fragment
+                and re.fullmatch(r"/[A-Za-z0-9_./-]{3,160}", parsed.path)):
+            disclosed.append(parsed.path)
+    for i, script in enumerate(sorted(set(disclosed))[:8], 1):
+        print("RU_SAMARA_PUBLIC_JS_" + str(i) + "=" + script)
     print("RU_SAMARA_LIST_NATIVE_ID_ROWS=" + str(sum(
         bool(NATIVE_ID.search(" ".join(row["cells"]))) for row in doc.rows
     )))

@@ -10,7 +10,6 @@ import asyncio
 import json
 from urllib.parse import parse_qsl, urljoin, urlsplit
 
-from playwright.async_api import async_playwright
 
 HOST = "goszakaz.e-dag.ru"
 LISTING = "https://" + HOST + "/smallpurchases/GzwSP/NoticesGrid"
@@ -154,6 +153,9 @@ def public_original_link_shape(value):
 
 
 async def observe():
+    # Dedicated browser workflow installs Playwright; shared offline pytest
+    # collection must not require the optional Chromium dependency.
+    from playwright.async_api import async_playwright
     total_requests = 0
     native_requests = 0
     responses = []

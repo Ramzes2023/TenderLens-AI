@@ -70,3 +70,30 @@ jobs:
           echo "RU_DAG_NATIVE_CURL_EXIT=$rc"
           echo "ORIGINAL_DETAIL_PROVED=NO"
           echo "PRODUCTION_CHANGED=NO"
+
+  published-notice-route-http-diagnostic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ['5611345', '5611196']
+    steps:
+      - name: Check alternate original Notice route published by official public grid
+        env:
+          NATIVE_ID: ${{ matrix.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$NATIVE_ID" in 5611345|5611196) ;; *) exit 2;; esac
+          url="https://goszakaz.e-dag.ru/smallpurchases/GzwSP/Notice?noticeLink=$NATIVE_ID"
+          status="$(curl --silent --show-error --noproxy '*' --proto '=https' \
+            --retry 0 --max-redirs 0 --connect-timeout 8 --max-time 24 \
+            --output /dev/null --write-out '%{http_code}' \
+            --header 'Accept: text/html' --user-agent 'Mozilla/5.0' \
+            "$url")" && rc=0 || rc=$?
+          echo "RU_DAG_PUBLISHED_NOTICE_ID=$NATIVE_ID"
+          echo "RU_DAG_PUBLISHED_NOTICE_HTTP=$status"
+          echo "RU_DAG_PUBLISHED_NOTICE_CURL_EXIT=$rc"
+          echo "ORIGINAL_DETAIL_PROVED=NO"
+          echo "PRODUCTION_CHANGED=NO"

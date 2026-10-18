@@ -166,7 +166,9 @@ async def probe_disclosed_public_json(client, html):
         print("RU_SAMARA_JSON_DIAG=NOT_DISCLOSED")
         return
     try:
+        client.cookies.clear()  # Never reuse a server-issued guest session.
         response = await client.get("https://" + HOST + path)
+        client.cookies.clear()
         print("RU_SAMARA_JSON_HTTP_STATUS=" + str(response.status_code))
         if response.status_code != 200:
             print("RU_SAMARA_JSON_DIAG=HTTP_NOT_OK")
@@ -184,8 +186,10 @@ async def probe_disclosed_public_json(client, html):
         print("RU_SAMARA_JSON_NATIVE_ID_COUNT=" + str(diagnostic["native_ids_visible"]))
         print("RU_SAMARA_JSON_KEYS=" + ",".join(diagnostic["keys"]))
         print("RU_SAMARA_JSON_DIAG=STRUCTURE_ONLY")
-    except (ConnectorTransportError, httpx.HTTPError, ValueError, OSError, TimeoutError):
-        print("RU_SAMARA_JSON_DIAG=BLOCKED")
+    except (ConnectorTransportError, httpx.HTTPError, ValueError, OSError, TimeoutError) as exc:
+        print("RU_SAMARA_JSON_DIAG=BLOCKED_" + type(exc).__name__)
+        if isinstance(exc, ConnectorTransportError):
+            print("RU_SAMARA_JSON_RETRYABLE=" + str(exc.retryable))
 
 
 def listing(raw):
@@ -259,7 +263,9 @@ async def real():
             timeout=25, trust_env=False, follow_redirects=False,
             headers={"Accept": "text/html", "User-Agent": "Mozilla/5.0"},
         ) as client:
+            client.cookies.clear()
             response = await client.get(INDEX)
+            client.cookies.clear()
             response.raise_for_status()
             if "html" not in response.headers.get("content-type", "").lower():
                 raise ValueError("Original Samara registry not HTML")
@@ -281,7 +287,9 @@ async def real():
                 # fixed first-party GET, never a guessed URL or an auth bypass.
                 # The adapter still fails closed if neither returned page
                 # lists two independently linked original notices.
+                client.cookies.clear()
                 grid = await client.get(GRID_URL)
+                client.cookies.clear()
                 grid.raise_for_status()
                 if "html" not in grid.headers.get("content-type", "").lower():
                     raise ValueError("Samara public native grid is not HTML")
@@ -297,7 +305,9 @@ async def real():
                     raise
             result = []
             for number, title, url in rows:
+                client.cookies.clear()
                 page = await client.get(url)
+                client.cookies.clear()
                 page.raise_for_status()
                 if "html" not in page.headers.get("content-type", "").lower():
                     raise ValueError("Original Samara detail not HTML")

@@ -17,7 +17,7 @@ from app.sources.http import (
 )
 
 HOST = "webtorgi.samregion.ru"
-INDEX = "https://webtorgi.samregion.ru/"
+# Official regional small-purchase public registry, not the portal root.\n# The government resolution and published operator instructions identify this path.\nINDEX = "https://webtorgi.samregion.ru/smallpurchases/Menu/Page/1"
 MAX_BYTES = 1_800_000
 REQUIRED = 2
 NATIVE_ID = re.compile(r"ИМЗ-20[0-9]{2}-[0-9-]{5,20}", re.I)

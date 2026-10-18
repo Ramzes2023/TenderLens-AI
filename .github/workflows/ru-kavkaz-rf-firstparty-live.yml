@@ -7,6 +7,7 @@ on:
       - app/sources/ingestion.py
       - tests/test_ru_kavkaz_rf_firstparty.py
       - scripts/ci_ru_kavkaz_real_worker.py
+      - scripts/research_ru_kavkaz_live.py
       - .github/workflows/ru-kavkaz-rf-firstparty-live.yml
   pull_request:
     branches: [main]
@@ -37,6 +38,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install -r requirements-dev.txt
+      - name: Diagnose genuine source transport and independent original parser before worker
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_kavkaz_live
       - name: Genuine corporate site current list and 2 independent native originals -> actual leased Worker -> disposable SQLite -> keyword query
         timeout-minutes: 5
         run: python -B -m scripts.ci_ru_kavkaz_real_worker

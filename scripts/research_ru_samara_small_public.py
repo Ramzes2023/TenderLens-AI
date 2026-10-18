@@ -7,6 +7,7 @@ Only URLs physically disclosed by a fresh official HTML listing are followed.
 from __future__ import annotations
 
 import asyncio
+import json
 from html.parser import HTMLParser
 import re
 from urllib.parse import urljoin, urlsplit
@@ -134,6 +135,59 @@ def disclosed_grid_paths(raw):
     return tuple(sorted(routes))[:12]
 
 
+def describe_public_json_shape(raw):
+    """Read-only diagnostics: structure/ID counts are NOT real tender proof."""
+    if type(raw) is not bytes or not 0 < len(raw) <= MAX_BYTES or b"\\x00" in raw:
+        raise ValueError("Invalid public JSON size")
+    value = json.loads(raw)
+    if isinstance(value, dict):
+        keys = sorted(key for key in value if
+                      type(key) is str and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,35}", key))
+        rows = value.get("rows")
+        root_kind = "object"
+    elif isinstance(value, list):
+        keys = []
+        rows = value
+        root_kind = "array"
+    else:
+        raise ValueError("Invalid public grid JSON root")
+    return {
+        "root": root_kind,
+        "keys": tuple(keys[:12]),
+        "rows": len(rows) if isinstance(rows, list) else 0,
+        "native_ids_visible": len(set(NATIVE_ID.findall(raw.decode("utf-8-sig", "replace")))),
+    }
+
+
+async def probe_disclosed_public_json(client, html):
+    """One anonymous same-origin GET, *only* for original HTML-disclosed path."""
+    path = "/smallpurchases/GzwSP/NoticesJson"
+    if path not in disclosed_grid_paths(html):
+        print("RU_SAMARA_JSON_DIAG=NOT_DISCLOSED")
+        return
+    try:
+        response = await client.get("https://" + HOST + path)
+        print("RU_SAMARA_JSON_HTTP_STATUS=" + str(response.status_code))
+        if response.status_code != 200:
+            print("RU_SAMARA_JSON_DIAG=HTTP_NOT_OK")
+            return
+        mime = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+        print("RU_SAMARA_JSON_MIME=" + (
+            "json" if mime in {"application/json", "text/json"} else "other"
+        ))
+        if mime not in {"application/json", "text/json"}:
+            print("RU_SAMARA_JSON_DIAG=NOT_JSON")
+            return
+        diagnostic = describe_public_json_shape(response.content)
+        print("RU_SAMARA_JSON_ROOT=" + diagnostic["root"])
+        print("RU_SAMARA_JSON_ROW_COUNT=" + str(diagnostic["rows"]))
+        print("RU_SAMARA_JSON_NATIVE_ID_COUNT=" + str(diagnostic["native_ids_visible"]))
+        print("RU_SAMARA_JSON_KEYS=" + ",".join(diagnostic["keys"]))
+        print("RU_SAMARA_JSON_DIAG=STRUCTURE_ONLY")
+    except (ConnectorTransportError, httpx.HTTPError, ValueError, OSError, TimeoutError):
+        print("RU_SAMARA_JSON_DIAG=BLOCKED")
+
+
 def listing(raw):
     doc = document(raw)
     print("RU_SAMARA_LIST_ROWS=" + str(len(doc.rows)))
@@ -199,7 +253,7 @@ def original_detail(raw, notice_id, title, url):
 
 
 async def real():
-    with bounded_fetch(FetchPolicy(frozenset({HOST}), REQUIRED + 2,
+    with bounded_fetch(FetchPolicy(frozenset({HOST}), REQUIRED + 3,
                                    max_bytes=MAX_BYTES)):
         async with source_client(
             timeout=25, trust_env=False, follow_redirects=False,
@@ -233,7 +287,14 @@ async def real():
                     raise ValueError("Samara public native grid is not HTML")
                 print("RU_SAMARA_GRID_HTTP_BYTES=" + str(len(grid.content)))
                 print("RU_SAMARA_RESEARCH_ROUTE=OFFICIAL_GRID")
-                rows = listing(grid.content)
+                try:
+                    rows = listing(grid.content)
+                except ValueError:
+                    # Do not infer ingestion from a guessed endpoint or JSON
+                    # field names. This one read-only disclosed-URL diagnostic
+                    # cannot make the required real notice gate green.
+                    await probe_disclosed_public_json(client, grid.content)
+                    raise
             result = []
             for number, title, url in rows:
                 page = await client.get(url)

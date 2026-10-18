@@ -2,7 +2,8 @@
 import copy
 
 import pytest
-from scripts.research_ru_dagestan_native_json_http import settings, real_list_proof
+from datetime import date
+from scripts.research_ru_dagestan_native_json_http import settings, real_list_proof, one_month_ago
 
 
 def sample_data():
@@ -23,16 +24,24 @@ def sample_data():
 
 
 def test_fixed_public_settings_match_observed_anonymous_browser_structure():
-    obj = settings("")
+    obj = settings("18.09.2026")
     assert obj["page"] == 0
     assert obj["rp"] == 10
     assert obj["totalRows"] == 0
     assert obj["sortField"] == "pub_date"
     assert obj["sortDir"] == "desc"
-    assert obj["filter"] == {"dtDatePubBegin": ""}
+    assert obj["filter"] == {"dtDatePubBegin": {
+        "PName": "dtDatePubBegin", "PType": "Date", "PValue": "18.09.2026",
+    }}
     assert obj["localFilter"] == []
     assert obj["rpList"] == [10, 20, 30]
-    assert settings(None)["filter"] == {"dtDatePubBegin": None}
+    assert one_month_ago(date(2026, 10, 18)) == "18.09.2026"
+    assert one_month_ago(date(2024, 3, 31)) == "29.02.2024"
+    assert one_month_ago(date(2026, 1, 31)) == "31.12.2025"
+    with pytest.raises(ValueError):
+        settings(None)
+    with pytest.raises(ValueError):
+        settings("31.02.2026")
     with pytest.raises(ValueError):
         settings("private-data")
 

@@ -96,6 +96,18 @@ async def probe():
                 },
                 data=data,
             )
+            # Print ONLY shape metadata; never record actual tender values.
+            preliminary = response.json()
+            if type(preliminary) is dict:
+                keys_only = sorted(str(k) for k in preliminary if type(k) is str and
+                                   k.isascii() and k.replace("_", "").isalnum())[:18]
+                print("RU_DAG_ANON_JSON_ROOT_KEYS=" + ",".join(keys_only))
+                rows_field = preliminary.get("rows")
+                print("RU_DAG_ANON_JSON_ROWS_TYPE=" + type(rows_field).__name__)
+                if type(rows_field) is list:
+                    print("RU_DAG_ANON_JSON_ROW_COUNT=" + str(len(rows_field)))
+            else:
+                print("RU_DAG_ANON_JSON_ROOT_TYPE=" + type(preliminary).__name__)
             count, keys, shapes = parse_public_json(
                 response.content, response.headers.get("content-type", ""),
             )

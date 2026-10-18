@@ -58,19 +58,19 @@ class _Sections(HTMLParser):
     def handle_starttag(self, tag, attrs):
         if tag in ("script","style"):
             self.in_hidden += 1
-        if tag == "section":
+        if tag == "article":
             if self.current is None:
                 self.current = {"sections":0,"heads":[],"texts":[],"links":[]}
             self.depth += 1
         if self.current is not None:
-            if tag in ("h3", "p"):
+            if tag in ("h3", "p", "h4", "strong", "b"):
                 self.tag = tag
             if tag == "a":
                 href = dict(attrs).get("href", "")
                 if href and len(self.current["links"]) < 12:
                     self.current["links"].append(href[:160])
     def handle_endtag(self, tag):
-        if tag == "section" and self.current is not None:
+        if tag == "article" and self.current is not None:
             self.depth -= 1
             if self.depth == 0:
                 self.records.append(self.current)
@@ -85,7 +85,7 @@ class _Sections(HTMLParser):
         value = " ".join(data.split())
         if not value:
             return
-        if self.tag == "h3":
+        if self.tag in ("h3", "h4", "strong", "b"):
             self.current["heads"].append(value[:350])
         if self.tag == "p" and len(self.current["texts"]) < 35:
             self.current["texts"].append(value[:190])
@@ -112,9 +112,9 @@ async def run():
             "sample_tags": [{"tag": n["tag"], "parents": n["parents"], "text_prefix": n["text"][:145]}
                             for n in sampled[:15]],
             "recent_oct_2026": sum(bool(re.search(r"02[.]10[.]2026", n["text"])) for n in parser.nodes),
-            "section_count": len(sections.records),
-            "sections_first6": [
-                {"heads": v["heads"][:3], "texts": v["texts"][:12],
+            "article_count": len(sections.records),
+            "articles_first6": [
+                {"heads": v["heads"][:3], "texts": v["texts"][:15],
                  "links": v["links"][:5]}
                 for v in sections.records[:6]
             ],

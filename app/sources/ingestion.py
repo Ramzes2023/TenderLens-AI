@@ -30,6 +30,9 @@ HOSTS = {
     'tj_eprocurement': frozenset({'eprocurement.gov.tj'}),
     'uz_uzex': frozenset({'apietender.uzex.uz', 'etender.uzex.uz'}),
     'md_achizitii': frozenset({'achizitii.md'}),
+    'md_elicitatie': frozenset({'e-licitatie.md'}),
+    'az_azeristilik': frozenset({'azeristilik.gov.az'}),
+    'az_adif_small': frozenset({'adif.gov.az'}),
     'kg_gov_legacy': frozenset({'zakupki.gov.kg'}),
     'kz_gov_html': frozenset({'old.goszakup.gov.kz'}),
     'b2b_center': frozenset({'www.b2b-center.ru'}),
@@ -157,7 +160,8 @@ class ConnectorSyncHandler:
         # At most five listing/feed requests; AusTender adds one detail per notice.
         request_limit = (4 if source_id in {'ted', 'uk_fts', 'world_bank'}
                          else 2 if source_id in {'am_armeps', 'uz_uzex'}
-                         else 1 + min(self.max_records, 5) if source_id == 'md_achizitii'
+                         else 1 + min(self.max_records, 5) if source_id in {'md_achizitii', 'az_azeristilik'}
+                          else 11 if source_id == 'md_elicitatie'
                          else self.max_records + 1 if source_id == 'austender'
                          else 5 if source_id in {'eis', 'eis_223', 'india_cppp', 'kz_goszakup'}
                          else 2 if source_id in {'jp_jetro_national', 'jp_jetro_local'}

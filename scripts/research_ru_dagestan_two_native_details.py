@@ -46,11 +46,6 @@ class Visible(HTMLParser):
             self.hidden.append(tag)
         if not self.hidden and tag in {"h1", "h2"} and self.heading is None:
             self.heading = []
-        if not self.hidden and tag == "input":
-            a = dict(attrs)
-            if (a.get("type") or "").lower() == "password":
-                self.hidden.append("__password_input")
-
     def handle_data(self, data):
         if not self.hidden:
             self.visible.append(data)
@@ -60,8 +55,6 @@ class Visible(HTMLParser):
     def handle_endtag(self, tag):
         if self.hidden:
             if self.hidden[-1] == tag:
-                self.hidden.pop()
-            elif self.hidden[-1] == "__password_input" and tag == "input":
                 self.hidden.pop()
             return
         if tag in {"h1", "h2"} and self.heading is not None:

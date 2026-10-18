@@ -141,7 +141,11 @@ def parse_public_articles(html, *, today=None):
         # Legacy archived articles use multiple older document formats.
         # Ignore them *before* requiring the stricter active-notice layout.
         if (today - posted).days > 90:
-            continue
+            # Official articles are published newest-first (observed on the
+            # live October 2026 page). Older archive entries below this point
+            # contain deprecated layouts or lack a date entirely. Never scan
+            # them as if they were current tenders.
+            break
         if posted > today + timedelta(days=1):
             raise SourceError("AZ ADIF future-dated publication rejected.")
         bids = [DEADLINE.fullmatch(x) for x in ps if DEADLINE.fullmatch(x)]

@@ -74,3 +74,24 @@ jobs:
       - name: Require authentic original Dagestan notices export from published first-party route
         timeout-minutes: 4
         run: python -B -m scripts.research_ru_dagestan_export
+  dagestan-public-http-diagnostic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read public fixed Dagestan response status, never follow redirects or disable TLS
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in NoticesJson NoticesExport; do
+            case "$name" in
+              NoticesJson) path='NoticesJson' ;;
+              NoticesExport) path='NoticesExport' ;;
+              *) exit 2 ;;
+            esac
+            code="$(curl --noproxy '*' --silent --show-error --proto '=https' \\
+              --max-redirs 0 --connect-timeout 8 --max-time 24 \\
+              --output /dev/null --write-out '%{http_code}' \\
+              "https://goszakaz.e-dag.ru/smallpurchases/GzwSP/$path")" && rc=0 || rc=$?
+            echo "RU_DAG_PUBLIC_$name HTTP_STATUS=$code CURL_EXIT=$rc"
+          done
+          echo "PRODUCTION_CHANGED=NO"

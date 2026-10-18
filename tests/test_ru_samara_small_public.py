@@ -2,7 +2,7 @@
 import pytest
 from scripts.research_ru_samara_small_public import (
     HOST, INDEX, GRID_URL, listing, strict_original_link, original_detail,
-    disclosed_grid_paths,
+    disclosed_grid_paths, describe_public_json_shape,
 )
 
 A = "ИМЗ-2026-0-223-000399"
@@ -91,3 +91,15 @@ def test_disclosed_native_grid_paths_are_diagnostic_only():
         disclosed_grid_paths(b"")
     with pytest.raises(ValueError):
         disclosed_grid_paths(b"test\x00more")
+
+def test_public_json_is_diagnostic_and_never_fake_original_notice_proof():
+    payload = b'{"total":17,"page":1,"rows":[{"id":1},{"id":2}]}'
+    detail = describe_public_json_shape(payload)
+    assert detail["root"] == "object"
+    assert detail["rows"] == 2
+    assert detail["native_ids_visible"] == 0
+    assert detail["keys"] == ("page", "rows", "total")
+    assert describe_public_json_shape(b'[]')["root"] == "array"
+    for bad in (b"", b"null", b"{", b"123", b"hello", b'{"a":1}\x00'):
+        with pytest.raises((ValueError, UnicodeError)):
+            describe_public_json_shape(bad)

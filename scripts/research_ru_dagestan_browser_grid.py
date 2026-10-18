@@ -15,7 +15,7 @@ from playwright.async_api import async_playwright
 HOST = "goszakaz.e-dag.ru"
 LISTING = "https://" + HOST + "/smallpurchases/GzwSP/NoticesGrid"
 NATIVE = "/smallpurchases/GzwSP/NoticesJson"
-MAX_ORIGIN_REQUESTS = 65
+MAX_ORIGIN_REQUESTS = 160
 MAX_NATIVE_REQUESTS = 3
 MAX_ROWS_LOGGED = 2
 
@@ -71,8 +71,15 @@ async def observe():
         async def route_request(route):
             nonlocal total_requests, native_requests
             req = route.request
-            total_requests += 1
             url = req.url
+            suffix = urlsplit(url).path.lower()
+            # Static image/font assets are unnecessary for the public grid
+            # request: never fetch them and do not spend request budget.
+            if suffix.endswith((".png", ".jpg", ".jpeg", ".gif", ".ico",
+                                ".woff", ".woff2", ".ttf", ".svg")):
+                await route.abort()
+                return
+            total_requests += 1
             if total_requests > MAX_ORIGIN_REQUESTS or not allowed(url, req.method):
                 await route.abort()
                 return
@@ -134,6 +141,7 @@ async def observe():
         await context.close()
         await browser.close()
     print("RU_DAG_BROWSER_TOTAL_PUBLIC_REQUESTS=" + str(total_requests))
+    print("RU_DAG_BROWSER_BUDGET=" + str(MAX_ORIGIN_REQUESTS))
     print("RU_DAG_BROWSER_NATIVE_REQUESTS=" + str(native_requests))
     print("ORIGINAL_DETAILS_VERIFIED=NO")
     print("WORKER_SQL_KEYWORD_TENANT_VERIFIED=NO")

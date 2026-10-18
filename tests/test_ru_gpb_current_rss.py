@@ -50,6 +50,6 @@ def test_unsafe_xml_entity_declaration_fails_closed():
 
 
 def test_official_documented_feed_exact_host():
-    assert FEED == "https://new.etpgpb.ru/procedures.rss"
-    assert FEED_HOST == "new.etpgpb.ru"
+    assert FEED == "https://etpgpb.ru/procedures.rss"
+    assert FEED_HOST == "etpgpb.ru"
     assert DETAIL_HOST == "etpgpb.ru"

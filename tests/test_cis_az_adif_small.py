@@ -64,6 +64,15 @@ class ADIFSmallContracts(unittest.TestCase):
         with self.assertRaises(SourceError):
             parse_public_articles("<script>"+fixture()+"</script>",today=date(2026,10,18))
 
+    def test_newest_first_archival_section_stops_before_deprecated_malformed_articles(self):
+        active = fixture()
+        archived = fixture(date_value="02.01.2026", deadline="25 yanvar 2026-cı il saat 12:00-dək")
+        undocumented = fixture(date_value="missing")
+        html = active + archived + undocumented
+        rows = parse_public_articles(html, today=date(2026,10,18))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].published_at, "2026-10-02")
+
     def test_stale_notices_are_not_falsely_active(self):
         with self.assertRaises(SourceError):
             parse_public_articles(fixture(),today=date(2026,10,20))

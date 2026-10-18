@@ -23,6 +23,7 @@ from .austender_rss import AusTenderRssSource
 from .b2b_center import B2BCenterSource
 from .tektorg_public_html import TekTorgPublicSource
 from .gpb_etp_public import GpbEtpPublicSource
+from .fabrikant_44_public import Fabrikant44PublicSource
 from .lenobl_small_public import LenoblSmallPublicSource
 from .nmck_native_public import NmckNativePublicSource
 from .stan_commercial_public import StanCommercialPublicSource
@@ -823,6 +824,22 @@ def build_source_catalog(
             jurisdictions=("RU",),
             languages=("ru",),
             homepage_url="https://etpgpb.ru/procedures/",
+            official=False,
+            enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    # Corporate platform original 44-FZ tenders are EIS cross-posts;
+    # do not count as extra unique public opportunities.
+    if settings.fabrikant_44_public_enabled:
+        registry.register(SourceRegistration(
+            key="fabrikant_44_public",
+            display_name="Фабрикант — 44-ФЗ, original first-party cards (EIS mirror)",
+            source=Fabrikant44PublicSource(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url="https://soap4.fabrikant.ru/44/catalog/procedure/published",
             official=False,
             enabled=True,
             capabilities=SourceCapabilities(),

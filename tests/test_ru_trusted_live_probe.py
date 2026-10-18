@@ -10,6 +10,12 @@ class ProbeSafetyTests(unittest.TestCase):
         self.assertEqual(len(pairs), len(TARGETS))
         self.assertTrue(all(t.mode in {"html", "rss"} for t in TARGETS.values()))
 
+    def test_fabrikant_mirror_uses_verified_published_official_register_not_empty_requestoffer(self):
+        self.assertEqual(TARGETS["fabrikant_44_mirror"],
+                         Target("soap4.fabrikant.ru", "/44/catalog/procedure/published"))
+        self.assertNotEqual(TARGETS["fabrikant_44_mirror"].path,
+                            "/44/catalog/procedure/requestOffer")
+
     def test_caucasus_exact_public_targets_not_live_source_claims(self):
         self.assertEqual(TARGETS["ossetia_official_small"], Target("15.portalregion.ru", "/"))
         self.assertEqual(TARGETS["stavropol_rts_small"], Target("market26.rts-tender.ru", "/"))

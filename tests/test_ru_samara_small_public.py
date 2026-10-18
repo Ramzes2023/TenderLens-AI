@@ -74,4 +74,4 @@ def test_independent_details_must_match_buyer_and_price():
 
 def test_exact_origin():
     assert HOST == "webtorgi.samregion.ru"
-    assert INDEX == "https://webtorgi.samregion.ru/"
+    assert INDEX == "https://webtorgi.samregion.ru/smallpurchases/Menu/Page/1"

@@ -12,6 +12,7 @@ def test_gpb_job_is_daily_and_offline_ci_is_not_live_substitute():
     assert "workflow_dispatch" in workflow["on"]
     assert set(workflow["jobs"]) == {
         "gpb-daily-health-offline-security", "gpb-firstparty-live-worker-and-tenant",
+        "gpb-official-public-http-diagnostic-only",
     }
     job = workflow["jobs"]["gpb-firstparty-live-worker-and-tenant"]
     assert job["runs-on"] == "ubuntu-latest"
@@ -44,3 +45,18 @@ def test_runner_no_credentials_faked_live_or_network_downgrade():
                 "mocktransport", "skip-live", "production_changed=yes"):
         assert bad not in data
     assert "persist-credentials: false" in data
+
+
+def test_http_diagnostic_does_not_replace_actual_live_scoring():
+    flow = yaml.load(PATH.read_text("utf-8"), Loader=yaml.BaseLoader)
+    health = flow["jobs"]["gpb-firstparty-live-worker-and-tenant"]
+    cmds = [x.get("run") for x in health["steps"] if x.get("run")]
+    assert "python -B -m scripts.ci_ru_gpb_public_worker" in cmds
+    assert "python -B -m scripts.ci_ru_gpb_authenticated" in cmds
+    probe = flow["jobs"]["gpb-official-public-http-diagnostic-only"]
+    assert probe["runs-on"] == "ubuntu-latest"
+    shell = " ".join(x.get("run", "") for x in probe["steps"])
+    assert "--noproxy '*'" in shell
+    assert "--max-redirs 0" in shell
+    assert "--proto '=https'" in shell
+    assert "curl -k" not in shell and "--insecure" not in shell

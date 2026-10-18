@@ -1,0 +1,30 @@
+name: RU Telegram verified-original identity no duplicate delivery
+on:
+  push:
+    branches: [fix/ru-telegram-eis-fabrikant-dedup-20261018]
+    paths:
+      - app/monitoring/service.py
+      - tests/test_ru_telegram_original_dedup.py
+      - .github/workflows/ru-telegram-original-dedup.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - app/monitoring/service.py
+      - tests/test_ru_telegram_original_dedup.py
+      - .github/workflows/ru-telegram-original-dedup.yml
+permissions:
+  contents: read
+jobs:
+  ru-original-alert-sqlite-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Trusted EIS/Fabrikant original, legacy deliveries, scoped SQLite and Telegram regression
+        run: python -m pytest -q tests/test_ru_telegram_original_dedup.py tests/test_ru_background_telegram_catalog.py tests/test_monitoring.py tests/test_ru_original_notice_identity.py

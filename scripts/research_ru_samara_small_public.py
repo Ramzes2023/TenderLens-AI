@@ -137,7 +137,7 @@ def disclosed_grid_paths(raw):
 
 def describe_public_json_shape(raw):
     """Read-only diagnostics: structure/ID counts are NOT real tender proof."""
-    if type(raw) is not bytes or not 0 < len(raw) <= MAX_BYTES or b"\\x00" in raw:
+    if type(raw) is not bytes or not 0 < len(raw) <= MAX_BYTES or b"\x00" in raw:
         raise ValueError("Invalid public JSON size")
     value = json.loads(raw)
     if isinstance(value, dict):

@@ -223,7 +223,7 @@ async def observe():
                             val = date.get("PValue")
                             if val is None or val == "":
                                 print("RU_DAG_BROWSER_DATE_FILTER_PVALUE=EMPTY")
-                            elif type(val) is str and re.fullmatch(r"(?:\\d{2}\\.\\d{2}\\.\\d{4}|\\d{4}-\\d{2}-\\d{2})", val):
+                            elif type(val) is str and re.fullmatch(r"(?:\d{2}\.\d{2}\.\d{4}|\d{4}-\d{2}-\d{2})", val):
                                 print("RU_DAG_BROWSER_DATE_FILTER_PVALUE_PUBLIC_DATE=" + val)
                             else:
                                 print("RU_DAG_BROWSER_DATE_FILTER_PVALUE=NONEMPTY_OTHER")

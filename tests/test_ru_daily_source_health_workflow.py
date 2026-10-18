@@ -24,6 +24,10 @@ EXPECTED={
         "python -B -m scripts.ci_ru_stan_real_worker",
         "python -B -m scripts.ci_ru_stan_authenticated",
     ),
+    "south-ural-ten-public-signal": (
+        "python -B -m scripts.ci_ru_south_ural_10_real_worker",
+        "python -B -m scripts.ci_ru_south_ural_authenticated",
+    ),
 }
 
 def test_schedule_manual_default_and_five_specific_jobs():
@@ -67,3 +71,15 @@ def test_no_selfhosted_pr_exec_or_credentials():
     assert "cancel-in-progress: false" in txt
     for forbidden in ("curl -k","--insecure","trust_env=true","tls_verify=false"):
         assert forbidden not in txt
+
+
+
+def test_approved_ten_originals_and_independent_deadline_stay_mandatory():
+    x=load()
+    job=x["jobs"]["south-ural-ten-public-signal"]
+    scripts=[item.get("run") for item in job["steps"] if item.get("run")]
+    assert "python -B -m scripts.ci_ru_south_ural_10_real_worker" in scripts
+    assert "python -B -m scripts.ci_ru_south_ural_deadline" in scripts
+    assert "python -B -m scripts.ci_ru_south_ural_authenticated" in scripts
+    assert scripts.index("python -B -m scripts.ci_ru_south_ural_10_real_worker") < scripts.index("python -B -m scripts.ci_ru_south_ural_authenticated")
+    assert "continue-on-error" not in job and not any(step.get("continue-on-error") for step in job["steps"])

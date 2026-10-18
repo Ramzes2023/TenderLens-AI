@@ -19,7 +19,7 @@ def classify_redirect(location, listing_url):
     """
     if type(location) is not str or not 0 < len(location) <= 2000:
         return "MISSING_OR_INVALID"
-    if any(ord(char) < 33 or ord(char) == 127 for char in location):
+    if any(ord(char) < 33 or ord(char) == 127 or char == "\\" for char in location):
         return "INVALID"
     try:
         target = urlsplit(urljoin(listing_url, location))

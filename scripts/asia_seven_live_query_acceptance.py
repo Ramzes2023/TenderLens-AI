@@ -9,6 +9,7 @@ import asyncio
 import json
 import os
 import tempfile
+import time
 from pathlib import Path
 
 from app.database.backend import Database
@@ -21,6 +22,33 @@ from app.sources.ingestion import JOB_TYPE, SYSTEM_SCOPE, ConnectorSyncHandler, 
 from app.sources.opportunities import OpportunityRepository
 from app.sources.snapshots import snapshot_catalog
 from scripts.asia_six_live_acceptance import settings
+
+
+def run_bounded_jetro_claim(worker, jobs, job_id, *, clock=None, sleeper=None):
+    """Only honor genuine leased JETRO retries at the DB's scheduled time.
+
+    There are no forced job-state changes, mocked upstream notices, or fake
+    successes. A non-terminal queued job can never pass real acceptance.
+    """
+    now = clock if clock is not None else time.time
+    pause = sleeper if sleeper is not None else time.sleep
+    state = None
+    for attempt in range(3):
+        worked = worker.run_once()
+        state = jobs.get(job_id, scope=SYSTEM_SCOPE)
+        if not worked:
+            return state, "NO_LEASE_CLAIM"
+        if state is None:
+            return None, "NO_JOB_RESULT"
+        if state.state != "queued":
+            return state, "TERMINAL"
+        if state.attempt_count >= min(state.max_attempts, 3) or attempt == 2:
+            return state, "RETRIES_EXHAUSTED"
+        wait_seconds = (state.available_at - int(now() * 1_000_000)) / 1_000_000
+        if wait_seconds > 5.0:
+            return state, "RETRY_WINDOW_TOO_LONG"
+        pause(max(0.0, wait_seconds) + 0.08)
+    return state, "RETRIES_EXHAUSTED"
 
 
 def main() -> int:
@@ -52,10 +80,17 @@ def main() -> int:
                     result[key] = report
                     try:
                         job = service.enqueue(key)
-                        if not worker.run_once():
-                            report["job"] = "NO_WORK"
-                            continue
-                        completed = jobs.get(job.id, scope=SYSTEM_SCOPE)
+                        if key == "jp_jetro_bid":
+                            completed, queue_check = run_bounded_jetro_claim(
+                                worker, jobs, job.id)
+                            report["queue_check"] = queue_check
+                            report["attempts"] = completed.attempt_count if completed else 0
+                            report["failure_code"] = completed.failure_code if completed else None
+                        else:
+                            if not worker.run_once():
+                                report["job"] = "NO_WORK"
+                                continue
+                            completed = jobs.get(job.id, scope=SYSTEM_SCOPE)
                         report["job"] = completed.state if completed else "MISSING"
                         if completed is None or completed.state != "succeeded":
                             continue

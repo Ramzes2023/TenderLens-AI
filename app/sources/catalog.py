@@ -27,6 +27,7 @@ from .lenobl_small_public import LenoblSmallPublicSource
 from .nmck_native_public import NmckNativePublicSource
 from .stan_commercial_public import StanCommercialPublicSource
 from .south_ural_public import SouthUralPublicSource
+from .kavkaz_rf_firstparty import KavkazRfFirstpartySource
 from .canada_buys_dataset import CanadaBuysDatasetSource
 from .eis_rss import EisRssSource, SourceError
 from .eis_44_public_html import Eis44PublicHtmlSource
@@ -750,6 +751,23 @@ def build_source_catalog(
             languages=("ru",),
             homepage_url="https://zakupki.lenreg.ru/Search/NewRequests",
             official=True,
+            enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    # Verified original buyer notices; duplicate Fabrikant/EIS procedures must
+    # be reconciled before enabling in an operator-managed production environment.
+    # The adapter itself never consumes credentials and cannot self-activate.
+    if settings.kavkaz_rf_firstparty_enabled:
+        registry.register(SourceRegistration(
+            key="kavkaz_rf_firstparty",
+            display_name="Кавказ.РФ — first-party North Caucasus corporate tenders",
+            source=KavkazRfFirstpartySource(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url="https://xn--80aafvlc.xn--p1ai/purchases_sales/zakupki/tekushchie-/",
+            official=False,
             enabled=True,
             capabilities=SourceCapabilities(),
         ))

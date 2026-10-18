@@ -92,14 +92,14 @@ async def check():
         links = discover(index_html)
         markup = index_html.decode("utf-8", "replace")
         anchor_text = {}
-        for match in re.finditer(r"<a\\b[^>]*href\\s*=\\s*[\\\"']([^\\\"']+)[\\\"'][^>]*>(.*?)</a\\s*>",
+        for match in re.finditer(r"<a\b[^>]*href\s*=\s*[\\"']([^\\"']+)[\\"'][^>]*>(.*?)</a\s*>",
                                  markup, re.I | re.S):
             try:
                 candidate = _safe_link(html.unescape(match.group(1)), HOSTS, base=INDEX)
             except SourceError:
                 continue
             if candidate in links:
-                anchor_text[candidate] = re.sub(r"\\s+", " ", visible(match.group(2).encode("utf-8")))[:260]
+                anchor_text[candidate] = re.sub(r"\s+", " ", visible(match.group(2).encode("utf-8")))[:260]
         # Require all detail links to be derived from the CURRENT first-party list.
         priority = sorted(links, key=lambda x: (
             0 if "procurement-of-goods" in x else

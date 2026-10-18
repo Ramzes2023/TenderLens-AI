@@ -43,7 +43,13 @@ async def execute():
                     raw = response.json()
                     if not isinstance(raw, list) or len(raw) > PER_TYPE:
                         raise ValueError("official page changed bounded row shape")
-                    notices = parse_uzex_tradelist(raw, type_id=type_id) if raw else []
+                    try:
+                        notices = parse_uzex_tradelist(raw, type_id=type_id) if raw else []
+                    except Exception as exc:
+                        report["failed_page"] = {"type": type_id, "from": start, "to": stop,
+                                                 "error_type": type(exc).__name__}
+                        report["passed"] = False
+                        return report
                     ids = {item.external_id for item in notices}
                     if ids & seen_page_ids:
                         raise ValueError("official pagination repeated previously observed page identities")

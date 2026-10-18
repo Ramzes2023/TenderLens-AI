@@ -492,6 +492,14 @@ class TenderMonitorService:
         source, identity = canonical
         if await asyncio.to_thread(self.repository.seen, owner_user_id, source, identity):
             return True
+        # Older releases marked the adapter's local external_id; that key can
+        # differ from an explicitly corroborated original tender_number.
+        if notice.external_id != identity:
+            local_scope = await self.dedup_source(owner_user_id, notice.source)
+            if await asyncio.to_thread(
+                self.repository.seen, owner_user_id, local_scope, notice.external_id,
+            ):
+                return True
         original_source, _ = original_notice_key(notice)
         if original_source == "eis_44":
             legacy = ("eis", "eis_44_html", "fabrikant_44_public")

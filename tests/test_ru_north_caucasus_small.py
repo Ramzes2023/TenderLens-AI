@@ -61,7 +61,7 @@ def test_reject_external_credential_auth_or_ambiguous_paths(url):
 
 def test_unlinked_or_placeholder_or_one_row_fails():
     with pytest.raises(ValueError):
-        listing_originals(b"<h1>Портал закупок малого объема</h1>", HOST)
+        listing_originals("<h1>Портал закупок малого объема</h1>".encode("utf-8"), HOST)
     with pytest.raises(ValueError):
         listing_originals(listing().replace(NUMBERS[1].encode(), NUMBERS[0].encode()), HOST)
     with pytest.raises(ValueError):

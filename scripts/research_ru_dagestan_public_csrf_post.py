@@ -106,6 +106,22 @@ async def probe():
                 print("RU_DAG_ANON_JSON_ROWS_TYPE=" + type(rows_field).__name__)
                 if type(rows_field) is list:
                     print("RU_DAG_ANON_JSON_ROW_COUNT=" + str(len(rows_field)))
+                items_field = preliminary.get("items")
+                print("RU_DAG_ANON_JSON_ITEMS_TYPE=" + type(items_field).__name__)
+                if type(items_field) is list:
+                    print("RU_DAG_ANON_JSON_ITEM_COUNT=" + str(len(items_field)))
+                elif type(items_field) is dict:
+                    print("RU_DAG_ANON_JSON_ITEM_OBJECT_KEYS=" +
+                          ",".join(sorted(str(k) for k in items_field.keys() if
+                                          type(k) is str and k.isascii())[:20]))
+                print("RU_DAG_ANON_JSON_TOTAL_ROWS_TYPE=" +
+                      type(preliminary.get("totalRows")).__name__)
+                if type(preliminary.get("totalRows")) is int:
+                    print("RU_DAG_ANON_JSON_TOTAL_ROWS_COUNT=" +
+                          str(min(preliminary["totalRows"], 100000000)))
+                print("RU_DAG_ANON_JSON_PAGE_TYPE=" +
+                      type(preliminary.get("page")).__name__)
+
             else:
                 print("RU_DAG_ANON_JSON_ROOT_TYPE=" + type(preliminary).__name__)
             count, keys, shapes = parse_public_json(

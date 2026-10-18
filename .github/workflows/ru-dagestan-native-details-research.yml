@@ -44,3 +44,29 @@ jobs:
       - name: Require two actual original Dagestan details with same native identifiers and tender facts
         timeout-minutes: 4
         run: python -B -m scripts.research_ru_dagestan_two_native_details
+
+  fixed-native-public-http-diagnostic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ['5611345', '5611196']
+    steps:
+      - name: Classify direct HTTPS GET for two original published native list paths
+        env:
+          NATIVE_ID: ${{ matrix.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$NATIVE_ID" in 5611345|5611196) ;; *) exit 2;; esac
+          code="$(curl --silent --show-error --noproxy '*' --proto '=https' \
+            --retry 0 --max-redirs 0 --connect-timeout 8 --max-time 24 \
+            --output /dev/null --write-out '%{http_code}' \
+            --header 'Accept: text/html' --user-agent 'Mozilla/5.0' \
+            "https://goszakaz.e-dag.ru/smallpurchases/GzwSP/$NATIVE_ID")" && rc=0 || rc=$?
+          echo "RU_DAG_NATIVE_ID=$NATIVE_ID"
+          echo "RU_DAG_NATIVE_GET_HTTP=$code"
+          echo "RU_DAG_NATIVE_CURL_EXIT=$rc"
+          echo "ORIGINAL_DETAIL_PROVED=NO"
+          echo "PRODUCTION_CHANGED=NO"

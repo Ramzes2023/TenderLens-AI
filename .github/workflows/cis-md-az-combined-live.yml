@@ -1,4 +1,4 @@
-name: CIS Moldova Azerbaijan simultaneous real queue and query acceptance
+name: CIS Moldova and two Azerbaijan sources real shared SQLite search
 
 on:
   push:

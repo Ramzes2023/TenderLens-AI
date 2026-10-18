@@ -1,0 +1,26 @@
+name: CIS integration blocker independent India official diagnosis
+on:
+  push:
+    branches: [research/cis-blocker-india-epublish-20261018]
+    paths:
+      - scripts/ci_cis_india_gate_public_probe.py
+      - .github/workflows/cis-india-cross-gate-diagnostic.yml
+permissions:
+  contents: read
+jobs:
+  independent-real-html-shape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Prove real anonymous HTTPS and ePublishing live table shape
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHON_DOTENV_DISABLED: '1'
+        run: python -B -m scripts.ci_cis_india_gate_public_probe

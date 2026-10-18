@@ -299,13 +299,18 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService,
                                 continue
                         else:
                             matches = await service.fetch_matches(subscription.owner_user_id)
-                        new_matches = await service.claim_new(subscription.owner_user_id, matches)
+                        new_matches = await service.unseen_matches(
+                            subscription.owner_user_id, matches,
+                        )
                         for match in new_matches[:service.settings.max_notifications_per_cycle]:
                             await bot.send_message(
                                 subscription.chat_id,
                                 "🆕 НОВАЯ ЗАКУПКА\n\n" + format_match(match),
                                 disable_web_page_preview=True,
                             )
+                            # Mark only after Telegram confirms delivery; a
+                            # failed send must be retryable on the next cycle.
+                            await service.claim_new(subscription.owner_user_id, [match])
                     except (MonitoringRepositoryError, SourceError):
                         logger.warning("Monitoring scan failed for one subscription.")
                     except Exception:

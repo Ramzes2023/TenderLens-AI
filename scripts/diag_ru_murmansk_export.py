@@ -23,7 +23,7 @@ async def inspect():
             response.raise_for_status()
             raw = response.content
             mime = response.headers.get("content-type", "").lower().split(";", 1)[0]
-            kind = ("XLSX_ZIP" if raw.startswith(b"PK\\x03\\x04") else
+            kind = ("XLSX_ZIP" if raw.startswith(bytes.fromhex("504b0304")) else
                     "XLS_OLD" if raw.startswith(bytes.fromhex("d0cf11e0a1b11ae1")) else
                     "CSV_TEXT" if "csv" in mime and raw else
                     "HTML_OR_UNKNOWN")

@@ -20,6 +20,7 @@ HOST = "webtorgi.samregion.ru"
 # Official regional small-purchase public registry, not the portal root.
 # Documented public entry point; live listing/detail proof remains mandatory.
 INDEX = "https://webtorgi.samregion.ru/smallpurchases/Menu/Page/1"
+GRID_URL = "https://webtorgi.samregion.ru/smallpurchases/GzwSP/NoticesGrid"
 MAX_BYTES = 1_800_000
 REQUIRED = 2
 NATIVE_ID = re.compile(r"ИМЗ-20[0-9]{2}-[0-9-]{5,20}", re.I)
@@ -170,7 +171,7 @@ def original_detail(raw, notice_id, title, url):
 
 
 async def real():
-    with bounded_fetch(FetchPolicy(frozenset({HOST}), REQUIRED + 1,
+    with bounded_fetch(FetchPolicy(frozenset({HOST}), REQUIRED + 2,
                                    max_bytes=MAX_BYTES)):
         async with source_client(
             timeout=25, trust_env=False, follow_redirects=False,
@@ -191,7 +192,20 @@ async def real():
             ):
                 print("RU_SAMARA_" + label + "="
                       + str(any(needle in decoded for needle in needles)))
-            rows = listing(response.content)
+            try:
+                rows = listing(response.content)
+            except ValueError:
+                # This independently documented native public grid is a second
+                # fixed first-party GET, never a guessed URL or an auth bypass.
+                # The adapter still fails closed if neither returned page
+                # lists two independently linked original notices.
+                grid = await client.get(GRID_URL)
+                grid.raise_for_status()
+                if "html" not in grid.headers.get("content-type", "").lower():
+                    raise ValueError("Samara public native grid is not HTML")
+                print("RU_SAMARA_GRID_HTTP_BYTES=" + str(len(grid.content)))
+                print("RU_SAMARA_RESEARCH_ROUTE=OFFICIAL_GRID")
+                rows = listing(grid.content)
             result = []
             for number, title, url in rows:
                 page = await client.get(url)

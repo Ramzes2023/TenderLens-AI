@@ -25,6 +25,7 @@ async def execute():
     with bounded_fetch(FetchPolicy(frozenset({HOST}), len(PAGES) * 2, max_bytes=MAX_BODY)):
         async with source_client(timeout=16.0, trust_env=False, follow_redirects=False) as client:
             for type_id in (1, 2):
+                seen_page_ids = set()
                 for start, stop in PAGES:
                     response = await client.post(
                         API_URL,
@@ -42,6 +43,10 @@ async def execute():
                     if not isinstance(raw, list) or len(raw) > PER_TYPE:
                         raise ValueError("official page changed bounded row shape")
                     notices = parse_uzex_tradelist(raw, type_id=type_id) if raw else []
+                    ids = {item.external_id for item in notices}
+                    if ids & seen_page_ids:
+                        raise ValueError("official pagination repeated previously observed page identities")
+                    seen_page_ids.update(ids)
                     regional = [n for n in notices
                                 if n.customer and any(x in n.customer.casefold() for x in LOCAL)]
                     open_regional = []

@@ -54,18 +54,31 @@ def only_public_keynames(data: str | None, content_type: str) -> tuple[str, ...]
                             k.isascii() and k.replace("_", "").isalnum()))[:50])
 
 
-def public_native_settings_shape(data: str | None):
-    """Only safe field names/type names of native settings, NEVER values."""
+def extract_public_native_settings(data: str | None, content_type: str = ""):
+    """Safely locate one first-party settings parameter in JSON or form, no logs."""
     if type(data) is not str or not 0 < len(data) <= 180_000:
-        return (), ()
+        return None
+    if "json" in content_type.lower():
+        try:
+            outer = json.loads(data)
+        except ValueError:
+            return None
+        if type(outer) is not dict or set(outer) != {"settings"}:
+            return None
+        return outer["settings"]
     settings = [v for k, v in parse_qsl(data, keep_blank_values=True)
                 if k == "settings"]
     if len(settings) != 1 or not 0 < len(settings[0]) <= 80_000:
-        return (), ()
+        return None
     try:
-        obj = json.loads(settings[0])
-    except (ValueError, TypeError):
-        return (), ()
+        return json.loads(settings[0])
+    except ValueError:
+        return settings[0]
+
+
+def public_native_settings_shape(data: str | None, content_type: str = ""):
+    """Only safe field names/type names of native settings, NEVER values."""
+    obj = extract_public_native_settings(data, content_type)
     if type(obj) is not dict:
         return (), ()
     keys = tuple(sorted(k for k in obj if type(k) is str and
@@ -74,34 +87,18 @@ def public_native_settings_shape(data: str | None):
     return keys, types
 
 
-def public_native_settings_encoding(data: str | None):
-    """Emit only syntax classification and rough size. Never actual settings values."""
-    if type(data) is not str or len(data) > 180_000:
-        return "INVALID", 0
-    settings = [v for k, v in parse_qsl(data, keep_blank_values=True)
-                if k == "settings"]
-    if len(settings) != 1:
-        return "MISSING_OR_DUPLICATE", 0
-    value = settings[0]
-    if not 0 < len(value) <= 80_000:
-        return "INVALID_LENGTH", 0
-    try:
-        obj = json.loads(value)
-        if type(obj) is dict:
-            return "JSON_OBJECT", len(value)
-        if type(obj) is list:
-            return "JSON_ARRAY", len(value)
-        if type(obj) is str:
-            return "JSON_STRING", len(value)
-        return "JSON_" + type(obj).__name__.upper(), len(value)
-    except ValueError:
-        if value.startswith("%7B") or value.startswith("%5B"):
-            return "DOUBLE_URL_ENCODED", len(value)
-        if value.startswith("page=") or "&" in value:
-            return "NESTED_QUERY_STRING", len(value)
-        if value.startswith("{") or value.startswith("["):
-            return "MALFORMED_JSON", len(value)
-        return "OTHER_OPAQUE", len(value)
+def public_native_settings_encoding(data: str | None, content_type: str = ""):
+    """Emit only syntax classification and rough size, no values."""
+    obj = extract_public_native_settings(data, content_type)
+    if obj is None:
+        return "MISSING_OR_INVALID", 0
+    if type(obj) is dict:
+        return "JSON_OBJECT", len(obj)
+    if type(obj) is list:
+        return "JSON_ARRAY", len(obj)
+    if type(obj) is str:
+        return "OPAQUE_STRING", len(obj)
+    return "OTHER_TYPE", 0
 
 
 def public_original_link_shape(value):
@@ -162,10 +159,10 @@ async def observe():
                 print("RU_DAG_BROWSER_NATIVE_METHOD=" + req.method)
                 print("RU_DAG_BROWSER_NATIVE_PARAM_NAMES=" + ",".join(keys))
                 if "settings" in keys:
-                    _, shape = public_native_settings_shape(req.post_data)
+                    _, shape = public_native_settings_shape(req.post_data, content_type)
                     print("RU_DAG_BROWSER_NATIVE_SETTINGS_FIELD_TYPES=" +
                           ",".join(shape))
-                    kind, length = public_native_settings_encoding(req.post_data)
+                    kind, length = public_native_settings_encoding(req.post_data, content_type)
                     print("RU_DAG_BROWSER_NATIVE_SETTINGS_ENCODING=" + kind)
                     print("RU_DAG_BROWSER_NATIVE_SETTINGS_LENGTH=" + str(length))
             await route.continue_()

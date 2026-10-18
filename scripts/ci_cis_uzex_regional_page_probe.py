@@ -6,6 +6,7 @@ production writes, TLS override, redirects or private document calls.
 from __future__ import annotations
 import asyncio
 import json
+import traceback
 from datetime import datetime, timezone
 from app.sources.uz_uzex import API_URL, HOST, MAX_BODY, PER_TYPE, parse_uzex_tradelist
 from app.sources.http import FetchPolicy, bounded_fetch, source_client
@@ -73,8 +74,15 @@ def main():
         result = asyncio.run(execute())
         result["passed"] = result["regional_buyer_rows"] > 0
     except Exception as exc:
+        tb = traceback.extract_tb(exc.__traceback__)
+        last = tb[-1] if tb else None
         result = {"source": "uz_uzex", "passed": False,
-                  "failure_type": type(exc).__name__, "production_enabled": False}
+                  "failure_type": type(exc).__name__,
+                  "safe_failure_line": last.lineno if last and
+                  last.filename.endswith("ci_cis_uzex_regional_page_probe.py") else None,
+                  "safe_failure_function": last.name if last and
+                  last.filename.endswith("ci_cis_uzex_regional_page_probe.py") else "adapter_or_transport",
+                  "production_enabled": False}
     print(json.dumps(result, sort_keys=True))
     return 0 if result.get("passed") else 1
 

@@ -49,3 +49,24 @@ jobs:
       - name: Stored actual first-party GPB tenders reach authorized tenant scoring, not foreign tenant
         timeout-minutes: 5
         run: python -B -m scripts.ci_ru_gpb_authenticated
+  gpb-official-public-http-diagnostic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read two fixed first-party public URLs without redirects, TLS bypass or proxy
+        shell: bash
+        run: |
+          set -euo pipefail
+          for endpoint in legacy-list current-list; do
+            case "$endpoint" in
+              legacy-list) url="https://etpgpb.ru/procedures/" ;;
+              current-list) url="https://new.etpgpb.ru/procedures/" ;;
+              *) exit 2 ;;
+            esac
+            result="$(curl --noproxy '*' --silent --show-error --proto '=https' \
+              --max-redirs 0 --connect-timeout 8 --max-time 20 --output /dev/null \
+              --write-out '%{http_code}' "$url")" && rc=0 || rc=$?
+            echo "GPB_DIAGNOSTIC_$endpoint HTTP=$result CURL_EXIT=$rc"
+          done
+          echo 'GPB_DIAGNOSTIC_ONLY=YES'
+          echo 'PRODUCTION_CHANGED=NO'

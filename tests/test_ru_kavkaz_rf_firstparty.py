@@ -81,6 +81,17 @@ def test_duplicate_unknown_and_script_injection_fail_closed():
     assert parse_listing(index(), limit=1)[0][0] == A
 
 
+def test_real_site_style_h2_heading_is_independently_verified():
+    number, title, url = parse_listing(index())[0]
+    payload = original(number, title).replace(b"<h1>", b"<h2>").replace(b"</h1>", b"</h2>")
+    notice = parse_detail(payload, number=number, title=title, url=url)
+    assert notice.external_id == number
+    # Multiple conflicting independent headings never qualify as one detail.
+    extra = payload.replace(b"</h2>", b"</h2><h2>Conflicting title</h2>")
+    with pytest.raises(ValueError):
+        parse_detail(extra, number=number, title=title, url=url)
+
+
 def test_detail_mismatch_price_and_native_number_must_fail():
     number, title, url = parse_listing(index())[0]
     for body in (

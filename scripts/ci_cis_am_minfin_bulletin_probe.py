@@ -59,12 +59,12 @@ class PublicStructure(HTMLParser):
         if tag in {"script","style","noscript","template"} and self.ignore:
             self.ignore -= 1
 
-def scrub_link(href):
+def scrub_link(href, origin_host):
     try:
         p=urlsplit(href)
         if (p.scheme and p.scheme != "https") or p.username or p.password or p.query or p.fragment:
             return None
-        return {"host":p.hostname or HOST,"path_prefix":p.path[:120]}
+        return {"host":p.hostname or origin_host,"path_prefix":p.path[:120]}
     except ValueError:
         return None
 
@@ -89,11 +89,11 @@ async def main():
                          "text_blocks":len(dom.texts),
                          "notice_date_indicators":sum("Published 2026" in t for t in dom.texts),
                          "document_links":len(document_links),
-                         "candidate_link_hosts":dict(Counter((scrub_link(h) or {}).get("host","rejected")
+                         "candidate_link_hosts":dict(Counter((scrub_link(h, urlsplit(url).hostname) or {}).get("host","rejected")
                                                              for h,_ in document_links)),
                          "sample_public_titles":[t for t in dom.texts if any(w in t.casefold()
                            for w in ("municipality","community","համայնքապետ","համայնքի"))][:6],
-                         "document_link_shapes":[scrub_link(h) for h,_ in document_links[:6]],
+                         "document_link_shapes":[scrub_link(h, urlsplit(url).hostname) for h,_ in document_links[:6]],
                          "tags":{k:dom.tags[k] for k in ("article","li","div","p","a","time","section")},
                          "production_enabled":False})
             report.append(page)

@@ -88,9 +88,9 @@ jobs:
               NoticesExport) path='NoticesExport' ;;
               *) exit 2 ;;
             esac
-            code="$(curl --noproxy '*' --silent --show-error --proto '=https' \\
-              --max-redirs 0 --connect-timeout 8 --max-time 24 \\
-              --output /dev/null --write-out '%{http_code}' \\
+            code="$(curl --noproxy '*' --silent --show-error --proto '=https' \
+              --max-redirs 0 --connect-timeout 8 --max-time 24 \
+              --output /dev/null --write-out '%{http_code}' \
               "https://goszakaz.e-dag.ru/smallpurchases/GzwSP/$path")" && rc=0 || rc=$?
             echo "RU_DAG_PUBLIC_$name HTTP_STATUS=$code CURL_EXIT=$rc"
           done

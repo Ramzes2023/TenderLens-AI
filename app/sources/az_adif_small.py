@@ -35,7 +35,7 @@ MONTHS = {
     "oktyabr": 10, "noyabr": 11, "dekabr": 12,
 }
 DEADLINE = re.compile(
-    r"Təkliflər\s+(\d{1,2})\s+([a-zçğıöşüə]+)\s+(20\d{2})-c[ıi]\s+il\s+saat\s+(\d{1,2}):(\d{2})",
+    r"^Təkliflər\s+(\d{1,2})\s+([a-zçğıöşüə]+)\s+(20\d{2})-c[ıi]\s+il\s+saat\s+(\d{1,2}):(\d{2})-dək\s+qəbul\s+olunur[.]?$",
     re.I)
 PUBLISHED = re.compile(r"Elanın yerləşdirilmə tarixi:\s*(\d{2})\.(\d{2})\.(20\d{2})")
 

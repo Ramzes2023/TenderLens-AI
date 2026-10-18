@@ -97,3 +97,47 @@ jobs:
           echo "RU_DAG_PUBLISHED_NOTICE_CURL_EXIT=$rc"
           echo "ORIGINAL_DETAIL_PROVED=NO"
           echo "PRODUCTION_CHANGED=NO"
+
+  published-notice-redirect-target-diagnostic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ['5611345','5611196']
+    steps:
+      - name: Classify HTTP 302 target of public Notice route without following
+        env:
+          NATIVE_ID: ${{ matrix.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$NATIVE_ID" in 5611345|5611196) ;; *) exit 2 ;; esac
+          hdr="$(mktemp)"
+          trap 'rm -f "$hdr"' EXIT
+          curl --silent --show-error --noproxy '*' --proto '=https' \
+            --retry 0 --max-redirs 0 --connect-timeout 8 --max-time 24 \
+            --dump-header "$hdr" --output /dev/null \
+            "https://goszakaz.e-dag.ru/smallpurchases/GzwSP/Notice?noticeLink=$NATIVE_ID" || true
+          python - "$hdr" <<'PY'
+          import pathlib, sys
+          from urllib.parse import urlsplit, urljoin
+          lines = pathlib.Path(sys.argv[1]).read_text(errors="replace").splitlines()
+          headers = [x.split(":",1)[1].strip() for x in lines
+                     if x.lower().startswith("location:")]
+          if len(headers) != 1:
+              print("RU_DAG_REDIRECT_KIND=NONE_OR_AMBIGUOUS")
+          else:
+              uri = urlsplit(urljoin("https://goszakaz.e-dag.ru/", headers[0]))
+              if uri.scheme == "https" and uri.hostname == "goszakaz.e-dag.ru" and not uri.username and not uri.password and uri.port is None:
+                  print("RU_DAG_REDIRECT_KIND=SAME_FIRST_PARTY_HOST")
+                  if any(w in uri.path.lower() for w in ("/login", "/auth", "/account", "/register")):
+                      print("RU_DAG_REDIRECT_DESTINATION=AUTH_ROUTE")
+                  else:
+                      print("RU_DAG_REDIRECT_DESTINATION=OTHER_SAME_HOST")
+                  print("RU_DAG_REDIRECT_PATH=" + uri.path[:140])
+                  print("RU_DAG_REDIRECT_HAS_QUERY=" + str(bool(uri.query)))
+              else:
+                  print("RU_DAG_REDIRECT_KIND=EXTERNAL_OR_INVALID")
+          print("ORIGINAL_DETAIL_PROVED=NO")
+          PY

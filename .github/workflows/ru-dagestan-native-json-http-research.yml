@@ -44,3 +44,38 @@ jobs:
       - name: Require first-party live JSON containing at least two distinct genuine list records
         timeout-minutes: 4
         run: python -B -m scripts.research_ru_dagestan_native_json_http
+
+  fixed-official-native-json-method-status-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Classify published JSON POST status with real native envelope and ephemeral anonymous cookie jar
+        shell: bash
+        run: |
+          set -euo pipefail
+          jar="$(mktemp)"
+          trap 'rm -f "$jar"' EXIT
+          index_code="$(curl --silent --show-error --noproxy '*' --proto '=https' \
+            --retry 0 --max-redirs 0 --connect-timeout 8 --max-time 24 \
+            --cookie-jar "$jar" --output /dev/null --write-out '%{http_code}' \
+            -H 'Accept: text/html' -A 'Mozilla/5.0' \
+            'https://goszakaz.e-dag.ru/smallpurchases/GzwSP/NoticesGrid')" && index_rc=0 || index_rc=$?
+          echo "RU_DAG_DIRECT_PUBLIC_GRID_HTTP=$index_code"
+          echo "RU_DAG_DIRECT_PUBLIC_GRID_CURL_EXIT=$index_rc"
+          if test "$index_rc" -ne 0 || test "$index_code" != "200"; then
+            echo "RU_DAG_DIRECT_NATIVE_POST=NOT_ATTEMPTED"
+            exit 0
+          fi
+          status="$(curl --silent --show-error --noproxy '*' --proto '=https' \
+            --retry 0 --max-redirs 0 --connect-timeout 8 --max-time 24 \
+            --cookie "$jar" --cookie-jar "$jar" --output /dev/null --write-out '%{http_code}' \
+            -H 'Accept: application/json, text/javascript' \
+            -H 'Content-Type: application/json' -H 'X-Requested-With: XMLHttpRequest' \
+            -H 'Referer: https://goszakaz.e-dag.ru/smallpurchases/GzwSP/NoticesGrid' \
+            -A 'Mozilla/5.0' \
+            --data-binary '{"settings":{"page":0,"rp":10,"totalRows":0,"sortField":"pub_date","sortDir":"desc","filter":{"dtDatePubBegin":""},"sortList":{"pub_date":"Дата публикации","number":"Рег. номер","name":"Наименование","summa":"НМЦК","uchr_sname":"Заказчик","collecting_endDate":"Дата окончания подачи заявок"},"rpList":[10,20,30],"localFilter":[]}}' \
+            'https://goszakaz.e-dag.ru/smallpurchases/GzwSP/NoticesJson')" && rc=0 || rc=$?
+          echo "RU_DAG_DIRECT_NATIVE_JSON_HTTP=$status"
+          echo "RU_DAG_DIRECT_NATIVE_JSON_CURL_EXIT=$rc"
+          echo "ORIGINAL_DETAILS_VERIFIED=NO"
+          echo "PRODUCTION_CHANGED=NO"

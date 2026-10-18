@@ -1,0 +1,51 @@
+name: RU GPB independent official tenders daily worker and tenant proof
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/ru-gpb-firstparty-daily-live.yml
+      - tests/test_ru_gpb_daily_health.py
+  push:
+    branches: [ci/ru-gpb-firstparty-worker-health-20261018]
+    paths:
+      - .github/workflows/ru-gpb-firstparty-daily-live.yml
+      - tests/test_ru_gpb_daily_health.py
+permissions:
+  contents: read
+concurrency:
+  group: ru-gpb-firstparty-live-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: false
+jobs:
+  gpb-daily-health-offline-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install PyYAML pytest
+      - name: Source adapter, genuine Worker and denied cross-tenant access remain mandatory
+        run: python -m pytest -q tests/test_ru_gpb_daily_health.py
+  gpb-firstparty-live-worker-and-tenant:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Official original detail through durable lease to disposable SQLite and keyword search
+        timeout-minutes: 5
+        run: python -B -m scripts.ci_ru_gpb_public_worker
+      - name: Stored actual first-party GPB tenders reach authorized tenant scoring, not foreign tenant
+        timeout-minutes: 5
+        run: python -B -m scripts.ci_ru_gpb_authenticated

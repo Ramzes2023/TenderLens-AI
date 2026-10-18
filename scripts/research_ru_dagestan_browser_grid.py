@@ -207,6 +207,12 @@ async def observe():
                         date = obj["filter"].get("dtDatePubBegin")
                         print("RU_DAG_BROWSER_DATE_FILTER_TYPE=" + type(date).__name__)
                         print("RU_DAG_BROWSER_DATE_FILTER_EMPTY=" + str(date == ""))
+                        if type(date) is dict:
+                            fields = tuple(sorted(k for k in date if type(k) is str and
+                                                  k.isascii() and k.replace("_", "").isalnum())[:35])
+                            print("RU_DAG_BROWSER_DATE_FILTER_FIELDS=" + ",".join(fields))
+                            print("RU_DAG_BROWSER_DATE_FILTER_FIELD_TYPES=" +
+                                  ",".join(k + ":" + type(date[k]).__name__ for k in fields))
                         if type(date) is str:
                             print("RU_DAG_BROWSER_DATE_FILTER_LENGTH=" + str(len(date)))
                     defaults = public_native_settings_public_defaults(req.post_data, content_type)

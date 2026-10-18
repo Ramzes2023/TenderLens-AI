@@ -3,6 +3,7 @@ import pytest
 
 from scripts.research_ru_dagestan_browser_grid import (
     HOST, LISTING, NATIVE, allowed, only_public_keynames,
+    public_native_settings_shape, public_original_link_shape,
 )
 
 
@@ -41,3 +42,28 @@ def test_json_shape_keynames_are_static():
         "application/json",
     )
     assert names == ("antiforgery", "limit", "page")
+
+
+def test_only_public_native_settings_field_names_and_types_no_values():
+    import json
+    from urllib.parse import urlencode
+    token = "DO_NOT_PRINT_ANONYMOUS_SESSION_TOKEN"
+    payload = urlencode({"settings": json.dumps({
+        "page": 1, "pageSize": 10, "csrf": token,
+    })})
+    keys, types = public_native_settings_shape(payload)
+    assert keys == ("csrf", "page", "pageSize")
+    assert types == ("csrf:str", "page:int", "pageSize:int")
+    assert token not in repr((keys, types))
+    assert public_native_settings_shape("settings=not%20json") == ((), ())
+    assert public_native_settings_shape("settings=1") == ((), ())
+    assert public_native_settings_shape("settings=%7B%7D&settings=%7B%7D") == ((), ())
+
+
+def test_only_genuine_first_party_dagestan_link_paths_and_no_query_values():
+    original = ("/smallpurchases/GzwSP/Notice/123"
+                "?__RequestVerificationToken=SECRET_NEVER_DISPLAY")
+    assert public_original_link_shape(original) == "/smallpurchases/GzwSP/Notice/123"
+    assert public_original_link_shape("https://evil.example/smallpurchases/GzwSP/Notice/123") == "NON_FIRST_PARTY"
+    assert public_original_link_shape("javascript:alert(1)") == "NON_FIRST_PARTY"
+    assert public_original_link_shape(None) == "MISSING_OR_NONSTRING"

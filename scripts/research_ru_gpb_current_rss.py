@@ -1,6 +1,6 @@
 """Independent official Gazprombank ETP RSS -> original detail research.
 
-Official docs advertise /procedures.rss on new.etpgpb.ru. Fail closed
+Official ETP GPB docs explicitly advertise https://etpgpb.ru/procedures.rss. Fail closed
 unless RSS *itself* yields at least two distinct original linked procedures,
 which independently pass the already merged GPB detail validator.
 No changes to production/catalog, tokens, proxies, redirects or TLS.
@@ -18,9 +18,9 @@ from app.sources.http import (
 )
 from app.sources.gpb_etp_public import parse_gpb_verified_detail
 
-FEED_HOST = "new.etpgpb.ru"
+FEED_HOST = "etpgpb.ru"
 DETAIL_HOST = "etpgpb.ru"
-FEED = "https://new.etpgpb.ru/procedures.rss"
+FEED = "https://etpgpb.ru/procedures.rss"
 MAX_BYTES = 1_800_000
 MIN_ORIGINALS = 2
 ORIGINAL_PATH = re.compile(r"/procedures/etp/([0-9]{5,10})-[a-z0-9-]+/")
@@ -64,7 +64,7 @@ def feed_originals(body):
 
 async def real():
     with bounded_fetch(FetchPolicy(
-        frozenset({FEED_HOST, DETAIL_HOST}), MIN_ORIGINALS + 1,
+        frozenset({DETAIL_HOST}), MIN_ORIGINALS + 1,
         max_bytes=MAX_BYTES,
     )):
         async with source_client(

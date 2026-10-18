@@ -16,6 +16,8 @@ HOST = "procurement.am"
 URLS = (
     "https://procurement.am/en/page/announcement_and_invitation_of_an_electronic_auction/",
     "https://procurement.am/en/page/announcement_and_invitation_of_an_open_tender/",
+    "https://gnumner.am/ru/",
+    "https://gnumner.am/en/",
 )
 MAX_BYTES = 1_500_000
 STAMP = re.compile(r"Published\s+20\d{2}-\d{2}-\d{2}", re.I)
@@ -69,9 +71,9 @@ def scrub_link(href):
 async def main():
     report=[]
     for url in URLS:
-        page={"source":HOST,"path":urlsplit(url).path,"enabled":False}
+        page={"source":urlsplit(url).hostname,"path":urlsplit(url).path,"enabled":False}
         try:
-            with bounded_fetch(FetchPolicy(frozenset({HOST}), 1, max_bytes=MAX_BYTES)):
+            with bounded_fetch(FetchPolicy(frozenset({urlsplit(url).hostname}), 1, max_bytes=MAX_BYTES)):
                 async with source_client(timeout=20, follow_redirects=False, trust_env=False) as client:
                     response=await client.get(url)
             page["status"]=response.status_code

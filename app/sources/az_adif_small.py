@@ -46,8 +46,9 @@ class Articles(HTMLParser):
         self.items = []
         self.current = None
         self.depth = 0
-        self.in_p = 0
-        self.pieces = []
+        # Nested paragraph markup must not concatenate distinct public fields.
+        # A stack preserves the *innermost* visible paragraph separately.
+        self.paragraph_stack = []
         self.hidden = 0
 
     def handle_starttag(self, tag, attrs):
@@ -60,30 +61,25 @@ class Articles(HTMLParser):
         if self.current is None or self.hidden:
             return
         if tag == "p":
-            if self.in_p == 0:
-                self.pieces = []
-            self.in_p += 1
+            self.paragraph_stack.append([])
         if tag == "a":
             href = dict(attrs).get("href", "")
             if href:
                 self.current["docs"].append(href)
 
     def handle_data(self, data):
-        if self.current is not None and self.in_p and not self.hidden:
-            self.pieces.append(data)
+        if self.current is not None and self.paragraph_stack and not self.hidden:
+            self.paragraph_stack[-1].append(data)
 
     def handle_endtag(self, tag):
-        if tag == "p" and self.current is not None and self.in_p:
-            self.in_p -= 1
-            if not self.in_p:
-                value = " ".join("".join(self.pieces).split())
-                if value:
-                    self.current["paragraphs"].append(value)
-                self.pieces = []
+        if tag == "p" and self.current is not None and self.paragraph_stack:
+            value = " ".join("".join(self.paragraph_stack.pop()).split())
+            if value:
+                self.current["paragraphs"].append(value)
         if tag == "article" and self.current is not None:
             self.depth -= 1
             if not self.depth:
-                if self.in_p:
+                if self.paragraph_stack:
                     raise SourceError("AZ ADIF malformed public tender article.")
                 self.items.append(self.current)
                 self.current = None
@@ -117,7 +113,7 @@ def parse_public_articles(html, *, today=None):
     if not 1 <= len(parser.items) <= MAX_ARTICLES or parser.current is not None:
         raise SourceError("AZ ADIF public procurement article structure changed.")
     accepted = {}
-    for item in parser.items:
+    for article_index, item in enumerate(parser.items):
         ps = item["paragraphs"]
         if not ps:
             continue
@@ -132,7 +128,7 @@ def parse_public_articles(html, *, today=None):
             raise SourceError("AZ ADIF invalid public tender title.")
         pub = [PUBLISHED.fullmatch(x) for x in ps if PUBLISHED.fullmatch(x)]
         if len(pub) != 1:
-            raise SourceError("AZ ADIF candidate missing unique public posting date.")
+            raise SourceError(f"AZ ADIF article {article_index} missing unique posting date; paragraph_count={len(ps)}; matches={len(pub)}.")
         try:
             day, month, year = (int(x) for x in pub[0].groups())
             posted = date(year, month, day)
@@ -151,7 +147,7 @@ def parse_public_articles(html, *, today=None):
         bids = [DEADLINE.fullmatch(x) for x in ps if DEADLINE.fullmatch(x)]
         docs = list(dict.fromkeys(x for x in item["docs"] if _official_doc(x)))
         if len(bids) != 1 or not docs:
-            raise SourceError("AZ ADIF recent candidate missing deadline or first-party documents.")
+            raise SourceError(f"AZ ADIF article {article_index} missing current deadline/docs; count={len(bids)}/{len(docs)}.")
         try:
             d, monthname, yr, hr, minute = bids[0].groups()
             close = datetime(int(yr), MONTHS[monthname.lower()], int(d), int(hr), int(minute))

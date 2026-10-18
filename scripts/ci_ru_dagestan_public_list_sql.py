@@ -89,12 +89,33 @@ def proof():
                     for r in result.notices
                 ):
                     raise AssertionError("Real Dagestan user keyword query missed native ID")
+                words = re.findall(r"[А-Яа-яЁёA-Za-z]{6,}", notice.title.casefold())
+                if not words:
+                    raise AssertionError("No actual tender title keyword for natural-language search")
+                title_term = words[0]
+                by_title = asyncio.run(snapshot.fetch(
+                    source_keys=(SOURCE_ID,),
+                    search_terms=(title_term,),
+                    limit_per_source=2,
+                ))
+                if by_title.failures or not any(
+                        row.external_id == notice.external_id for row in by_title.notices):
+                    raise AssertionError("Natural-language tender title query did not match")
+                not_found = asyncio.run(snapshot.fetch(
+                    source_keys=(SOURCE_ID,),
+                    search_terms=("valyqon_nonexistent_dagestan_keyword_987654321",),
+                    limit_per_source=2,
+                ))
+                if not_found.failures or not_found.notices:
+                    raise AssertionError("Unmatched tenant keyword query leaked unrelated notices")
                 if store.upsert(notice, connector_version(SOURCE_ID)):
                     raise AssertionError("Idempotent Dagestan replay inserted a duplicate")
             return {
                 "live_official_list_rows": len(rows),
                 "lease_fenced_worker_inserted": stats["inserted_count"],
                 "sqlite_user_keyword_matches": len(rows),
+                "natural_language_title_queries": len(rows),
+                "unmatched_keyword_returns_no_records": True,
                 "idempotent": True,
                 "individual_detail_independently_verified": False,
                 "public_original_registry": True,

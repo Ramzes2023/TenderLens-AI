@@ -90,4 +90,4 @@ def test_disclosed_native_grid_paths_are_diagnostic_only():
     with pytest.raises(ValueError):
         disclosed_grid_paths(b"")
     with pytest.raises(ValueError):
-        disclosed_grid_paths(b"test\\x00more")
+        disclosed_grid_paths(b"test\x00more")

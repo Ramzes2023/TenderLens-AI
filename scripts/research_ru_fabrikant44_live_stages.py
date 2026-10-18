@@ -1,4 +1,4 @@
-"""Read-only official soap4 Fabrikant original source failure-stage diagnosis.
+"""Read-only official Fabrikant original source failure-stage diagnosis.
 
 No log of source HTML, cookies, tokens or customer data. Not acceptance proof.
 """

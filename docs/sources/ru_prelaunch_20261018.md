@@ -36,3 +36,5 @@ For the principal live proofs use `python -m scripts.ci_ru_gpb_public_worker`, `
 ## Remaining launch conditions
 
 Exact-head CI must complete; earlier GitHub-hosted GPB/TEK-Torg/Fabrikant/Roseltorg runs failed transport despite these local successes. Do not turn a failed live check green by using fixtures or weakening transport. Confirm the actual deployment network separately. Sources require explicit flags and worker execution; code registration alone does not activate them. Real customer notification delivery has not been exercised. Regional research PRs without original-list/detail acceptance remain research, not working integrations. EIS HTML independent detail proof and Dagestan details remain incomplete.
+
+Offline validation on the initial integration revision: **569 passed**, with one dependency deprecation warning. Additional numeric transport-observation regressions: **4 passed**. The diagnostic does not claim ingestion and cannot replace the strict live gate.

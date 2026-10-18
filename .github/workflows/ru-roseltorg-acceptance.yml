@@ -66,6 +66,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install -r requirements-dev.txt
+      - name: Observe bounded numeric HTTP status
+        run: python -m scripts.ru_marketplace_transport_observation roseltorg_public
       - name: Verify official listing and independently checked detail, report only bounded failure classes
         timeout-minutes: 3
         run: python -B -m scripts.ci_ru_roseltorg_safe_probe

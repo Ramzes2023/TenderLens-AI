@@ -1,0 +1,40 @@
+name: RU prelaunch GPB and TEK-Torg real worker acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/**
+      - scripts/ci_ru_gpb_public_worker.py
+      - scripts/ci_ru_gpb_authenticated.py
+      - scripts/ci_ru_tektorg_real_worker.py
+      - scripts/ru_marketplace_transport_observation.py
+      - .github/workflows/ru-prelaunch-marketplace-acceptance.yml
+permissions:
+  contents: read
+jobs:
+  marketplace-real-worker:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - source: gpb_etp_public
+            module: ci_ru_gpb_public_worker
+          - source: tektorg
+            module: ci_ru_tektorg_real_worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Observe bounded numeric HTTP status without source payload
+        run: python -m scripts.ru_marketplace_transport_observation ${{ matrix.source }}
+      - name: Require genuine details, durable lease, saved query and replay
+        run: python -m scripts.${{ matrix.module }}
+      - name: Require authenticated GPB scoring and tenant isolation
+        if: matrix.source == 'gpb_etp_public'
+        run: python -m scripts.ci_ru_gpb_authenticated

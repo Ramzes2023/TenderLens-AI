@@ -55,6 +55,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install -r requirements-dev.txt
+      - name: Observe bounded numeric HTTP status
+        run: python -m scripts.ru_marketplace_transport_observation fabrikant_44_public
       - name: Diagnose first-party list and individual official details without fallback
         timeout-minutes: 3
         run: python -B -m scripts.research_ru_fabrikant44_live_stages

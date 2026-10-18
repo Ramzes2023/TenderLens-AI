@@ -79,7 +79,11 @@ async def execute():
 def main():
     try:
         result = asyncio.run(execute())
-        result["passed"] = result["regional_buyer_rows"] > 0
+        # An unsupported/changed official page invalidates the overall gate,
+        # even if earlier verified pages contained interesting district buyers.
+        result["passed"] = ("failed_page" not in result and
+                            result["regional_buyer_rows"] > 0 and
+                            result["pages_requested"] == len(PAGES) * 2)
     except Exception as exc:
         tb = traceback.extract_tb(exc.__traceback__)
         last = tb[-1] if tb else None

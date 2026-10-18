@@ -2,7 +2,7 @@
 import pytest
 from scripts.research_ru_samara_small_public import (
     HOST, INDEX, GRID_URL, listing, strict_original_link, original_detail,
-    disclosed_grid_paths, describe_public_json_shape,
+    disclosed_grid_paths, describe_public_json_shape, disclosed_json_grid_method,
 )
 
 A = "ИМЗ-2026-0-223-000399"
@@ -103,3 +103,16 @@ def test_public_json_is_diagnostic_and_never_fake_original_notice_proof():
     for bad in (b"", b"null", b"{", b"123", b"hello", b'{"a":1}\x00'):
         with pytest.raises((ValueError, UnicodeError)):
             describe_public_json_shape(bad)
+
+def test_samara_disclosed_public_grid_method_is_not_live_proof():
+    assert disclosed_json_grid_method(b"<html></html>") == "NOT_DISCLOSED"
+    url = b'/smallpurchases/GzwSP/NoticesJson'
+    assert disclosed_json_grid_method(
+        b'<script>var list={url:"' + url + b'",mtype:"POST"};</script>'
+    ) == "POST"
+    assert disclosed_json_grid_method(
+        b'<script>var list={url:"' + url + b'",mtype:"GET"};</script>'
+    ) == "GET"
+    assert disclosed_json_grid_method(
+        b'<script>var list={url:"' + url + b'"};</script>'
+    ) == "UNKNOWN"

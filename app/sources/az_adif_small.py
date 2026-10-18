@@ -113,6 +113,7 @@ def parse_public_articles(html, *, today=None):
     if not 1 <= len(parser.items) <= MAX_ARTICLES or parser.current is not None:
         raise SourceError("AZ ADIF public procurement article structure changed.")
     accepted = {}
+    verified_official_publications = 0
     for article_index, item in enumerate(parser.items):
         ps = item["paragraphs"]
         if not ps:
@@ -134,6 +135,7 @@ def parse_public_articles(html, *, today=None):
             posted = date(year, month, day)
         except ValueError:
             raise SourceError("AZ ADIF impossible public posting date.") from None
+        verified_official_publications += 1
         # Legacy archived articles use multiple older document formats.
         # Ignore them *before* requiring the stricter active-notice layout.
         if (today - posted).days > 90:
@@ -179,8 +181,11 @@ def parse_public_articles(html, *, today=None):
         accepted[identity] = notice
         if len(accepted) >= MAX_RESULTS:
             break
-    if not accepted:
-        raise SourceError("AZ ADIF no currently open complete procurement quotations.")
+    # Dated official tenders can all close between purchasing rounds; an empty
+    # set of *open* offers is then valid, not a transport/schema failure.
+    # Generic landing pages and changed public notice structures still fail.
+    if not verified_official_publications:
+        raise SourceError("AZ ADIF no verified dated official procurement announcements.")
     return list(accepted.values())
 
 

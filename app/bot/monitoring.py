@@ -14,6 +14,16 @@ from app.sources import SourceCatalog, SourceError
 
 logger = logging.getLogger(__name__)
 
+def enabled_ru_catalog_keys(catalog: SourceCatalog | None) -> tuple[str, ...]:
+    """Only explicitly enabled RU registrations; no guessed or draft sources."""
+    if catalog is None:
+        return ()
+    return tuple(sorted(
+        item.key for item in catalog.registry.metadata()
+        if item.enabled and "RU" in item.jurisdictions
+    ))
+
+
 
 def _money(value: float | None, currency: str | None) -> str:
     if value is None:
@@ -185,7 +195,8 @@ async def tenders_handler(
         )
 
 
-async def monitor_on_handler(message: Message, monitoring_service: TenderMonitorService | None = None) -> None:
+async def monitor_on_handler(message: Message, monitoring_service: TenderMonitorService | None = None,
+                             source_catalog: SourceCatalog | None = None) -> None:
     service = await _service_or_message(message, monitoring_service)
     if service is None or message.from_user is None:
         return
@@ -197,9 +208,17 @@ async def monitor_on_handler(message: Message, monitoring_service: TenderMonitor
         return
     status = await message.answer("Подготавливаю исходную точку мониторинга…")
     try:
-        baseline_count = await service.baseline(message.from_user.id)
+        if service.settings.ru_background_catalog_enabled:
+            keys = enabled_ru_catalog_keys(source_catalog)
+            if not keys:
+                raise ValueError("No explicitly enabled Russian source.")
+            baseline_count, _ = await service.baseline_from_catalog(
+                source_catalog, message.from_user.id, source_keys=keys,
+            )
+        else:
+            baseline_count = await service.baseline(message.from_user.id)
         await service.subscribe(message.from_user.id, message.chat.id)
-    except (SourceError, MonitoringRepositoryError):
+    except (SourceError, MonitoringRepositoryError, ValueError):
         await status.edit_text("Не удалось включить мониторинг. Проверьте источник и локальную БД.")
         return
     await status.edit_text(
@@ -222,7 +241,8 @@ async def monitor_off_handler(message: Message, monitoring_service: TenderMonito
 
 
 async def monitor_status_handler(message: Message, monitoring_service: TenderMonitorService | None = None,
-                                 company_service: CompanyService | None = None) -> None:
+                                 company_service: CompanyService | None = None,
+                                 source_catalog: SourceCatalog | None = None) -> None:
     service = await _service_or_message(message, monitoring_service)
     if service is None or message.from_user is None:
         return
@@ -243,26 +263,42 @@ async def monitor_status_handler(message: Message, monitoring_service: TenderMon
         feed_count = len(service.settings.eis_rss_urls)
         feed_mode = "статические RSS"
     company_line = workspace.name if workspace is not None else (profile.company_name if profile else "не выбрана")
+    ru_mode = service.settings.ru_background_catalog_enabled
+    ru_count = len(enabled_ru_catalog_keys(source_catalog)) if ru_mode else 0
     await message.answer(
-        "📡 Мониторинг ЕИС\n"
+        ("📡 Мониторинг российских источников" if ru_mode else "📡 Мониторинг ЕИС") + "\n"
         f"Фоновый цикл: {global_state}\n"
         f"Ваша подписка: {state}\n"
         f"Активная компания: {company_line}\n"
         f"Интервал: {service.settings.interval_seconds} сек.\n"
-        f"RSS-поисков: {feed_count} ({feed_mode})\n"
+        (f"Включённых RU-источников: {ru_count}\n" if ru_mode else f"RSS-поисков: {feed_count} ({feed_mode})\n")
         "Pre-filter использует данные RSS и активный профиль; полный score выполняется после анализа документа."
     )
 
 
-async def monitor_loop(bot: Bot, service: TenderMonitorService, stop_event: asyncio.Event) -> None:
-    """Periodic source check. Errors are logged without URLs or credentials."""
+async def monitor_loop(bot: Bot, service: TenderMonitorService,
+                       stop_event: asyncio.Event, source_catalog: SourceCatalog | None = None) -> None:
+    """Periodic source check. Russian catalog scanning is operator opt-in."""
+    russian_keys = (enabled_ru_catalog_keys(source_catalog)
+                    if service.settings.ru_background_catalog_enabled else ())
+    if service.settings.ru_background_catalog_enabled and not russian_keys:
+        raise ValueError("No approved Russian sources for the background monitor.")
     while not stop_event.is_set():
         try:
             subscriptions = await service.active_subscriptions()
             if subscriptions:
                 for subscription in subscriptions:
                     try:
-                        matches = await service.fetch_matches(subscription.owner_user_id)
+                        if service.settings.ru_background_catalog_enabled:
+                            matches, report = await service.fetch_matches_from_catalog(
+                                source_catalog, subscription.owner_user_id,
+                                source_keys=russian_keys,
+                            )
+                            if not report.attempted_sources or report.total_failure:
+                                logger.warning("Russian source scan unavailable; no alerts claimed.")
+                                continue
+                        else:
+                            matches = await service.fetch_matches(subscription.owner_user_id)
                         new_matches = await service.claim_new(subscription.owner_user_id, matches)
                         for match in new_matches[:service.settings.max_notifications_per_cycle]:
                             await bot.send_message(

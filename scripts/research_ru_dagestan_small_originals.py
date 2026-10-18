@@ -145,6 +145,13 @@ async def prove_live():
             if "html" not in res.headers.get("content-type", "").lower():
                 raise ValueError("Dagestan official listing is not HTML")
             parsed = parse(res.content)
+            routes = sorted(set(re.findall(
+                r"/smallpurchases/GzwSP/[A-Za-z][A-Za-z0-9_/-]{3,65}",
+                res.content.decode("utf-8-sig", "replace"),
+            )))
+            print("RU_DAG_PUBLIC_GZWSP_ROUTES=" + str(len(routes)))
+            for i, route in enumerate(routes[:12], 1):
+                print("RU_DAG_FIRSTPARTY_ROUTE_" + str(i) + "=" + route)
             print("RU_DAG_PUBLIC_LIST_ANCHORS=" + str(len(parsed.links)))
             print("RU_DAG_NATIVE_DETAIL_ANCHORS=" + str(sum(
                 canonical(href) is not None for href, _ in parsed.links)))

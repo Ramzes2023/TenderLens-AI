@@ -42,3 +42,18 @@ jobs:
       - name: Independently corroborate two first-party original Stavropol small purchases
         timeout-minutes: 5
         run: python -B -m scripts.research_ru_stavropol_rts_small
+  stavropol-fixed-public-diagnostic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Classify fixed first-party HTTPS status and DNS with no redirect, proxy or TLS override
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$(curl --noproxy '*' --silent --show-error --proto '=https' \
+            --max-redirs 0 --connect-timeout 8 --max-time 20 --output /dev/null \
+            --write-out '%{http_code}' 'https://market26.rts-tender.ru/')" && code=0 || code=$?
+          echo "RU_STAVROPOL_PUBLIC_HTTP=$result"
+          echo "RU_STAVROPOL_CURL_EXIT=$code"
+          echo "DIAGNOSTIC_ONLY=YES"
+          echo "PRODUCTION_CHANGED=NO"

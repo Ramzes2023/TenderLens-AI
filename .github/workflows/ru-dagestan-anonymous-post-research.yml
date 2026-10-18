@@ -6,6 +6,8 @@ on:
     paths:
       - scripts/research_ru_dagestan_anonymous_post.py
       - tests/test_ru_dagestan_anonymous_post.py
+      - scripts/research_ru_dagestan_public_csrf_post.py
+      - tests/test_ru_dagestan_public_csrf_post.py
       - .github/workflows/ru-dagestan-anonymous-post-research.yml
 
 permissions:
@@ -18,6 +20,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Basic no-CSRF POST was proven invalid (HTTP 400); never require it as a
+  # mandatory live feed. Only the true anonymous same-session CSRF gate below
+  # can pass, and even that is RESEARCH ONLY until original details + SQL search.
   strict-offline-published-route:
     runs-on: ubuntu-latest
     timeout-minutes: 8
@@ -31,21 +36,6 @@ jobs:
       - run: python -m pip install -r requirements-dev.txt
       - name: Validate strict publication gate and reject synthetic login/schema fraud
         run: python -m pytest -q tests/test_ru_dagestan_anonymous_post.py tests/test_ru_dagestan_public_csrf_post.py
-
-  actual-anonymous-post-public-list:
-    runs-on: ubuntu-latest
-    timeout-minutes: 9
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: python -m pip install -r requirements-dev.txt
-      - name: Require official public JSON from two genuine anonymous rows
-        timeout-minutes: 4
-        run: python -B -m scripts.research_ru_dagestan_anonymous_post
 
   fixed-firstparty-method-diagnostic-only:
     runs-on: ubuntu-latest

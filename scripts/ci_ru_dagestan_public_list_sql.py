@@ -14,34 +14,23 @@ from app.database.config import DatabaseSettings
 from app.jobs import HandlerRegistry, JobRepository, JobSettings
 from app.jobs.models import JobScope
 from app.jobs.worker import Worker
-from app.sources.catalog import SourceCatalog
+from app.sources.catalog import build_source_catalog
 from app.sources.ingestion import JOB_TYPE, ConnectorSyncHandler, ConnectorSyncService, connector_version
-from app.sources.multi import MultiSourceFetcher
 from app.sources.opportunities import OpportunityRepository
-from app.sources.registry import SourceCapabilities, SourceRegistration, SourceRegistry, SourceTransport
-from app.sources.ru_dagestan_public_list import (
-    SOURCE_ID, GRID, HOST, DagestanPublicListSource,
-)
+from app.sources.ru_dagestan_public_list import SOURCE_ID, GRID
 from app.sources.snapshots import snapshot_catalog
+from app.monitoring.config import MonitoringSettings
 
 
 def make_research_catalog():
-    reg = SourceRegistry([SourceRegistration(
-        key=SOURCE_ID,
-        display_name="Дагестан — анонимный публичный реестр (без деталей)",
-        source=DagestanPublicListResearchSource(timeout=25),
-        transport=SourceTransport.API,
-        jurisdictions=("RU",),
-        languages=("ru",),
-        homepage_url=GRID,
-        official=True,
-        enabled=True,
-        capabilities=SourceCapabilities(
-            keyword_search=False, pagination=False, documents=False,
-            incremental_sync=False, authentication_required=False,
-        ),
-    )])
-    return SourceCatalog(reg, MultiSourceFetcher(reg, concurrency=1))
+    # Same production catalog builder; only enable source inside this isolated
+    # process with disposable database. Default config remains OFF.
+    return build_source_catalog(MonitoringSettings(
+        enabled=False, interval_seconds=600, max_items=2,
+        max_notifications_per_cycle=5, request_timeout=25,
+        eis_rss_urls=(), ca_bundle_file=None, profile_feeds_enabled=False,
+        ru_dagestan_public_list_enabled=True,
+    ))
 
 
 def proof():

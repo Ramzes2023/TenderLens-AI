@@ -213,6 +213,20 @@ async def observe():
                             print("RU_DAG_BROWSER_DATE_FILTER_FIELDS=" + ",".join(fields))
                             print("RU_DAG_BROWSER_DATE_FILTER_FIELD_TYPES=" +
                                   ",".join(k + ":" + type(date[k]).__name__ for k in fields))
+                            import re
+                            for field in ("PName", "PType"):
+                                val = date.get(field)
+                                if type(val) is str and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]{0,49}", val):
+                                    print("RU_DAG_BROWSER_DATE_FILTER_" + field.upper() + "=" + val)
+                                else:
+                                    print("RU_DAG_BROWSER_DATE_FILTER_" + field.upper() + "=UNVERIFIED")
+                            val = date.get("PValue")
+                            if val is None or val == "":
+                                print("RU_DAG_BROWSER_DATE_FILTER_PVALUE=EMPTY")
+                            elif type(val) is str and re.fullmatch(r"(?:\\d{2}\\.\\d{2}\\.\\d{4}|\\d{4}-\\d{2}-\\d{2})", val):
+                                print("RU_DAG_BROWSER_DATE_FILTER_PVALUE_PUBLIC_DATE=" + val)
+                            else:
+                                print("RU_DAG_BROWSER_DATE_FILTER_PVALUE=NONEMPTY_OTHER")
                         if type(date) is str:
                             print("RU_DAG_BROWSER_DATE_FILTER_LENGTH=" + str(len(date)))
                     defaults = public_native_settings_public_defaults(req.post_data, content_type)

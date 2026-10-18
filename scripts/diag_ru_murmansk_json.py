@@ -8,21 +8,41 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import httpx
 from app.sources.http import FetchPolicy, bounded_fetch, source_client, ConnectorTransportError
 
 HOST = "gz-murman.ru"
+INDEX = "https://gz-murman.ru/site/GzwSP/NoticesGrid"
 URL = "https://gz-murman.ru/site/GzwSP/NoticesJson"
 QUERY = {"page": "1", "rows": "5", "sidx": "", "sord": "desc"}
 MAX_BYTES = 1_800_000
 
 
 async def probe():
-    with bounded_fetch(FetchPolicy(frozenset({HOST}), 1, max_bytes=MAX_BYTES)):
+    with bounded_fetch(FetchPolicy(frozenset({HOST}), 2, max_bytes=MAX_BYTES)):
+        # Inspect the exact original first-party jqGrid call, no JS execution.
         async with source_client(
-            timeout=24,
-            trust_env=False,
-            follow_redirects=False,
+            timeout=24, trust_env=False, follow_redirects=False,
+            headers={"Accept": "text/html", "User-Agent": "Mozilla/5.0"},
+        ) as page_client:
+            page = await page_client.get(INDEX)
+            page.raise_for_status()
+            markup = page.content.decode("utf-8-sig", "replace")
+            location = markup.find("/site/GzwSP/NoticesJson")
+            if location == -1:
+                print("RU_MURMANSK_JSON=ROUTE_NOT_PUBLISHED")
+                return 2
+            code = markup[max(0, location - 800):location + 3000]
+            method = re.search(r"""\bmtype\s*:\s*['"](POST|GET)['"]""", code, re.I)
+            print("RU_MURMANSK_JSON_GRID_METHOD=" +
+                  (method.group(1).upper() if method else "NOT_DECLARED"))
+            for key in ("postData", "jsonReader", "rowNum", "datatype"):
+                print("RU_MURMANSK_JQGRID_" + key.upper() + "=" +
+                      str(bool(re.search(r"\b" + key + r"\s*:", code))))
+        # Separate public HTTPS clients: no cookies carried from registry.
+        async with source_client(
+            timeout=24, trust_env=False, follow_redirects=False,
             headers={"Accept": "application/json", "User-Agent": "Mozilla/5.0"},
         ) as client:
             result = await client.get(URL, params=QUERY)

@@ -65,7 +65,7 @@ def test_unlinked_or_placeholder_or_one_row_fails():
     with pytest.raises(ValueError):
         listing_originals(listing().replace(NUMBERS[1].encode(), NUMBERS[0].encode()), HOST)
     with pytest.raises(ValueError):
-        listing_originals(b"<table><tr><td>123456</td><td>Без ссылки</td></tr></table>", HOST)
+        listing_originals("<table><tr><td>123456</td><td>Без ссылки</td></tr></table>".encode("utf-8"), HOST)
 
 
 def test_script_text_not_original_proof():

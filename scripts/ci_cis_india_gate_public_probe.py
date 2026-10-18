@@ -8,7 +8,7 @@ import json
 import re
 
 from app.sources.http import FetchPolicy, bounded_fetch, source_client
-from app.sources.india_epublish import LIST_URL, HOME, _TR, _TD, _text, _verified_portal_detail, parse_epublish_latest
+from app.sources.india_epublish import LIST_URL, HOME, _TR, _TD, _text, _verified_portal_detail, parse_epublish_latest, IndiaEpublishSource
 
 async def run():
     report={"source":"in_epublish","production_changed":False}
@@ -38,8 +38,19 @@ async def run():
         except Exception as exc:
             report["parser_error_type"]=type(exc).__name__
             report["parser_safe_code"]="no_active_or_changed_schema"
+        # Test the exact same anonymous source adapter under the worker's
+        # enclosing strict one-request HTTPS policy, not only raw HTML.
+        try:
+            with bounded_fetch(FetchPolicy(frozenset({"eprocure.gov.in"}), 1, max_bytes=1024*1024)):
+                rows=await IndiaEpublishSource(timeout=25).fetch(limit=10)
+            report["worker_policy_adapter_rows"]=len(rows)
+            report["worker_policy_adapter_ok"]=bool(rows)
+        except Exception as exc:
+            report["worker_policy_adapter_ok"]=False
+            report["worker_policy_error_type"]=type(exc).__name__
+            report["worker_policy_error_code"]="source_rejected_strict_upstream"
         print(json.dumps(report,sort_keys=True))
-        return 0 if report.get("parsed_real_opportunities",0)>0 else 1
+        return 0 if report.get("parsed_real_opportunities",0)>0 and report.get("worker_policy_adapter_ok") else 1
     except Exception as exc:
         print(json.dumps({**report,"transport_error_type":type(exc).__name__},sort_keys=True))
         return 1

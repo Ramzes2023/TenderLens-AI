@@ -74,6 +74,36 @@ def public_native_settings_shape(data: str | None):
     return keys, types
 
 
+def public_native_settings_encoding(data: str | None):
+    """Emit only syntax classification and rough size. Never actual settings values."""
+    if type(data) is not str or len(data) > 180_000:
+        return "INVALID", 0
+    settings = [v for k, v in parse_qsl(data, keep_blank_values=True)
+                if k == "settings"]
+    if len(settings) != 1:
+        return "MISSING_OR_DUPLICATE", 0
+    value = settings[0]
+    if not 0 < len(value) <= 80_000:
+        return "INVALID_LENGTH", 0
+    try:
+        obj = json.loads(value)
+        if type(obj) is dict:
+            return "JSON_OBJECT", len(value)
+        if type(obj) is list:
+            return "JSON_ARRAY", len(value)
+        if type(obj) is str:
+            return "JSON_STRING", len(value)
+        return "JSON_" + type(obj).__name__.upper(), len(value)
+    except ValueError:
+        if value.startswith("%7B") or value.startswith("%5B"):
+            return "DOUBLE_URL_ENCODED", len(value)
+        if value.startswith("page=") or "&" in value:
+            return "NESTED_QUERY_STRING", len(value)
+        if value.startswith("{") or value.startswith("["):
+            return "MALFORMED_JSON", len(value)
+        return "OTHER_OPAQUE", len(value)
+
+
 def public_original_link_shape(value):
     """Classify first-party link PATHS only; strip all query and tokens."""
     if type(value) is not str or not 0 < len(value) < 1800:
@@ -135,6 +165,9 @@ async def observe():
                     _, shape = public_native_settings_shape(req.post_data)
                     print("RU_DAG_BROWSER_NATIVE_SETTINGS_FIELD_TYPES=" +
                           ",".join(shape))
+                    kind, length = public_native_settings_encoding(req.post_data)
+                    print("RU_DAG_BROWSER_NATIVE_SETTINGS_ENCODING=" + kind)
+                    print("RU_DAG_BROWSER_NATIVE_SETTINGS_LENGTH=" + str(length))
             await route.continue_()
 
         async def inspect_response(resp):

@@ -205,7 +205,7 @@ class ArmeniaArmepsSource:
                         break
                     # Preserve the accepted two-page contract. Additional pages
                     # require a navigation link in the immediately preceding HTML.
-                    next_url = ARMEPS_PAGE_TWO_URL if page == 1 else observed_next_page(response.text, page)
+                    next_url = observed_next_page(response.text, page)
                     if next_url is None:
                         break
                     url = next_url

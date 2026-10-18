@@ -129,7 +129,7 @@ def test_actual_ingestion_budget_and_provenance(monkeypatch, tmp_path, key):
         ctx.fenced_write = lambda write: jobs.fenced_write(claim.job.id, claim.token, write)
         result = ConnectorSyncHandler(cat, store, max_records=100)(ctx, claim.job.payload)
         assert jobs.complete(claim.job.id, claim.token, result)
-        expected_calls = [am.ARMEPS_LISTING_URL, am.ARMEPS_PAGE_TWO_URL] if key == KEYS[0] else [tj.LISTING_URL]
+        expected_calls = [am.ARMEPS_LISTING_URL] if key == KEYS[0] else [tj.LISTING_URL]
         assert calls == expected_calls
         assert result['accepted_count'] == len(calls)
         rows = store.read(key, 100)
@@ -143,6 +143,25 @@ def test_actual_ingestion_budget_and_provenance(monkeypatch, tmp_path, key):
         assert _policy.get() is None
     finally:
         database.close()
+
+
+
+def test_armenian_follow_page_two_only_when_first_page_actually_links_it(monkeypatch):
+    seen = []
+    def handle(request):
+        seen.append(str(request.url))
+        page = len(seen)
+        base_html = html('am_armeps', page)
+        if page == 1:
+            base_html += f'<a class="pg_n" href="{am.ARMEPS_PAGE_TWO_URL}">2</a>'
+        return httpx.Response(200, text=base_html, headers={'content-type':'text/html'})
+    monkeypatch.setattr(am, 'source_client', lambda **kw: source_client(**kw, transport=httpx.MockTransport(handle)))
+    result = asyncio.run(am.ArmeniaArmepsSource(max_pages=2).fetch(limit=20))
+    assert seen == [am.ARMEPS_LISTING_URL, am.ARMEPS_PAGE_TWO_URL]
+    assert [n.external_id for n in result] == ['1', '2']
+    assert am.observed_next_page(html('am_armeps', 1), 1) is None
+    assert am.observed_next_page(html('am_armeps', 1) + '<a class="pg_n" href="https://evil.invalid">2</a>', 1) is None
+
 
 
 @pytest.mark.parametrize('key', KEYS)

@@ -78,6 +78,21 @@ def test_fabrikant_legacy_delivery_is_not_resent_as_eis(tmp_path):
     asyncio.run(check())
 
 
+def test_legacy_surrogate_external_id_preserves_already_sent_notice(tmp_path):
+    repo = MonitoringRepository(tmp_path / "legacy-surrogate.sqlite")
+    repo.initialize()
+    assert repo.mark_seen(9, "fabrikant_44_public", "local-surrogate-4")
+    s = service(repo)
+    old = item("fabrikant_44_public", "local-surrogate-4", N)
+
+    async def check():
+        assert await s.unseen_matches(9, [old]) == []
+        assert await s.claim_new(9, [old]) == []
+        assert not repo.seen(9, "eis_44", N)
+
+    asyncio.run(check())
+
+
 def test_no_guessing_marketplace_original_and_no_title_based_dedup(tmp_path):
     repo = MonitoringRepository(tmp_path / "distinct.sqlite")
     repo.initialize()

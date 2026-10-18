@@ -16,6 +16,7 @@ from app.sources.http import FetchPolicy, bounded_fetch, source_client, Connecto
 from scripts.research_ru_dagestan_anonymous_post import (
     HOST, INDEX, URL, MAX_BYTES, published_route,
 )
+from scripts.research_ru_dagestan_public_csrf_post import public_grid_token
 
 SORT_LIST = {
     "pub_date": "Дата публикации",
@@ -87,6 +88,7 @@ async def probe():
                 raise
             if "html" not in home.headers.get("content-type", "").lower() or not published_route(home.content):
                 raise ValueError("Official native list route not published")
+            token, _ = public_grid_token(home.content)
             for i, filter_value in enumerate(("", None), 1):
                 try:
                     response = await client.post(
@@ -94,6 +96,9 @@ async def probe():
                             "Accept": "application/json, text/javascript",
                             "X-Requested-With": "XMLHttpRequest",
                             "Referer": INDEX,
+                            # Supplied by the site's own public HTML, scoped to
+                            # this anonymous first-party session only.
+                            "RequestVerificationToken": token,
                         },
                     )
                 except ConnectorTransportError as err:

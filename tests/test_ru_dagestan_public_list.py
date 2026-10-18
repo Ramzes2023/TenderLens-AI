@@ -130,3 +130,21 @@ def test_unsupported_source_never_appears_in_default_production_catalog():
     )
     catalog=build_source_catalog(settings)
     assert mod.SOURCE_ID not in catalog.enabled_keys
+
+
+def test_explicit_optin_uses_real_dagestan_adapter_without_detail_capability():
+    from app.sources.catalog import build_source_catalog
+    from app.monitoring.config import MonitoringSettings
+    catalog = build_source_catalog(MonitoringSettings(
+        enabled=False, interval_seconds=600, max_items=3,
+        max_notifications_per_cycle=5, request_timeout=25,
+        eis_rss_urls=(), ca_bundle_file=None, profile_feeds_enabled=False,
+        ru_dagestan_public_list_enabled=True,
+    ))
+    assert mod.SOURCE_ID in catalog.enabled_keys
+    item = catalog.registry.get(mod.SOURCE_ID)
+    assert item.source.name == mod.SOURCE_ID
+    assert item.official
+    assert item.homepage_url == mod.GRID
+    assert item.capabilities.documents is False
+    assert item.capabilities.keyword_search is False

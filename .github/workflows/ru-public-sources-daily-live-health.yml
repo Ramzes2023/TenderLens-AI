@@ -104,6 +104,9 @@ jobs:
       - name: Native STAN notices -> authorized tenant scoring and denial
         timeout-minutes: 4
         run: python -B -m scripts.ci_ru_stan_authenticated
+      - name: Original STAN buyers and Moscow deadlines -> disposable SQLite and buyer keyword search
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_stan_metadata_live_sql
 
   south-ural-ten-public-signal:
     if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'

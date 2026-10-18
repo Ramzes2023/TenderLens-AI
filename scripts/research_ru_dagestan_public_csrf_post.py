@@ -61,9 +61,12 @@ def public_grid_token(html: bytes):
     print("RU_DAG_PUBLIC_GRID_TOKEN_COUNT=" + str(len(form.tokens)))
     print("RU_DAG_PUBLIC_GRID_TOKEN_LENGTHS=" + ",".join(str(len(t)) for t in form.tokens[:4]))
     print("RU_DAG_PUBLIC_GRID_FIELD_COUNT=" + str(len(form.names)))
-    if len(form.tokens) != 1 or not TOKEN.fullmatch(form.tokens[0]):
+    unique_tokens = list(dict.fromkeys(form.tokens))
+    print("RU_DAG_PUBLIC_GRID_TOKEN_DISTINCT=" + str(len(unique_tokens)))
+    print("RU_DAG_PUBLIC_GRID_NAMES=" + ",".join(sorted(form.names)[:25]))
+    if len(unique_tokens) != 1 or not TOKEN.fullmatch(unique_tokens[0]):
         raise ValueError("No unambiguous public grid anti-forgery token")
-    return form.tokens[0], sorted(form.names)
+    return unique_tokens[0], sorted(form.names)
 
 
 async def probe():

@@ -178,6 +178,17 @@ async def real():
             response.raise_for_status()
             if "html" not in response.headers.get("content-type", "").lower():
                 raise ValueError("Original Samara registry not HTML")
+            print("RU_SAMARA_HTTP_BYTES=" + str(len(response.content)))
+            # Safe bounded status classification, never log body, cookies or
+            # login tokens; HTTP 200 can still mean no public procurement.
+            decoded = response.content.decode("utf-8-sig", "replace").casefold()
+            for label, needles in (
+                ("AUTH_GATE", ("авторизац", "войти в систему", "login", "sign in")),
+                ("JS_REQUIRED", ("javascript", "enable javascript", "включите javascript")),
+                ("BOT_GATE", ("captcha", "проверка браузера", "ддос", "ddos")),
+            ):
+                print("RU_SAMARA_" + label + "="
+                      + str(any(needle in decoded for needle in needles)))
             rows = listing(response.content)
             result = []
             for number, title, url in rows:

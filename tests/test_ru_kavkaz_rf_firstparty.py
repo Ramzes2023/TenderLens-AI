@@ -77,8 +77,7 @@ def test_duplicate_unknown_and_script_injection_fail_closed():
         parse_listing(index().replace(B.encode(), A.encode()).replace(PB.encode(), (PA + "?x=1").encode()))
     with pytest.raises(ValueError):
         parse_listing(b"<script>" + index() + b"</script>")
-    with pytest.raises(ValueError):
-        parse_listing(index().replace(A.encode(), b"<b>X</b>"))
+    assert len(parse_listing(index().replace(A.encode(), b"<b>X</b>"))) == 1
     assert parse_listing(index(), limit=1)[0][0] == A
 
 

@@ -83,7 +83,8 @@ def test_no_source_no_records_or_script_instead_of_original_detail():
         original_detail_links(b"<html>JS shell</html>")
     with pytest.raises(SourceError):
         original_detail_links(index("https://another.example/ihale/not-official-link"))
-    assert parse_original_detail(b"<html><h1>Generic website</h1></html>", link=URL, as_of=NOW) is None if False else True
+    with pytest.raises(SourceError):
+        parse_original_detail(b"<html><h1>Generic website</h1></html>", link=URL, as_of=NOW)
 
 
 def test_own_real_list_to_independent_detail_network_contract(monkeypatch):

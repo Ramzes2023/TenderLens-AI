@@ -52,8 +52,8 @@ def test_detail_requires_original_id_subject_price_and_buyer():
     for altered in (
         detail("ИМЗ-2026-999999", title),
         detail(number, "Другой предмет закупки"),
-        detail(number, title).replace("Начальная (максимальная) цена закупки", "Цена договора"),
-        detail(number, title).replace("Заказчик", "Продавец"),
+        detail(number, title).replace("Начальная (максимальная) цена закупки".encode("utf-8"), "Цена договора".encode("utf-8")),
+        detail(number, title).replace("Заказчик".encode("utf-8"), "Продавец".encode("utf-8")),
         " <script>Номер и дата извещения ИМЗ-2026-005228 Объект закупки Приобретение сетевого оборудования и аксессуаров</script>".strip().encode("utf-8"),
     ):
         with pytest.raises(ValueError):

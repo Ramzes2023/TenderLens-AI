@@ -41,9 +41,17 @@ class MonitoringSettings:
     lenobl_small_public_enabled: bool = False
     nmck_native_public_enabled: bool = False
     stan_commercial_public_enabled: bool = False
+    south_ural_public_enabled: bool = False
+    ru_dagestan_public_list_enabled: bool = False
+    ru_samara_public_list_enabled: bool = False
+    kavkaz_rf_firstparty_enabled: bool = False
+    ru_background_catalog_enabled: bool = False
     eis_direct_enabled: bool = False
     eis_system_trust_enabled: bool = False
     eis_44_html_enabled: bool = False
+    cis_md_elicitatie_enabled: bool = False
+    cis_az_azeristilik_enabled: bool = False
+    cis_az_adif_small_enabled: bool = False
 
     @property
     def eis_223_configured(self) -> bool:
@@ -122,9 +130,17 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         lenobl_small_public_enabled=_bool("LENOBL_SMALL_PUBLIC_ENABLED", False),
         nmck_native_public_enabled=_bool("NMCK_NATIVE_PUBLIC_ENABLED", False),
         stan_commercial_public_enabled=_bool("STAN_COMMERCIAL_PUBLIC_ENABLED", False),
+        south_ural_public_enabled=_bool("SOUTH_URAL_PUBLIC_ENABLED", False),
+        ru_dagestan_public_list_enabled=_bool("RU_DAGESTAN_PUBLIC_LIST_ENABLED", False),
+        ru_samara_public_list_enabled=_bool("RU_SAMARA_PUBLIC_LIST_ENABLED", False),
+        kavkaz_rf_firstparty_enabled=_bool("KAVKAZ_RF_FIRSTPARTY_ENABLED", False),
+        ru_background_catalog_enabled=_bool("VALYQON_RU_BACKGROUND_CATALOG_ENABLED", False),
         eis_direct_enabled=_bool("EIS_DIRECT_ENABLED", False),
         eis_system_trust_enabled=_bool("EIS_SYSTEM_TRUST_ENABLED", False),
         eis_44_html_enabled=_bool("EIS_44_HTML_ENABLED", False),
+        cis_md_elicitatie_enabled=_bool("VALYQON_CIS_MD_ELICITATIE_ENABLED", False),
+        cis_az_azeristilik_enabled=_bool("VALYQON_CIS_AZ_AZERISTILIK_ENABLED", False),
+        cis_az_adif_small_enabled=_bool("VALYQON_CIS_AZ_ADIF_SMALL_ENABLED", False),
         eis_223_rss_urls=_urls(os.environ.get("EIS_223_RSS_URLS", "")),
         eis_223_profile_feeds_enabled=_bool("EIS_223_PROFILE_FEEDS_ENABLED", False),
         profile_feeds_enabled=_bool("EIS_PROFILE_FEEDS_ENABLED", True),

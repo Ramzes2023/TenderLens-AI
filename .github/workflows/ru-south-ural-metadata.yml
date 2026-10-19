@@ -1,0 +1,47 @@
+name: RU South Ural verified regional buyer deadline and price enrichment
+on:
+  push:
+    branches: [feat/ru-south-ural-metadata-reconciled-20261018]
+    paths:
+      - app/sources/south_ural_public.py
+      - tests/test_ru_south_ural_adapter.py
+      - scripts/ci_ru_south_ural_verified_metadata.py
+      - .github/workflows/ru-south-ural-metadata.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/south_ural_public.py
+      - tests/test_ru_south_ural_adapter.py
+      - scripts/ci_ru_south_ural_verified_metadata.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+jobs:
+  south-ural-metadata-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Strict price currency buyer and zoned deadline metadata safety
+        run: python -m pytest -q tests/test_ru_south_ural_adapter.py
+  south-ural-metadata-real-persistence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real buyer, deadline and priced-or-unknown tender fields roundtrip through SQLite
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_south_ural_verified_metadata

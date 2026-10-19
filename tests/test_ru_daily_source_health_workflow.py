@@ -24,6 +24,10 @@ EXPECTED={
         "python -B -m scripts.ci_ru_stan_real_worker",
         "python -B -m scripts.ci_ru_stan_authenticated",
     ),
+    "south-ural-ten-public-signal": (
+        "python -B -m scripts.ci_ru_south_ural_10_real_worker",
+        "python -B -m scripts.ci_ru_south_ural_authenticated",
+    ),
 }
 
 def test_schedule_manual_default_and_five_specific_jobs():
@@ -58,6 +62,20 @@ def test_real_worker_sql_keyword_and_auth_scoring_still_run_on_live_network():
                 script=Path(parts[2])
             assert script.exists(),script
 
+def test_daily_stan_original_buyer_deadline_to_sql_search():
+    y = load()
+    commands = [x.get('run') for x in y['jobs']['stan-commercial-public-signal']['steps'] if x.get('run')]
+    worker = 'python -B -m scripts.ci_ru_stan_real_worker'
+    tenant = 'python -B -m scripts.ci_ru_stan_authenticated'
+    metadata = 'python -B -m scripts.ci_ru_stan_metadata_live_sql'
+    assert worker in commands and tenant in commands and metadata in commands
+    assert commands.index(worker) < commands.index(metadata)
+    source = Path('scripts/ci_ru_stan_metadata_live_sql.py').read_text('utf-8')
+    for required in ('StanCommercialPublicSource(', 'TemporaryDirectory(', 'OpportunityRepository(', 'store.upsert(', 'store.read(', 'notice.customer', 'notice.deadline'):
+        assert required in source, required
+    assert 'MockTransport' not in source
+
+
 def test_no_selfhosted_pr_exec_or_credentials():
     txt=YML.read_text("utf-8").lower()
     assert "self-hosted" not in txt and "pull_request_target" not in txt
@@ -67,3 +85,36 @@ def test_no_selfhosted_pr_exec_or_credentials():
     assert "cancel-in-progress: false" in txt
     for forbidden in ("curl -k","--insecure","trust_env=true","tls_verify=false"):
         assert forbidden not in txt
+
+
+
+def test_approved_ten_originals_and_independent_deadline_stay_mandatory():
+    x=load()
+    job=x["jobs"]["south-ural-ten-public-signal"]
+    scripts=[item.get("run") for item in job["steps"] if item.get("run")]
+    assert "python -B -m scripts.ci_ru_south_ural_10_real_worker" in scripts
+    assert "python -B -m scripts.ci_ru_south_ural_deadline" in scripts
+    assert "python -B -m scripts.ci_ru_south_ural_authenticated" in scripts
+    assert scripts.index("python -B -m scripts.ci_ru_south_ural_10_real_worker") < scripts.index("python -B -m scripts.ci_ru_south_ural_authenticated")
+    assert "continue-on-error" not in job and not any(step.get("continue-on-error") for step in job["steps"])
+
+
+def test_daily_south_ural_buyer_amount_deadline_real_sql_roundtrip():
+    """New metadata gate may neither be skipped nor satisfied with fixtures."""
+    y = load()
+    steps = y["jobs"]["south-ural-ten-public-signal"]["steps"]
+    commands = [step.get("run") for step in steps if step.get("run")]
+    originals = "python -B -m scripts.ci_ru_south_ural_10_real_worker"
+    metadata = "python -B -m scripts.ci_ru_south_ural_verified_metadata"
+    assert originals in commands
+    assert metadata in commands
+    assert commands.index(originals) < commands.index(metadata)
+    assert "python -B -m scripts.ci_ru_south_ural_deadline" in commands
+    assert not any(step.get("continue-on-error") for step in steps)
+    source = Path("scripts/ci_ru_south_ural_verified_metadata.py").read_text("utf-8")
+    for required in ("SouthUralPublicSource(", "OpportunityRepository(db)",
+                     "store.upsert(", "store.read(", "notice.customer",
+                     "notice.deadline", "notice.initial_price", "TemporaryDirectory"):
+        assert required in source, required
+    for forbidden in ("MockTransport", "continue-on-error", "skip_live", "sqlite:///:memory:"):
+        assert forbidden not in source

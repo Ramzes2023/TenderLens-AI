@@ -11,6 +11,9 @@ from .kg_gov_legacy import KyrgyzstanGovLegacySource
 from .kz_gov_html import KazakhstanGovHtmlSource
 from .uz_uzex import UzbekistanUzexSource
 from .md_achizitii import MoldovaAchizitiiSource
+from .az_azeristilik import AzerbaijanHeatSource
+from .az_adif_small import AzerbaijanAdifSmallSource
+from .md_elicitatie import MoldovaELicitatieSource
 from .asia_public import ASIA_RSS_FEEDS, AsiaPublicSource
 from .jp_jetro_bid_rss import JetroBidRssSource, RSS_URL as JETRO_BID_RSS_URL
 from .hk_hyd_tenders import HighwaysTendersSource, RSS_URL as HYD_TENDERS_RSS_URL
@@ -23,6 +26,10 @@ from .gpb_etp_public import GpbEtpPublicSource
 from .lenobl_small_public import LenoblSmallPublicSource
 from .nmck_native_public import NmckNativePublicSource
 from .stan_commercial_public import StanCommercialPublicSource
+from .south_ural_public import SouthUralPublicSource
+from .ru_dagestan_public_list import DagestanPublicListSource, GRID as DAG_PUBLIC_GRID
+from .ru_samara_public_list import SamaraPublicListSource, GRID as SAMARA_PUBLIC_GRID
+from .kavkaz_rf_firstparty import KavkazRfFirstpartySource
 from .canada_buys_dataset import CanadaBuysDatasetSource
 from .eis_rss import EisRssSource, SourceError
 from .eis_44_public_html import Eis44PublicHtmlSource
@@ -488,6 +495,22 @@ def build_source_catalog(
         capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
     ))
 
+    # Independent accredited Moldova MTender platform with visible municipal purchases.
+    # Not the existing Achizitii.md marketplace and NOT the government OCDS API.
+    # Disabled until real live worker -> SQLite -> saved search CI passes.
+    registry.register(SourceRegistration(
+        key="md_elicitatie",
+        display_name="Moldova e-Licitație — public municipal and small procurement",
+        source=MoldovaELicitatieSource(timeout=min(timeout, 30)),
+        transport=SourceTransport.HTML,
+        jurisdictions=("MD",),
+        languages=("ro", "ru"),
+        homepage_url="https://e-licitatie.md/achizitii",
+        official=False,
+        enabled=bool(settings.cis_md_elicitatie_enabled),
+        capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
+    ))
+
     # Additional official KZ public HTML adapter complements the separately
     # token-authenticated KZ API source; operator activation remains explicit.
     registry.register(SourceRegistration(
@@ -500,6 +523,35 @@ def build_source_catalog(
         homepage_url="https://old.goszakup.gov.kz/ru/search/announce",
         official=True,
         enabled=False,
+        capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
+    ))
+
+    # Verified public announcements of Azerbaijani state-owned heating entity.
+    # Not the national AZ eTender platform, and disabled by default.
+    registry.register(SourceRegistration(
+        key="az_azeristilik",
+        display_name="Azerbaijan Azəristiliktəchizat public procurement",
+        source=AzerbaijanHeatSource(timeout=min(timeout, 30)),
+        transport=SourceTransport.HTML,
+        jurisdictions=("AZ",),
+        languages=("az",),
+        homepage_url="https://azeristilik.gov.az/az/imkanlar/tender-elanlari",
+        official=True,
+        enabled=bool(settings.cis_az_azeristilik_enabled),
+        capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
+    ))
+
+    # First-party deposit-insurance public quotation source, not national eTender.
+    registry.register(SourceRegistration(
+        key="az_adif_small",
+        display_name="Azerbaijan Deposit Insurance Fund small public quotations",
+        source=AzerbaijanAdifSmallSource(timeout=min(timeout, 30)),
+        transport=SourceTransport.HTML,
+        jurisdictions=("AZ",),
+        languages=("az",),
+        homepage_url="https://adif.gov.az/az/sale/",
+        official=True,
+        enabled=bool(settings.cis_az_adif_small_enabled),
         capabilities=SourceCapabilities(pagination=False, incremental_sync=False),
     ))
 
@@ -701,6 +753,81 @@ def build_source_catalog(
             languages=("ru",),
             homepage_url="https://zakupki.lenreg.ru/Search/NewRequests",
             official=True,
+            enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    # Verified original buyer notices; duplicate Fabrikant/EIS procedures must
+    # be reconciled before enabling in an operator-managed production environment.
+    # The adapter itself never consumes credentials and cannot self-activate.
+    if settings.kavkaz_rf_firstparty_enabled:
+        registry.register(SourceRegistration(
+            key="kavkaz_rf_firstparty",
+            display_name="Кавказ.РФ — first-party North Caucasus corporate tenders",
+            source=KavkazRfFirstpartySource(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url="https://xn--80aafvlc.xn--p1ai/purchases_sales/zakupki/tekushchie-/",
+            official=False,
+            enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    # Public official regional listing only: no anonymous deep detail access.
+    # Never auto-enable; operator must explicitly accept the list-only scope.
+    if settings.ru_dagestan_public_list_enabled:
+        registry.register(SourceRegistration(
+            key="ru_dagestan_public_list",
+            display_name="Дагестан — официальный реестр малых закупок (публичный список)",
+            source=DagestanPublicListSource(timeout=min(timeout, 30)),
+            transport=SourceTransport.API,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url=DAG_PUBLIC_GRID,
+            official=True,
+            enabled=True,
+            capabilities=SourceCapabilities(
+                keyword_search=False,
+                pagination=False,
+                documents=False,
+                incremental_sync=False,
+                authentication_required=False,
+            ),
+        ))
+
+    # Samara first-party municipal list: anonymous original JSON rows are
+    # observed; independent detail pages are not verified. No automatic enable.
+    if settings.ru_samara_public_list_enabled:
+        registry.register(SourceRegistration(
+            key="ru_samara_public_list",
+            display_name="Самарская область — официальный реестр малых закупок (публичный список)",
+            source=SamaraPublicListSource(timeout=min(timeout, 30)),
+            transport=SourceTransport.API,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url=SAMARA_PUBLIC_GRID,
+            official=True,
+            enabled=True,
+            capabilities=SourceCapabilities(
+                keyword_search=False,
+                pagination=False,
+                documents=False,
+                incremental_sync=False,
+                authentication_required=False,
+            ),
+        ))
+
+    if settings.south_ural_public_enabled:
+        registry.register(SourceRegistration(
+            key="south_ural_public",
+            display_name="South Ural Vendor Portal — original municipal and commercial small purchases",
+            source=SouthUralPublicSource(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url="https://www.vendorportal.ru/Market/OfferInvitationOpen",
+            official=False,
             enabled=True,
             capabilities=SourceCapabilities(),
         ))

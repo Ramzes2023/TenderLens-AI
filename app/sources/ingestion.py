@@ -30,6 +30,9 @@ HOSTS = {
     'tj_eprocurement': frozenset({'eprocurement.gov.tj'}),
     'uz_uzex': frozenset({'apietender.uzex.uz', 'etender.uzex.uz'}),
     'md_achizitii': frozenset({'achizitii.md'}),
+    'md_elicitatie': frozenset({'e-licitatie.md'}),
+    'az_azeristilik': frozenset({'azeristilik.gov.az'}),
+    'az_adif_small': frozenset({'adif.gov.az'}),
     'kg_gov_legacy': frozenset({'zakupki.gov.kg'}),
     'kz_gov_html': frozenset({'old.goszakup.gov.kz'}),
     'b2b_center': frozenset({'www.b2b-center.ru'}),
@@ -38,6 +41,10 @@ HOSTS = {
     'lenobl_small_public': frozenset({'zakupki.lenreg.ru'}),
     'nmck_native_public': frozenset({'xn--j1adc1b.xn--p1ai'}),
     'stan_commercial_public': frozenset({'stantorgi.ru'}),
+    'kavkaz_rf_firstparty': frozenset({'xn--80aafvlc.xn--p1ai'}),
+    'south_ural_public': frozenset({'www.vendorportal.ru'}),
+    'ru_dagestan_public_list': frozenset({'goszakaz.e-dag.ru'}),
+    'ru_samara_public_list': frozenset({'webtorgi.samregion.ru'}),
     'eis_223': frozenset({'zakupki.gov.ru'}),
     'eis_44_html': frozenset({'zakupki.gov.ru'}),
     'eis': frozenset({'zakupki.gov.ru', 'www.zakupki.gov.ru'}),
@@ -156,7 +163,8 @@ class ConnectorSyncHandler:
         # At most five listing/feed requests; AusTender adds one detail per notice.
         request_limit = (4 if source_id in {'ted', 'uk_fts', 'world_bank'}
                          else 2 if source_id in {'am_armeps', 'uz_uzex'}
-                         else 1 + min(self.max_records, 5) if source_id == 'md_achizitii'
+                         else 1 + min(self.max_records, 5) if source_id in {'md_achizitii', 'az_azeristilik'}
+                          else 11 if source_id == 'md_elicitatie'
                          else self.max_records + 1 if source_id == 'austender'
                          else 5 if source_id in {'eis', 'eis_223', 'india_cppp', 'kz_goszakup'}
                          else 2 if source_id in {'jp_jetro_national', 'jp_jetro_local'}
@@ -165,13 +173,17 @@ class ConnectorSyncHandler:
                          else 4 if source_id == 'lenobl_small_public'
                          else min(self.max_records, 2) + 1 if source_id == 'nmck_native_public'
                          else min(self.max_records, 2) + 1 if source_id == 'stan_commercial_public'
+                         else min(self.max_records, 2) + 1 if source_id == 'kavkaz_rf_firstparty'
+                         else min(self.max_records, 10) + 1 if source_id == 'south_ural_public'
+                         else 1 + min(3, (self.max_records + 9) // 10) if source_id == 'ru_samara_public_list'
+                         else 2 if source_id == 'ru_dagestan_public_list'
                          else 2 if source_id == 'mikroton_tender'
                          else 1)
         async def fetch():
             with bounded_fetch(FetchPolicy(
                 HOSTS[source_id], request_limit,
                 max_bytes=(2 * 1024 * 1024 if source_id == 'b2b_center' else
-                           1_800_000 if source_id in {'nmck_native_public', 'stan_commercial_public'} else 25 * 1024 * 1024),
+                           1_800_000 if source_id in {'nmck_native_public', 'stan_commercial_public', 'south_ural_public', 'kavkaz_rf_firstparty'} else 25 * 1024 * 1024),
             )):
                 return await asyncio.wait_for(source.fetch(self.max_records), timeout=180)
         try:

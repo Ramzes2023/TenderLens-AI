@@ -44,6 +44,8 @@ on:
           - dagestan_official_small
           - tver_official_small
           - spb_official_eshop
+          - ossetia_official_small
+          - stavropol_rts_small
 permissions:
   contents: read
 jobs:

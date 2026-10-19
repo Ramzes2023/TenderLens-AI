@@ -1,0 +1,32 @@
+name: CIS Tajikistan real small district buyer saved search
+on:
+  push:
+    branches: [research/cis-tj-district-buyer-live-20261018]
+    paths:
+      - scripts/ci_cis_tj_district_buyer_live.py
+      - .github/workflows/cis-tj-district-buyer-live.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/ci_cis_tj_district_buyer_live.py
+      - .github/workflows/cis-tj-district-buyer-live.yml
+permissions:
+  contents: read
+jobs:
+  real-tajik-regional-buyer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Official district customers through fenced worker and actual persisted search
+        timeout-minutes: 5
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHON_DOTENV_DISABLED: '1'
+        run: python -B -m scripts.ci_cis_tj_district_buyer_live --source tj_eprocurement

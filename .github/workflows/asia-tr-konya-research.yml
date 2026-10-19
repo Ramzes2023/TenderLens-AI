@@ -1,0 +1,30 @@
+name: Turkish Konya original municipal procurement research
+on:
+  push:
+    branches: [research/asia-tr-konya-original-live-20261018]
+    paths:
+      - "scripts/asia_tr_konya_original_probe.py"
+      - ".github/workflows/asia-tr-konya-research.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/asia_tr_konya_original_probe.py"
+      - ".github/workflows/asia-tr-konya-research.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  first-party-official-html:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real anonymous official Konya current list and three original details
+        timeout-minutes: 3
+        run: python -B -m scripts.asia_tr_konya_original_probe

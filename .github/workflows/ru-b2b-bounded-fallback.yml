@@ -4,7 +4,6 @@ on:
     branches: [fix/ru-b2b-live-budget-and-fallback-20261017]
     paths:
       - app/sources/b2b_center.py
-      - app/sources/ingestion.py
       - tests/test_b2b_foreign_aggregate.py
       - scripts/ci_ru_b2b_real_worker.py
       - scripts/ci_ru_b2b_user_scoring.py
@@ -14,12 +13,12 @@ on:
     branches: [main]
     paths:
       - app/sources/b2b_center.py
-      - app/sources/ingestion.py
       - tests/test_b2b_foreign_aggregate.py
       - scripts/ci_ru_b2b_real_worker.py
       - scripts/ci_ru_b2b_user_scoring.py
       - scripts/ci_ru_leased_connector.py
-      - .github/workflows/ru-b2b-bounded-fallback.yml
+  workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

@@ -1,0 +1,57 @@
+name: RU Dagestan genuine public registry daily Worker and keyword health
+
+on:
+  schedule:
+    - cron: '37 5 * * *'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/ru-dagestan-public-list-daily-health.yml
+      - tests/test_ru_dagestan_daily_health_workflow.py
+      - scripts/ci_ru_dagestan_public_list_sql.py
+      - app/sources/ru_dagestan_public_list.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ru-dagestan-original-public-health-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: false
+
+jobs:
+  strict-daily-health-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'pytest>=8,<10' 'PyYAML>=6,<7'
+      - name: Verify first-party source health semantics, schedule and read-only isolation
+        run: python -m pytest -q tests/test_ru_dagestan_daily_health_workflow.py
+
+  original-public-list-to-fenced-sql-keyword-daily:
+    # Scheduled jobs always run on default main; manual dispatch only from main.
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require TWO real anonymous Dagestan native listings, fenced Worker, disposable SQL and user keyword search
+        timeout-minutes: 6
+        run: python -B -m scripts.ci_ru_dagestan_public_list_sql
+      - name: State the original detail authentication boundary
+        run: |
+          echo 'PUBLIC_REGISTER_SEARCH_PROOF_ONLY=YES'
+          echo 'INDIVIDUAL_NOTICE_LOGIN_PROTECTED=YES'
+          echo 'PRODUCTION_ACTIVATION=NO'

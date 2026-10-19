@@ -210,9 +210,20 @@ def proof():
 
 def _safe_ingushetia_vendor_failure(exc):
     """Expose only constant contract names, never upstream pages or URL/token text."""
-    if type(exc) is not ValueError:
+    if type(exc) not in {ValueError, AssertionError}:
         return None
     whitelist = {
+        "Insufficient current independently verified Ingushetia originals from Worker SQL": "INSUFFICIENT_REAL_WORKER_ROWS",
+        "Noncanonical duplicated 44-FZ publisher identities in Worker SQL": "ORIGINAL_IDENTITY_MISMATCH",
+        "Worker verified originals / SQL insert counts diverged": "WORKER_SQL_COUNT_MISMATCH",
+        "Official first-party mirrored notices Worker not claimed": "WORKER_NOT_CLAIMED",
+        "Real original-card leased Worker failed": "WORKER_FAILED",
+        "Official first-party Ingushetia tender not found in tenant search": "SQL_TENANT_SEARCH_FAILED",
+        "Original-number replay created duplicate": "SQL_REPLAY_DUPLICATED",
+        "User keyword/region profile lost a matching SQL tender": "USER_FILTER_POSITIVE_FAILED",
+        "Excluded user keyword still produced an alert": "USER_FILTER_EXCLUSION_FAILED",
+        "Unrelated user query returned regional tenders": "USER_FILTER_NEGATIVE_FAILED",
+        "Isolated monitor failed to acknowledge verified rows": "ISOLATED_NOTIFICATION_ACK_FAILED",
         "No source-owned Ingushetia committee tenders in live Fabrikant list": "REGIONAL_ROWS_ABSENT",
         "No independently verified regional original cards": "ORIGINAL_CARDS_NOT_VERIFIED",
         "First-party regional listing was not HTML": "LISTING_NOT_HTML",

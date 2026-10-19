@@ -74,7 +74,7 @@ def test_metadata_shape_diagnostic_never_exposes_native_values():
     assert public_metadata_shape("15000.50", kind="money") == "plain_number"
     assert public_metadata_shape("<html>", kind="money") == "unknown_money_format"
     assert public_metadata_shape("2026-10-19T13:40:00", kind="date") == "iso_date_time"
-    assert public_metadata_shape("19.10.2026 13:40:00", kind="date") == "russian_dot_date"
+    assert public_metadata_shape("19.10.2026 13:40:00", kind="date") == "russian_dot_datetime"
     assert public_metadata_shape("19.10.2026", kind="date") == "russian_dot_date"
     assert public_metadata_shape("/Date(1792400000000)/", kind="date") == "asp_net_json_date"
     assert public_metadata_shape(None, kind="date") == "absent"

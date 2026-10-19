@@ -79,3 +79,28 @@ API acknowledgement alone is not proof the user read it. No bot token/chat was
 provided, no Telegram request was sent, and simulated acknowledgements do NOT
 satisfy delivery. Keep PR draft/unmerged until required CI and real delivery
 conditions pass.
+
+Local verification: 78 focused contracts, 141 Worker/jobs/monitoring regressions,
+102 shared EIS/law/catalog regressions passed. Initial mistyped test filename
+produced no tests; corrected invocation passed. No failure was counted as success.
+
+## Hosted CI for code commit 7992ebf
+
+- Russian source contracts: PASS, run 39308646072.
+- Required Ingushetia strict contracts: PASS, run 39308646160.
+- Required live Worker gate: FAIL in that same run. EIS ConnectError;
+  Fabrikant ReadTimeout. No certificate verification code reported.
+- Diagnostic run 39308646107: completed. Its green job status is observational.
+  Both Linux and Windows pinned-root probes report BLOCKED / ConnectTimeout,
+  strict_tls=true, hostname_check=true, trust_source=verified_pinned_root,
+  certificate_verify_code=null. This verifies CA loading on Linux but does NOT
+  establish a successful Linux TLS handshake or HTTP/card/Worker acquisition.
+
+Run links:
+https://github.com/Ramzes2023/TenderLens-AI/actions/runs/39308646072
+https://github.com/Ramzes2023/TenderLens-AI/actions/runs/39308646160
+https://github.com/Ramzes2023/TenderLens-AI/actions/runs/39308646107
+
+The remaining Linux problem is network/handshake reachability without a
+certificate-specific error. Full Linux acceptance and genuine Telegram delivery
+remain open. No red checks were removed or converted to success. No merge.

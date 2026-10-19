@@ -73,7 +73,7 @@ async def _check_original_links(notices):
                   raise AssertionError("Official original card does not corroborate EIS number")
 
 
-async def _check_isolated_dispatch(catalog, cfg, notices, db_path):
+async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, source_id=SOURCE_ID):
     """Real stored notices -> real monitor dedup -> Telegram-format fake sink.
 
     Intentionally uses no bot credentials, chat API, network send, or user data.
@@ -88,10 +88,10 @@ async def _check_isolated_dispatch(catalog, cfg, notices, db_path):
         async def fetch_matches_from_catalog(self, selected_catalog, owner_user_id=None,
                                              *, source_keys=None):
             assert selected_catalog is catalog
-            assert SOURCE_ID in source_keys
+            assert source_id in source_keys
             matches = [prefilter_notice(n, None) for n in notices]
             return [m for m in matches if m is not None], SimpleNamespace(
-                attempted_sources=(SOURCE_ID,), total_failure=False,
+                attempted_sources=(source_id,), total_failure=False,
             )
 
     service = PersistedNoticeMonitor(cfg, None, monitor_repo, None)

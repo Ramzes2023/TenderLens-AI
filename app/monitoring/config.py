@@ -42,6 +42,7 @@ class MonitoringSettings:
     nmck_native_public_enabled: bool = False
     stan_commercial_public_enabled: bool = False
     south_ural_public_enabled: bool = False
+    ru_dagestan_public_list_enabled: bool = False
     kavkaz_rf_firstparty_enabled: bool = False
     ru_background_catalog_enabled: bool = False
     eis_direct_enabled: bool = False
@@ -129,6 +130,7 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         nmck_native_public_enabled=_bool("NMCK_NATIVE_PUBLIC_ENABLED", False),
         stan_commercial_public_enabled=_bool("STAN_COMMERCIAL_PUBLIC_ENABLED", False),
         south_ural_public_enabled=_bool("SOUTH_URAL_PUBLIC_ENABLED", False),
+        ru_dagestan_public_list_enabled=_bool("RU_DAGESTAN_PUBLIC_LIST_ENABLED", False),
         kavkaz_rf_firstparty_enabled=_bool("KAVKAZ_RF_FIRSTPARTY_ENABLED", False),
         ru_background_catalog_enabled=_bool("VALYQON_RU_BACKGROUND_CATALOG_ENABLED", False),
         eis_direct_enabled=_bool("EIS_DIRECT_ENABLED", False),

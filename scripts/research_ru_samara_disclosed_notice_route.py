@@ -54,7 +54,9 @@ def detail_url_from_original_native_link(url: str) -> str:
     return DETAIL_PREFIX + identity
 
 
-async def proof() -> int:
+async def proof(*, stage: dict | None = None) -> int:
+    stage = stage if stage is not None else {}
+    stage["step"] = "PUBLIC_GRID_GET"
     with bounded_fetch(FetchPolicy(frozenset({HOST}), 4, max_bytes=MAX_BYTES)):
         async with source_client(
             timeout=25, trust_env=False, follow_redirects=False,
@@ -69,6 +71,7 @@ async def proof() -> int:
             if not announced:
                 raise ValueError("Official public page did not disclose that detail query")
             token = public_token(public.content)
+            stage["step"] = "NATIVE_JSON_POST"
             response = await client.post(JSON_URL, json={"settings": public_settings()}, headers={
                 "Accept": "application/json, text/javascript",
                 "X-Requested-With": "XMLHttpRequest",
@@ -82,11 +85,13 @@ async def proof() -> int:
             confirmed = 0
             for number, title, buyer, raw_url in current:
                 detail_url = detail_url_from_original_native_link(raw_url)
+                stage["step"] = "DECLARED_ORIGINAL_GET"
                 detail = await client.get(detail_url, headers={"Accept": "text/html"})
                 print("RU_SAMARA_DECLARED_ORIGINAL_HTTP=" + str(detail.status_code))
                 detail.raise_for_status()
                 if "html" not in detail.headers.get("content-type", "").lower():
                     raise ValueError("Published detail not HTML")
+                stage["step"] = "ORIGINAL_VISIBLE_IDENTITY_PARSE"
                 verify_original_detail(
                     detail.content, number=number, title=title, buyer=buyer,
                 )
@@ -95,11 +100,13 @@ async def proof() -> int:
 
 
 def main() -> int:
+    stage = {}
     try:
-        found = asyncio.run(proof())
+        found = asyncio.run(proof(stage=stage))
     except (ValueError, TypeError, ConnectorTransportError, httpx.HTTPError,
             OSError, TimeoutError, json.JSONDecodeError) as error:
         print("RU_SAMARA_DECLARED_DETAILS=BLOCKED_" + type(error).__name__)
+        print("RU_SAMARA_DECLARED_FAILURE_STAGE=" + stage.get("step", "START"))
         if isinstance(error, ConnectorTransportError):
             print("RU_SAMARA_DECLARED_RETRYABLE=" + str(error.retryable))
         print("PRODUCTION_CHANGED=NO")

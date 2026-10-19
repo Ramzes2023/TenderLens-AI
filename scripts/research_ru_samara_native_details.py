@@ -41,7 +41,9 @@ def verify_original_detail(raw: bytes, *, number: str, title: str, buyer: str) -
     return True
 
 
-async def proof() -> int:
+async def proof(*, stage: dict | None = None) -> int:
+    stage = stage if stage is not None else {}
+    stage["step"] = "GRID_GET"
     with bounded_fetch(FetchPolicy(frozenset({HOST}), 4, max_bytes=MAX_BYTES)):
         async with source_client(
             timeout=25, trust_env=False, follow_redirects=False,
@@ -52,6 +54,7 @@ async def proof() -> int:
             if "html" not in page.headers.get("content-type", "").lower():
                 raise ValueError("No native public grid HTML")
             token = public_token(page.content)
+            stage["step"] = "GRID_NATIVE_JSON_POST"
             native = await client.post(
                 URL,
                 json={"settings": public_settings()},
@@ -83,10 +86,13 @@ async def proof() -> int:
                 seen.add(number)
                 # URLs originate strictly from the live original public list.
                 detail_url = urljoin(GRID, raw)
+                stage["step"] = "ORIGINAL_DETAIL_GET"
                 detail = await client.get(detail_url, headers={"Accept": "text/html"})
+                print("RU_SAMARA_ORIGINAL_HTTP_STATUS=" + str(detail.status_code))
                 detail.raise_for_status()
                 if "html" not in detail.headers.get("content-type", "").lower():
                     raise ValueError("No original HTML detail media type")
+                stage["step"] = "ORIGINAL_DETAIL_PARSE"
                 verify_original_detail(detail.content, number=number, title=title, buyer=buyer)
                 confirmed += 1
                 if confirmed == 2:
@@ -95,11 +101,13 @@ async def proof() -> int:
 
 
 def main() -> int:
+    stage = {}
     try:
-        count = asyncio.run(proof())
+        count = asyncio.run(proof(stage=stage))
     except (ValueError, TypeError, ConnectorTransportError, httpx.HTTPError,
             OSError, TimeoutError, json.JSONDecodeError) as error:
         print("RU_SAMARA_NATIVE_ORIGINAL_DETAILS=BLOCKED_" + type(error).__name__)
+        print("RU_SAMARA_FAILURE_STAGE=" + stage.get("step", "START"))
         if isinstance(error, ConnectorTransportError):
             print("RU_SAMARA_TRANSPORT_RETRYABLE=" + str(error.retryable))
         print("PRODUCTION_CHANGED=NO")

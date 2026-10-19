@@ -22,16 +22,24 @@ from app.monitoring.config import MonitoringSettings
 from app.sources.catalog import build_source_catalog
 from app.sources.http import source_client
 from app.sources.ingestion import JOB_TYPE, ConnectorSyncHandler, ConnectorSyncService, connector_version
+from app.sources.http import FetchPolicy, bounded_fetch
+from scripts.ru_eis_pinned_tls_probe import verify_root
 from app.sources.opportunities import OpportunityRepository
 from app.sources.ru_ingushetia_eis44 import SOURCE_ID, RSS_URL, normalize_ingushetia_notice
 from app.sources.snapshots import snapshot_catalog
 
 
+ROOT = Path(__file__).resolve().parents[1] / 'russian_trusted_root_ca_pem.crt'
+
+
 def _catalog():
+    # The bundled Ministry certificate is accepted only when its canonical DER
+    # matches the independently documented official root fingerprint.
+    verify_root(ROOT.read_bytes())
     cfg = MonitoringSettings(
         enabled=False, interval_seconds=600, max_items=2,
         max_notifications_per_cycle=2, request_timeout=25,
-        eis_rss_urls=(), ca_bundle_file=None,
+        eis_rss_urls=(), ca_bundle_file=ROOT,
         profile_feeds_enabled=False,
         ru_ingushetia_eis44_enabled=True,
     )
@@ -39,18 +47,19 @@ def _catalog():
 
 
 async def _check_original_links(notices):
-    async with source_client(
-        timeout=20, follow_redirects=False, trust_env=False,
+    with bounded_fetch(FetchPolicy(frozenset({'zakupki.gov.ru'}), len(notices), max_bytes=1_800_000)):
+      async with source_client(
+        timeout=20, follow_redirects=False, trust_env=False, verify=str(ROOT),
         headers={"Accept": "text/html"},
-    ) as client:
-        for notice in notices:
-            original = await client.get(notice.url)
-            original.raise_for_status()
-            if "html" not in original.headers.get("content-type", "").lower():
-                raise AssertionError("Official EIS original card is not HTML")
-            body = original.text
-            if notice.tender_number not in body:
-                raise AssertionError("Official original card does not corroborate EIS number")
+      ) as client:
+          for notice in notices:
+              original = await client.get(notice.url)
+              original.raise_for_status()
+              if "html" not in original.headers.get("content-type", "").lower():
+                  raise AssertionError("Official EIS original card is not HTML")
+              body = original.text
+              if notice.tender_number not in body:
+                  raise AssertionError("Official original card does not corroborate EIS number")
 
 
 def proof():
@@ -115,6 +124,14 @@ def main():
         print("RU_INGUSHETIA_LIVE_ACCEPTANCE=BLOCKED")
         print("FAILURE_CLASS=" + type(exc).__name__)
         print("FAILURE_REASON=" + str(exc).replace("\n", " ")[:250])
+        # Do not expose raw URLs, response bodies, cookies or client paths.
+        causes = []
+        cause = getattr(exc, '__cause__', None)
+        while cause is not None and len(causes) < 3:
+            causes.append(type(cause).__name__)
+            cause = getattr(cause, '__cause__', None)
+        print("FAILURE_CAUSE_TYPES=" + ','.join(causes))
+        print("FAILURE_RETRYABLE=" + str(bool(getattr(exc, 'retryable', False))))
         print("PRODUCTION_CHANGED=NO")
         return 2
     print("RU_INGUSHETIA_PROOF=" + json.dumps(result, ensure_ascii=False, sort_keys=True))

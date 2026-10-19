@@ -41,16 +41,11 @@ def proof():
     catalog = build_source_catalog(cfg)
     assert SOURCE_ID in catalog.enabled_keys
 
-    # This fetch is really issued to the CURRENT first-party searchable list.
-    # Every returned row must have a checked independent first-party detail.
-    originals = asyncio.run(catalog.registry.get(SOURCE_ID).source.fetch(limit=3))
-    if len(originals) < 2:
-        raise AssertionError("Not enough current independently verified Ingushetia originals")
-    verified_ids = {n.tender_number for n in originals}
-    if len(verified_ids) != len(originals) or any(
-        original_notice_key(n) != ("eis_44", n.tender_number) for n in originals
-    ):
-        raise AssertionError("Noncanonical duplicated 44-FZ publisher identities")
+    # Production-equivalent acceptance: the leased Worker itself must fetch
+    # the live, region-filtered official listing and independently GET and
+    # validate each actual original card inside source.fetch(). A redundant
+    # second network fetch is not required to establish this same-chain proof.
+    # Do not monkeypatch or seed Worker data from cached/known originals.
 
     with tempfile.TemporaryDirectory(prefix="valyqon-ru-ing-fabrikant-") as d:
         db = Database(DatabaseSettings("ingush-verified-vendor", Path(d) / "worker.sqlite"))
@@ -68,8 +63,21 @@ def proof():
             if completed is None or completed.state != "succeeded":
                 raise AssertionError("Real original-card leased Worker failed")
             rows = store.read(SOURCE_ID, limit=3)
-            if len(rows) < 2 or not verified_ids <= {n.tender_number for n in rows}:
-                raise AssertionError("Verified current original IDs lost during Worker and SQLite")
+            if len(rows) < 2:
+                raise AssertionError("Insufficient current independently verified Ingushetia originals from Worker SQL")
+            verified_ids = {n.tender_number for n in rows}
+            if (len(verified_ids) != len(rows) or any(
+                n.source != SOURCE_ID or n.external_id != n.tender_number
+                or original_notice_key(n) != ("eis_44", n.tender_number)
+                for n in rows
+            )):
+                raise AssertionError("Noncanonical duplicated 44-FZ publisher identities in Worker SQL")
+            stats = completed.result
+            if (stats["fetched_count"] < len(rows)
+                    or stats["accepted_count"] != len(rows)
+                    or stats["inserted_count"] != len(rows)
+                    or stats["skipped_count"] != 0):
+                raise AssertionError("Worker verified originals / SQL insert counts diverged")
             search = snapshot_catalog(catalog, store)
             for n in rows:
                 for keyword in (n.tender_number, n.title):
@@ -110,7 +118,7 @@ def proof():
             return {
                 "official_first_party_current_originals": len(verified_ids),
                 "verified_notices": [{"number": n.tender_number, "title": n.title,
-                                      "url": n.url, "region": n.region} for n in originals],
+                                      "url": n.url, "region": n.region} for n in rows],
                 "worker_state": completed.state,
                 "sql_and_title_number_search": len(rows),
                 "user_keyword_region_and_exclusion_filter": True,

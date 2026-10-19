@@ -12,10 +12,16 @@ import asyncio
 import httpx
 
 from app.sources.http import ConnectorTransportError, FetchPolicy, bounded_fetch, source_client
-from app.sources.ru_samara_public_list import (
-    GRID, HOST, JSON_URL, MAX_BYTES, public_token, public_settings, NATIVE_NUMBER,
+# This is a stand-alone research PR, independent of the still-unmerged
+# Samara production adapter in PR #218. Reuse the already merged same-family
+# anonymous GzwSP public-grid settings/token logic from Dagestan.
+from app.sources.ru_dagestan_public_list import public_settings, public_token
+from scripts.research_ru_samara_browser_grid import (
+    GRID, HOST, JSON_PATH, MAX_BYTES, NATIVE_ID, public_row_shape,
 )
-from scripts.research_ru_samara_browser_grid import public_row_shape
+
+JSON_URL = "https://" + HOST + JSON_PATH
+NATIVE_NUMBER = NATIVE_ID
 
 PAGE_ROWS = 10
 

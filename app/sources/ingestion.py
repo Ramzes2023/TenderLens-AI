@@ -175,6 +175,9 @@ class ConnectorSyncHandler:
                          else min(self.max_records, 2) + 1 if source_id == 'kavkaz_rf_firstparty'
                          else min(self.max_records, 10) + 1 if source_id == 'south_ural_public'
                          else 2 if source_id == 'ru_dagestan_public_list'
+                         # B2B public root may require one same-origin partial
+                         # office fallback; source.fetch has exactly two calls.
+                         else 2 if source_id == 'b2b_center'
                          else 2 if source_id == 'mikroton_tender'
                          else 1)
         async def fetch():

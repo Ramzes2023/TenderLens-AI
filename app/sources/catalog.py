@@ -29,6 +29,7 @@ from .stan_commercial_public import StanCommercialPublicSource
 from .south_ural_public import SouthUralPublicSource
 from .ru_dagestan_public_list import DagestanPublicListSource, GRID as DAG_PUBLIC_GRID
 from .kavkaz_rf_firstparty import KavkazRfFirstpartySource
+from .ru_ingushetia_eis44 import IngushetiaEis44Source, RSS_URL as ING_RSS_URL
 from .canada_buys_dataset import CanadaBuysDatasetSource
 from .eis_rss import EisRssSource, SourceError
 from .eis_44_public_html import Eis44PublicHtmlSource
@@ -769,6 +770,23 @@ def build_source_catalog(
             languages=("ru",),
             homepage_url="https://xn--80aafvlc.xn--p1ai/purchases_sales/zakupki/tekushchie-/",
             official=False,
+            enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    # Region is verified from source-owned notice fields, never inferred from
+    # the RSS query alone. Independent EIS/Ingushetia original dedup is required.
+    # Live original-link + leased worker + tenant search CI gates deployment.
+    if settings.ru_ingushetia_eis44_enabled:
+        registry.register(SourceRegistration(
+            key="ru_ingushetia_eis44",
+            display_name="Ингушетия — ЕИС 44-ФЗ (регионально подтверждённые извещения)",
+            source=IngushetiaEis44Source(timeout=min(timeout, 30)),
+            transport=SourceTransport.RSS,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url=ING_RSS_URL,
+            official=True,
             enabled=True,
             capabilities=SourceCapabilities(),
         ))

@@ -1,9 +1,16 @@
 """Honest dynamic source directory and differentiated public marketing."""
+import pytest
 from fastapi.testclient import TestClient
 from app.api.main import create_app
 from app.api.runtime import ApiRuntime
 from app.api.public_sources import source_directory
 from app.sources.registry import SourceRegistry, SourceRegistration, SourceTransport, SourceCapabilities
+
+EXPECTED_OPTIONAL_KEYS = {
+    "ru_ingushetia_eis44", "ru_ingushetia_fabrikant44", "eis_223", "b2b_center",
+    "mikroton_tender", "tektorg", "eis_44_html", "lenobl_small_public",
+    "stan_commercial_public", "nmck_native_public", "gpb_etp_public",
+}
 
 
 class Dummy:
@@ -33,10 +40,10 @@ def test_source_directory_is_scoped_to_actual_registry_not_live_health():
     assert result["sources"][1]["enabled"] is True
     assert result["sources"][1]["homepage"]=="https://ted.europa.eu/"
     # Opt-in adapters are discoverable, but are not counted as registered.
-    assert result["optional_count"] == 9
+    assert result["optional_count"] == len(EXPECTED_OPTIONAL_KEYS)
     assert result["candidate_count"] == 38
     keys = {item["key"] for item in result["optional_sources"]}
-    assert {"lenobl_small_public", "nmck_native_public", "b2b_center"} <= keys
+    assert keys == EXPECTED_OPTIONAL_KEYS
     assert all(item["registered"] is False and item["enabled"] is False
                and item["live_status"] == "not_verified"
                for item in result["optional_sources"])
@@ -58,21 +65,23 @@ def test_directory_has_no_fabricated_sources_if_runtime_has_none():
         assert "100 verified" not in html
         assert "competitors do not" not in html
 
-def test_ru_optional_adapter_not_duplicated_when_registered():
+@pytest.mark.parametrize('key', ['lenobl_small_public', 'ru_ingushetia_eis44', 'ru_ingushetia_fabrikant44'])
+def test_ru_optional_adapter_not_duplicated_when_registered(key):
     catalog = Catalog()
     catalog.registry.register(SourceRegistration(
-        key="lenobl_small_public",
+        key=key,
         display_name="Leningrad Oblast official public small-purchase requests",
-        source=Dummy("lenobl_small_public"),
+        source=Dummy(key),
         jurisdictions=("RU",), enabled=True,
         homepage_url="https://zakupki.lenreg.ru/Search/NewRequests",
         transport=SourceTransport.HTML,
     ))
     result = source_directory(catalog)
     assert result["source_count"] == 3
-    assert result["optional_count"] == 8
+    assert result["optional_count"] == len(EXPECTED_OPTIONAL_KEYS) - 1
+    assert {item["key"] for item in result["optional_sources"]} == EXPECTED_OPTIONAL_KEYS - {key}
     assert result["candidate_count"] == 38
-    assert sum(item["key"] == "lenobl_small_public" for item in
+    assert sum(item["key"] == key for item in
                result["sources"] + result["optional_sources"]) == 1
 
 def test_every_curated_ru_candidate_is_visible_but_never_enabled():

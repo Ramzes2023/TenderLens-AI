@@ -30,6 +30,10 @@ production or real Telegram acceptance gates. Base PR #222 SHA:
    Live acceptance now dispatches through the actual Worker SQL snapshot catalog.
    SQL replay changes `last_seen` and can reorder rows; notification verification
    now matches original numbers rather than assuming list order.
+6. PR #222 added two optional adapters without updating the public directory's
+   old count expectations. Both general-CI failures were stale inventory
+   contracts. Tests now assert the precise intended optional-key set and cover
+   registering either Ingushetia adapter without duplication.
 
 No TLS verification, host/DNS protections, authorization, tests or source opt-ins
 were disabled. No production databases or subscriptions were opened.
@@ -73,7 +77,8 @@ this environment; RSS availability alone is not full EIS-route acceptance.
 - **Real Telegram API ACKs: zero; not tested.** No dedicated authorized test
   bot/chat configuration was supplied at the time of this report.
 - Targeted adapter, ingestion, lease/fence, SQL snapshot, monitoring and identity
-  regressions: **216 passed, zero failed**, one upstream Starlette deprecation
+  regressions: **216 passed, zero failed**; public source-directory regressions:
+  **7 passed, zero failed** (223 total), one upstream Starlette deprecation
   warning. Initial use of an incomplete shared Python environment failed import
   collection (`aiogram` missing); the final checks used this clone's own `.venv`
   with `requirements-dev.txt` installed.
@@ -112,8 +117,9 @@ accidental overwrite of another run.
 
 PR #222 at the audited SHA had **83 successful, 6 failed and 1 skipped checks**.
 Failures included Ingushetia live acceptance, general tests, two B2B jobs and two
-Asian-source jobs. Those unrelated failures are not repaired or hidden by this
-change. Correction checks must be examined on the correction PR's exact SHA.
+Asian-source jobs. The general tests' two stale optional-adapter expectations
+are corrected here. B2B and Asian-source failures are not repaired or hidden by
+this change. Correction checks must be examined on the correction PR's exact SHA.
 
 Both Ingushetia adapters remain default-off. PR #222 must remain Draft and
 unmerged until all mandatory checks and the real authorized Telegram delivery

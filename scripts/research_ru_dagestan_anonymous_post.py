@@ -33,7 +33,12 @@ def published_route(html: bytes) -> bool:
             and b"\x00" not in html)
 
 
-def parse_public_json(body: bytes, content_type: str):
+def parse_public_json(body: bytes, content_type: str, *, max_rows: int = LIMIT):
+    # Legacy anonymous form requests up to five. The first-party native grid
+    # explicitly requests rp=10; callers must supply that bounded page limit.
+    # Never infer an unbounded allowance from a totalRows counter.
+    if type(max_rows) is not int or not 2 <= max_rows <= 10:
+        raise ValueError("Invalid bounded public grid page size")
     if type(body) is not bytes or not 0 < len(body) <= MAX_BYTES:
         raise ValueError("No bounded original JSON response")
     if "application/json" not in content_type.lower():
@@ -54,7 +59,7 @@ def parse_public_json(body: bytes, content_type: str):
             raise ValueError("Invalid original public registry pagination")
     else:
         rows = data.get("rows")
-    if type(rows) is not list or not 2 <= len(rows) <= LIMIT:
+    if type(rows) is not list or not 2 <= len(rows) <= max_rows:
         raise ValueError("No two real first-party public listing rows")
     keys = sorted(k for k in data if isinstance(k, str) and k.isascii()
                   and k.replace("_", "").isalnum())[:15]

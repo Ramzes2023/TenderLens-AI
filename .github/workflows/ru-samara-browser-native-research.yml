@@ -13,6 +13,7 @@ on:
       - scripts/research_ru_samara_browser_originals.py
       - tests/test_ru_samara_browser_originals.py
       - scripts/research_ru_samara_disclosed_notice_route.py
+      - scripts/research_ru_samara_browser_disclosed_notice.py
       - tests/test_ru_samara_disclosed_notice_route.py
       - .github/workflows/ru-samara-browser-native-research.yml
 
@@ -154,3 +155,24 @@ jobs:
       - name: Try only currently disclosed original Samara Notice route and two real current public listing IDs
         timeout-minutes: 5
         run: python -B -m scripts.research_ru_samara_disclosed_notice_route
+
+  samara-browser-two-disclosed-notice-originals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install read-only first-party Chromium driver
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install 'playwright==1.55.0'
+          python -m playwright install --with-deps chromium
+      - name: Require first-party route disclosure and reject forged notice IDs
+        run: python -B -m pytest -q tests/test_ru_samara_disclosed_notice_route.py tests/test_ru_samara_browser_originals.py
+      - name: Demand two authentic independently readable Samara Notice pages after real current JSON listing
+        timeout-minutes: 6
+        run: python -B -m scripts.research_ru_samara_browser_disclosed_notice

@@ -1,0 +1,63 @@
+"""Release isolation: external-source live workflows may not be triggered by unrelated adapters.
+
+These are offline trigger-contract tests. They do NOT prove publisher availability,
+real notices, or production delivery. Shared regressions are exercised by main CI.
+"""
+from pathlib import Path
+
+import pytest
+import yaml
+
+ROOT = Path(__file__).resolve().parents[1]
+WORKFLOWS = {
+    "cis-kz-gov-public-html-live.yml": "app/sources/kz_gov_html.py",
+    "asia-jetro-bid-acceptance.yml": "app/sources/jp_jetro_bid_rss.py",
+    "asia-seven-query-acceptance.yml": "app/sources/asia_seven.py",
+    "asia-source-acceptance.yml": "app/sources/asia_public.py",
+    "ru-b2b-bounded-fallback.yml": "app/sources/b2b_center.py",
+    "ru-b2b-real-worker.yml": "app/sources/b2b_center.py",
+    "ru-dagestan-public-list-optin.yml": "app/sources/ru_dagestan_public_list.py",
+}
+GENERIC_LIVE_TRIGGERS = {
+    "app/sources/**",
+    "app/sources/catalog.py",
+    "app/sources/ingestion.py",
+    "app/sources/opportunities.py",
+    "app/monitoring/config.py",
+    "tests/test_source_catalog.py",
+    "tests/test_connector_workers.py",
+}
+
+
+def workflow_events(name):
+    document = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
+    )
+    # YAML 1.1 parses the unquoted GitHub 'on:' key as a boolean True.
+    result = document.get("on", document.get(True))
+    assert isinstance(result, dict), name
+    return result
+
+
+@pytest.mark.parametrize("name,own_adapter", WORKFLOWS.items())
+def test_live_pr_gates_are_owned_by_their_publisher(name, own_adapter):
+    events = workflow_events(name)
+    assert "pull_request" in events
+    paths = events["pull_request"].get("paths", [])
+    assert paths and all(isinstance(p, str) for p in paths)
+    assert own_adapter in paths
+    assert not GENERIC_LIVE_TRIGGERS.intersection(paths), name
+    assert f".github/workflows/{name}" in paths
+    assert "workflow_dispatch" in events, "Shared-only publisher fixes need explicit live verification"
+
+
+def test_shared_core_and_source_contracts_still_run():
+    core = workflow_events("ci.yml")
+    assert "pull_request" in core
+    assert not core["pull_request"].get("paths"), "Shared CI must not be path-limited"
+    source = workflow_events("ru-source-contracts.yml")
+    assert "pull_request" in source
+    assert "app/sources/**" in source["pull_request"]["paths"]
+    # Independent live source gates are not substitutes for these shared checks.
+    ci_text = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "python -m pytest" in ci_text

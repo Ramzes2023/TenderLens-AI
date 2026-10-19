@@ -7,7 +7,6 @@ on:
       - "app/sources/asia_seven.py"
       - "app/sources/asia_public.py"
       - "app/sources/jp_jetro_bid_rss.py"
-      - "app/sources/ingestion.py"
       - "tests/test_asia_seven_operations.py"
       - "scripts/asia_seven_live_query_acceptance.py"
       - ".github/workflows/asia-seven-query-acceptance.yml"

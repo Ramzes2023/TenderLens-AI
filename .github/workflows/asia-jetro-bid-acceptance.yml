@@ -5,8 +5,6 @@ on:
     branches: [main]
     paths:
       - "app/sources/jp_jetro_bid_rss.py"
-      - "app/sources/catalog.py"
-      - "app/sources/ingestion.py"
       - "tests/test_jp_jetro_bid_rss.py"
       - "scripts/asia_jetro_bid_worker_acceptance.py"
       - ".github/workflows/asia-jetro-bid-acceptance.yml"

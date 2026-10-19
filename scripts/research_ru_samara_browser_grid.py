@@ -46,8 +46,10 @@ def safe_original_reference(raw: str | None) -> bool:
         p = urlsplit(urljoin(GRID, raw))
         return (p.scheme == "https" and p.hostname == HOST and p.port in (None, 443)
                 and not (p.username or p.password or p.fragment or p.query)
-                and p.path.startswith("/smallpurchases/")
-                and not any(x in p.path.lower() for x in ("/login", "/auth")))
+                # A general same-host public page is NOT a notice detail.
+                # Only native published numeric original links qualify.
+                and re.fullmatch(r"/smallpurchases/GzwSP/[0-9]{6,12}", p.path)
+                is not None)
     except ValueError:
         return False
 

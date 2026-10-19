@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1] / "russian_trusted_root_ca_pem.crt"
 HOST_EIS = "zakupki.gov.ru"
 HOST_FAB = "44.fabrikant.ru"
 HOST_SOAP = "soap4.fabrikant.ru"
+HOST_ZMO = "zmo.fabrikant.ru"
 class VisibleText(HTMLParser):
     """Read only visible first-party text, not raw markup or inline scripts."""
     def __init__(self):
@@ -50,6 +51,8 @@ CASES = (
     ("eis_ingushetia_rss", "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&regions=06&pageNumber=1", HOST_EIS, None),
     ("fabrikant_current_catalog", "https://44.fabrikant.ru/44/catalog/procedure/published?dir=desc&order=publication_datetime", HOST_FAB, None),
     ("fabrikant_soap4_current_catalog", "https://soap4.fabrikant.ru/44/catalog/procedure/published", HOST_SOAP, None),
+    ("fabrikant_soap4_ordered_current_catalog", "https://soap4.fabrikant.ru/44/catalog/procedure/published?dir=desc&dropOrder=1&order=procedure_number", HOST_SOAP, None),
+    ("fabrikant_zmo_current_catalog", "https://zmo.fabrikant.ru/44/catalog/procedure?dir=desc&order=trade_start_datetime&page=1", HOST_ZMO, None),
     ("fabrikant_ingush_0114500000826002121", "https://soap4.fabrikant.ru/44/procedure/ea21/0114500000826002121", HOST_SOAP, "0114500000826002121"),
     ("fabrikant_ingush_0114500000826002117", "https://soap4.fabrikant.ru/44/procedure/ea21/0114500000826002117", HOST_SOAP, "0114500000826002117"),
 )
@@ -64,12 +67,12 @@ async def observe(name, url, host, number):
 
     try:
         if (urlsplit(url).scheme != "https" or urlsplit(url).netloc != host
-                or host not in {HOST_EIS, HOST_FAB, HOST_SOAP}):
+                or host not in {HOST_EIS, HOST_FAB, HOST_SOAP, HOST_ZMO}):
             raise ValueError("Unexpected diagnostic host")
         verify = str(ROOT) if host == HOST_EIS else True
         with bounded_fetch(FetchPolicy(frozenset({host}), 1, max_bytes=1_800_000)):
             async with source_client(
-                timeout=25 if host == HOST_FAB else 15, trust_env=False, follow_redirects=False,
+                timeout=25 if host in {HOST_FAB, HOST_ZMO} else 15, trust_env=False, follow_redirects=False,
                 verify=verify, event_hooks={"response": [record]},
                 headers={"Accept": "text/html, application/rss+xml, application/xml",
                          "User-Agent": "Mozilla/5.0 (compatible; VALYQON-Source-Audit/1.0)"},

@@ -21,7 +21,6 @@ RU_RESEARCH_TARGETS = (
     ("fabrikant_44_mirror","Фабрикант — служебный каталог 44-ФЗ (зеркало)","https://soap4.fabrikant.ru/44/catalog/procedure/requestOffer", False,"general","https://github.com/Ramzes2023/TenderLens-AI/blob/main/scripts/ru_trusted_live_probe.py"),
     ("fabrikant_223_mirror","Фабрикант — служебный каталог 223-ФЗ (зеркало)","https://soap2.fabrikant.ru/223/catalog/procedure/finished", False,"general","https://github.com/Ramzes2023/TenderLens-AI/blob/main/scripts/ru_trusted_live_probe.py"),
     ("tatarstan_trading","Татарстан — региональная ЭТП etpzakupki.tatar","https://etpzakupki.tatar/app/SearchLots/", False,"regional_small","https://github.com/Ramzes2023/TenderLens-AI/pull/149"),
-    ("samara_small","Самарская область — малые закупки","https://webtorgi.samregion.ru/smallpurchases", True,"regional_small","https://github.com/Ramzes2023/TenderLens-AI/pull/99"),
     ("sverdlovsk_small","Свердловская область — малые закупки","https://torgi.egov66.ru/smallpurchases/GzwSP/NoticesGrid", True,"regional_small","https://github.com/Ramzes2023/TenderLens-AI/pull/131"),
     ("bashkortostan_small","Башкортостан — запросы котировок","https://zakaz.bashkortostan.ru/quotation-requests/new", True,"regional_small","https://github.com/Ramzes2023/TenderLens-AI/pull/99"),
     ("yanao_small","ЯНАО — витрина малых закупок","https://zakupki.yanao.ru/vitriny-zakupok/oos-rks-001-001", True,"regional_small","https://github.com/Ramzes2023/TenderLens-AI/pull/99"),

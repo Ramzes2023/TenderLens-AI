@@ -21,7 +21,6 @@ _RU_OPT_IN_ADAPTERS = (
     ("stan_commercial_public", "STAN-Torgi — genuine commercial procurement procedures", "html", False, "general", "https://stantorgi.ru/etp"),
     ("nmck_native_public", "NMCK — first-party public small-purchase notices", "html", False, "regional_small", "https://xn--j1adc1b.xn--p1ai/procedures"),
     ("gpb_etp_public", "Gazprombank ETP public procurement (law unverified)", "html", False, "general", "https://etpgpb.ru/procedures/"),
-    ("ru_samara_public_list", "Самарская область — официальный публичный список малых закупок (только список)", "api", True, "regional_small", "https://webtorgi.samregion.ru/smallpurchases/GzwSP/NoticesGrid"),
 )
 
 
@@ -49,7 +48,7 @@ def source_directory(catalog):
         # This is an editorial categorization, not a proof of a procurement law,
         # published bid limit, or current availability.
         small = any(part in (key + " " + name).lower()
-                    for part in ("small", "regional", "lenobl", "nmck", "municipal", "samara", "малых"))
+                    for part in ("small", "regional", "lenobl", "nmck", "municipal"))
         sources.append({
             "key": key, "name": name, "country": country,
             "region": region, "transport": m.transport.value,

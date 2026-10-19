@@ -10,6 +10,7 @@ import json
 import sys
 import tempfile
 from pathlib import Path
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -120,7 +121,18 @@ def acceptance():
     catalog = build_source_catalog(settings)
     if SOURCE not in catalog.enabled_keys:
         raise AssertionError("B2B-Center was not enabled in the isolated catalog")
-    notices = asyncio.run(public_notices(catalog))
+    # A legitimate upstream transport outage may recover on a subsequent
+    # bounded, independently live request. Never use cache or test fixtures.
+    # Each attempt keeps the original hardcoded hosts, TLS and request limits.
+    from app.sources.http import ConnectorTransportError
+    for attempt in range(3):
+        try:
+            notices = asyncio.run(public_notices(catalog))
+            break
+        except ConnectorTransportError:
+            if attempt == 2:
+                raise
+            time.sleep(1 + attempt)
     print("B2B_REAL_FETCHED_COUNT=" + str(len(notices)), flush=True)
     if not notices or len(notices) > 10:
         raise AssertionError("No live B2B procurement notices")

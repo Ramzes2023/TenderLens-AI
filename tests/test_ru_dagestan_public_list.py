@@ -148,3 +148,15 @@ def test_explicit_optin_uses_real_dagestan_adapter_without_detail_capability():
     assert item.homepage_url == mod.GRID
     assert item.capabilities.documents is False
     assert item.capabilities.keyword_search is False
+
+
+def test_runtime_accepts_single_notice_and_honest_empty_page():
+    data = original_rows()
+    assert len(mod.parse_public_list(data, limit=1)) == 1
+    data['items'] = data['items'][:1]
+    data['totalRows'] = 1
+    assert len(mod.parse_public_list(data)) == 1
+    assert mod.parse_public_list({'items': [], 'totalRows': 0}) == []
+    for total in (-1, True, '0', 2):
+        with pytest.raises(ValueError):
+            mod.parse_public_list({'items': [], 'totalRows': total})

@@ -159,6 +159,12 @@ def proof():
             rows = store.read(SOURCE_ID, limit=10)
             if len(rows) < 2:
                 raise AssertionError("Insufficient real Ingushetia notices persisted")
+            # Never accept two verified upstream details AND unrelated SQL rows
+            # as a complete ingestion chain; the same originals must survive.
+            original_verified_ids = {n.tender_number for n in first[:2]}
+            persisted_ids = {n.tender_number for n in rows}
+            if not original_verified_ids <= persisted_ids:
+                raise AssertionError("Original EIS detail IDs did not survive real leased Worker SQL")
             snap = snapshot_catalog(catalog, store)
             for n in rows:
                 assert normalize_ingushetia_notice(n) is not None

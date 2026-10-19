@@ -14,7 +14,7 @@ from app.sources.ru_notice_identity import original_notice_key
 from app.sources.ru_dedup import deduplicate
 from app.sources.ru_ingushetia_fabrikant44 import (
     IngushetiaFabrikant44Source, SOURCE_ID, HOST, LIST_URL, ORGANIZER, INN,
-    extract_regional_listing, verified_fabrikant_notice,
+    extract_regional_listing, verified_fabrikant_notice, DETAIL_MIRROR_HOST,
 )
 
 NUMBER = "0114500000826002358"
@@ -105,7 +105,7 @@ def test_enabled_only_by_explicit_opt_in_and_official_host_only():
     assert isinstance(reg.source, IngushetiaFabrikant44Source)
     assert reg.source.name == SOURCE_ID
     assert reg.homepage_url == LIST_URL
-    assert HOSTS[SOURCE_ID] == frozenset({HOST})
+    assert HOSTS[SOURCE_ID] == frozenset({HOST, DETAIL_MIRROR_HOST})
 
 
 def test_cross_eis_original_dedup_is_not_double_user_alert():
@@ -182,7 +182,7 @@ def test_one_stale_detail_never_loses_two_independently_verified_rows(monkeypatc
     monkeypatch.setattr(mod, "source_client", fake_client)
     verified = asyncio.run(IngushetiaFabrikant44Source().fetch(limit=3))
     assert [n.tender_number for n in verified] == list(numbers[:2])
-    assert len(calls) == 4
+    assert len(calls) == 5  # one failing primary detail also tries the same-publisher mirror
 
 
 def test_no_verified_card_is_never_reported_as_success(monkeypatch):
@@ -305,5 +305,70 @@ def test_detail_scan_can_skip_two_bad_originals_and_keep_next_three(monkeypatch)
     monkeypatch.setattr(mod, "bounded_fetch", observe_policy)
     notices = asyncio.run(IngushetiaFabrikant44Source().fetch(limit=3))
     assert [n.tender_number for n in notices] == list(ids[2:])
-    assert len(calls) == 6  # one current list and all five observed originals
-    assert len(policies) == 1 and policies[0].max_requests == 7
+    assert len(calls) == 8  # list + 5 originals + 2 fallback original requests
+    assert len(policies) == 1 and policies[0].max_requests == 12
+
+
+def test_live_list_original_can_be_verified_via_same_publisher_detail_host(monkeypatch):
+    """Synthetic network outage proves fallback identity, not live availability."""
+    import app.sources.ru_ingushetia_fabrikant44 as mod
+    from app.sources.http import ConnectorTransportError
+    from urllib.parse import urlsplit
+
+    calls = []
+    mirror_url = "https://" + DETAIL_MIRROR_HOST + urlsplit(URL).path
+
+    class Client:
+        async def get(self, url):
+            calls.append(url)
+            if url == URL:
+                raise ConnectorTransportError(retryable=True)
+            if url == LIST_URL:
+                content = listing()
+            elif url == mirror_url:
+                content = detail()
+            else:
+                pytest.fail("Source attempted a nonofficial host")
+            return SimpleNamespace(content=content, headers={"content-type": "text/html"},
+                                   raise_for_status=lambda: None)
+
+    @asynccontextmanager
+    async def fake_client(**kwargs):
+        assert kwargs["follow_redirects"] is False
+        assert kwargs["trust_env"] is False
+        yield Client()
+
+    monkeypatch.setattr(mod, "source_client", fake_client)
+    found = asyncio.run(IngushetiaFabrikant44Source().fetch(limit=1))
+    assert len(found) == 1
+    assert found[0].tender_number == NUMBER and found[0].url == URL
+    assert found[0].customer == ORGANIZER
+    assert calls == [LIST_URL, URL, mirror_url]
+
+
+def test_same_publisher_detail_mirror_cannot_override_bad_identity(monkeypatch):
+    import app.sources.ru_ingushetia_fabrikant44 as mod
+    from app.sources.http import ConnectorTransportError
+
+    calls = []
+
+    class Client:
+        async def get(self, url):
+            calls.append(url)
+            if url == LIST_URL:
+                content = listing()
+            elif url == URL:
+                raise ConnectorTransportError(retryable=True)
+            else:
+                content = detail(number="0114500000826002359")
+            return SimpleNamespace(content=content, headers={"content-type": "text/html"},
+                                   raise_for_status=lambda: None)
+
+    @asynccontextmanager
+    async def fake_client(**kwargs):
+        yield Client()
+
+    monkeypatch.setattr(mod, "source_client", fake_client)
+    with pytest.raises(ValueError, match="No independently verified regional original cards"):
+        asyncio.run(IngushetiaFabrikant44Source().fetch(limit=1))
+    assert len(calls) == 3

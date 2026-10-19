@@ -5,10 +5,25 @@ from scripts.ru_trusted_live_probe import TARGETS, UnsafeAddress, checked_ips, d
 
 class ProbeSafetyTests(unittest.TestCase):
     def test_fixed_unique_approved_targets(self):
-        self.assertEqual(len(TARGETS), 35)
+        self.assertEqual(len(TARGETS), 37)
         pairs = {(t.host, t.path) for t in TARGETS.values()}
         self.assertEqual(len(pairs), len(TARGETS))
         self.assertTrue(all(t.mode in {"html", "rss"} for t in TARGETS.values()))
+
+    def test_fabrikant_legacy_alias_uses_real_published_register_not_obsolete_soap4(self):
+        published = TARGETS["fabrikant_44_mirror"]
+        self.assertEqual(published, Target("44.fabrikant.ru", "/44/catalog/procedure/published"))
+        self.assertNotEqual(published.path, "/44/catalog/procedure/requestOffer")
+        self.assertEqual(published.host, TARGETS["fabrikant_44"].host)
+        self.assertNotEqual(published.path, TARGETS["fabrikant_44"].path)
+        # Two operator choices on one official host are not independent feeds.
+        self.assertEqual(sum(t.host == published.host for t in TARGETS.values()), 2)
+
+    def test_caucasus_exact_public_targets_not_live_source_claims(self):
+        self.assertEqual(TARGETS["ossetia_official_small"], Target("15.portalregion.ru", "/"))
+        self.assertEqual(TARGETS["stavropol_rts_small"], Target("market26.rts-tender.ru", "/"))
+        self.assertEqual(TARGETS["ossetia_official_small"].mode, "html")
+        self.assertEqual(TARGETS["stavropol_rts_small"].mode, "html")
 
     def test_unapproved_choice_never_resolves_dns(self):
         with patch("scripts.ru_trusted_live_probe.socket.getaddrinfo") as dns:
@@ -53,8 +68,8 @@ class ProbeSafetyTests(unittest.TestCase):
             output = StringIO()
             with redirect_stdout(output):
                 self.assertEqual(main("batch_priority"), 0)
-            self.assertEqual(fn.call_count, 35)
-            self.assertIn("RU_BATCH_HTTPS_VISIBLE=35/35", output.getvalue())
+            self.assertEqual(fn.call_count, 37)
+            self.assertIn("RU_BATCH_HTTPS_VISIBLE=37/37", output.getvalue())
             self.assertIn("RU_BATCH_NOTICE_DETAIL_VERIFIED=NO", output.getvalue())
         def blocked(target):
             if target.host == "44.fabrikant.ru":
@@ -66,7 +81,7 @@ class ProbeSafetyTests(unittest.TestCase):
 
     def test_every_batch_target_has_safe_fixed_origin_and_path(self):
         from urllib.parse import urlsplit
-        self.assertEqual(len({(t.host,t.path) for t in TARGETS.values()}),35)
+        self.assertEqual(len({(t.host,t.path) for t in TARGETS.values()}),37)
         for item in TARGETS.values():
             url = urlsplit("https://" + item.host + item.path)
             self.assertEqual(url.hostname, item.host)

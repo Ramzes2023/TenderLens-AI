@@ -27,6 +27,8 @@ from .lenobl_small_public import LenoblSmallPublicSource
 from .nmck_native_public import NmckNativePublicSource
 from .stan_commercial_public import StanCommercialPublicSource
 from .south_ural_public import SouthUralPublicSource
+from .ru_dagestan_public_list import DagestanPublicListSource, GRID as DAG_PUBLIC_GRID
+from .kavkaz_rf_firstparty import KavkazRfFirstpartySource
 from .canada_buys_dataset import CanadaBuysDatasetSource
 from .eis_rss import EisRssSource, SourceError
 from .eis_44_public_html import Eis44PublicHtmlSource
@@ -752,6 +754,45 @@ def build_source_catalog(
             official=True,
             enabled=True,
             capabilities=SourceCapabilities(),
+        ))
+
+    # Verified original buyer notices; duplicate Fabrikant/EIS procedures must
+    # be reconciled before enabling in an operator-managed production environment.
+    # The adapter itself never consumes credentials and cannot self-activate.
+    if settings.kavkaz_rf_firstparty_enabled:
+        registry.register(SourceRegistration(
+            key="kavkaz_rf_firstparty",
+            display_name="Кавказ.РФ — first-party North Caucasus corporate tenders",
+            source=KavkazRfFirstpartySource(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url="https://xn--80aafvlc.xn--p1ai/purchases_sales/zakupki/tekushchie-/",
+            official=False,
+            enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    # Public official regional listing only: no anonymous deep detail access.
+    # Never auto-enable; operator must explicitly accept the list-only scope.
+    if settings.ru_dagestan_public_list_enabled:
+        registry.register(SourceRegistration(
+            key="ru_dagestan_public_list",
+            display_name="Дагестан — официальный реестр малых закупок (публичный список)",
+            source=DagestanPublicListSource(timeout=min(timeout, 30)),
+            transport=SourceTransport.API,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url=DAG_PUBLIC_GRID,
+            official=True,
+            enabled=True,
+            capabilities=SourceCapabilities(
+                keyword_search=False,
+                pagination=False,
+                documents=False,
+                incremental_sync=False,
+                authentication_required=False,
+            ),
         ))
 
     if settings.south_ural_public_enabled:

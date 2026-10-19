@@ -30,3 +30,24 @@ def test_timeouts_do_not_claim_certificate_failure_and_cycles_terminate():
         result = transport_failure(error)
         assert result["category"] == expected
         assert result["certificate_verify_code"] is None
+
+
+def test_known_ingushetia_vendor_failures_are_classified_without_remote_text():
+    from scripts.ci_ru_ingushetia_live_worker import _safe_ingushetia_vendor_failure
+
+    assert _safe_ingushetia_vendor_failure(ValueError(
+        "No source-owned Ingushetia committee tenders in live Fabrikant list"
+    )) == "REGIONAL_ROWS_ABSENT"
+    assert _safe_ingushetia_vendor_failure(ValueError(
+        "No independently verified regional original cards"
+    )) == "ORIGINAL_CARDS_NOT_VERIFIED"
+    assert _safe_ingushetia_vendor_failure(ValueError(
+        "First-party regional listing was not HTML"
+    )) == "LISTING_NOT_HTML"
+    assert _safe_ingushetia_vendor_failure(ValueError(
+        "Untrusted Fabrikant regional listing"
+    )) == "LISTING_UNTRUSTED"
+    assert _safe_ingushetia_vendor_failure(ValueError(
+        "secret upstream query and token=ABC"
+    )) is None
+    assert _safe_ingushetia_vendor_failure(RuntimeError("private")) is None

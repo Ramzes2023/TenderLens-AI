@@ -8,6 +8,7 @@ Do not count these as a second independent publication beside EIS.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from pathlib import Path
 import re
 from urllib.parse import parse_qs, urlsplit
 
@@ -54,6 +55,8 @@ def normalize_ingushetia_notice(notice: TenderNotice) -> TenderNotice | None:
 @dataclass(frozen=True)
 class IngushetiaEis44Source:
     timeout: float = 25
+    ca_bundle_file: Path | None = None
+    system_trust: bool = False
     name: str = SOURCE_ID
 
     async def fetch(self, limit: int = 20) -> list[TenderNotice]:
@@ -63,7 +66,8 @@ class IngushetiaEis44Source:
         # do not silently accept the first unrelated national results.
         upstream = EisRssSource(
             urls=(RSS_URL,), timeout=self.timeout, name=SOURCE_ID,
-            direct=True, system_trust=False,
+            direct=True, system_trust=self.system_trust,
+            ca_bundle_file=self.ca_bundle_file,
         )
         items = await upstream.fetch(limit=100)
         verified: list[TenderNotice] = []

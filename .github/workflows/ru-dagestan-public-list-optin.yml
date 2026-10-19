@@ -5,12 +5,10 @@ on:
     branches: [main]
     paths:
       - app/sources/ru_dagestan_public_list.py
-      - app/sources/catalog.py
-      - app/sources/ingestion.py
-      - app/monitoring/config.py
       - scripts/ci_ru_dagestan_public_list_sql.py
       - tests/test_ru_dagestan_public_list.py
-      - .github/workflows/ru-dagestan-public-list-optin.yml
+
+  workflow_dispatch:
 
 permissions:
   contents: read

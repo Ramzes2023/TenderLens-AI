@@ -11,11 +11,9 @@ on:
     branches: [main]
     paths:
       - scripts/ci_ru_b2b_real_worker.py
-      - .github/workflows/ru-b2b-real-worker.yml
       - app/sources/b2b_center.py
-      - app/sources/ingestion.py
-      - app/sources/catalog.py
-      - app/sources/opportunities.py
+
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -24,7 +24,7 @@ def test_fabrikant_has_no_implicit_enable_or_extra_eis_upstream_count():
     entry = enabled.registry.get(SOURCE_ID)
     assert isinstance(entry.source, Fabrikant44PublicSource)
     assert entry.jurisdictions == ("RU",)
-    assert "soap4.fabrikant.ru" in entry.homepage_url
+    assert "44.fabrikant.ru" in entry.homepage_url
     assert HOSTS[SOURCE_ID] == frozenset({HOST})
 
 

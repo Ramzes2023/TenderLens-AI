@@ -6,7 +6,7 @@ on:
       - scripts/research_ru_ingushetia_routes.py
       - .github/workflows/ru-ingushetia-network-diagnostics.yml
   pull_request:
-    branches: [main]
+    branches: [main, feat/ru-ingushetia-eis-live-gated-20261019]
     paths:
       - scripts/research_ru_ingushetia_routes.py
       - .github/workflows/ru-ingushetia-network-diagnostics.yml

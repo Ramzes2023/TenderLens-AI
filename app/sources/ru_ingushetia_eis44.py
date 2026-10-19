@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from pathlib import Path
 import re
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 from .eis_rss import EIS_EXTENDED_RSS_URL, EisRssSource, SourceError
 from .models import TenderNotice
@@ -18,8 +18,13 @@ from .opportunities import validate_notice
 
 SOURCE_ID = "ru_ingushetia_eis44"
 REGION = "Республика Ингушетия"
-# This filter must be verified against the genuine live EIS response by CI.
-RSS_URL = EIS_EXTENDED_RSS_URL + "?fz44=on&regions=06&pageNumber=1"
+# EIS ignores the guessed regions=06 argument and returns national records.
+# Use its public text search; publisher-owned buyer/region metadata below is
+# still mandatory. This conservative query can miss buyers without the region
+# in their indexed text and is not a claim of complete regional coverage.
+RSS_URL = EIS_EXTENDED_RSS_URL + "?" + urlencode({
+    "fz44": "on", "searchString": "Ингушетия", "morphology": "on", "pageNumber": "1",
+})
 _NUMBER = re.compile(r"[0-9]{19}\Z")
 _REGION = re.compile(r"\bингушети(?:я|и|ю|ей)\b", re.I)
 

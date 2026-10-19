@@ -53,6 +53,24 @@ def test_official_row_and_independent_detail_identity():
     assert item.deadline is None
 
 
+def test_public_organizer_filter_is_newest_first_not_procurement_text_search():
+    from urllib.parse import parse_qs, urlsplit
+    parsed = urlsplit(LIST_URL)
+    assert parsed.path == "/44/catalog/procedure/published"
+    assert parse_qs(parsed.query) == {
+        "placer_search_str": [INN], "order": ["publication_datetime"], "dir": ["desc"],
+    }
+
+
+def test_title_anchor_excludes_real_catalog_preference_badges():
+    html = listing().decode().replace(
+        f"<td>{TITLE}</td>",
+        f'<td><a href="/44/procedure/ea21/{NUMBER}?&backurl=abc">{TITLE}</a>'
+        '<div class="label-list"><div>СМП/СОНО</div><div>1875</div></div></td>',
+    ).encode()
+    assert extract_regional_listing(html) == [(NUMBER, URL, TITLE)]
+
+
 @pytest.mark.parametrize("org,href", [
     ("ДРУГОЙ РЕГИОН", "/44/procedure/ea21/" + NUMBER),
     (ORGANIZER, "https://44.fabrikant.ru.attacker.invalid/44/procedure/ea21/" + NUMBER),

@@ -16,7 +16,7 @@ on:
       - scripts/ci_ru_ingushetia_fabrikant_worker.py
       - .github/workflows/ru-ingushetia-eis-live.yml
   pull_request:
-    branches: [main]
+    branches: [main, feat/ru-ingushetia-eis-live-gated-20261019]
 permissions:
   contents: read
 jobs:

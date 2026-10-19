@@ -73,7 +73,7 @@ async def _check_original_links(notices):
                   raise AssertionError("Official original card does not corroborate EIS number")
 
 
-async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, source_id=SOURCE_ID):
+async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, repository, source_id=SOURCE_ID):
     """Real stored notices -> real monitor dedup -> Telegram-format fake sink.
 
     Intentionally uses no bot credentials, chat API, network send, or user data.
@@ -84,17 +84,16 @@ async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, source_id=
     fake_owner, fake_chat = 101, 202
     monitor_repo.set_subscription(fake_owner, fake_chat, True)
 
-    class PersistedNoticeMonitor(TenderMonitorService):
-        async def fetch_matches_from_catalog(self, selected_catalog, owner_user_id=None,
-                                             *, source_keys=None):
-            assert selected_catalog is catalog
-            assert source_id in source_keys
-            matches = [prefilter_notice(n, None) for n in notices]
-            return [m for m in matches if m is not None], SimpleNamespace(
-                attempted_sources=(source_id,), total_failure=False,
-            )
-
-    service = PersistedNoticeMonitor(cfg, None, monitor_repo, None)
+    # Read the actual Worker database through the production snapshot and
+    # monitoring service. Do not override catalog fetching with in-memory rows.
+    persisted_catalog = snapshot_catalog(catalog, repository)
+    service = TenderMonitorService(cfg, None, monitor_repo, None)
+    stored_matches, report = await service.fetch_matches_from_catalog(
+        persisted_catalog, fake_owner, source_keys=(source_id,),
+    )
+    if report.failures or not stored_matches:
+        raise AssertionError("Worker SQL snapshot unavailable to notification service")
+    expected_rows = [m.notice for m in stored_matches[:cfg.max_notifications_per_cycle]]
     stop = asyncio.Event()
 
     class IsolatedAckSink:
@@ -108,22 +107,25 @@ async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, source_id=
             return SimpleNamespace(message_id=len(self.messages))
 
     sink = IsolatedAckSink()
-    await monitor_loop(sink, service, stop, source_catalog=catalog)
-    expected = min(len(notices), cfg.max_notifications_per_cycle)
+    await asyncio.wait_for(
+        monitor_loop(sink, service, stop, source_catalog=persisted_catalog), timeout=30,
+    )
+    expected = len(expected_rows)
     if len(sink.messages) != expected:
         raise AssertionError("Staging monitor did not dispatch every allowed first batch notice")
-    for row, text in zip(notices[:expected], sink.messages):
+    for row, text in zip(expected_rows, sink.messages):
         if row.tender_number not in text or row.title not in text or "НОВАЯ ЗАКУПКА" not in text:
             raise AssertionError("Staging dispatch lost original procurement identity")
         if not monitor_repo.seen(fake_owner, "eis_44", row.tender_number):
             raise AssertionError("Simulated Telegram acknowledgement was not persisted")
     if await service.unseen_matches(fake_owner, [
-        prefilter_notice(row, None) for row in notices[:expected]
+        prefilter_notice(row, None) for row in expected_rows
     ]):
         raise AssertionError("Simulated delivered Ingushetia original would alert again")
     # A per-cycle cap cannot mark unnotified later rows as delivered.
     remaining = await service.unseen_matches(fake_owner, [
-        prefilter_notice(row, None) for row in notices[expected:]
+        prefilter_notice(row, None) for row in notices
+        if row.identity not in {n.identity for n in expected_rows}
     ])
     if len(remaining) != len(notices) - expected:
         raise AssertionError("Undelivered notices must remain eligible for the next cycle")
@@ -186,9 +188,11 @@ def proof():
                     raise AssertionError('Real Ingushetia notice not searchable by title')
                 if store.upsert(n, connector_version(SOURCE_ID)):
                     raise AssertionError("Replay inserted duplicate regional notice")
-            staged = asyncio.run(_check_isolated_dispatch(catalog, _catalog_settings(), rows, Path(tmp) / "notifications.sqlite"))
+            staged = asyncio.run(_check_isolated_dispatch(catalog, _catalog_settings(), rows, Path(tmp) / "notifications.sqlite", repository=store))
             return {
                 "official_rss_origin": "zakupki.gov.ru",
+                "verified_notices": [{"number": n.tender_number, "title": n.title,
+                                      "url": n.url, "customer": n.customer} for n in first[:2]],
                 "isolated_staging_sink_dispatches": staged,
                 "original_cards_corresponding_to_list": 2,
                 "leased_worker_state": completed.state,

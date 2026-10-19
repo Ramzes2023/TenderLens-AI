@@ -13,6 +13,8 @@ from html.parser import HTMLParser
 from urllib.parse import urlsplit
 
 from app.sources.http import FetchPolicy, bounded_fetch, source_client
+from app.sources.ru_ingushetia_eis44 import RSS_URL
+from app.sources.ru_ingushetia_fabrikant44 import LIST_URL
 from scripts.ru_eis_pinned_tls_probe import verify_root
 
 ROOT = Path(__file__).resolve().parents[1] / "russian_trusted_root_ca_pem.crt"
@@ -48,12 +50,12 @@ def public_visible_text(html):
 
 
 CASES = (
-    ("eis_ingushetia_rss", "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&regions=06&pageNumber=1", HOST_EIS, None),
+    ("eis_ingushetia_rss", RSS_URL, HOST_EIS, None),
     ("fabrikant_current_catalog", "https://44.fabrikant.ru/44/catalog/procedure/published?dir=desc&order=publication_datetime", HOST_FAB, None),
     # The 'q' query is a publicly indexed official catalogue shape; whether
     # it searches organizers or buyers must be corroborated by live row data.
     ("fabrikant_query_ingushetia", "https://44.fabrikant.ru/44/catalog/procedure?q=%D0%98%D0%BD%D0%B3%D1%83%D1%88%D0%B5%D1%82%D0%B8%D1%8F", HOST_FAB, None),
-    ("fabrikant_query_organizer_inn", "https://44.fabrikant.ru/44/catalog/procedure?q=0608058533", HOST_FAB, None),
+    ("fabrikant_query_organizer_inn", LIST_URL, HOST_FAB, None),
     ("fabrikant_query_recent_original", "https://44.fabrikant.ru/44/catalog/procedure?q=0114500000826002358", HOST_FAB, None),
     ("fabrikant_soap4_current_catalog", "https://soap4.fabrikant.ru/44/catalog/procedure/published", HOST_SOAP, None),
     ("fabrikant_soap4_ordered_current_catalog", "https://soap4.fabrikant.ru/44/catalog/procedure/published?dir=desc&dropOrder=1&order=procedure_number", HOST_SOAP, None),

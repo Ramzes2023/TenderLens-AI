@@ -23,9 +23,10 @@ REGION = "Республика Ингушетия"
 ORGANIZER = "КОМИТЕТ ГОСУДАРСТВЕННОГО ЗАКАЗА РЕСПУБЛИКИ ИНГУШЕТИЯ"
 INN = "0608058533"
 HOST = "44.fabrikant.ru"
-# This q filter exists in the indexed first-party search UI, but whether it
-# filters organizer by INN MUST be established on the live first-party server.
-LIST_URL = "https://44.fabrikant.ru/44/catalog/procedure?q=" + INN
+# Public GET form: q searches the procurement, placer_search_str searches
+# organizer name/INN. Sort newest first so each poll discovers new notices.
+LIST_URL = ("https://44.fabrikant.ru/44/catalog/procedure/published"
+            "?placer_search_str=" + INN + "&order=publication_datetime&dir=desc")
 _DETAIL = re.compile(r"/44/procedure/([a-z0-9-]{2,18})/([0-9]{19})\Z")
 MAX_BYTES = 1_800_000
 MAX_DETAILS = 5
@@ -56,23 +57,31 @@ class _TableRows(HTMLParser):
         self.rows = []
         self.row = None
         self.cell = None
+        self.anchor = None
 
     def handle_starttag(self, tag, attrs):
         if tag == "tr":
-            self.row = {"cells": [], "links": []}
+            self.row = {"cells": [], "links": [], "titles": []}
         elif self.row is not None and tag == "td":
             self.cell = []
         elif self.row is not None and tag == "a":
             href = dict(attrs).get("href")
             if href:
                 self.row["links"].append(href)
+                if len(self.row["cells"]) == 2 and self.cell is not None:
+                    self.anchor = []
 
     def handle_data(self, value):
         if self.cell is not None:
             self.cell.append(value)
+        if self.anchor is not None:
+            self.anchor.append(value)
 
     def handle_endtag(self, tag):
-        if tag == "td" and self.row is not None and self.cell is not None:
+        if tag == "a" and self.anchor is not None and self.row is not None:
+            self.row["titles"].append(_text(self.anchor))
+            self.anchor = None
+        elif tag == "td" and self.row is not None and self.cell is not None:
             self.row["cells"].append(_text(self.cell))
             self.cell = None
         elif tag == "tr" and self.row is not None:
@@ -98,7 +107,9 @@ def extract_regional_listing(payload):
         organizer = cells[4].upper()
         if ORGANIZER not in organizer:
             continue
-        title = cells[2]
+        # The title cell also contains preference badges (СМП/СОНО, 1875).
+        # Those are not part of the procurement title on the original card.
+        title = row["titles"][0] if len(row["titles"]) == 1 else cells[2]
         if not 5 <= len(title) <= 1000:
             continue
         identities = []

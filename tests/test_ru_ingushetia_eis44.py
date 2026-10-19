@@ -75,7 +75,12 @@ def test_no_duplicate_eis_notifications_for_same_original():
 
 
 def test_source_stays_off_by_default_and_uses_one_official_host():
-    assert "regions=06" in RSS_URL and RSS_URL.startswith("https://zakupki.gov.ru/")
+    from urllib.parse import parse_qs, urlsplit
+    assert RSS_URL.startswith("https://zakupki.gov.ru/")
+    query = parse_qs(urlsplit(RSS_URL).query)
+    assert query["searchString"] == ["Ингушетия"]
+    assert query["fz44"] == ["on"]
+    assert "regions" not in query
     assert HOSTS[SOURCE_ID] == frozenset({"zakupki.gov.ru"})
     assert SOURCE_ID not in build_source_catalog(settings()).registry.keys()
     catalog = build_source_catalog(settings(ru_ingushetia_eis44_enabled=True))
@@ -185,7 +190,20 @@ def test_real_monitor_dispatch_path_uses_isolated_ack_sink_without_telegram_api(
     assert first is not None and second is not None
     # Only one alert can be marked as seen during this constrained cycle;
     # the second genuinely stored record must remain eligible next cycle.
-    count = asyncio.run(_check_isolated_dispatch(
-        catalog, cfg, (first, second), tmp_path / "ingush-staging-ack.sqlite",
-    ))
+    from app.database.backend import Database
+    from app.database.config import DatabaseSettings
+    from app.sources.opportunities import OpportunityRepository
+    from app.sources.ingestion import connector_version
+    db = Database(DatabaseSettings("synthetic-monitor-contract", tmp_path / "opportunities.sqlite"))
+    try:
+        store = OpportunityRepository(db)
+        store.initialize()
+        for notice in (first, second):
+            store.upsert(notice, connector_version(SOURCE_ID))
+        count = asyncio.run(_check_isolated_dispatch(
+            catalog, cfg, store.read(SOURCE_ID, limit=2), tmp_path / "ingush-staging-ack.sqlite",
+            repository=store,
+        ))
+    finally:
+        db.close()
     assert count == 1

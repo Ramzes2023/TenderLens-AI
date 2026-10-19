@@ -18,6 +18,9 @@ from app.jobs import HandlerRegistry, JobRepository, JobSettings
 from app.jobs.models import JobScope
 from app.jobs.worker import Worker
 from app.monitoring.config import MonitoringSettings
+from app.monitoring.repository import MonitoringRepository
+from app.monitoring.service import TenderMonitorService
+from app.scoring.models import CompanyProfile
 from app.sources.catalog import build_source_catalog
 from app.sources.ingestion import JOB_TYPE, ConnectorSyncHandler, ConnectorSyncService, connector_version
 from app.sources.opportunities import OpportunityRepository
@@ -80,15 +83,37 @@ def proof():
                         raise AssertionError("Official first-party Ingushetia tender not found in tenant search")
                 if store.upsert(n, connector_version(SOURCE_ID)):
                     raise AssertionError("Original-number replay created duplicate")
+            # Exercise the actual user's profile filtering against Worker SQL,
+            # including an explicit exclusion and a query that cannot match.
+            profile = CompanyProfile(
+                profile_version="1", company_name="Isolated acceptance tenant",
+                search_keywords=[rows[0].title], allowed_regions=[rows[0].region],
+            )
+            monitor_repo = MonitoringRepository(Path(d) / "filter.sqlite")
+            monitor_repo.initialize()
+            service = TenderMonitorService(cfg, None, monitor_repo, profile)
+            matches, report = asyncio.run(service.fetch_matches_from_catalog(search, 101, source_keys=(SOURCE_ID,)))
+            if report.failures or not any(m.notice.identity == rows[0].identity for m in matches):
+                raise AssertionError("User keyword/region profile lost a matching SQL tender")
+            blocked = profile.model_copy(update={"excluded_keywords": [rows[0].title]})
+            matches, report = asyncio.run(service.fetch_matches_from_catalog_for_profile(search, blocked, source_keys=(SOURCE_ID,)))
+            if report.failures or any(m.notice.identity == rows[0].identity for m in matches):
+                raise AssertionError("Excluded user keyword still produced an alert")
+            negative = asyncio.run(search.fetch(source_keys=(SOURCE_ID,), search_terms=("VALYQON_NONMATCH_71c913d0",)))
+            if negative.failures or negative.notices:
+                raise AssertionError("Unrelated user query returned regional tenders")
             acknowledged = asyncio.run(_check_isolated_dispatch(
-                catalog, cfg, rows, Path(d) / "monitor.sqlite", source_id=SOURCE_ID,
+                catalog, cfg, rows, Path(d) / "monitor.sqlite", repository=store, source_id=SOURCE_ID,
             ))
             if acknowledged != min(len(rows), cfg.max_notifications_per_cycle):
                 raise AssertionError("Isolated monitor failed to acknowledge verified rows")
             return {
                 "official_first_party_current_originals": len(verified_ids),
+                "verified_notices": [{"number": n.tender_number, "title": n.title,
+                                      "url": n.url, "region": n.region} for n in originals],
                 "worker_state": completed.state,
                 "sql_and_title_number_search": len(rows),
+                "user_keyword_region_and_exclusion_filter": True,
                 "isolated_notification_ack": acknowledged,
                 "original_ids_not_double_counted_as_eis": True,
                 "production_changed": False,

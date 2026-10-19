@@ -129,8 +129,12 @@ async def probe():
 
             else:
                 print("RU_DAG_ANON_JSON_ROOT_TYPE=" + type(preliminary).__name__)
+            # Official public_settings() requests precisely ten native rows.
+            # The old separate legacy form probes only five; a genuine ten-row
+            # official response must not fail merely due to its page size.
             count, keys, shapes = parse_public_json(
                 response.content, response.headers.get("content-type", ""),
+                max_rows=10,
             )
             print("RU_DAG_GRID_ANON_CSRF_ROWS=" + str(count))
             print("RU_DAG_GRID_ANON_CSRF_KEYS=" + ",".join(keys))

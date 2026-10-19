@@ -13,6 +13,7 @@ from html.parser import HTMLParser
 from urllib.parse import urlsplit
 
 from app.sources.http import FetchPolicy, bounded_fetch, source_client
+from app.sources.ru_ingushetia_eis44 import RSS_URL as INGUSHETIA_RSS_URL
 from scripts.ru_eis_pinned_tls_probe import verify_root
 
 ROOT = Path(__file__).resolve().parents[1] / "russian_trusted_root_ca_pem.crt"
@@ -48,7 +49,8 @@ def public_visible_text(html):
 
 
 CASES = (
-    ("eis_ingushetia_rss", "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&regions=06&pageNumber=1", HOST_EIS, None),
+    ("eis_legacy_region_code_rss_unverified", "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&regions=06&pageNumber=1", HOST_EIS, None),
+    ("eis_ingushetia_text_search_rss", INGUSHETIA_RSS_URL, HOST_EIS, None),
     ("fabrikant_current_catalog", "https://44.fabrikant.ru/44/catalog/procedure/published?dir=desc&order=publication_datetime", HOST_FAB, None),
     # The 'q' query is a publicly indexed official catalogue shape; whether
     # it searches organizers or buyers must be corroborated by live row data.

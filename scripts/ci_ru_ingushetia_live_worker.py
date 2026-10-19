@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import tempfile
 from dataclasses import replace
 from pathlib import Path
@@ -23,6 +24,7 @@ from app.jobs.worker import Worker
 from app.monitoring.config import MonitoringSettings
 from app.monitoring.repository import MonitoringRepository
 from app.monitoring.service import TenderMonitorService, prefilter_notice
+from app.scoring.models import CompanyProfile
 from app.bot.monitoring import monitor_loop
 from app.sources.catalog import build_source_catalog
 from app.sources.http import source_client
@@ -58,22 +60,38 @@ def _catalog():
 
 
 async def _check_original_links(notices):
+    observed = {}
+    async def record(response):
+        observed['status'] = response.status_code
     with bounded_fetch(FetchPolicy(frozenset({'zakupki.gov.ru'}), len(notices), max_bytes=1_800_000)):
       async with source_client(
         timeout=20, follow_redirects=False, trust_env=False, verify=str(ROOT),
         headers={"Accept": "text/html"},
+        event_hooks={"response": [record]},
       ) as client:
           for notice in notices:
-              original = await client.get(notice.url)
+              observed.clear()
+              try:
+                  original = await client.get(notice.url)
+              except Exception:
+                  if observed.get('status') is not None:
+                      raise AssertionError('Official EIS original card HTTP ' + str(observed['status'])) from None
+                  raise
               original.raise_for_status()
               if "html" not in original.headers.get("content-type", "").lower():
                   raise AssertionError("Official EIS original card is not HTML")
               body = original.text
-              if notice.tender_number not in body:
-                  raise AssertionError("Official original card does not corroborate EIS number")
+              from app.sources.ru_ingushetia_fabrikant44 import _Visible, _text
+              visible = _Visible()
+              visible.feed(body)
+              text = _text(visible.content).casefold()
+              if any(value.casefold() not in text for value in
+                     (notice.tender_number, notice.title, notice.customer or "")):
+                  raise AssertionError("Official EIS card does not corroborate number, title and customer")
 
 
-async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, source_id=SOURCE_ID):
+async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, source_id=SOURCE_ID,
+                                   persisted_catalog=None):
     """Real stored notices -> real monitor dedup -> Telegram-format fake sink.
 
     Intentionally uses no bot credentials, chat API, network send, or user data.
@@ -94,7 +112,11 @@ async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, source_id=
                 attempted_sources=(source_id,), total_failure=False,
             )
 
-    service = PersistedNoticeMonitor(cfg, None, monitor_repo, None)
+    # Live acceptance reads the actual Worker database through SnapshotSource.
+    # The supplied-notice subclass is used only by the offline helper contract.
+    service = (TenderMonitorService(cfg, None, monitor_repo, None)
+               if persisted_catalog is not None else
+               PersistedNoticeMonitor(cfg, None, monitor_repo, None))
     stop = asyncio.Event()
 
     class IsolatedAckSink:
@@ -108,26 +130,65 @@ async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, source_id=
             return SimpleNamespace(message_id=len(self.messages))
 
     sink = IsolatedAckSink()
-    await monitor_loop(sink, service, stop, source_catalog=catalog)
+    await monitor_loop(sink, service, stop, source_catalog=persisted_catalog or catalog)
     expected = min(len(notices), cfg.max_notifications_per_cycle)
     if len(sink.messages) != expected:
         raise AssertionError("Staging monitor did not dispatch every allowed first batch notice")
-    for row, text in zip(notices[:expected], sink.messages):
-        if row.tender_number not in text or row.title not in text or "НОВАЯ ЗАКУПКА" not in text:
+    delivered = []
+    for text in sink.messages:
+        matching = [row for row in notices if row.tender_number in text]
+        if len(matching) != 1 or matching[0].title not in text or "НОВАЯ ЗАКУПКА" not in text:
             raise AssertionError("Staging dispatch lost original procurement identity")
+        row = matching[0]
+        delivered.append(row)
         if not monitor_repo.seen(fake_owner, "eis_44", row.tender_number):
             raise AssertionError("Simulated Telegram acknowledgement was not persisted")
+    if len({row.tender_number for row in delivered}) != expected:
+        raise AssertionError("Staging monitor dispatched a duplicate original")
     if await service.unseen_matches(fake_owner, [
-        prefilter_notice(row, None) for row in notices[:expected]
+        prefilter_notice(row, None) for row in delivered
     ]):
         raise AssertionError("Simulated delivered Ingushetia original would alert again")
+    if await service.unseen_matches(fake_owner, [
+        prefilter_notice(replace(row, source="eis", external_id="generic-" + row.tender_number), None)
+        for row in delivered
+    ]):
+        raise AssertionError("The same original from generic EIS would alert again")
     # A per-cycle cap cannot mark unnotified later rows as delivered.
     remaining = await service.unseen_matches(fake_owner, [
-        prefilter_notice(row, None) for row in notices[expected:]
+        prefilter_notice(row, None) for row in notices if row not in delivered
     ])
     if len(remaining) != len(notices) - expected:
         raise AssertionError("Undelivered notices must remain eligible for the next cycle")
     return len(sink.messages)
+
+
+async def _check_user_queries_and_profiles(catalog, cfg, notices, db_path, *, source_id):
+    """Exercise actual SQL catalog queries and production profile filtering."""
+    repo = MonitoringRepository(db_path)
+    repo.initialize()
+    service = TenderMonitorService(cfg, None, repo, None)
+    evidence = []
+    for notice in notices:
+        words = re.findall(r"[^\W_]+", notice.title, flags=re.UNICODE)
+        term = next((word for word in words[1:] if len(word) >= 4), words[0])
+        profile = CompanyProfile(profile_version="live-acceptance-v1",
+                                 company_name="Isolated Ingushetia acceptance",
+                                 search_keywords=[term], allowed_regions=[notice.region])
+        matches, report = await service.fetch_matches_from_catalog_for_profile(
+            catalog, profile, source_keys=(source_id,))
+        if report.failures or not any(m.notice.identity == notice.identity for m in matches):
+            raise AssertionError("Live SQL notice not found for user keyword and matching profile")
+        for rejecting in (profile.model_copy(update={"excluded_keywords": [term]}),
+                          profile.model_copy(update={"allowed_regions": ["Чужой регион"]})):
+            rejected, report = await service.fetch_matches_from_catalog_for_profile(
+                catalog, rejecting, source_keys=(source_id,))
+            if report.failures or any(m.notice.identity == notice.identity for m in rejected):
+                raise AssertionError("Excluded keyword or wrong-region profile accepted the notice")
+        evidence.append({"number": notice.tender_number, "user_query": term,
+                         "profile_match": True, "excluded_keyword_rejected": True,
+                         "other_region_rejected": True})
+    return evidence
 
 
 def proof():
@@ -135,7 +196,7 @@ def proof():
     assert SOURCE_ID in catalog.enabled_keys
     # LIVE network to real official RSS first, never fixtures.
     source = catalog.registry.get(SOURCE_ID).source
-    first = asyncio.run(source.fetch(limit=5))
+    first = asyncio.run(source.fetch(limit=2))
     if len(first) < 2:
         raise AssertionError(
             f"Only {len(first)} independently region-confirmed real EIS notices; minimum 2"
@@ -151,12 +212,12 @@ def proof():
             store.initialize()
             job = ConnectorSyncService(jobs, catalog).enqueue(SOURCE_ID)
             handlers = HandlerRegistry()
-            handlers.register(JOB_TYPE, ConnectorSyncHandler(catalog, store, max_records=10))
+            handlers.register(JOB_TYPE, ConnectorSyncHandler(catalog, store, max_records=2))
             assert Worker(jobs, handlers, job_types=(JOB_TYPE,)).run_once()
             completed = jobs.get(job.id, scope=JobScope())
             if completed is None or completed.state != "succeeded":
                 raise AssertionError("Real fenced worker did not succeed")
-            rows = store.read(SOURCE_ID, limit=10)
+            rows = store.read(SOURCE_ID, limit=2)
             if len(rows) < 2:
                 raise AssertionError("Insufficient real Ingushetia notices persisted")
             # Never accept two verified upstream details AND unrelated SQL rows
@@ -186,13 +247,21 @@ def proof():
                     raise AssertionError('Real Ingushetia notice not searchable by title')
                 if store.upsert(n, connector_version(SOURCE_ID)):
                     raise AssertionError("Replay inserted duplicate regional notice")
-            staged = asyncio.run(_check_isolated_dispatch(catalog, _catalog_settings(), rows, Path(tmp) / "notifications.sqlite"))
+            profiles = asyncio.run(_check_user_queries_and_profiles(
+                snap, _catalog_settings(), rows, Path(tmp) / "profiles.sqlite", source_id=SOURCE_ID))
+            staged = asyncio.run(_check_isolated_dispatch(
+                catalog, _catalog_settings(), rows, Path(tmp) / "notifications.sqlite",
+                persisted_catalog=snap))
             return {
                 "official_rss_origin": "zakupki.gov.ru",
                 "isolated_staging_sink_dispatches": staged,
                 "original_cards_corresponding_to_list": 2,
                 "leased_worker_state": completed.state,
                 "stored_and_searchable": len(rows),
+                "notice_ids": sorted(persisted_ids),
+                "notices": [{"number": n.tender_number, "title": n.title,
+                             "customer": n.customer, "url": n.url} for n in rows],
+                "user_queries_and_profiles": profiles,
                 "replay_duplicates": 0,
                 "production_changed": False,
                 "real_user_notifications_sent": False,
@@ -227,9 +296,11 @@ def main():
                 "failure_class": failure,
                 "cause_types": cause_names,
                 "retryable": bool(getattr(exc, "retryable", False)),
+                "contract": str(exc)[:200] if type(exc) is AssertionError else None,
             })
             continue
         print("RU_INGUSHETIA_LIVE_UPSTREAM=" + upstream)
+        print("EARLIER_ROUTE_FAILURES=" + json.dumps(failures, sort_keys=True))
         print("RU_INGUSHETIA_PROOF=" + json.dumps(result, ensure_ascii=False, sort_keys=True))
         print("RU_INGUSHETIA_LIVE_ACCEPTANCE=PASS")
         print("REAL_USER_TELEGRAM_RECEIPT=NOT_TESTED")

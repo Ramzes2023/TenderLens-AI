@@ -20,7 +20,7 @@ from .models import TenderNotice
 from .opportunities import validate_notice
 
 SOURCE_ID = "fabrikant_44_public"
-HOST = "soap4.fabrikant.ru"
+HOST = "44.fabrikant.ru"
 LIST_URL = "https://" + HOST + "/44/catalog/procedure/published?dir=desc&order=publication_datetime"
 MAX_BYTES = 1_600_000
 MAX_DETAILS = 3

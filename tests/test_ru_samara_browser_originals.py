@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from scripts.research_ru_samara_browser_originals import choose_originals
+from scripts.research_ru_samara_browser_originals import choose_originals, classify_original_navigation
 from scripts.research_ru_samara_browser_grid import GRID
 
 
@@ -46,3 +46,25 @@ def test_only_two_distinct_disclosed_same_host_numeric_original_links_qualify():
 def test_no_unproven_duplicate_external_or_listing_links(rows):
     with pytest.raises(ValueError):
         choose_originals(payload(rows))
+
+
+
+def test_native_detail_same_identity_canonicalization_is_not_blocked_blindly():
+    numeric = "https://webtorgi.samregion.ru/smallpurchases/GzwSP/5611196"
+    canonical = "https://webtorgi.samregion.ru/smallpurchases/GzwSP/Notice?noticeLink=5611196"
+    assert classify_original_navigation(numeric, numeric) == "EXACT_ORIGINAL"
+    assert classify_original_navigation(canonical, numeric) == "SAME_ID_CANONICAL_REDIRECT"
+    assert classify_original_navigation(numeric, canonical) == "SAME_ID_CANONICAL_REDIRECT"
+
+
+@pytest.mark.parametrize("final,expected", [
+    ("https://webtorgi.samregion.ru/smallpurchases/Account/Login", "LOGIN_REQUIRED"),
+    ("https://webtorgi.samregion.ru/smallpurchases/GzwSP/NoticesGrid", "RETURNED_TO_LIST"),
+    ("https://webtorgi.samregion.ru/smallpurchases/GzwSP/Notice?noticeLink=5611197", "UNVERIFIED_REDIRECT"),
+    ("https://evil.invalid/smallpurchases/GzwSP/5611196", "UNTRUSTED_ORIGIN"),
+    ("http://webtorgi.samregion.ru/smallpurchases/GzwSP/5611196", "UNTRUSTED_ORIGIN"),
+    ("https://webtorgi.samregion.ru/smallpurchases/GzwSP/Notice?noticeLink=5611196&admin=1", "UNVERIFIED_REDIRECT"),
+])
+def test_browser_rejects_login_and_mismatched_canonical_redirect(final,expected):
+    requested="https://webtorgi.samregion.ru/smallpurchases/GzwSP/5611196"
+    assert classify_original_navigation(requested,final)==expected

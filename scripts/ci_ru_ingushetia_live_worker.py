@@ -118,9 +118,15 @@ async def _check_isolated_dispatch(catalog, cfg, notices, db_path):
         if not monitor_repo.seen(fake_owner, "eis_44", row.tender_number):
             raise AssertionError("Simulated Telegram acknowledgement was not persisted")
     if await service.unseen_matches(fake_owner, [
-        prefilter_notice(row, None) for row in notices
+        prefilter_notice(row, None) for row in notices[:expected]
     ]):
         raise AssertionError("Simulated delivered Ingushetia original would alert again")
+    # A per-cycle cap cannot mark unnotified later rows as delivered.
+    remaining = await service.unseen_matches(fake_owner, [
+        prefilter_notice(row, None) for row in notices[expected:]
+    ])
+    if len(remaining) != len(notices) - expected:
+        raise AssertionError("Undelivered notices must remain eligible for the next cycle")
     return len(sink.messages)
 
 

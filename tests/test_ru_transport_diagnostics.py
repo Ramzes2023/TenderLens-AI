@@ -22,6 +22,7 @@ def test_nested_certificate_failure_is_distinct_and_redacted():
 def test_timeouts_do_not_claim_certificate_failure_and_cycles_terminate():
     for error, expected in (
         (httpx.ReadTimeout("private"), "response_read_timeout"),
+        (httpx.ReadError("private"), "response_read_failure"),
         (httpx.ConnectTimeout("private"), "connection_or_tls_handshake_timeout"),
         (httpx.ConnectError("private"), "connection_failure_unspecified"),
     ):

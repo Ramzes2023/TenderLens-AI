@@ -23,6 +23,8 @@ def transport_failure(error):
         elif category != "tls_certificate_verification":
             if isinstance(item, httpx.ReadTimeout):
                 category = "response_read_timeout"
+            elif isinstance(item, httpx.ReadError):
+                category = "response_read_failure"
             elif isinstance(item, httpx.ConnectTimeout):
                 category = "connection_or_tls_handshake_timeout"
             elif isinstance(item, httpx.ConnectError) and category == "unclassified":

@@ -6,6 +6,8 @@ on:
     paths:
       - scripts/research_ru_samara_browser_grid.py
       - tests/test_ru_samara_browser_grid.py
+      - scripts/research_ru_samara_native_http.py
+      - tests/test_ru_samara_native_http.py
       - .github/workflows/ru-samara-browser-native-research.yml
 
 permissions:
@@ -48,3 +50,34 @@ jobs:
       - name: Verify first-party Samara native rows without authentication or fabricated details
         timeout-minutes: 2
         run: python -B -m scripts.research_ru_samara_browser_grid
+
+  samara-native-http-offline-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install audited offline dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Verify public JSON request rejects forged, empty or unsafe responses
+        run: python -B -m pytest -q tests/test_ru_samara_native_http.py
+
+  samara-native-http-genuine-public-list:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install audited runtime
+        run: python -m pip install -r requirements-dev.txt
+      - name: Require real Samara anonymous GET + native CSRF JSON POST
+        timeout-minutes: 3
+        run: python -B -m scripts.research_ru_samara_native_http

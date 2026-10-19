@@ -76,6 +76,8 @@ def test_title_anchor_excludes_real_catalog_preference_badges():
     (ORGANIZER, "https://44.fabrikant.ru.attacker.invalid/44/procedure/ea21/" + NUMBER),
     (ORGANIZER, "http://44.fabrikant.ru/44/procedure/ea21/" + NUMBER),
     (ORGANIZER, "/44/procedure/ea21/" + NUMBER + "?token=oops"),
+    (ORGANIZER, "/44/procedure/ea21/" + NUMBER + "?&backurl=safe&token=oops"),
+    (ORGANIZER, "/44/procedure/ea21/" + NUMBER + "?&backurl="),
     (ORGANIZER, "/44/procedure/ea21/123456789"),
 ])
 def test_fails_closed_on_other_buyers_or_unsafe_link(org, href):
@@ -137,3 +139,70 @@ def test_mocked_vendor_client_is_not_live_proof(monkeypatch):
     result = asyncio.run(IngushetiaFabrikant44Source().fetch(limit=3))
     assert len(result) == 1 and result[0].tender_number == NUMBER
     assert calls == [LIST_URL, URL]
+
+
+def test_one_stale_detail_never_loses_two_independently_verified_rows(monkeypatch):
+    """Synthetic partial outage: only verified originals survive; no fake success."""
+    import app.sources.ru_ingushetia_fabrikant44 as mod
+    from app.sources.http import ConnectorTransportError
+
+    numbers = ("0114500000826002358", "0114500000826002359", "0114500000826002360")
+    titles = ("Поставка лекарств", "Поставка оборудования", "Ремонт здания")
+    rows = []
+    for number, title in zip(numbers, titles):
+        rows.append(
+            f'<tr><td>ЭА</td><td>{number}</td>'
+            f'<td><a href="/44/procedure/ea21/{number}?&backurl=safe">{title}</a></td>'
+            f'<td>100.00 RUB</td><td>{ORGANIZER}</td><td>Больница</td></tr>'
+        )
+    payload = ("<html><table>" + "".join(rows) + "</table></html>").encode()
+    calls = []
+
+    class Client:
+        async def get(self, url):
+            calls.append(url)
+            if url == LIST_URL:
+                body = payload
+            elif url.endswith(numbers[2]):
+                raise ConnectorTransportError(retryable=True)
+            else:
+                index = next(i for i, number in enumerate(numbers) if url.endswith(number))
+                body = detail(number=numbers[index], title=titles[index])
+            return SimpleNamespace(
+                content=body, headers={"content-type": "text/html"},
+                raise_for_status=lambda: None,
+            )
+
+    @asynccontextmanager
+    async def fake_client(**kwargs):
+        assert kwargs["follow_redirects"] is False
+        assert kwargs["trust_env"] is False
+        yield Client()
+
+    monkeypatch.setattr(mod, "source_client", fake_client)
+    verified = asyncio.run(IngushetiaFabrikant44Source().fetch(limit=3))
+    assert [n.tender_number for n in verified] == list(numbers[:2])
+    assert len(calls) == 4
+
+
+def test_no_verified_card_is_never_reported_as_success(monkeypatch):
+    import app.sources.ru_ingushetia_fabrikant44 as mod
+    from app.sources.http import ConnectorTransportError
+
+    class Client:
+        async def get(self, url):
+            if url == LIST_URL:
+                return SimpleNamespace(
+                    content=listing(),
+                    headers={"content-type": "text/html"},
+                    raise_for_status=lambda: None,
+                )
+            raise ConnectorTransportError(retryable=True)
+
+    @asynccontextmanager
+    async def fake_client(**kwargs):
+        yield Client()
+
+    monkeypatch.setattr(mod, "source_client", fake_client)
+    with pytest.raises(ValueError, match="No independently verified regional original cards"):
+        asyncio.run(IngushetiaFabrikant44Source().fetch(limit=3))

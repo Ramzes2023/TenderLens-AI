@@ -70,7 +70,7 @@ def acceptance():
                             if len(word) >= 4), notices[0].title[:20])
             profile = state.profile.model_copy(update={
                 "product_keywords": [keyword],
-                "monitoring_keywords": [],
+                "search_keywords": [],
                 "accepted_currencies": ["RUB"],
                 "max_contract_value": 100000000000.0,
             })

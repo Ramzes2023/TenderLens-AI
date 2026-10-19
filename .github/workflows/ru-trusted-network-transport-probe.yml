@@ -1,0 +1,64 @@
+name: RU trusted runner read-only upstream transport diagnostic
+
+# Owner-controlled branch push only. This probe executes ONLY hard-coded
+# unprivileged curl commands and NEVER checks out or runs unreviewed PR code.
+# The result is TRANSPORT reachability, NOT real tender acceptance.
+on:
+  push:
+    branches: [fix/ru-prelaunch-adapters-20261018]
+    paths:
+      - .github/workflows/ru-trusted-network-transport-probe.yml
+
+permissions: {}
+
+concurrency:
+  group: ru-trusted-transport-network
+  cancel-in-progress: true
+
+jobs:
+  trusted-ru-network-only:
+    if: github.repository == 'Ramzes2023/TenderLens-AI' && github.ref == 'refs/heads/fix/ru-prelaunch-adapters-20261018'
+    runs-on: valyqon-int
+    timeout-minutes: 7
+    steps:
+      - name: Probe only fixed official public HTTPS websites without checkout, auth or response bodies
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${RUNNER_NAME:-}" != "VALYQON-INT-02" ]]; then
+            echo 'RU_TRUSTED_NETWORK=UNEXPECTED_RUNNER'
+            exit 12
+          fi
+          if ! command -v curl >/dev/null; then
+            echo 'RU_TRUSTED_NETWORK=CURL_UNAVAILABLE'
+            exit 13
+          fi
+          echo 'RU_TRUSTED_NETWORK=DIAGNOSTIC_ONLY'
+          echo 'TENDERS_ORIGINALS_WORKER_SQL_NOTIFICATION_PROVED=NO'
+          targets=(
+            'SAMARA|https://webtorgi.samregion.ru/smallpurchases/GzwSP/NoticesGrid'
+            'GPB|https://etpgpb.ru/'
+            'FABRIKANT|https://44.fabrikant.ru/44/catalog/procedure/published'
+            'TEKTORG|https://www.tektorg.ru/'
+            'ROSELTORG|https://www.roseltorg.ru/'
+            'B2B|https://www.b2b-center.ru/'
+          )
+          for pair in "${targets[@]}"; do
+            key="${pair%%|*}"
+            url="${pair#*|}"
+            # HTTPS certificate verification is ON; no redirects, proxies,
+            # accounts, cookies, response body, operator input or tokens.
+            set +e
+            result=$(curl -q --silent --noproxy '*' --proto '=https' \
+              --connect-timeout 7 --max-time 12 --max-redirs 0 \
+              --output /dev/null --write-out '%{http_code}' "$url" 2>/dev/null)
+            code=$?
+            set -e
+            if [[ "$code" -eq 0 && "$result" =~ ^[0-9]{3}$ ]]; then
+              printf 'RU_TRUSTED_%s=HTTP_%s\n' "$key" "$result"
+            else
+              printf 'RU_TRUSTED_%s=TRANSPORT_BLOCKED;CURL_EXIT=%s\n' "$key" "$code"
+            fi
+          done
+          echo 'EXTERNAL_SOURCE_INTEGRATION_PROVED=NO'
+          echo 'PRODUCTION_CHANGED=NO'

@@ -11,7 +11,7 @@ from app.sources.fabrikant_44_public import (
 )
 
 ID = "0358400002426000046"
-URL = "https://soap4.fabrikant.ru/44/procedure/ea21/" + ID
+URL = "https://44.fabrikant.ru/44/procedure/ea21/" + ID
 TITLE = "Поставка медицинского оборудования"
 
 
@@ -37,9 +37,9 @@ def test_public_backurl_is_not_sent_and_independent_detail_is_mandatory():
 
 @pytest.mark.parametrize("payload", [
     b"", b"<html>empty</html>",
-    listing(href="http://soap4.fabrikant.ru/44/procedure/ea21/" + ID),
-    listing(href="https://soap4.fabrikant.ru.evil.invalid/44/procedure/ea21/" + ID),
-    listing(href="https://soap4.fabrikant.ru/44/procedure/ea21/" + ID + "?token=xyz"),
+    listing(href="http://44.fabrikant.ru/44/procedure/ea21/" + ID),
+    listing(href="https://44.fabrikant.ru.evil.invalid/44/procedure/ea21/" + ID),
+    listing(href="https://44.fabrikant.ru/44/procedure/ea21/" + ID + "?token=xyz"),
     listing(href=URL + "#fragment"),
     listing(href=URL + "/documents"),
     listing(href=URL + "?&backurl=x&extra=1"),
@@ -66,7 +66,7 @@ def test_official_detail_disagreement_rejected(bad):
 @pytest.mark.parametrize("url", [
     URL + "?&backurl=test",
     URL.replace("https", "http"),
-    URL.replace("soap4.fabrikant.ru", "soap4.fabrikant.ru.evil.test"),
+    URL.replace("44.fabrikant.ru", "44.fabrikant.ru.evil.test"),
 ])
 def test_detail_url_must_be_exact_canonical_host(url):
     with pytest.raises(ValueError):
@@ -109,7 +109,7 @@ def test_live_source_transport_contract_offline(monkeypatch):
 
 def test_conflicting_duplicate_ids_rejected():
     page = (listing() + listing(
-        href="https://soap4.fabrikant.ru/44/procedure/ezk21/" + ID,
+        href="https://44.fabrikant.ru/44/procedure/ezk21/" + ID,
         title="Иное название закупки",
     ))
     with pytest.raises(ValueError):

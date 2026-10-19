@@ -60,6 +60,45 @@ class OfficialUzexContracts(unittest.TestCase):
         with self.assertRaises(SourceError):
             parse_uzex_tradelist([{"id": 510591}], type_id=1)
 
+    def test_live_only_bounded_missing_title_or_buyer_is_excluded(self):
+        # Genuine official 2026-10-19 TypeId=1 had 19 complete / 20 native rows.
+        # An incomplete row must never reach user search, while complete rows
+        # keep all independently checked original IDs, amounts and deadlines.
+        incomplete = dict(FIRST, id=510592, seller_name="")
+        result = parse_uzex_tradelist(
+            [FIRST, incomplete], type_id=1, allow_incomplete=True,
+        )
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].external_id, "1-510591")
+        self.assertEqual(result[0].initial_price, FIRST["cost"])
+        self.assertEqual(result[0].deadline, FIRST["end_date"])
+        # Strict callers cannot accidentally opt into skipping.
+        with self.assertRaises(SourceError):
+            parse_uzex_tradelist([FIRST, incomplete], type_id=1)
+
+    def test_live_incomplete_policy_never_accepts_malicious_invalid_rows(self):
+        incomplete = dict(FIRST, id=510592, seller_name="")
+        with self.assertRaises(SourceError):
+            parse_uzex_tradelist([incomplete], type_id=1, allow_incomplete=True)
+        with self.assertRaises(SourceError):
+            parse_uzex_tradelist([FIRST, incomplete, incomplete], type_id=1,
+                                allow_incomplete=True)
+        rows = [dict(FIRST, id=510600 + n, seller_name="") for n in range(3)]
+        with self.assertRaises(SourceError):
+            parse_uzex_tradelist([FIRST] + rows, type_id=1, allow_incomplete=True)
+        with self.assertRaises(SourceError):
+            parse_uzex_tradelist([FIRST, dict(FIRST, id=510593, cost=-1)],
+                                type_id=1, allow_incomplete=True)
+        with self.assertRaises(SourceError):
+            parse_uzex_tradelist([FIRST, dict(FIRST, id=510593, type_id=3)],
+                                type_id=1, allow_incomplete=True)
+        with self.assertRaises(SourceError):
+            parse_uzex_tradelist([FIRST, dict(FIRST, id=510593, currency_codeabc="BTC_USD")],
+                                type_id=1, allow_incomplete=True)
+        with self.assertRaises(SourceError):
+            parse_uzex_tradelist([FIRST, dict(FIRST, id=510593, end_date="bad")],
+                                type_id=1, allow_incomplete=True)
+
     def test_catalog_staged_and_worker_host_pinned(self):
         config = MonitoringSettings(False, 600, 20, 5, 12, (), None)
         registration = build_source_catalog(config).registry.get("uz_uzex")

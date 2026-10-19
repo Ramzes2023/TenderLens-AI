@@ -1,0 +1,28 @@
+name: UzEx genuine native adapter classification research
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/ci_uzex_adapter_live_diagnostics.py
+      - .github/workflows/cis-uz-uzex-adapter-diagnostics.yml
+      - app/sources/uz_uzex.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-public-row-parser-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real official POST, classify native row normalization errors without logging records
+        run: python -B -m scripts.ci_uzex_adapter_live_diagnostics

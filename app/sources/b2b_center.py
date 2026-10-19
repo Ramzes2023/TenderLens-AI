@@ -15,8 +15,9 @@ from .http import ConnectorTransportError, FetchPolicy, bounded_fetch, source_cl
 from .models import TenderNotice
 from .opportunities import validate_notice
 
+B2B_CENTER_NEXT_LIST_URL = 'https://www.b2b-center.ru/app/next/market-search/?from=0'
 B2B_CENTER_LIST_URL = 'https://www.b2b-center.ru/search/'
-# The unrestricted aggregate exceeds the audited 2 MiB cap.
+# Unrestricted aggregate responses can exceed the audited 2 MiB cap.
 # This official category is an explicitly LIMITED partial fallback.
 B2B_CENTER_OFFICE_LIST_URL = 'https://www.b2b-center.ru/search/industry/ofis/'
 B2B_CENTER_HOSTS = frozenset({'www.b2b-center.ru'})
@@ -28,6 +29,10 @@ KNOWN_FOREIGN_AGGREGATE_HOSTS = frozenset({
     'zakupki.gov.ru',
 })
 MAX_BYTES = 2 * 1024 * 1024
+
+
+class B2BNoNativeNotices(SourceError):
+    """Structured public foreign records were found, but no native procedure."""
 
 
 @dataclass
@@ -142,6 +147,7 @@ def parse_b2b_center_listing(payload: bytes, *, limit=100, listing_url=B2B_CENTE
     document.feed(text)
     document.close()
     seen = {}
+    has_foreign_records = False
     for card in document.root.walk():
         if (card.tag != 'div' or 'cards' not in (card.attrs.get('class') or '').split()
                 or card.attrs.get('itemtype') != 'https://schema.org/ListItem'):
@@ -164,6 +170,7 @@ def parse_b2b_center_listing(payload: bytes, *, limit=100, listing_url=B2B_CENTE
                 and parts.username is None and parts.password is None
                 and parts.port in (None, 443) and not parts.fragment)
         if demands and all(foreign):
+            has_foreign_records = True
             continue
         # Some genuine public B2B cards omit the Organization entity. Keep
         # customer unknown; never fabricate one or infer it from other cards.
@@ -185,10 +192,9 @@ def parse_b2b_center_listing(payload: bytes, *, limit=100, listing_url=B2B_CENTE
         upstream, number = None, None
         if references:
             raw, label = next(iter(references))
-            # Aggregate cross-platform references are OPTIONAL provenance.
-            # Some real cards include tracker fragments from third parties.
-            # Do not accept unsafe external URLs or infer EIS identity from
-            # them; retain the authoritative validated B2B detail URL.
+            # The search wrapper alone cannot prove native ownership.
+            # Unsafe provenance stays unverified and is excluded below;
+            # never erase it to relabel another platform's purchase as B2B.
             try:
                 upstream = _safe_url(raw)
             except SourceError:
@@ -196,7 +202,21 @@ def parse_b2b_center_listing(payload: bytes, *, limit=100, listing_url=B2B_CENTE
             if upstream is not None:
                 number = label.removeprefix('Закупка №').removesuffix(' в ЕИС')
         host = urlsplit(upstream).hostname if upstream else None
-        origin = 'aggregated' if host and host not in B2B_CENTER_HOSTS else 'unknown'
+        # A same-host search wrapper does not turn another platform's purchase
+        # into a B2B procedure. Malformed optional provenance cannot erase this
+        # distinction either. Require the native procedure reference and its
+        # matching number; l-prefixed search IDs occur for BOTH native/foreign.
+        native_parts = urlsplit(upstream) if upstream else None
+        native_path = native_parts.path if native_parts else ''
+        native = re.fullmatch(r'/(?:app/market-next|market)/[^/]+/tender-([0-9]+)/', native_path)
+        if (host not in B2B_CENTER_HOSTS or native_parts.scheme != 'https' or
+                native_parts.query or native is None or
+                number != native.group(1) or
+                not (external_id == number or external_id.startswith('l' + number + '-'))):
+            if upstream is not None and host not in B2B_CENTER_HOSTS:
+                has_foreign_records = True
+            continue
+        origin = 'first_party'
         # Original reference is retained in the base contract as well as provenance,
         # so repository/snapshot/scoring reconstruction cannot silently lose it.
         summary = json.dumps({'listing_url': listing_url, 'upstream_url': upstream,
@@ -226,13 +246,15 @@ def parse_b2b_center_listing(payload: bytes, *, limit=100, listing_url=B2B_CENTE
             published_at=_date(_property(demand, 'validFrom')),
             deadline=_date(_property(demand, 'validThrough')),
             initial_price=price, currency='RUB' if price is not None else None,
-            summary=summary, upstream_url=upstream, upstream_host=host, origin=origin)
+            summary=summary, listing_url=listing_url,
+            upstream_url=upstream, upstream_host=host, origin=origin)
         validate_notice(notice, 'b2b_center')
         if external_id in seen and seen[external_id] != notice:
             raise SourceError('B2B-Center conflicting duplicate identity.')
         seen[external_id] = notice
     if not seen:
-        raise SourceError('B2B-Center returned no usable procurement records.')
+        kind = B2BNoNativeNotices if has_foreign_records else SourceError
+        raise kind('B2B-Center returned no usable procurement records.')
     return [seen[key] for key in sorted(seen)][:max(1, min(int(limit), 100))]
 
 
@@ -240,8 +262,11 @@ def parse_b2b_center_listing(payload: bytes, *, limit=100, listing_url=B2B_CENTE
 class B2BCenterSource:
     timeout: float = 30
     name: str = 'b2b_center'
+    listing_url: str = B2B_CENTER_NEXT_LIST_URL
 
     def __post_init__(self):
+        if self.listing_url not in (B2B_CENTER_NEXT_LIST_URL, B2B_CENTER_LIST_URL):
+            raise ValueError('Unapproved B2B-Center listing.')
         if not math.isfinite(self.timeout) or not 0 < self.timeout <= 120 or self.name != 'b2b_center':
             raise ValueError('Invalid B2B-Center source configuration.')
 
@@ -255,20 +280,28 @@ class B2BCenterSource:
             async with source_client(timeout=self.timeout, follow_redirects=False,
                                      trust_env=False, headers={'Accept': 'text/html'}) as client:
                 try:
-                    response = await client.get(B2B_CENTER_LIST_URL)
+                    response = await client.get(self.listing_url)
                     response.raise_for_status()
                     if response.status_code != 200:
                         raise SourceError('B2B-Center listing unavailable.')
+                    if self.listing_url == B2B_CENTER_NEXT_LIST_URL:
+                        from .b2b_next_market import parse_next_market
+                        return parse_next_market(response.content, limit=limit)
                     return parse_b2b_center_listing(response.content, limit=limit)
                 except ConnectorTransportError as error:
-                    if error.retryable:
+                    if self.listing_url == B2B_CENTER_NEXT_LIST_URL or error.reason != 'response_size':
                         raise
-                    # The alternate official listing is deliberately partial:
-                    # never fabricate full-aggregate coverage or missing records.
-                    fallback = await client.get(B2B_CENTER_OFFICE_LIST_URL)
-                    fallback.raise_for_status()
-                    if fallback.status_code != 200:
-                        raise SourceError('B2B-Center bounded office listing unavailable.')
-                    return parse_b2b_center_listing(
-                        fallback.content, limit=limit, listing_url=B2B_CENTER_OFFICE_LIST_URL,
-                    )
+                except B2BNoNativeNotices:
+                    # An otherwise valid public aggregate can contain only
+                    # foreign purchases. Never relabel them to force success.
+                    pass
+                # The alternate official listing is deliberately partial:
+                # never fabricate full-aggregate coverage or missing records.
+                client.cookies.clear()
+                fallback = await client.get(B2B_CENTER_OFFICE_LIST_URL)
+                fallback.raise_for_status()
+                if fallback.status_code != 200:
+                    raise SourceError('B2B-Center bounded office listing unavailable.')
+                return parse_b2b_center_listing(
+                    fallback.content, limit=limit, listing_url=B2B_CENTER_OFFICE_LIST_URL,
+                )

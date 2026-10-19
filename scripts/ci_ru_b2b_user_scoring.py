@@ -27,79 +27,11 @@ from app.scoring.preview import score_metadata_preview
 from app.services.tender_analysis import analysis_from_notice
 from app.sources.catalog import build_source_catalog
 from app.sources.snapshots import snapshot_catalog
-from scripts.ru_public_live_smoke import _settings
+from scripts.ci_ru_b2b_real_worker import b2b_settings, ingest_live_b2b
 from test_scoring_workers import system as synthetic_system, run as run_job
 
 SOURCE = "b2b_center"
 VERSION = "connector-sync-v1:b2b_center:adapter-r1"
-
-
-async def public_notices(catalog):
-    from unittest.mock import patch
-    from app.sources import b2b_center
-    from app.sources.b2b_center import _Document, _Node
-    source = catalog.registry.get(SOURCE).source
-    original = b2b_center.parse_b2b_center_listing
-    safe_original = b2b_center._safe_url
-
-    def measured_safe_url(raw, *, detail=False):
-        try:
-            return safe_original(raw, detail=detail)
-        except Exception:
-            from urllib.parse import urljoin, urlsplit
-            from re import fullmatch
-            try:
-                p = urlsplit(urljoin(b2b_center.B2B_CENTER_LIST_URL, raw or ""))
-                data = {"detail": bool(detail), "scheme": p.scheme,
-                        "host": p.hostname, "query_present": bool(p.query),
-                        "fragment_present": bool(p.fragment),
-                        "path_matches_expected": bool(fullmatch(
-                            r"/search/number/[A-Za-z0-9-]{1,100}/", p.path))}
-                print("B2B_UNSAFE_URL_SHAPE=" + repr(data), flush=True)
-            except Exception:
-                print("B2B_UNSAFE_URL_SHAPE=UNPARSEABLE", flush=True)
-            raise
-
-    def observed_parse(payload, *, limit=100, listing_url=b2b_center.B2B_CENTER_LIST_URL):
-        # Structural counts only; no raw HTML, tender identifiers or content.
-        doc = _Document()
-        doc.feed(payload.decode("utf-8-sig"))
-        doc.close()
-        profiles = []
-        for node in doc.root.walk():
-            if (node.tag == "div" and "cards" in (node.attrs.get("class") or "").split()
-                and node.attrs.get("itemtype") == "https://schema.org/ListItem"):
-                children = list(node.walk())
-                org = sum(c.attrs.get("itemtype") == "https://schema.org/Organization"
-                          for c in children)
-                demand = sum(c.attrs.get("itemtype") == "https://schema.org/Demand"
-                             for c in children)
-                profiles.append((org, demand))
-        print("B2B_LIVE_CARD_SHAPES=" + str(profiles[:12]), flush=True)
-        print("B2B_TOTAL_LISTITEM_CARDS=" + str(len(profiles)), flush=True)
-        from urllib.parse import urljoin, urlsplit
-        hosts = {}
-        for card in doc.root.walk():
-            if (card.tag == "div" and "cards" in (card.attrs.get("class") or "").split()
-                and card.attrs.get("itemtype") == "https://schema.org/ListItem"):
-                for demand in card.walk():
-                    if demand.attrs.get("itemtype") == "https://schema.org/Demand":
-                        raw = b2b_center._property(demand, "url", "link")
-                        if raw:
-                            host = urlsplit(urljoin(b2b_center.B2B_CENTER_LIST_URL, raw)).hostname
-                            hosts[host or "(missing)"] = hosts.get(host or "(missing)", 0) + 1
-        print("B2B_LIVE_CARD_HOST_COUNTS=" + repr(hosts), flush=True)
-        try:
-            records = original(payload, limit=limit, listing_url=listing_url)
-            print("B2B_REAL_NORMALIZED_CARD_COUNT=" + str(len(records)), flush=True)
-            return records
-        except Exception as error:
-            print("B2B_REAL_PARSER_ERROR_CLASS=" + type(error).__name__, flush=True)
-            raise
-
-    with patch.object(b2b_center, "_safe_url", measured_safe_url), \
-            patch.object(b2b_center, "parse_b2b_center_listing", observed_parse):
-        return await asyncio.wait_for(source.fetch(limit=10), timeout=30)
 
 
 async def keyword_roundtrip(catalog, repository, notice):
@@ -116,16 +48,9 @@ async def keyword_roundtrip(catalog, repository, notice):
 def acceptance():
     # No .env is loaded; the existing production fetcher uses its exact-host,
     # bounded request transport with strict TLS and no cookies or redirects.
-    settings = _settings()
-    catalog = build_source_catalog(settings)
+    catalog = build_source_catalog(b2b_settings())
     if SOURCE not in catalog.enabled_keys:
         raise AssertionError("B2B-Center was not enabled in the isolated catalog")
-    notices = asyncio.run(public_notices(catalog))
-    print("B2B_REAL_FETCHED_COUNT=" + str(len(notices)), flush=True)
-    if not notices or len(notices) > 10:
-        raise AssertionError("No live B2B procurement notices")
-    if any(item.source != SOURCE or not item.external_id or not item.url for item in notices):
-        raise AssertionError("Malformed B2B live data")
 
     with tempfile.TemporaryDirectory(prefix="valyqon-b2b-auth-live-") as directory:
         # Reuse the actual production repositories, security and job worker.
@@ -134,9 +59,19 @@ def acceptance():
         state = next(fixture)
         try:
             state.service.catalog = catalog
+            report = ingest_live_b2b(state.database, catalog, state.store)
+            notices = state.store.read(SOURCE, limit=10)
+            if (not notices or len(notices) != report["fetched_count"] or
+                    report["accepted_count"] != len(notices) or
+                    report["inserted_count"] != len(notices) or report["skipped_count"]):
+                raise AssertionError("Live Worker did not persist every B2B notice")
+            if len({n.identity for n in notices}) != len(notices):
+                raise AssertionError("Duplicate real B2B identity")
+            print("B2B_REAL_FETCHED_COUNT=" + str(len(notices)), flush=True)
             matched = 0
             for notice in notices:
-                state.store.upsert(notice, VERSION)
+                if state.store.upsert(notice, VERSION):
+                    raise AssertionError("Replay inserted duplicate B2B identity")
                 if asyncio.run(keyword_roundtrip(catalog, state.store, notice)):
                     matched += 1
             if matched != len(notices):
@@ -200,12 +135,20 @@ def acceptance():
                 )
                 if client.get(url + "/" + job_id).status_code != 403:
                     raise AssertionError("Cross-tenant access was not denied")
+                if client.get(url + "/" + job_id + "/revisions").status_code != 403:
+                    raise AssertionError("Cross-tenant revisions access was not denied")
+                if client.post(url, json={"sources": [SOURCE]}).status_code != 403:
+                    raise AssertionError("Cross-tenant scoring creation was not denied")
                 offline_analysis = score_metadata_preview(
                     analysis_from_notice(notices[0]), profile
                 )
                 if len(offline_analysis.criteria) != 6:
                     raise AssertionError("Deterministic notice analysis missing criteria")
+                print("B2B_WORKER_SEARCH_IDENTITIES=" + json.dumps(
+                    [n.url for n in notices]), flush=True)
                 return {"real_notice_count": len(notices),
+                        "ingested_by_worker": report["accepted_count"],
+                        "idempotent_replay": True,
                         "db_search_verified": matched,
                         "authorized_score_results": body["result_count"],
                         "tenant_isolation": True,

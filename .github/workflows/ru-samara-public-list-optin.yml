@@ -9,6 +9,7 @@ on:
       - app/sources/ingestion.py
       - app/monitoring/config.py
       - scripts/ci_ru_samara_public_list_sql.py
+      - scripts/ci_ru_samara_authenticated.py
       - tests/test_ru_samara_public_list.py
       - .github/workflows/ru-samara-public-list-optin.yml
 
@@ -48,3 +49,18 @@ jobs:
       - name: Prove actual first-party list from real HTTP -> leased fenced worker -> disposable SQLite -> keyword user search
         timeout-minutes: 6
         run: python -B -m scripts.ci_ru_samara_public_list_sql
+
+  real-public-list-authenticated-tenant-scoring:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Verify real public-list Samara notice reaches signed-in scoring and cross-tenant access denied
+        timeout-minutes: 6
+        run: python -B -m scripts.ci_ru_samara_authenticated

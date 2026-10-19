@@ -41,8 +41,8 @@ HOSTS = {
     'lenobl_small_public': frozenset({'zakupki.lenreg.ru'}),
     'nmck_native_public': frozenset({'xn--j1adc1b.xn--p1ai'}),
     'stan_commercial_public': frozenset({'stantorgi.ru'}),
+    'kavkaz_rf_firstparty': frozenset({'xn--80aafvlc.xn--p1ai'}),
     'south_ural_public': frozenset({'www.vendorportal.ru'}),
-    # STAGED RESEARCH ONLY. Not in the runtime catalog or production configuration.
     'ru_dagestan_public_list': frozenset({'goszakaz.e-dag.ru'}),
     'eis_223': frozenset({'zakupki.gov.ru'}),
     'eis_44_html': frozenset({'zakupki.gov.ru'}),
@@ -172,6 +172,7 @@ class ConnectorSyncHandler:
                          else 4 if source_id == 'lenobl_small_public'
                          else min(self.max_records, 2) + 1 if source_id == 'nmck_native_public'
                          else min(self.max_records, 2) + 1 if source_id == 'stan_commercial_public'
+                         else min(self.max_records, 2) + 1 if source_id == 'kavkaz_rf_firstparty'
                          else min(self.max_records, 10) + 1 if source_id == 'south_ural_public'
                          else 2 if source_id == 'ru_dagestan_public_list'
                          else 2 if source_id == 'mikroton_tender'
@@ -180,7 +181,7 @@ class ConnectorSyncHandler:
             with bounded_fetch(FetchPolicy(
                 HOSTS[source_id], request_limit,
                 max_bytes=(2 * 1024 * 1024 if source_id == 'b2b_center' else
-                           1_800_000 if source_id in {'nmck_native_public', 'stan_commercial_public', 'south_ural_public'} else 25 * 1024 * 1024),
+                           1_800_000 if source_id in {'nmck_native_public', 'stan_commercial_public', 'south_ural_public', 'kavkaz_rf_firstparty'} else 25 * 1024 * 1024),
             )):
                 return await asyncio.wait_for(source.fetch(self.max_records), timeout=180)
         try:

@@ -1,4 +1,4 @@
-"""STAGED Dagestan official public-list procurement adapter, NOT registered.
+"""Opt-in Dagestan official public-list procurement adapter, disabled by default.
 
 Authentic first-party public list provides ID, number, title and buyer.
 Detail pages currently 404 or redirect to login; never represent them as
@@ -170,14 +170,14 @@ def parse_public_list(data, *, limit=2):
 
 
 @dataclass(frozen=True)
-class DagestanPublicListResearchSource:
+class DagestanPublicListSource:
     timeout: float = 25
     name: str = SOURCE_ID
 
     def __post_init__(self):
         if (self.name != SOURCE_ID or type(self.timeout) not in (int, float) or
                 not math.isfinite(self.timeout) or not 0 < self.timeout <= 30):
-            raise ValueError("Invalid staged public list configuration")
+            raise ValueError("Invalid public list-only source configuration")
 
     async def fetch(self, limit=20):
         if type(limit) is not int or not 2 <= limit <= 100:

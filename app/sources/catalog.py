@@ -781,7 +781,9 @@ def build_source_catalog(
         registry.register(SourceRegistration(
             key="ru_ingushetia_eis44",
             display_name="Ингушетия — ЕИС 44-ФЗ (регионально подтверждённые извещения)",
-            source=IngushetiaEis44Source(timeout=min(timeout, 30)),
+            source=IngushetiaEis44Source(timeout=min(timeout, 30),
+                                         ca_bundle_file=settings.ca_bundle_file,
+                                         system_trust=settings.eis_system_trust_enabled),
             transport=SourceTransport.RSS,
             jurisdictions=("RU",),
             languages=("ru",),

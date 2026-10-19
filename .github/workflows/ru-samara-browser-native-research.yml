@@ -10,6 +10,8 @@ on:
       - tests/test_ru_samara_native_http.py
       - scripts/research_ru_samara_native_details.py
       - tests/test_ru_samara_native_details.py
+      - scripts/research_ru_samara_browser_originals.py
+      - tests/test_ru_samara_browser_originals.py
       - .github/workflows/ru-samara-browser-native-research.yml
 
 permissions:
@@ -112,3 +114,24 @@ jobs:
       - name: Demand two genuine current official native list-origin details before claiming full integration
         timeout-minutes: 5
         run: python -B -m scripts.research_ru_samara_native_details
+
+  samara-browser-two-independent-originals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install strictly isolated Chromium research driver
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install 'playwright==1.55.0'
+          python -m playwright install --with-deps chromium
+      - name: Reject duplicates, auth redirects and forged list-origin detail links
+        run: python -B -m pytest -q tests/test_ru_samara_browser_originals.py
+      - name: Demand two genuine independently readable current Samara original pages in same anonymous browser session
+        timeout-minutes: 6
+        run: python -B -m scripts.research_ru_samara_browser_originals

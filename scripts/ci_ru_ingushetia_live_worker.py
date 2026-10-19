@@ -202,26 +202,45 @@ def proof():
 
 
 def main():
-    try:
-        result = proof()
-    except Exception as exc:
-        print("RU_INGUSHETIA_LIVE_ACCEPTANCE=BLOCKED")
-        print("FAILURE_CLASS=" + type(exc).__name__)
-        print("FAILURE_REASON=" + str(exc).replace("\n", " ")[:250])
-        # Do not expose raw URLs, response bodies, cookies or client paths.
-        causes = []
-        cause = getattr(exc, '__cause__', None)
-        while cause is not None and len(causes) < 3:
-            causes.append(type(cause).__name__)
-            cause = getattr(cause, '__cause__', None)
-        print("FAILURE_CAUSE_TYPES=" + ','.join(causes))
-        print("FAILURE_RETRYABLE=" + str(bool(getattr(exc, 'retryable', False))))
+    """Accept ONLY genuinely live full-chain originals from EIS or accredited ETP.
+
+    This is not a fake fallback to archived notice IDs. Both choices must
+    acquire *current real upstream list rows* on this run, independently GET
+    originals, and pass real leased Worker, SQL, tenant search and alert sink.
+    """
+    from scripts.ci_ru_ingushetia_fabrikant_worker import proof as vendor_proof
+
+    failures = []
+    for upstream, acceptance in (("official_eis_rss", proof),
+                                 ("accredited_44fz_etp_mirror", vendor_proof)):
+        try:
+            result = acceptance()
+        except Exception as exc:
+            failure = type(exc).__name__
+            cause_names = []
+            cause = getattr(exc, "__cause__", None)
+            while cause is not None and len(cause_names) < 3:
+                cause_names.append(type(cause).__name__)
+                cause = getattr(cause, "__cause__", None)
+            failures.append({
+                "route": upstream,
+                "failure_class": failure,
+                "cause_types": cause_names,
+                "retryable": bool(getattr(exc, "retryable", False)),
+            })
+            continue
+        print("RU_INGUSHETIA_LIVE_UPSTREAM=" + upstream)
+        print("RU_INGUSHETIA_PROOF=" + json.dumps(result, ensure_ascii=False, sort_keys=True))
+        print("RU_INGUSHETIA_LIVE_ACCEPTANCE=PASS")
+        print("REAL_USER_TELEGRAM_RECEIPT=NOT_TESTED")
         print("PRODUCTION_CHANGED=NO")
-        return 2
-    print("RU_INGUSHETIA_PROOF=" + json.dumps(result, ensure_ascii=False, sort_keys=True))
-    print("RU_INGUSHETIA_LIVE_ACCEPTANCE=PASS")
+        return 0
+
+    print("RU_INGUSHETIA_LIVE_ACCEPTANCE=BLOCKED")
+    print("FAILURE_ROUTE_SUMMARY=" + json.dumps(failures, sort_keys=True))
+    print("REAL_USER_TELEGRAM_RECEIPT=NOT_TESTED")
     print("PRODUCTION_CHANGED=NO")
-    return 0
+    return 2
 
 
 if __name__ == "__main__":

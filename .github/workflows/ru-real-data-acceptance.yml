@@ -7,6 +7,8 @@ on:
       - "scripts/ci_ru_b2b_user_scoring.py"
       - "scripts/ci_ru_b2b_real_worker.py"
       - "scripts/diagnose_ru_b2b_transport.py"
+      - "scripts/diagnose_ru_b2b_next_market.py"
+      - "tests/test_b2b_next_market_probe.py"
       - "tests/test_b2b_transport_acceptance.py"
       - "tests/test_b2b_foreign_aggregate.py"
       - ".github/workflows/ru-real-data-acceptance.yml"
@@ -45,3 +47,7 @@ jobs:
         if: failure()
         timeout-minutes: 2
         run: python -B -m scripts.diagnose_ru_b2b_transport
+      - name: Investigate separate official next-market HTML route (diagnostic only)
+        if: failure()
+        timeout-minutes: 2
+        run: python -B -m scripts.diagnose_ru_b2b_next_market

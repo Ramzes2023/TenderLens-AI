@@ -161,3 +161,95 @@ def test_runtime_accepts_single_notice_and_honest_empty_page():
     for total in (-1, True, '0', 2):
         with pytest.raises(ValueError):
             mod.parse_public_list({'items': [], 'totalRows': total})
+
+
+def test_verified_two_pages_return_20_distinct_native_notices_in_three_requests(monkeypatch):
+    from app.sources.http import _policy
+
+    first = original_rows()["items"][0]
+    pages = []
+    for idx in range(2):
+        rows = []
+        for j in range(10):
+            record = copy.deepcopy(first)
+            n = 20 * idx + j + 1
+            record["link"] = f"/smallpurchases/GzwSP/{5611000+n}"
+            record["number"] = f"ИМЗ-2026-{n:06d}"
+            record["name"] = f"Настоящий по форме синтетический тест страницы {idx} запись {n}"
+            rows.append(record)
+        pages.append({"items": rows, "totalRows": 20, "page": idx})
+    observed = []
+
+    class Reply:
+        headers = {"content-type": "application/json"}
+        content = b'{"items":[]}'
+        def __init__(self, payload):
+            self.payload = payload
+        def raise_for_status(self):
+            pass
+        def json(self):
+            return self.payload
+
+    class Client:
+        async def get(self, url):
+            observed.append(("GET", url))
+            return SimpleNamespace(
+                content=index_html(), headers={"content-type": "text/html"},
+                raise_for_status=lambda: None,
+            )
+        async def post(self, url, **kwargs):
+            idx = kwargs["json"]["settings"]["page"]
+            observed.append(("POST", idx))
+            assert kwargs["headers"]["RequestVerificationToken"] == TOKEN
+            assert _policy.get().hosts == frozenset({mod.HOST})
+            assert _policy.get().max_requests == 3
+            return Reply(pages[idx])
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        assert kwargs["trust_env"] is False
+        assert kwargs["follow_redirects"] is False
+        yield Client()
+
+    monkeypatch.setattr(mod, "source_client", client)
+    items = asyncio.run(mod.SamaraPublicListSource().fetch(limit=20))
+    assert observed == [("GET", mod.GRID), ("POST", 0), ("POST", 1)]
+    assert len(items) == len({n.external_id for n in items}) == 20
+    assert len({n.tender_number for n in items}) == 20
+    assert all(x.url == mod.GRID and x.deadline is None and x.initial_price is None for x in items)
+
+
+def test_repeated_original_across_pages_fails_closed(monkeypatch):
+    first = original_rows()["items"][0]
+    data = {"items": [copy.deepcopy(first) for _ in range(10)], "totalRows": 20}
+    for i, row in enumerate(data["items"]):
+        row["number"] = f"ИМЗ-2026-{i+1:06d}"
+        row["link"] = f"/smallpurchases/GzwSP/{5611001+i}"
+    second = copy.deepcopy(data)
+    # Each page is valid alone, but the same first-party IDs across pages
+    # cannot become twenty artificial unique procurement notices.
+    class Reply:
+        content = b"{}"
+        headers = {"content-type": "application/json"}
+        def __init__(self, obj):
+            self.obj = obj
+        def json(self):
+            return self.obj
+        def raise_for_status(self):
+            pass
+
+    class Client:
+        async def get(self, url):
+            return SimpleNamespace(
+                content=index_html(), headers={"content-type":"text/html"},
+                raise_for_status=lambda: None,
+            )
+        async def post(self, url, **kwargs):
+            return Reply(data if kwargs["json"]["settings"]["page"] == 0 else second)
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        yield Client()
+    monkeypatch.setattr(mod, "source_client", client)
+    with pytest.raises(ValueError, match="across native pages"):
+        asyncio.run(mod.SamaraPublicListSource().fetch(limit=20))

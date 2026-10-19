@@ -44,7 +44,7 @@ def choose_originals(body: bytes) -> list[tuple[str, str, str, str]]:
     raise ValueError("Two independent list-origin exact URLs were not disclosed")
 
 
-async def observe() -> int:
+async def observe(*, disclosed_notice_route: bool = False) -> int:
     # Dedicated CI alone installs optional browser dependency.
     from playwright.async_api import async_playwright
 
@@ -112,12 +112,28 @@ async def observe() -> int:
         try:
             try:
                 await page.goto(GRID, wait_until="domcontentloaded", timeout=30000)
+                if disclosed_notice_route:
+                    # Only the current Samara first-party grid may authorize
+                    # this alternative route. Never infer it from another region.
+                    from scripts.research_ru_samara_disclosed_notice_route import (
+                        disclosed_notice_contract,
+                    )
+                    if not disclosed_notice_contract(
+                        (await page.content()).encode("utf-8"),
+                    ):
+                        raise ValueError("First-party Samara detail route not disclosed")
+                    print("RU_SAMARA_BROWSER_DECLARED_NOTICE_ROUTE=YES")
                 await asyncio.wait_for(native_received.wait(), timeout=15)
                 if len(entries) != 2 or post_count < 1:
                     raise ValueError("Current official native JSON not available")
                 print("RU_SAMARA_BROWSER_LIVE_LIST_ROWS_VERIFIED=2")
                 confirmed = 0
                 for number, title, buyer, url in entries:
+                    if disclosed_notice_route:
+                        from scripts.research_ru_samara_disclosed_notice_route import (
+                            detail_url_from_original_native_link,
+                        )
+                        url = detail_url_from_original_native_link(url)
                     stage = "ORIGINAL_DETAIL_NAVIGATION"
                     # Only links disclosed by the fresh current official JSON.
                     # Blocked redirects/login never count as independent details.

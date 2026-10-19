@@ -15,6 +15,7 @@ from .http import ConnectorTransportError, FetchPolicy, bounded_fetch, source_cl
 from .models import TenderNotice
 from .opportunities import validate_notice
 
+B2B_CENTER_NEXT_LIST_URL = 'https://www.b2b-center.ru/app/next/market-search/?from=0'
 B2B_CENTER_LIST_URL = 'https://www.b2b-center.ru/search/'
 # Unrestricted aggregate responses can exceed the audited 2 MiB cap.
 # This official category is an explicitly LIMITED partial fallback.
@@ -261,8 +262,11 @@ def parse_b2b_center_listing(payload: bytes, *, limit=100, listing_url=B2B_CENTE
 class B2BCenterSource:
     timeout: float = 30
     name: str = 'b2b_center'
+    listing_url: str = B2B_CENTER_NEXT_LIST_URL
 
     def __post_init__(self):
+        if self.listing_url not in (B2B_CENTER_NEXT_LIST_URL, B2B_CENTER_LIST_URL):
+            raise ValueError('Unapproved B2B-Center listing.')
         if not math.isfinite(self.timeout) or not 0 < self.timeout <= 120 or self.name != 'b2b_center':
             raise ValueError('Invalid B2B-Center source configuration.')
 
@@ -276,13 +280,16 @@ class B2BCenterSource:
             async with source_client(timeout=self.timeout, follow_redirects=False,
                                      trust_env=False, headers={'Accept': 'text/html'}) as client:
                 try:
-                    response = await client.get(B2B_CENTER_LIST_URL)
+                    response = await client.get(self.listing_url)
                     response.raise_for_status()
                     if response.status_code != 200:
                         raise SourceError('B2B-Center listing unavailable.')
+                    if self.listing_url == B2B_CENTER_NEXT_LIST_URL:
+                        from .b2b_next_market import parse_next_market
+                        return parse_next_market(response.content, limit=limit)
                     return parse_b2b_center_listing(response.content, limit=limit)
                 except ConnectorTransportError as error:
-                    if error.reason != 'response_size':
+                    if self.listing_url == B2B_CENTER_NEXT_LIST_URL or error.reason != 'response_size':
                         raise
                 except B2BNoNativeNotices:
                     # An otherwise valid public aggregate can contain only

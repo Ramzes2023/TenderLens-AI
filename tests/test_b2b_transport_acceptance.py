@@ -17,6 +17,12 @@ from tests.test_b2b_foreign_aggregate import CAPTURE, extra_card
 
 
 def install_transport(monkeypatch, handler):
+    # Retain legacy transport regressions explicitly; new SSR transport is
+    # independently exercised in test_b2b_next_market_adapter.py.
+    import app.sources.catalog as catalog_module
+    original_source = catalog_module.B2BCenterSource
+    monkeypatch.setattr(catalog_module, "B2BCenterSource",
+                        lambda **kw: original_source(listing_url=b2b.B2B_CENTER_LIST_URL, **kw))
     def client(**kwargs):
         return source_client(**kwargs, transport=httpx.MockTransport(handler))
     monkeypatch.setattr(b2b, 'source_client', client)
@@ -49,7 +55,7 @@ def test_real_bounded_dispatch_size_fallback_and_no_third_request(monkeypatch):
         return httpx.Response(200, content=b'x' * (b2b.MAX_BYTES + 1)
                               if len(calls) == 1 else CAPTURE)
     install_transport(monkeypatch, reply)
-    notices = asyncio.run(b2b.B2BCenterSource().fetch())
+    notices = asyncio.run(b2b.B2BCenterSource(listing_url=b2b.B2B_CENTER_LIST_URL).fetch())
     assert calls == [b2b.B2B_CENTER_LIST_URL, b2b.B2B_CENTER_OFFICE_LIST_URL]
     assert budgets[0] is budgets[1]
     assert budgets[0].requests == budgets[0].max_requests == 2
@@ -68,12 +74,12 @@ def test_foreign_only_root_uses_only_official_partial_office(monkeypatch, office
                               headers={'set-cookie': 'tracking=synthetic; Path=/'})
     install_transport(monkeypatch, reply)
     if office_native:
-        notice = asyncio.run(b2b.B2BCenterSource().fetch())[0]
+        notice = asyncio.run(b2b.B2BCenterSource(listing_url=b2b.B2B_CENTER_LIST_URL).fetch())[0]
         assert notice.listing_url == b2b.B2B_CENTER_OFFICE_LIST_URL
     else:
         from app.sources.eis_rss import SourceError
         with pytest.raises(SourceError, match='no usable'):
-            asyncio.run(b2b.B2BCenterSource().fetch())
+            asyncio.run(b2b.B2BCenterSource(listing_url=b2b.B2B_CENTER_LIST_URL).fetch())
     assert calls == [b2b.B2B_CENTER_LIST_URL, b2b.B2B_CENTER_OFFICE_LIST_URL]
 
 
@@ -86,7 +92,7 @@ def test_unrecognized_or_challenge_page_cannot_trigger_fallback(monkeypatch, pay
     install_transport(monkeypatch, reply)
     from app.sources.eis_rss import SourceError
     with pytest.raises(SourceError):
-        asyncio.run(b2b.B2BCenterSource().fetch())
+        asyncio.run(b2b.B2BCenterSource(listing_url=b2b.B2B_CENTER_LIST_URL).fetch())
     assert calls == [b2b.B2B_CENTER_LIST_URL]
 
 
@@ -122,7 +128,7 @@ def test_certificate_verification_is_permanent_and_not_fallback(monkeypatch):
             raise httpx.ConnectError('synthetic TLS failure') from error
     install_transport(monkeypatch, reply)
     with pytest.raises(ConnectorTransportError) as caught:
-        asyncio.run(b2b.B2BCenterSource().fetch())
+        asyncio.run(b2b.B2BCenterSource(listing_url=b2b.B2B_CENTER_LIST_URL).fetch())
     assert caught.value.reason == 'tls_certificate'
     assert not caught.value.retryable
     assert len(calls) == 1

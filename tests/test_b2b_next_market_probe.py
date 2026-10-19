@@ -21,7 +21,7 @@ def test_original_native_detail_paths_only_and_never_foreign_or_malformed():
     assert report["anchor_count"] == 7
 
 
-@pytest.mark.parametrize("payload", [b"", b"z" * (2 * 1024 * 1024 + 1), bytes((255,))])
+@pytest.mark.parametrize("payload", [b"", b"z" * (2 * 1024 * 1024 + 1), bytes((255,))], ids=["empty", "oversize_2mib", "invalid_utf8"])
 def test_offline_probe_fails_closed_on_unsafe_or_invalid_html(payload):
     with pytest.raises((ValueError, UnicodeDecodeError)):
         analyze_official_html(payload)

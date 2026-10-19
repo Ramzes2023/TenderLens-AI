@@ -67,6 +67,31 @@ def ingest_live_b2b(db, catalog, store):
     raise AssertionError('Durable connector retry deadline exceeded')
 
 
+def _verified_b2b_public_url(notice):
+    """Require canonical original B2B public URL and its stored exact identity.
+
+    The legacy public /search/number/ and first-party Next-market procedure
+    pages are separate, verified URL contracts, never aggregate relabeling.
+    """
+    import re
+    from app.sources.b2b_next_market import native_url
+    from app.sources.eis_rss import SourceError
+
+    if notice.source != SOURCE or not isinstance(notice.external_id, str):
+        return False
+    legacy = re.fullmatch(
+        r"https://www[.]b2b-center[.]ru/search/number/([a-zA-Z0-9-]{1,500})/",
+        notice.url,
+    )
+    if legacy:
+        return legacy.group(1) == notice.external_id
+    try:
+        canonical, original_number = native_url(notice.url)
+    except SourceError:
+        return False
+    return (canonical == notice.url and original_number == notice.external_id
+            and notice.tender_number == original_number)
+
 def acceptance() -> dict[str, int | bool]:
     # This settings object is intentionally independent of the operator's .env.
     settings = b2b_settings()
@@ -98,8 +123,7 @@ def acceptance() -> dict[str, int | bool]:
             snapshot = snapshot_catalog(catalog, store)
             matches = 0
             for notice in notices:
-                if (notice.source != SOURCE or
-                        not notice.url.startswith("https://www.b2b-center.ru/search/number/")):
+                if not _verified_b2b_public_url(notice):
                     raise AssertionError("Stored source and public URL mismatch")
                 result = asyncio.run(snapshot.fetch(
                     limit_per_source=MAX_RECORDS,

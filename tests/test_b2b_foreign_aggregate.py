@@ -174,7 +174,7 @@ def test_bounded_b2b_office_fallback_is_real_provenance_not_full_coverage(monkey
         yield Client()
 
     monkeypatch.setattr(module, "source_client", client)
-    notices = asyncio.run(B2BCenterSource().fetch(limit=2))
+    notices = asyncio.run(B2BCenterSource(listing_url=B2B_CENTER_LIST_URL).fetch(limit=2))
     assert calls == [B2B_CENTER_LIST_URL, B2B_CENTER_OFFICE_LIST_URL]
     assert len(notices) == 1
     for notice in notices:
@@ -203,7 +203,7 @@ def test_retryable_b2b_error_not_masked_by_fallback(monkeypatch):
 
     monkeypatch.setattr(module, "source_client", client)
     with pytest.raises(ConnectorTransportError) as exc:
-        asyncio.run(B2BCenterSource().fetch(limit=2))
+        asyncio.run(B2BCenterSource(listing_url=B2B_CENTER_LIST_URL).fetch(limit=2))
     assert exc.value.retryable is True
 
 

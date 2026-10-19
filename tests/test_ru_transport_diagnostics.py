@@ -62,3 +62,23 @@ def test_nested_os_socket_error_codes_are_safe_and_numeric_only():
     assert result["os_error_numbers"] == [10061]
     assert "private" not in json.dumps(result)
     assert "SHOULD_NOT_LOG" not in json.dumps(result)
+
+
+def test_fabrikant_worker_failure_reports_only_allowlisted_job_outcome():
+    from types import SimpleNamespace
+    from scripts.ci_ru_ingushetia_fabrikant_worker import IngushetiaWorkerProofFailure
+    from scripts.ci_ru_ingushetia_live_worker import _safe_ingushetia_vendor_failure
+
+    retry = IngushetiaWorkerProofFailure(
+        SimpleNamespace(state="queued", failure_code="retryable_failure")
+    )
+    assert _safe_ingushetia_vendor_failure(retry) == "WORKER_FAILED"
+    assert retry.job_state == "queued"
+    assert retry.job_failure_code == "retryable_failure"
+
+    unsafe = IngushetiaWorkerProofFailure(
+        SimpleNamespace(state="private status", failure_code="token=PRIVATE")
+    )
+    assert unsafe.job_state == "UNKNOWN"
+    assert unsafe.job_failure_code == "UNKNOWN"
+    assert "PRIVATE" not in str(unsafe)

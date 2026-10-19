@@ -41,12 +41,13 @@ do not share code or resources.
 
 ## Stage 1 — workflow path isolation
 
-This PR isolates the primary observed false dependencies:
+This PR isolates an initial set of fifteen observed false dependencies:
 
 - Kazakhstan native HTML; JETRO official RSS;
 - Asia six-feed and seven-feed **composite** workflows;
 - B2B root/fallback and B2B real-worker;
-- Dagestan public list.
+- Dagestan public list;
+- NMCK, South Ural depth/integration/metadata/research, Kavkaz.RF and STAN live/research pipelines where pull_request had no file filters.
 
 These workflows keep their original genuine-live assertions. All that changes
 is the set of pull-request file paths that automatically launch them. Explicit

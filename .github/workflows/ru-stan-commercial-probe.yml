@@ -8,6 +8,12 @@ on:
       - .github/workflows/ru-stan-commercial-probe.yml
   pull_request:
     branches: [main]
+    paths:
+      - scripts/research_ru_stan_commercial.py
+      - tests/test_ru_stan_commercial.py
+      - .github/workflows/ru-stan-commercial-probe.yml
+  workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

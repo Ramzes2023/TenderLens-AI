@@ -10,6 +10,7 @@ on:
       - app/monitoring/config.py
       - scripts/ci_ru_samara_public_list_sql.py
       - scripts/ci_ru_samara_authenticated.py
+      - scripts/ci_ru_samara_telegram_query_delivery.py
       - tests/test_ru_samara_public_list.py
       - .github/workflows/ru-samara-public-list-optin.yml
 
@@ -64,3 +65,18 @@ jobs:
       - name: Verify real public-list Samara notice reaches signed-in scoring and cross-tenant access denied
         timeout-minutes: 6
         run: python -B -m scripts.ci_ru_samara_authenticated
+
+  real-samara-keyword-to-local-telegram:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Prove real native Samara notices pass request keyword filter and local in-memory Telegram send/dedup
+        timeout-minutes: 8
+        run: python -B -m scripts.ci_ru_samara_telegram_query_delivery

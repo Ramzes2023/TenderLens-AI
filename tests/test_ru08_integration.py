@@ -31,52 +31,38 @@ CAPTURE_HASH = 'b5ec85c85e9a29ff2fd02a6815adbdcdc61ca2155d34fb8c18e057325d945aa7
 REPOSITORY_NORMALIZED_CAPTURE_HASH = '1f937626a85fffdb99de5bb7db10fc99a5a6a41407cc53a53e04c35c0565fc7d'
 
 
-def captured_records():
+def test_capture_keeps_only_verified_native_reference():
     payload = (FIXTURES / 'b2b_search.html').read_bytes()
     assert (hashlib.sha256(payload).hexdigest() == CAPTURE_HASH
             or hashlib.sha256(payload.replace(b'\r\n', b'\n')).hexdigest()
             == REPOSITORY_NORMALIZED_CAPTURE_HASH)
-    return parse_b2b_center_listing(payload, limit=100)
+    records = parse_b2b_center_listing(payload)
+    assert [n.external_id for n in records] == ['l4639392-4-12-1']
+    assert records[0].tender_number == '4639392'
 
 
-def test_real_capture_identifiers_urls_and_eis_references():
-    records = captured_records()
-    assert len(records) == 10
-    assert len({notice.identity for notice in records}) == 10
-    assert {'l4639392-4-12-1', 'l0338200012226000019-1'} <= {n.external_id for n in records}
-    assert all(n.url == 'https://www.b2b-center.ru/search/number/' + n.external_id + '/' for n in records)
-    diagnostics = duplicate_diagnostics(records)
-    assert set(diagnostics['eis_references']) == {
-        '0338200012226000019', '0348200072726000025', '0358100010326000043'}
-    assert diagnostics['cross_source_links'] == {}  # No fetched EIS counterpart in this capture.
-
-
-def test_real_capture_fetch_registry_upsert_and_user_snapshot_query(tmp_path):
-    class CapturedSource:
+def test_synthetic_native_fetch_registry_upsert_and_snapshot(tmp_path):
+    # Offline mechanics only; the captured aggregate is never native proof.
+    from tests.test_b2b_foreign_aggregate import CAPTURE
+    records = parse_b2b_center_listing(CAPTURE)
+    class SyntheticSource:
         name = 'b2b_center'
-
         async def fetch(self, limit=20):
-            return captured_records()[:limit]
-
+            return records[:limit]
     catalog = local_catalog(enable_b2b=True)
-    registry = SourceRegistry(replace(item, source=CapturedSource()) if item.key == 'b2b_center'
+    registry = SourceRegistry(replace(item, source=SyntheticSource()) if item.key == 'b2b_center'
                               else item for item in catalog.registry.registrations())
     catalog = SourceCatalog(registry, MultiSourceFetcher(registry, concurrency=1))
     database = Database(DatabaseSettings('ru08-test-only', tmp_path / 'public.sqlite'))
-    repository = OpportunityRepository(database)
-    repository.initialize()
-    report = asyncio.run(catalog.fetch(source_keys=('b2b_center',), limit_per_source=20))
-    assert not report.failures
-    counts = asyncio.run(save_and_query(catalog, repository, 'b2b_center', report.notices))
-    assert counts == (10, 10)
-    assert asyncio.run(save_and_query(catalog, repository, 'b2b_center', report.notices)) == (10, 10)
-    assert len(repository.read('b2b_center', limit=100)) == 10  # Idempotent per-source key.
-    assert repository.read('b2b_center', search_terms=('RU08_IMPOSSIBLE_QUERY_7fb92',)) == []
-    with closing(database.connect()) as conn:
-        row = conn.execute('SELECT notice_json,connector_version FROM source_opportunities WHERE external_id=?',
-                           ('l0338200012226000019-1',)).fetchone()
-    assert 'zakupki.gov.ru' in json.loads(row[0])['upstream_url']
-    assert row[1] == 'connector-sync-v1:b2b_center:adapter-r1'
+    try:
+        repository = OpportunityRepository(database)
+        repository.initialize()
+        assert asyncio.run(save_and_query(catalog, repository, 'b2b_center', records)) == (1, 1)
+        assert asyncio.run(save_and_query(catalog, repository, 'b2b_center', records)) == (1, 1)
+        assert len(repository.read('b2b_center', limit=100)) == 1
+        assert repository.read('b2b_center', search_terms=('IMPOSSIBLE_7fb92',)) == []
+    finally:
+        database.close()
 
 
 def test_six_diagnostic_entries_and_opt_in_defaults():
@@ -120,7 +106,7 @@ def test_local_wrapper_request_budget_and_timeout_contract():
         async def fetch(self, limit):
             policy = _policy.get()
             assert policy.hosts == HOSTS['b2b_center']
-            assert policy.max_requests == 1 and policy.max_bytes == 5 * 1024 * 1024
+            assert policy.max_requests == 2 and policy.max_bytes == 2 * 1024 * 1024
             assert limit == 20
             return []
     assert asyncio.run(LocalBoundedSource(Probe(), 'b2b_center').fetch(100)) == []
@@ -137,16 +123,6 @@ def test_exact_hosts_reject_external_and_credentials():
             _validate_bounded_url(httpx.URL(url), policy)
 
 
-def test_synthetic_duplicate_counterpart_links_without_new_unique_claim():
-    from app.sources.models import TenderNotice
-    records = captured_records()
-    # Explicit synthetic comparator, never a real EIS retrieval fixture.
-    counterpart = TenderNotice(source='eis', external_id='synthetic-counterpart', title='Synthetic',
-        tender_number='0338200012226000019',
-        url='https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber=0338200012226000019')
-    links = duplicate_diagnostics([*records, counterpart])['cross_source_links']
-    assert links['0338200012226000019'] == [
-        ['b2b_center', 'l0338200012226000019-1'], ['eis', 'synthetic-counterpart']]
 
 
 def test_existing_ingestion_routing_requires_local_opt_ins():

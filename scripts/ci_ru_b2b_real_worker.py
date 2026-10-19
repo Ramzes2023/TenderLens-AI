@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import tempfile
+import time
 from pathlib import Path
 
 from app.database.backend import Database
@@ -17,26 +18,58 @@ from app.sources.catalog import build_source_catalog
 from app.sources.ingestion import connector_version
 from app.sources.opportunities import OpportunityRepository
 from app.sources.snapshots import snapshot_catalog
-from scripts.ci_ru_leased_connector import run_leased_connector
+from app.jobs import HandlerRegistry, JobRepository, JobSettings
+from app.jobs.models import JobScope
+from app.jobs.worker import Worker
+from app.sources.ingestion import ConnectorSyncHandler, ConnectorSyncService, JOB_TYPE
 
 SOURCE = "b2b_center"
 MAX_RECORDS = 10
 
 
+def b2b_settings():
+    return MonitoringSettings(
+        enabled=False, interval_seconds=600, max_items=MAX_RECORDS,
+        max_notifications_per_cycle=5, request_timeout=25,
+        eis_rss_urls=(), ca_bundle_file=None, profile_feeds_enabled=False,
+        eis_223_enabled=False, b2b_center_enabled=True,
+    )
+
+
+def ingest_live_b2b(db, catalog, store):
+    """One durable job, at most three attempts; honor real queue backoff.
+
+    Only retryable handler failures return to queued. Each claim retains the
+    production exact-host, TLS, public-IP, two-request and 2 MiB limits.
+    """
+    jobs = JobRepository(db, JobSettings(lease_seconds=240, heartbeat_seconds=10))
+    jobs.initialize()
+    job = ConnectorSyncService(jobs, catalog).enqueue(SOURCE)
+    handlers = HandlerRegistry()
+    handlers.register(JOB_TYPE, ConnectorSyncHandler(catalog, store, max_records=MAX_RECORDS))
+    worker = Worker(jobs, handlers, job_types=(JOB_TYPE,))
+    deadline = time.monotonic() + 165
+    while time.monotonic() < deadline:
+        current = jobs.get(job.id, scope=JobScope())
+        if current.state == 'succeeded':
+            result = current.result
+            if not isinstance(result, dict) or result.get('source_id') != SOURCE:
+                raise AssertionError('Durable connector result source mismatch')
+            print('B2B_CONNECTOR_ATTEMPTS=' + str(current.attempt_count), flush=True)
+            return result
+        if current.state != 'queued':
+            print('B2B_CONNECTOR_ATTEMPTS=' + str(current.attempt_count), flush=True)
+            print('B2B_CONNECTOR_STATE=' + current.state, flush=True)
+            raise AssertionError('Durable connector job did not succeed: ' +
+                                 str(current.failure_code))
+        if not worker.run_once():
+            time.sleep(.25)
+    raise AssertionError('Durable connector retry deadline exceeded')
+
+
 def acceptance() -> dict[str, int | bool]:
     # This settings object is intentionally independent of the operator's .env.
-    settings = MonitoringSettings(
-        enabled=False,
-        interval_seconds=600,
-        max_items=MAX_RECORDS,
-        max_notifications_per_cycle=5,
-        request_timeout=25,
-        eis_rss_urls=(),
-        ca_bundle_file=None,
-        profile_feeds_enabled=False,
-        eis_223_enabled=False,
-        b2b_center_enabled=True,
-    )
+    settings = b2b_settings()
     catalog = build_source_catalog(settings)
     if SOURCE not in catalog.enabled_keys:
         raise AssertionError("B2B-Center not enabled in test catalog")
@@ -46,7 +79,7 @@ def acceptance() -> dict[str, int | bool]:
         try:
             store = OpportunityRepository(db)
             store.initialize()
-            report = run_leased_connector(db, catalog, store, SOURCE, max_records=MAX_RECORDS)
+            report = ingest_live_b2b(db, catalog, store)
             if (
                 report["fetched_count"] < 1
                 or report["accepted_count"] != report["fetched_count"]
@@ -89,6 +122,8 @@ def acceptance() -> dict[str, int | bool]:
 
             if matches != report["fetched_count"]:
                 raise AssertionError("Incomplete DB -> keyword search roundtrip")
+            print('B2B_WORKER_SEARCH_IDENTITIES=' + json.dumps(
+                [n.url for n in notices]), flush=True)
             return {
                 "real_notices_fetched": report["fetched_count"],
                 "ingested_by_worker": report["accepted_count"],

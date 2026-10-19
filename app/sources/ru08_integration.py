@@ -47,7 +47,10 @@ class LocalBoundedSource:
     name: str
 
     async def fetch(self, limit=20):
-        with bounded_fetch(FetchPolicy(HOSTS[self.name], 1, max_bytes=5 * 1024 * 1024)):
+        with bounded_fetch(FetchPolicy(
+            HOSTS[self.name], 2 if self.name == 'b2b_center' else 1,
+            max_bytes=(2 if self.name == 'b2b_center' else 5) * 1024 * 1024,
+        )):
             return await asyncio.wait_for(self.source.fetch(min(limit, 20)), timeout=25)
 
 

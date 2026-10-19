@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import ipaddress
 import re
 import sys
+import ssl
 import zlib
 from functools import partial
 from urllib.parse import urlsplit
@@ -17,9 +18,10 @@ from .http_transport import PublicIPBackend, PublicIPError, _bounded_close
 
 
 class ConnectorTransportError(RuntimeError):
-    def __init__(self, *, retryable=False):
+    def __init__(self, *, retryable=False, reason='policy'):
         super().__init__('Connector transport failed.')
         self.retryable = retryable
+        self.reason = reason
 
 
 def _is_public_ip_error(error):
@@ -30,6 +32,16 @@ def _is_public_ip_error(error):
             return True
         seen.add(id(error))
         error = error.__cause__
+    return False
+
+
+def _is_tls_verification_error(error):
+    seen = set()
+    while isinstance(error, BaseException) and id(error) not in seen:
+        if isinstance(error, ssl.SSLCertVerificationError):
+            return True
+        seen.add(id(error))
+        error = error.__cause__ or error.__context__
     return False
 
 
@@ -135,7 +147,7 @@ class _LimitedBoundedStream(httpx.AsyncByteStream):
                 await anyio.lowlevel.checkpoint()
                 size += len(chunk)
                 if size > self.max_bytes:
-                    raise ConnectorTransportError()
+                    raise ConnectorTransportError(reason='response_size')
                 for offset in range(0, len(chunk), _LIVE_CHUNK_BYTES):
                     yield chunk[offset:offset + _LIVE_CHUNK_BYTES]
         except BaseException:
@@ -170,14 +182,14 @@ class BoundedClient(_PublicIPClient):
             try:
                 status = response.status_code
                 if status == 429 or status == 408 or 500 <= status <= 599:
-                    raise ConnectorTransportError(retryable=True)
+                    raise ConnectorTransportError(retryable=True, reason='http_transient')
                 if not 200 <= status < 300:
-                    raise ConnectorTransportError()
+                    raise ConnectorTransportError(reason='http_status')
                 chunks, size = [], 0
                 async for chunk in response.aiter_bytes():
                     size += len(chunk)
                     if size > policy.max_bytes:
-                        raise ConnectorTransportError()
+                        raise ConnectorTransportError(reason='response_size')
                     chunks.append(chunk)
                 response._content = b''.join(chunks)
                 return response
@@ -188,7 +200,9 @@ class BoundedClient(_PublicIPClient):
                 if not response.is_closed:
                     await _close_live_response(response, suppress_errors=False)
         except (httpx.TransportError, OSError) as error:
-            raise ConnectorTransportError(retryable=not _is_public_ip_error(error)) from error
+            reason = ('public_ip' if _is_public_ip_error(error) else
+                      'tls_certificate' if _is_tls_verification_error(error) else 'network')
+            raise ConnectorTransportError(retryable=reason == 'network', reason=reason) from error
 
 
 def _validate_live_url(value):
@@ -333,7 +347,7 @@ async def _limited_live_bytes(response, chunk_size=None, *, max_bytes=_LIVE_MAX_
                         pending = decoder.unused_data if decoder.eof else decoder.unconsumed_tail
                     size += len(decoded)
                     if size > max_bytes:
-                        raise ConnectorTransportError()
+                        raise ConnectorTransportError(reason='response_size')
                 for offset in range(0, len(decoded), output_size):
                     yield decoded[offset:offset + output_size]
                 if not pending and (decoder is None or decoder.eof or len(decoded) < _LIVE_CHUNK_BYTES):

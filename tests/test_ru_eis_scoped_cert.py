@@ -12,7 +12,8 @@ def test_pinned_root_fingerprint_is_full_sha256():
     assert all(ch in "0123456789abcdef" for ch in ROOT_SHA256)
 
 
-@pytest.mark.parametrize("untrusted", [b"", b"not-a-cert", b"Z" * 1000, b"P" * 65537])
+@pytest.mark.parametrize("untrusted", [b"", b"not-a-cert", b"Z" * 1000, b"P" * 65537],
+                         ids=["empty", "not-a-certificate", "untrusted-bytes", "oversized"])
 def test_untrusted_input_cannot_enable_eis_tls(untrusted):
     with pytest.raises(ValueError):
         verify_root(untrusted)

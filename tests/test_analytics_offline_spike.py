@@ -91,6 +91,7 @@ def test_real_h_all_kpi_identity_denominator_policy_parity(case):
                 assert direct['kpis']['High Fit']['value'] == 0
             assert gate.peaks[0]['peak_commit'] < MEMORY_LIMIT
             evidence = Path('.cache/phase24p3/p39d-memory.jsonl')
+            evidence.parent.mkdir(parents=True, exist_ok=True)
             with evidence.open('a', encoding='utf-8') as stream:
                 stream.write(json.dumps({'case': case, **gate.peaks[0]}) + '\n')
         finally:

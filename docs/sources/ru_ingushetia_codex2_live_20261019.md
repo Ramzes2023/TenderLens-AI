@@ -83,6 +83,24 @@ this environment; RSS availability alone is not full EIS-route acceptance.
   collection (`aiogram` missing); the final checks used this clone's own `.venv`
   with `requirements-dev.txt` installed.
 
+The additional complete Windows suite initially produced **3589 passed,
+9 failed, 3 error events, 7 skipped, 1 xfailed**, plus 518 passed subtests.
+Seven failures were the missing measurement-output directory in the Windows
+analytics test itself; two were Git `core.autocrlf=true` changing pinned fixture
+bytes; the oversized certificate parameter also exceeded Windows' 32767-character
+environment-variable limit through pytest's generated ID. Tests now create their
+own output directory, `.gitattributes` preserves the exact committed bytes of
+the two affected evidence fixtures, and the same certificate payloads have short
+explicit test IDs. No pin, certificate assertion or input was replaced.
+
+One Windows handle-count teardown error reported a **decrease** from 416 to 409
+handles in the combined suite; its exact equality assertion is unchanged.
+Rechecking all five affected modules after preparation yielded **106 passed,
+zero failed/errors**. Their two warnings concern Starlette deprecation and the
+pre-existing absence of original raw TED captures; neither is live Ingushetia
+evidence. The general CI workflow now also runs on correction PRs targeting the
+Ingushetia feature branch, rather than waiting until an eventual PR to main.
+
 The public source is the accredited Fabrikant mirror of EIS 44-FZ. It is **not**
 an additional independent original publisher. Its query covers purchases routed
 through the specified committee, not a demonstrated exhaustive list of every

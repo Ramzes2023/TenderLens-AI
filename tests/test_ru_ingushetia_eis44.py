@@ -75,7 +75,9 @@ def test_no_duplicate_eis_notifications_for_same_original():
 
 
 def test_source_stays_off_by_default_and_uses_one_official_host():
-    assert "regions=06" in RSS_URL and RSS_URL.startswith("https://zakupki.gov.ru/")
+    from urllib.parse import parse_qs, urlsplit
+    assert parse_qs(urlsplit(RSS_URL).query)["searchString"] == ["Ингушетия"]
+    assert "regions=06" not in RSS_URL
     assert HOSTS[SOURCE_ID] == frozenset({"zakupki.gov.ru"})
     assert SOURCE_ID not in build_source_catalog(settings()).registry.keys()
     catalog = build_source_catalog(settings(ru_ingushetia_eis44_enabled=True))

@@ -1,0 +1,69 @@
+{
+  "isolated_notification_ack": 3,
+  "notice_ids": [
+    "0114500000826002364",
+    "0114500000826002390",
+    "0114500000826002391"
+  ],
+  "notices": [
+    {
+      "customer": "ГОСУДАРСТВЕННОЕ БЮДЖЕТНОЕ УЧРЕЖДЕНИЕ ЗДРАВООХРАНЕНИЯ \"РЕСПУБЛИКАНСКИЙ КЛИНИЧЕСКИЙ ЦЕНТР ПСИХИАТРИИ И НАРКОЛОГИИ\"",
+      "deadline": "26.10.2026 09:00",
+      "number": "0114500000826002364",
+      "published_at": "16.10.2026 17:01",
+      "title": "Поставка лекарственных средств",
+      "url": "https://44.fabrikant.ru/44/procedure/ea21/0114500000826002364"
+    },
+    {
+      "customer": "ГОСУДАРСТВЕННОЕ КАЗЕННОЕ УЧРЕЖДЕНИЕ ЗДРАВООХРАНЕНИЯ \"МЕДИЦИНСКИЙ МОБИЛИЗАЦИОННЫЙ ЦЕНТР \"РЕЗЕРВ\"",
+      "deadline": "26.10.2026 09:00",
+      "number": "0114500000826002391",
+      "published_at": "19.10.2026 15:18",
+      "title": "Выполнение работ по капитальному ремонту объекта \"Капитальный ремонт Государственное казенное учреждение здравоохранения \"медицинский мобилизационный центр \"Резерв\"",
+      "url": "https://44.fabrikant.ru/44/procedure/ezk21/0114500000826002391"
+    },
+    {
+      "customer": "ГОСУДАРСТВЕННОЕ БЮДЖЕТНОЕ УЧРЕЖДЕНИЕ \"РЕСПУБЛИКАНСКИЙ КАРДИОЛОГИЧЕСКИЙ ДИСПАНСЕР\"",
+      "deadline": "27.10.2026 09:00",
+      "number": "0114500000826002390",
+      "published_at": "19.10.2026 17:01",
+      "title": "Поставка ГСМ (Бензин АИ-95)",
+      "url": "https://44.fabrikant.ru/44/procedure/ea21/0114500000826002390"
+    }
+  ],
+  "official_first_party_current_originals": 3,
+  "original_ids_not_double_counted_as_eis": true,
+  "production_changed": false,
+  "real_telegram_acks": [],
+  "real_telegram_delivery_proven": false,
+  "recent_publication_ids": [
+    "0114500000826002364",
+    "0114500000826002390",
+    "0114500000826002391"
+  ],
+  "sql_and_title_number_search": 3,
+  "user_queries_and_profiles": [
+    {
+      "excluded_keyword_rejected": true,
+      "number": "0114500000826002364",
+      "other_region_rejected": true,
+      "profile_match": true,
+      "user_query": "лекарственных"
+    },
+    {
+      "excluded_keyword_rejected": true,
+      "number": "0114500000826002391",
+      "other_region_rejected": true,
+      "profile_match": true,
+      "user_query": "работ"
+    },
+    {
+      "excluded_keyword_rejected": true,
+      "number": "0114500000826002390",
+      "other_region_rejected": true,
+      "profile_match": true,
+      "user_query": "Бензин"
+    }
+  ],
+  "worker_state": "succeeded"
+}

@@ -56,23 +56,30 @@ class _TableRows(HTMLParser):
         self.rows = []
         self.row = None
         self.cell = None
+        self.anchor = None
 
     def handle_starttag(self, tag, attrs):
         if tag == "tr":
-            self.row = {"cells": [], "links": []}
+            self.row = {"cells": [], "links": [], "anchors": []}
         elif self.row is not None and tag == "td":
             self.cell = []
         elif self.row is not None and tag == "a":
             href = dict(attrs).get("href")
             if href:
                 self.row["links"].append(href)
+                self.anchor = {"href": href, "text": [], "cell": len(self.row["cells"])}
 
     def handle_data(self, value):
         if self.cell is not None:
             self.cell.append(value)
+        if self.anchor is not None:
+            self.anchor["text"].append(value)
 
     def handle_endtag(self, tag):
-        if tag == "td" and self.row is not None and self.cell is not None:
+        if tag == "a" and self.row is not None and self.anchor is not None:
+            self.row["anchors"].append(self.anchor)
+            self.anchor = None
+        elif tag == "td" and self.row is not None and self.cell is not None:
             self.row["cells"].append(_text(self.cell))
             self.cell = None
         elif tag == "tr" and self.row is not None:
@@ -98,11 +105,13 @@ def extract_regional_listing(payload):
         organizer = cells[4].upper()
         if ORGANIZER not in organizer:
             continue
-        title = cells[2]
-        if not 5 <= len(title) <= 1000:
-            continue
         identities = []
-        for raw in row["links"]:
+        for anchor in row["anchors"]:
+            # Only the procurement-name link identifies the title. The same
+            # cell also contains badges (СМП/СОНО, 1875), which are not title text.
+            if anchor["cell"] != 2:
+                continue
+            raw = anchor["href"]
             # Official list may carry relative links and navigation-only
             # backurl. Strip navigation, but never accept hostile hosts,
             # credentials, backslashes, non-HTTPS or arbitrary parameters.
@@ -120,11 +129,13 @@ def extract_regional_listing(payload):
             except ValueError:
                 continue
             if original is not None:
-                identities.append(original)
+                identities.append((*original, _text(anchor["text"])))
         identities = list(dict.fromkeys(identities))
         if len(identities) != 1:
             continue
-        number, url = identities[0]
+        number, url, title = identities[0]
+        if not 5 <= len(title) <= 1000:
+            continue
         if number not in cells[1] or number in seen:
             continue
         seen.add(number)
@@ -143,20 +154,29 @@ class _Visible(HTMLParser):
         self.h1 = None
         self.headings = []
         self.content = []
+        self.button = None
+        self.buttons = []
     def handle_starttag(self, tag, attrs):
         if tag in {"script", "style", "noscript", "template", "svg"}:
             self.hidden += 1
         elif tag == "h1" and not self.hidden:
             self.h1 = []
+        elif tag == "button" and not self.hidden:
+            self.button = []
     def handle_data(self, value):
         if not self.hidden:
             self.content.append(value)
             if self.h1 is not None:
                 self.h1.append(value)
+            if self.button is not None:
+                self.button.append(value)
     def handle_endtag(self, tag):
         if tag == "h1" and self.h1 is not None:
             self.headings.append(_text(self.h1))
             self.h1 = None
+        elif tag == "button" and self.button is not None:
+            self.buttons.append(_text(self.button))
+            self.button = None
         elif tag in {"script", "style", "noscript", "template", "svg"} and self.hidden:
             self.hidden -= 1
 
@@ -169,20 +189,31 @@ def verified_fabrikant_notice(payload, *, number, url, title):
     reader = _Visible()
     reader.feed(payload.decode("utf-8-sig", "replace"))
     reader.close()
-    body = _text(reader.content).upper()
+    visible = _text(reader.content)
+    body = visible.upper()
     # The buyer/organizer proof must be in the original card's ORGANIZER
     # section, not in an unrelated description, footer or marketing link.
     marker = "СВЕДЕНИЯ ОБ ОРГАНИЗАТОРЕ ЗАКУПКИ"
     at = body.find(marker)
-    organizer_area = body[at:at + 2400] if at >= 0 else ""
+    organizer_area = body[at:].split("КОНТАКТНАЯ ИНФОРМАЦИЯ", 1)[0] if at >= 0 else ""
+    organizer_area = organizer_area.split("СВЕДЕНИЯ О ЗАКАЗЧИКЕ", 1)[0]
+    title_match = re.search(r"Наименование закупки\s+(.+?)\s+Валюта\b", visible, re.I)
+    customers = [text.removeprefix("Сведения о заказчике ") for text in reader.buttons
+                 if text.startswith("Сведения о заказчике ")]
+    customer = "; ".join(dict.fromkeys(customers))
+    published = re.search(r"Дата и время публикации извещения\s+([0-9]{2}\.[0-9]{2}\.[0-9]{4})\s+•\s+([0-9]{2}:[0-9]{2})", visible, re.I)
+    deadline = re.search(r"Дата и время окончания срока подачи заявок\s+([0-9]{2}\.[0-9]{2}\.[0-9]{4})\s+•\s+([0-9]{2}:[0-9]{2})", visible, re.I)
     if (reader.headings != ["Сведения о закупке " + number]
-            or title.upper() not in body
+            or not title_match or title_match.group(1).casefold() != title.casefold()
+            or not 3 <= len(customer) <= 500
             or ORGANIZER not in organizer_area
-            or INN not in organizer_area):
+            or not re.search(r"\bИНН\s+" + INN + r"\b", organizer_area)):
         raise ValueError("Independent original detail fails Ingushetia publisher/identity/title checks")
     notice = TenderNotice(
         source=SOURCE_ID, external_id=number, tender_number=number,
-        title=title, url=url, customer=ORGANIZER, region=REGION,
+        title=title_match.group(1), url=url, customer=customer, region=REGION,
+        published_at=" ".join(published.groups()) if published else None,
+        deadline=" ".join(deadline.groups()) if deadline else None,
     )
     validate_notice(notice, SOURCE_ID)
     return notice
@@ -214,7 +245,7 @@ class IngushetiaFabrikant44Source:
                 listing.raise_for_status()
                 if "html" not in listing.headers.get("content-type", "").lower():
                     raise ValueError("First-party regional listing was not HTML")
-                candidates = extract_regional_listing(listing.content)
+                candidates = extract_regional_listing(listing.content)[:cap]
                 valid = []
                 for number, url, title in candidates:
                     card = await client.get(url)

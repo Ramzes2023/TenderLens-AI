@@ -12,14 +12,16 @@ from pathlib import Path
 import re
 from urllib.parse import parse_qs, urlsplit
 
-from .eis_rss import EIS_EXTENDED_RSS_URL, EisRssSource, SourceError
+from .eis_rss import build_eis_rss_url, EisRssSource, SourceError
 from .models import TenderNotice
 from .opportunities import validate_notice
 
 SOURCE_ID = "ru_ingushetia_eis44"
 REGION = "Республика Ингушетия"
-# This filter must be verified against the genuine live EIS response by CI.
-RSS_URL = EIS_EXTENDED_RSS_URL + "?fz44=on&regions=06&pageNumber=1"
+# The actual 2026-10-19 EIS response ignored regions=06 and returned national
+# rows. Use the existing official text-search RSS shape, verified live; still
+# require regional evidence in each result's own buyer/region, never query text.
+RSS_URL = build_eis_rss_url("Ингушетия")
 _NUMBER = re.compile(r"[0-9]{19}\Z")
 _REGION = re.compile(r"\bингушети(?:я|и|ю|ей)\b", re.I)
 
@@ -67,7 +69,10 @@ def normalize_ingushetia_notice(notice: TenderNotice) -> TenderNotice | None:
     evidence = " ".join(filter(None, (notice.customer, notice.region)))
     if not _REGION.search(evidence):
         return None
-    result = replace(notice, external_id=number, region=REGION, enrichment=None)
+    # EIS item.title is the procedure type + number. Its business summary is
+    # extracted from the publisher's "Наименование объекта закупки" field.
+    result = replace(notice, external_id=number, region=REGION, enrichment=None,
+                     title=(notice.summary or notice.title)[:1000])
     validate_notice(result, SOURCE_ID)
     return result
 

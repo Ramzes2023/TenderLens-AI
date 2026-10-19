@@ -29,6 +29,7 @@ from app.sources.http import source_client
 from app.sources.ingestion import JOB_TYPE, ConnectorSyncHandler, ConnectorSyncService, connector_version
 from app.sources.http import FetchPolicy, bounded_fetch
 from scripts.ru_eis_pinned_tls_probe import verify_root
+from scripts.ru_transport_diagnostics import transport_failure
 from app.sources.opportunities import OpportunityRepository
 from app.sources.ru_ingushetia_eis44 import SOURCE_ID, RSS_URL, normalize_ingushetia_notice
 from app.sources.snapshots import snapshot_catalog
@@ -220,19 +221,9 @@ def main():
         try:
             result = acceptance()
         except Exception as exc:
-            failure = type(exc).__name__
-            cause_names = []
-            cause = getattr(exc, "__cause__", None)
-            while cause is not None and len(cause_names) < 3:
-                cause_names.append(type(cause).__name__)
-                cause = getattr(cause, "__cause__", None)
-            failures.append({
-                "route": upstream,
-                "failure_class": failure,
-                "cause_types": cause_names,
-                "retryable": bool(getattr(exc, "retryable", False)),
-            })
+            failures.append({"route": upstream, **transport_failure(exc)})
             continue
+        print("FAILURE_ROUTE_SUMMARY=" + json.dumps(failures, sort_keys=True))
         print("RU_INGUSHETIA_LIVE_UPSTREAM=" + upstream)
         # Keep machine-readable evidence printable on legacy Windows consoles.
         print("RU_INGUSHETIA_PROOF=" + json.dumps(result, ensure_ascii=True, sort_keys=True))

@@ -16,6 +16,7 @@ from app.sources.http import FetchPolicy, bounded_fetch, source_client
 from app.sources.ru_ingushetia_eis44 import RSS_URL
 from app.sources.ru_ingushetia_fabrikant44 import LIST_URL
 from scripts.ru_eis_pinned_tls_probe import verify_root
+from scripts.ru_transport_diagnostics import transport_failure
 
 ROOT = Path(__file__).resolve().parents[1] / "russian_trusted_root_ca_pem.crt"
 HOST_EIS = "zakupki.gov.ru"
@@ -153,6 +154,7 @@ async def observe(name, url, host, number):
                             len(parser.ids) > 0 and not status["known_ingushetia_numbers_in_links"]
                         )
     except Exception as exc:
+        status["transport_failure"] = transport_failure(exc)
         status["error"] = type(exc).__name__
         causes = []
         inner = getattr(exc, "__cause__", None)

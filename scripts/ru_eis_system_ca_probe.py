@@ -8,6 +8,8 @@ from __future__ import annotations
 import asyncio
 import json
 import ssl
+import platform
+from scripts.ru_transport_diagnostics import transport_failure
 
 from app.sources.eis_rss import (
     SourceError, build_eis_rss_url, parse_eis_feed, verify_eis_feed_law,
@@ -17,7 +19,8 @@ from app.sources.http import FetchPolicy, bounded_fetch, source_client
 
 async def run():
     status = {"state": "BLOCKED", "http_status": None, "records": 0,
-              "error_type": None, "strict_tls": True, "hostname_check": True}
+              "error_type": None, "strict_tls": True, "hostname_check": True,
+              "platform": platform.system()}
     context = ssl.create_default_context()
     status["strict_tls"] = context.verify_mode == ssl.CERT_REQUIRED
     status["hostname_check"] = context.check_hostname
@@ -46,11 +49,12 @@ async def run():
                 )
     except Exception as error:
         status["error_type"] = type(error).__name__
+        status["transport_failure"] = transport_failure(error)
     return status
 
 
 def main():
-    print("RU_EIS_LINUX_SYSTEM_CA=" + json.dumps(
+    print("RU_EIS_SYSTEM_CA=" + json.dumps(
         asyncio.run(run()), ensure_ascii=False, separators=(",", ":"
     )), flush=True)
     print("WINDOWS_CA_VERIFIED=NO")

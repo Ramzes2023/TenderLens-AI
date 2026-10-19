@@ -37,7 +37,9 @@ TARGETS = {
     "gpb_rss": Target("etpgpb.ru", "/procedures.rss", "rss"),
     "rzd_eshop": Target("eshoprzd.ru", "/"),
     "tektorg": Target("www.tektorg.ru", "/223-fz/procedures"),
-    "fabrikant_44_mirror": Target("soap4.fabrikant.ru", "/44/catalog/procedure/requestOffer"),
+    # Legacy selection label, but the live published register uses the same official
+    # 44.fabrikant.ru publisher as fabrikant_44; never count as a second feed.
+    "fabrikant_44_mirror": Target("44.fabrikant.ru", "/44/catalog/procedure/published"),
     "fabrikant_223_mirror": Target("soap2.fabrikant.ru", "/223/catalog/procedure/finished"),
     "tatarstan_trading": Target("etpzakupki.tatar", "/app/SearchLots/"),
     "samara_small": Target("webtorgi.samregion.ru", "/smallpurchases"),
@@ -167,8 +169,9 @@ def batch_priority() -> int:
         except (OSError, ValueError, UnsafeAddress, ET.ParseError, ssl.SSLError) as error:
             return {"source": label, "status": "BLOCKED", "failure_class": type(error).__name__}
 
-    # Four concurrent requests to distinct approved hosts. Only one fixed read
-    # per host (plus a single IP failover), max 2 MiB each and strict TLS.
+    # At most four concurrent allowlisted fixed reads (two labels may share
+    # an official publisher host), max two pinned public IP attempts per label,
+    # 2 MiB per response and strict certificate-verified HTTPS.
     with ThreadPoolExecutor(max_workers=4) as pool:
         results = list(pool.map(once, tuple(TARGETS)))
     for result in results:

@@ -10,6 +10,15 @@ class ProbeSafetyTests(unittest.TestCase):
         self.assertEqual(len(pairs), len(TARGETS))
         self.assertTrue(all(t.mode in {"html", "rss"} for t in TARGETS.values()))
 
+    def test_fabrikant_legacy_alias_uses_real_published_register_not_obsolete_soap4(self):
+        published = TARGETS["fabrikant_44_mirror"]
+        self.assertEqual(published, Target("44.fabrikant.ru", "/44/catalog/procedure/published"))
+        self.assertNotEqual(published.path, "/44/catalog/procedure/requestOffer")
+        self.assertEqual(published.host, TARGETS["fabrikant_44"].host)
+        self.assertNotEqual(published.path, TARGETS["fabrikant_44"].path)
+        # Two operator choices on one official host are not independent feeds.
+        self.assertEqual(sum(t.host == published.host for t in TARGETS.values()), 2)
+
     def test_caucasus_exact_public_targets_not_live_source_claims(self):
         self.assertEqual(TARGETS["ossetia_official_small"], Target("15.portalregion.ru", "/"))
         self.assertEqual(TARGETS["stavropol_rts_small"], Target("market26.rts-tender.ru", "/"))

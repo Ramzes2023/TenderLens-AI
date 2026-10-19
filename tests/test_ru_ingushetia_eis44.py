@@ -150,3 +150,16 @@ def test_env_operator_filter_is_stored_but_source_stays_disabled(monkeypatch, tm
     cfg = load_monitoring_settings(tmp_path / "absent.env")
     assert cfg.ru_ingushetia_eis44_rss_url.endswith("fz44=on")
     assert SOURCE_ID not in build_source_catalog(cfg).enabled_keys
+
+def test_ingushetia_publisher_finding_is_not_a_fake_source_card():
+    from app.api.public_sources import source_directory
+    base = source_directory(build_source_catalog(settings()))
+    findings = base["regional_publisher_findings"]
+    ing = next(value for value in findings if value["region_code"] == "06")
+    assert ing["independent_regional_publisher"] == "not_verified"
+    assert ing["absence_proven"] is False
+    assert ing["regional_tenders_exist"] is True
+    assert ing["production_ingestion_verified"] is False
+    assert "ru_ingushetia_eis44" not in {entry["key"] for entry in base["sources"]}
+    assert "ru_ingushetia_eis44" not in {entry["key"] for entry in base["candidate_sources"]}
+    assert len(base["sources"]) == base["source_count"]

@@ -9,6 +9,7 @@ on:
       - app/sources/ingestion.py
       - app/monitoring/config.py
       - scripts/ci_ru_samara_public_list_sql.py
+      - scripts/ci_ru_samara_two_page_worker_sql.py
       - scripts/ci_ru_samara_authenticated.py
       - scripts/ci_ru_samara_telegram_query_delivery.py
       - app/sources/ru_cycle.py
@@ -84,3 +85,18 @@ jobs:
       - name: Prove real native Samara notices pass request keyword filter and local in-memory Telegram send/dedup
         timeout-minutes: 8
         run: python -B -m scripts.ci_ru_samara_telegram_query_delivery
+
+  samara-twenty-native-page-worker-sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require twenty REAL independently numbered official Samara notices from both native pages through fenced Worker and disposable SQL search
+        timeout-minutes: 6
+        run: python -B -m scripts.ci_ru_samara_two_page_worker_sql

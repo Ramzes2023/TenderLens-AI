@@ -124,6 +124,10 @@ async def observe() -> int:
                     response = await page.goto(
                         url, wait_until="domcontentloaded", timeout=18000,
                     )
+                    print("RU_SAMARA_ORIGINAL_BROWSER_HTTP_STATUS=" + (
+                        str(response.status) if response is not None else "NONE"
+                    ))
+                    print("RU_SAMARA_ORIGINAL_FINAL_URL_MATCH=" + str(page.url == url))
                     if response is None or response.status != 200 or page.url != url:
                         raise ValueError("Original detail was blocked or redirected")
                     stage = "ORIGINAL_DETAIL_PARSE"

@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from html.parser import HTMLParser
 from urllib.parse import urlsplit
 
 from app.sources.http import FetchPolicy, bounded_fetch, source_client
@@ -18,7 +19,32 @@ ROOT = Path(__file__).resolve().parents[1] / "russian_trusted_root_ca_pem.crt"
 HOST_EIS = "zakupki.gov.ru"
 HOST_FAB = "44.fabrikant.ru"
 HOST_SOAP = "soap4.fabrikant.ru"
-CA_PROVEN = False
+class VisibleText(HTMLParser):
+    """Read only visible first-party text, not raw markup or inline scripts."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.ignored = 0
+        self.words = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in {"script", "style", "template", "svg", "noscript"}:
+            self.ignored += 1
+
+    def handle_endtag(self, tag):
+        if tag in {"script", "style", "template", "svg", "noscript"} and self.ignored:
+            self.ignored -= 1
+
+    def handle_data(self, data):
+        if not self.ignored:
+            self.words.append(data)
+
+
+def public_visible_text(html):
+    parser = VisibleText()
+    parser.feed(html)
+    parser.close()
+    return " ".join(" ".join(parser.words).split()).upper()
+
 
 CASES = (
     ("eis_ingushetia_rss", "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&regions=06&pageNumber=1", HOST_EIS, None),
@@ -43,19 +69,22 @@ async def observe(name, url, host, number):
         verify = str(ROOT) if host == HOST_EIS else True
         with bounded_fetch(FetchPolicy(frozenset({host}), 1, max_bytes=1_800_000)):
             async with source_client(
-                timeout=12, trust_env=False, follow_redirects=False,
+                timeout=25 if host == HOST_FAB else 15, trust_env=False, follow_redirects=False,
                 verify=verify, event_hooks={"response": [record]},
-                headers={"Accept": "text/html, application/rss+xml, application/xml"},
+                headers={"Accept": "text/html, application/rss+xml, application/xml",
+                         "User-Agent": "Mozilla/5.0 (compatible; VALYQON-Source-Audit/1.0)"},
             ) as client:
                 response = await client.get(url)
                 response.raise_for_status()
                 if number:
-                    text = " ".join(response.text.split()).upper()
-                    status["verified_original_id"] = (
-                        "СВЕДЕНИЯ О ЗАКУПКЕ " + number in text
-                        and "КОМИТЕТ ГОСУДАРСТВЕННОГО ЗАКАЗА РЕСПУБЛИКИ ИНГУШЕТИЯ" in text
-                        and "0608058533" in text
-                    )
+                    text = public_visible_text(response.text)
+                    has_heading = "СВЕДЕНИЯ О ЗАКУПКЕ " + number in text
+                    has_organizer = "КОМИТЕТ ГОСУДАРСТВЕННОГО ЗАКАЗА РЕСПУБЛИКИ ИНГУШЕТИЯ" in text
+                    has_inn = "0608058533" in text
+                    status["detail_fields"] = {"original_number": has_heading,
+                                               "regional_organizer": has_organizer,
+                                               "regional_inn": has_inn}
+                    status["verified_original_id"] = has_heading and has_organizer and has_inn
                     status["status"] = "FIRST_PARTY_INGUSHETIA_DETAIL_VERIFIED" if status["verified_original_id"] else "UNVERIFIED_BODY"
                 elif "rss" in name:
                     status["status"] = "OFFICIAL_RSS_RESPONSE_NOT_INGESTION_PROOF" if (

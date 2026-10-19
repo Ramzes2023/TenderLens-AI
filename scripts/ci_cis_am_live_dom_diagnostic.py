@@ -6,20 +6,60 @@ Target stays pinned to HTTPS ARMEPS with project transport protections.
 import asyncio
 import json
 import re
+import ssl
+
+import httpx
 
 from app.sources.am_armeps import (
     ARMEPS_LISTING_URL, _Tables, parse_armeps_listing, _retryable_official_dns_failure,
     observed_next_page,
 )
-from app.sources.http import FetchPolicy, bounded_fetch, source_client
+from app.sources.http import (
+    ConnectorTransportError, FetchPolicy, _is_public_ip_error,
+    bounded_fetch, source_client,
+)
+
+
+def _retryable_observed_timeout(error):
+    """Only a proved connect/read timeout can retry; never TLS, IP or policy errors."""
+    if (not isinstance(error, ConnectorTransportError) or
+            not error.retryable or _is_public_ip_error(error)):
+        return False
+    current, seen, timed_out = error.__cause__, set(), False
+    while isinstance(current, BaseException) and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, ssl.SSLError):
+            return False
+        if isinstance(current, (httpx.ConnectTimeout, httpx.ReadTimeout)):
+            timed_out = True
+        current = current.__cause__
+    return timed_out
+
+
+async def _fetch_bounded_first_page():
+    """Up to three independent STRICT official HTTPS attempts; require real response."""
+    for attempt in range(1, 4):
+        try:
+            # Each attempt gets a fresh one-request policy, exact original host,
+            # TLS verification, public-IP/peer validation and 1 MiB hard limit.
+            with bounded_fetch(FetchPolicy(
+                frozenset({"eauction.armeps.am"}), 1, max_bytes=1024 * 1024
+            )):
+                async with source_client(
+                    timeout=15.0, trust_env=False, follow_redirects=False
+                ) as client:
+                    response = await client.get(ARMEPS_LISTING_URL)
+            return response, attempt
+        except ConnectorTransportError as error:
+            if attempt == 3 or not _retryable_observed_timeout(error):
+                raise
+            await asyncio.sleep(attempt)
+    raise AssertionError("ARMEPS bounded official attempt count exhausted.")
 
 
 async def run():
     try:
-        # Select BoundedClient at creation, exactly as the adapter/worker does.
-        with bounded_fetch(FetchPolicy(frozenset({"eauction.armeps.am"}), 1, max_bytes=1024 * 1024)):
-            async with source_client(timeout=15.0, trust_env=False, follow_redirects=False) as client:
-                resp = await client.get(ARMEPS_LISTING_URL)
+        resp, attempts = await _fetch_bounded_first_page()
     except Exception as error:
         chain, seen = [], set()
         current = error
@@ -41,6 +81,7 @@ async def run():
                           "classified_retryable_dns": _retryable_official_dns_failure(error)}, sort_keys=True))
         return 1
     report = {
+        "network_attempts": attempts,
         "status": resp.status_code,
         "html_content_type": "html" in resp.headers.get("content-type", "").lower(),
         "html_bytes": len(resp.content),

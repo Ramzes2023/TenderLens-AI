@@ -259,3 +259,51 @@ def test_permanent_listing_failure_does_not_trigger_retry(monkeypatch):
     with pytest.raises(ConnectorTransportError):
         asyncio.run(IngushetiaFabrikant44Source().fetch(limit=2))
     assert seen == [LIST_URL]
+
+
+def test_detail_scan_can_skip_two_bad_originals_and_keep_next_three(monkeypatch):
+    """Two dead cards ahead of three live ones must not consume the result limit."""
+    import app.sources.ru_ingushetia_fabrikant44 as mod
+    from app.sources.http import ConnectorTransportError
+    from contextlib import contextmanager
+
+    ids = tuple(str(114500000826002350 + i).zfill(19) for i in range(5))
+    titles = tuple("Поставка предметов " + str(i) for i in range(5))
+    rows = [
+        f'<tr><td>ЭА</td><td>{n}</td>'
+        f'<td><a href="/44/procedure/ea21/{n}?&backurl=ok">{t}</a></td>'
+        f'<td>500 RUB</td><td>{ORGANIZER}</td><td>Медучреждение</td></tr>'
+        for n, t in zip(ids, titles)
+    ]
+    html = ("<html><table>" + "".join(rows) + "</table></html>").encode()
+    calls = []
+    policies = []
+
+    class FakeClient:
+        async def get(self, url):
+            calls.append(url)
+            if url == LIST_URL:
+                content = html
+            else:
+                idx = next(i for i, n in enumerate(ids) if url.endswith(n))
+                if idx < 2:
+                    raise ConnectorTransportError(retryable=True)
+                content = detail(number=ids[idx], title=titles[idx])
+            return SimpleNamespace(content=content, headers={"content-type": "text/html"},
+                                   raise_for_status=lambda: None)
+
+    @asynccontextmanager
+    async def fake_client(**kwargs):
+        yield FakeClient()
+
+    @contextmanager
+    def observe_policy(policy):
+        policies.append(policy)
+        yield
+
+    monkeypatch.setattr(mod, "source_client", fake_client)
+    monkeypatch.setattr(mod, "bounded_fetch", observe_policy)
+    notices = asyncio.run(IngushetiaFabrikant44Source().fetch(limit=3))
+    assert [n.tender_number for n in notices] == list(ids[2:])
+    assert len(calls) == 6  # one current list and all five observed originals
+    assert len(policies) == 1 and policies[0].max_requests == 7

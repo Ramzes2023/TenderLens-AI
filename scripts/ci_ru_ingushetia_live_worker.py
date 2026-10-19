@@ -13,6 +13,7 @@ import os
 import tempfile
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 from app.database.backend import Database
 from app.database.config import DatabaseSettings
@@ -20,6 +21,9 @@ from app.jobs import HandlerRegistry, JobRepository, JobSettings
 from app.jobs.models import JobScope
 from app.jobs.worker import Worker
 from app.monitoring.config import MonitoringSettings
+from app.monitoring.repository import MonitoringRepository
+from app.monitoring.service import TenderMonitorService, prefilter_notice
+from app.bot.monitoring import monitor_loop
 from app.sources.catalog import build_source_catalog
 from app.sources.http import source_client
 from app.sources.ingestion import JOB_TYPE, ConnectorSyncHandler, ConnectorSyncService, connector_version
@@ -33,7 +37,7 @@ from app.sources.snapshots import snapshot_catalog
 ROOT = Path(__file__).resolve().parents[1] / 'russian_trusted_root_ca_pem.crt'
 
 
-def _catalog():
+def _catalog_settings():
     # The bundled Ministry certificate is accepted only when its canonical DER
     # matches the independently documented official root fingerprint.
     verify_root(ROOT.read_bytes())
@@ -43,9 +47,14 @@ def _catalog():
         eis_rss_urls=(), ca_bundle_file=ROOT,
         profile_feeds_enabled=False,
         ru_ingushetia_eis44_enabled=True,
+        ru_background_catalog_enabled=True,
         ru_ingushetia_eis44_rss_url=os.environ.get('RU_INGUSHETIA_EIS44_RSS_URL', '').strip() or None,
     )
-    return build_source_catalog(cfg)
+    return cfg
+
+
+def _catalog():
+    return build_source_catalog(_catalog_settings())
 
 
 async def _check_original_links(notices):
@@ -62,6 +71,57 @@ async def _check_original_links(notices):
               body = original.text
               if notice.tender_number not in body:
                   raise AssertionError("Official original card does not corroborate EIS number")
+
+
+async def _check_isolated_dispatch(catalog, cfg, notices, db_path):
+    """Real stored notices -> real monitor dedup -> Telegram-format fake sink.
+
+    Intentionally uses no bot credentials, chat API, network send, or user data.
+    This is a staging pipeline proof, NOT a Telegram delivery receipt.
+    """
+    monitor_repo = MonitoringRepository(db_path)
+    monitor_repo.initialize()
+    fake_owner, fake_chat = 101, 202
+    monitor_repo.set_subscription(fake_owner, fake_chat, True)
+
+    class PersistedNoticeMonitor(TenderMonitorService):
+        async def fetch_matches_from_catalog(self, selected_catalog, owner_user_id=None,
+                                             *, source_keys=None):
+            assert selected_catalog is catalog
+            assert SOURCE_ID in source_keys
+            matches = [prefilter_notice(n, None) for n in notices]
+            return [m for m in matches if m is not None], SimpleNamespace(
+                attempted_sources=(SOURCE_ID,), total_failure=False,
+            )
+
+    service = PersistedNoticeMonitor(cfg, None, monitor_repo, None)
+    stop = asyncio.Event()
+
+    class IsolatedAckSink:
+        def __init__(self):
+            self.messages = []
+
+        async def send_message(self, chat_id, text, **kwargs):
+            assert chat_id == fake_chat and kwargs.get("disable_web_page_preview") is True
+            self.messages.append(text)
+            stop.set()
+            return SimpleNamespace(message_id=len(self.messages))
+
+    sink = IsolatedAckSink()
+    await monitor_loop(sink, service, stop, source_catalog=catalog)
+    expected = min(len(notices), cfg.max_notifications_per_cycle)
+    if len(sink.messages) != expected:
+        raise AssertionError("Staging monitor did not dispatch every allowed first batch notice")
+    for row, text in zip(notices[:expected], sink.messages):
+        if row.tender_number not in text or row.title not in text or "НОВАЯ ЗАКУПКА" not in text:
+            raise AssertionError("Staging dispatch lost original procurement identity")
+        if not monitor_repo.seen(fake_owner, "eis_44", row.tender_number):
+            raise AssertionError("Simulated Telegram acknowledgement was not persisted")
+    if await service.unseen_matches(fake_owner, [
+        prefilter_notice(row, None) for row in notices
+    ]):
+        raise AssertionError("Simulated delivered Ingushetia original would alert again")
+    return len(sink.messages)
 
 
 def proof():
@@ -114,8 +174,10 @@ def proof():
                     raise AssertionError('Real Ingushetia notice not searchable by title')
                 if store.upsert(n, connector_version(SOURCE_ID)):
                     raise AssertionError("Replay inserted duplicate regional notice")
+            staged = asyncio.run(_check_isolated_dispatch(catalog, _catalog_settings(), rows, Path(tmp) / "notifications.sqlite"))
             return {
                 "official_rss_origin": "zakupki.gov.ru",
+                "isolated_staging_sink_dispatches": staged,
                 "original_cards_corresponding_to_list": 2,
                 "leased_worker_state": completed.state,
                 "stored_and_searchable": len(rows),

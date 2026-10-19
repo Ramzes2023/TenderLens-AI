@@ -839,7 +839,7 @@ def build_source_catalog(
             transport=SourceTransport.HTML,
             jurisdictions=("RU",),
             languages=("ru",),
-            homepage_url="https://soap4.fabrikant.ru/44/catalog/procedure/published",
+            homepage_url="https://44.fabrikant.ru/44/catalog/procedure/published",
             official=False,
             enabled=True,
             capabilities=SourceCapabilities(),

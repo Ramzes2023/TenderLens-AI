@@ -11,6 +11,13 @@ on:
       - .github/workflows/ru-south-ural-depth.yml
   pull_request:
     branches: [main, feat/ru-south-ural-small-live-sql-20261017]
+    paths:
+      - app/sources/south_ural_public.py
+      - tests/test_ru_south_ural_adapter.py
+      - scripts/ci_ru_south_ural_10_real_worker.py
+      - scripts/ci_ru_south_ural_deadline.py
+  workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

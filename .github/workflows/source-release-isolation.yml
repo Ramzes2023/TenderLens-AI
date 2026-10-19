@@ -1,0 +1,32 @@
+name: Independent procurement source release contracts
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - "tests/test_source_release_isolation.py"
+      - "docs/SOURCE_RELEASE_ISOLATION.md"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - "tests/test_source_release_isolation.py"
+
+permissions:
+  contents: read
+
+jobs:
+  offline-source-release-trigger-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Preserve each publisher's live CI isolation and shared regressions
+        run: python -m pytest -q tests/test_source_release_isolation.py tests/test_source_catalog.py tests/test_connector_workers.py

@@ -5,24 +5,23 @@ on:
     branches:
       - main
     paths:
-      - app/sources/**
+      - app/sources/kz_gov_html.py
+      - app/sources/kz_goszakup.py
       - tests/test_cis_kz_gov_html.py
-      - tests/test_source_catalog.py
-      - tests/test_connector_workers.py
       - scripts/ci_cis_kz_public_html_probe.py
       - scripts/ci_cis_kz_html_live_acceptance.py
-      - .github/workflows/cis-kz-gov-public-html-live.yml
   push:
     branches:
       - integration/cis-kz-html-live-20261016
     paths:
-      - app/sources/**
+      - app/sources/kz_gov_html.py
+      - app/sources/kz_goszakup.py
       - tests/test_cis_kz_gov_html.py
-      - tests/test_source_catalog.py
-      - tests/test_connector_workers.py
       - scripts/ci_cis_kz_public_html_probe.py
       - scripts/ci_cis_kz_html_live_acceptance.py
       - .github/workflows/cis-kz-gov-public-html-live.yml
+
+  workflow_dispatch:
 
 permissions:
   contents: read

@@ -40,7 +40,9 @@ def public_metadata_shape(value, *, kind):
         return "iso_date_time"
     if re.fullmatch(r"20[0-9]{2}-[0-9]{2}-[0-9]{2}", s):
         return "iso_date_only"
-    if re.fullmatch(r"[0-9]{2}\.[0-9]{2}\.20[0-9]{2}(?:[ ]+[0-9]{2}:[0-9]{2}(?::[0-9]{2})?)?", s):
+    if re.fullmatch(r"[0-9]{2}\.[0-9]{2}\.20[0-9]{2}[ ]+[0-9]{2}:[0-9]{2}(?::[0-9]{2})?", s):
+        return "russian_dot_datetime"
+    if re.fullmatch(r"[0-9]{2}\.[0-9]{2}\.20[0-9]{2}", s):
         return "russian_dot_date"
     if re.fullmatch(r"/Date\([0-9]+(?:[-+][0-9]+)?\)/", s):
         return "asp_net_json_date"

@@ -76,7 +76,7 @@ def public_token(body):
 
 def previous_month(today=None):
     if today is None:
-        today = datetime.now(timezone(timedelta(hours=3))).date()
+        today = datetime.now(timezone(timedelta(hours=4))).date()
     if type(today) is not date:
         raise ValueError("Invalid Samara local date")
     y, m = (today.year, today.month - 1) if today.month > 1 else (today.year - 1, 12)
@@ -128,7 +128,7 @@ def safe_string(row, key, max_length=1000):
 
 
 def parse_public_list(data, *, limit=2):
-    """Validate government list rows; live acceptance separately requires two."""
+    """Validate original Samara public-list rows; live worker demands two."""
     if type(limit) is not int or not 1 <= limit <= PAGE_SIZE:
         raise ValueError("Invalid list size")
     if type(data) is not dict or type(data.get("items")) is not list:

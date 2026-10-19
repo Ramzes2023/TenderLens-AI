@@ -7,6 +7,7 @@ The targeted query is unverified until a real live CI worker proves results.
 """
 from __future__ import annotations
 
+import asyncio
 from contextlib import nullcontext
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -220,7 +221,7 @@ class IngushetiaFabrikant44Source:
         if type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError("Invalid Ingushetia Fabrikant limit")
         cap = min(MAX_DETAILS, limit)
-        policy = (bounded_fetch(FetchPolicy(frozenset({HOST}), MAX_DETAILS + 1,
+        policy = (bounded_fetch(FetchPolicy(frozenset({HOST}), MAX_DETAILS + 2,
                                          max_bytes=MAX_BYTES))
                   if _policy.get() is None else nullcontext())
         with policy:
@@ -228,8 +229,17 @@ class IngushetiaFabrikant44Source:
                 timeout=self.timeout, follow_redirects=False, trust_env=False,
                 headers={"Accept": "text/html", "User-Agent": "Mozilla/5.0"},
             ) as client:
-                listing = await client.get(LIST_URL)
-                listing.raise_for_status()
+                # Retry at most once when the official listing fails due to
+                # transient transport loss. Never relax TLS or URL policy.
+                for attempt in range(2):
+                    try:
+                        listing = await client.get(LIST_URL)
+                        listing.raise_for_status()
+                        break
+                    except ConnectorTransportError as error:
+                        if attempt or not error.retryable:
+                            raise
+                        await asyncio.sleep(0.75)
                 if "html" not in listing.headers.get("content-type", "").lower():
                     raise ValueError("First-party regional listing was not HTML")
                 candidates = extract_regional_listing(listing.content)

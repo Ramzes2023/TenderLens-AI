@@ -12,9 +12,10 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 import math
 import re
+import httpx
 from urllib.parse import urljoin, urlsplit
 
-from .http import FetchPolicy, _policy, bounded_fetch, source_client
+from .http import ConnectorTransportError, FetchPolicy, _policy, bounded_fetch, source_client
 from .models import TenderNotice
 from .opportunities import validate_notice
 
@@ -122,8 +123,14 @@ def extract_regional_listing(payload):
                 continue
             try:
                 p = urlsplit(urljoin(LIST_URL, raw))
-                if p.query and not p.query.removeprefix("&").startswith("backurl="):
-                    continue
+                if p.query:
+                    nav = p.query.removeprefix("&")
+                    # A backurl is UI navigation, never a trusted discovery
+                    # input. Additional query pairs (including secret-bearing
+                    # ones) must fail closed rather than be silently stripped.
+                    if (len(nav) > 500 or not nav.startswith("backurl=")
+                            or "&" in nav or not nav[len("backurl="):]):
+                        continue
                 if (p.scheme != "https" or p.netloc != HOST or p.fragment
                         or p.username or p.password or p.port is not None):
                     continue
@@ -228,13 +235,22 @@ class IngushetiaFabrikant44Source:
                 candidates = extract_regional_listing(listing.content)
                 valid = []
                 for number, url, title in candidates:
-                    card = await client.get(url)
-                    card.raise_for_status()
-                    if "html" not in card.headers.get("content-type", "").lower():
-                        raise ValueError("First-party original card was not HTML")
-                    valid.append(verified_fabrikant_notice(
-                        card.content, number=number, url=url, title=title,
-                    ))
+                    try:
+                        card = await client.get(url)
+                        card.raise_for_status()
+                        if "html" not in card.headers.get("content-type", "").lower():
+                            raise ValueError("First-party original card was not HTML")
+                        notice = verified_fabrikant_notice(
+                            card.content, number=number, url=url, title=title,
+                        )
+                    except (ConnectorTransportError, httpx.HTTPStatusError, ValueError):
+                        # An unreachable/stale individual card must never be
+                        # ingested, but must not discard other independently
+                        # corroborated first-party notices from this poll.
+                        # An entirely unreachable listing or zero valid detail
+                        # cards remains a hard failure.
+                        continue
+                    valid.append(notice)
                     if len(valid) >= cap:
                         break
                 if not valid:

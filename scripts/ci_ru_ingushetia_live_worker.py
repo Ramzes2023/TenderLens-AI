@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import tempfile
 from dataclasses import replace
 from pathlib import Path
@@ -42,6 +43,7 @@ def _catalog():
         eis_rss_urls=(), ca_bundle_file=ROOT,
         profile_feeds_enabled=False,
         ru_ingushetia_eis44_enabled=True,
+        ru_ingushetia_eis44_rss_url=os.environ.get('RU_INGUSHETIA_EIS44_RSS_URL', '').strip() or None,
     )
     return build_source_catalog(cfg)
 
@@ -102,10 +104,18 @@ def proof():
                     m.external_id == n.external_id and m.url == n.url for m in report.notices
                 ):
                     raise AssertionError("Real Ingushetia EIS notice not searchable by number")
+                title_report = asyncio.run(snap.fetch(
+                    source_keys=(SOURCE_ID,), search_terms=(n.title,),
+                    limit_per_source=10,
+                ))
+                if title_report.failures or not any(
+                    m.identity == n.identity for m in title_report.notices
+                ):
+                    raise AssertionError('Real Ingushetia notice not searchable by title')
                 if store.upsert(n, connector_version(SOURCE_ID)):
                     raise AssertionError("Replay inserted duplicate regional notice")
             return {
-                "official_rss_url": RSS_URL,
+                "official_rss_origin": "zakupki.gov.ru",
                 "original_cards_corresponding_to_list": 2,
                 "leased_worker_state": completed.state,
                 "stored_and_searchable": len(rows),

@@ -26,7 +26,7 @@ _REGION = re.compile(r"\bингушети(?:я|и|ю|ей)\b", re.I)
 
 def validate_ingushetia_rss_url(raw: str) -> str:
     """Accept an operator-copied EIS 44-FZ RSS filter, not an arbitrary feed."""
-    if (type(raw) is not str or not 25 <= len(raw) <= 4000 or "\\\\" in raw
+    if (type(raw) is not str or not 25 <= len(raw) <= 4000 or "\\" in raw
             or any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in raw)):
         raise ValueError("Invalid explicit Ingushetia EIS RSS URL")
     parts = urlsplit(raw)

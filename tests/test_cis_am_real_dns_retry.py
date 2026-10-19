@@ -74,3 +74,14 @@ def test_tls_failure_not_reclassified_as_dns_retry():
         wrapped = httpx.ConnectError("Connect error")
         wrapped.__cause__ = error
     assert not _retryable_official_dns_failure(wrapped)
+
+
+def test_dns_marker_cannot_hide_deeper_security_failure_or_cyclic_chain():
+    import ssl
+    wrapped = _real_resolver_failure()
+    wrapped.__cause__.__cause__ = ssl.SSLCertVerificationError('private TLS diagnostic')
+    assert not _retryable_official_dns_failure(wrapped)
+    wrapped.__cause__.__cause__ = ConnectorTransportError(retryable=False)
+    assert not _retryable_official_dns_failure(wrapped)
+    wrapped.__cause__.__cause__ = wrapped
+    assert _retryable_official_dns_failure(wrapped)

@@ -9,14 +9,16 @@ import re
 
 from app.sources.am_armeps import (
     ARMEPS_LISTING_URL, _Tables, parse_armeps_listing, _retryable_official_dns_failure,
+    observed_next_page,
 )
 from app.sources.http import FetchPolicy, bounded_fetch, source_client
 
 
 async def run():
     try:
-        async with source_client(timeout=15.0, trust_env=False, follow_redirects=False) as client:
-            with bounded_fetch(FetchPolicy(frozenset({"eauction.armeps.am"}), 1, max_bytes=1024 * 1024)):
+        # Select BoundedClient at creation, exactly as the adapter/worker does.
+        with bounded_fetch(FetchPolicy(frozenset({"eauction.armeps.am"}), 1, max_bytes=1024 * 1024)):
+            async with source_client(timeout=15.0, trust_env=False, follow_redirects=False) as client:
                 resp = await client.get(ARMEPS_LISTING_URL)
     except Exception as error:
         chain, seen = [], set()
@@ -42,6 +44,7 @@ async def run():
         "status": resp.status_code,
         "html_content_type": "html" in resp.headers.get("content-type", "").lower(),
         "html_bytes": len(resp.content),
+        "observed_page_two": observed_next_page(resp.text, 1) is not None,
     }
     if resp.status_code != 200 or not report["html_content_type"]:
         print(json.dumps(report, sort_keys=True))

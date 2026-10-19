@@ -8,6 +8,7 @@ from datetime import datetime
 from html.parser import HTMLParser
 import math
 import re
+import ssl
 
 import httpx
 import httpcore
@@ -36,18 +37,22 @@ def _retryable_official_dns_failure(error):
             return False
     elif not isinstance(error, httpx.ConnectError):
         return False
-    seen, has_httpx_connect = set(), False
+    seen, has_httpx_connect, matched_dns = set(), False, False
     current = error
     while isinstance(current, BaseException) and id(current) not in seen:
         seen.add(id(current))
+        if isinstance(current, ssl.SSLError):
+            return False
+        if isinstance(current, ConnectorTransportError) and not current.retryable:
+            return False
         if isinstance(current, httpx.ConnectError):
             has_httpx_connect = True
         if (has_httpx_connect
                 and type(current) is httpcore.ConnectError
                 and str(current) == "DNS resolution failed"):
-            return True
+            matched_dns = True
         current = current.__cause__
-    return False
+    return matched_dns
 
 
 ARMEPS_LISTING_URL = "https://eauction.armeps.am/en/public/tender/"
@@ -236,9 +241,9 @@ class ArmeniaArmepsSource:
                         _merge(result, notice)
                     if len(result) >= requested or not rows:
                         break
-                    # Preserve the accepted two-page contract. Additional pages
-                    # require a navigation link in the immediately preceding HTML.
-                    next_url = ARMEPS_PAGE_TWO_URL if page == 1 else observed_next_page(response.text, page)
+                    # Every additional request requires navigation observed in
+                    # the immediately preceding official response, including page two.
+                    next_url = observed_next_page(response.text, page)
                     if next_url is None:
                         break
                     url = next_url

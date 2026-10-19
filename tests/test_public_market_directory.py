@@ -33,8 +33,8 @@ def test_source_directory_is_scoped_to_actual_registry_not_live_health():
     assert result["sources"][1]["enabled"] is True
     assert result["sources"][1]["homepage"]=="https://ted.europa.eu/"
     # Opt-in adapters are discoverable, but are not counted as registered.
-    assert result["optional_count"] == 10
-    assert result["candidate_count"] == 37
+    assert result["optional_count"] == 9
+    assert result["candidate_count"] == 38
     keys = {item["key"] for item in result["optional_sources"]}
     assert {"lenobl_small_public", "nmck_native_public", "b2b_center"} <= keys
     assert all(item["registered"] is False and item["enabled"] is False
@@ -70,8 +70,8 @@ def test_ru_optional_adapter_not_duplicated_when_registered():
     ))
     result = source_directory(catalog)
     assert result["source_count"] == 3
-    assert result["optional_count"] == 9
-    assert result["candidate_count"] == 37
+    assert result["optional_count"] == 8
+    assert result["candidate_count"] == 38
     assert sum(item["key"] == "lenobl_small_public" for item in
                result["sources"] + result["optional_sources"]) == 1
 
@@ -80,7 +80,7 @@ def test_every_curated_ru_candidate_is_visible_but_never_enabled():
     entries = source_directory(Catalog())
     candidates = entries["candidate_sources"]
     expected = {x[0] for x in RU_STAGED_ADAPTERS + RU_RESEARCH_TARGETS}
-    assert len(expected) == 37
+    assert len(expected) == 38
     assert {x["key"] for x in candidates} == expected
     assert len({x["key"] for x in candidates + entries["sources"] +
                 entries["optional_sources"]}) == len(candidates) + entries["source_count"] + entries["optional_count"]
@@ -101,40 +101,7 @@ def test_ru_probe_targets_appear_in_directory_or_corresponding_parent_adapter():
     parent = {"b2b_office": "b2b_center", "fabrikant_44": "fabrikant_44_public",
               "roseltorg": "roseltorg_public", "lenobl": "lenobl_small_public",
               "vologda": "vologda_small", "gpb_rss": "gpb_rss_feed",
-              "tektorg": "tektorg", "samara_small": "ru_samara_public_list"}
+              "tektorg": "tektorg"}
     assert len(TARGETS) == 37
     assert {"ossetia_official_small", "stavropol_rts_small"} <= keys
     assert all(parent.get(label, label) in keys for label in TARGETS)
-
-
-def test_samara_market_visible_once_as_disabled_optin_not_duplicate_research():
-    from app.api.ru_source_inventory import RU_RESEARCH_TARGETS
-    from app.sources.registry import SourceRegistration
-
-    directory = source_directory(Catalog())
-    samara = [x for group in ("sources", "optional_sources", "candidate_sources")
-              for x in directory[group]
-              if x["key"] in {"samara_small", "ru_samara_public_list"}]
-    assert len(samara) == 1
-    assert samara[0]["key"] == "ru_samara_public_list"
-    assert samara[0]["inventory_status"] == "optional"
-    assert samara[0]["enabled"] is False
-    assert samara[0]["focus"] == "regional_small"
-    assert all(entry[0] != "samara_small" for entry in RU_RESEARCH_TARGETS)
-
-    catalog = Catalog()
-    catalog.registry.register(SourceRegistration(
-        key="ru_samara_public_list",
-        display_name="Самарская область — официальный список малых закупок",
-        source=Dummy("ru_samara_public_list"),
-        jurisdictions=("RU",),
-        enabled=True,
-        homepage_url="https://webtorgi.samregion.ru/smallpurchases/GzwSP/NoticesGrid",
-        transport=SourceTransport.API,
-    ))
-    registered = source_directory(catalog)
-    entries = [x for group in ("sources", "optional_sources", "candidate_sources")
-               for x in registered[group] if x["key"] == "ru_samara_public_list"]
-    assert len(entries) == 1
-    assert entries[0]["inventory_status"] == "registered"
-    assert entries[0]["focus"] == "regional_small"

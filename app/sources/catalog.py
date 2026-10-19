@@ -28,7 +28,6 @@ from .nmck_native_public import NmckNativePublicSource
 from .stan_commercial_public import StanCommercialPublicSource
 from .south_ural_public import SouthUralPublicSource
 from .ru_dagestan_public_list import DagestanPublicListSource, GRID as DAG_PUBLIC_GRID
-from .ru_samara_public_list import SamaraPublicListSource, GRID as SAMARA_PUBLIC_GRID
 from .kavkaz_rf_firstparty import KavkazRfFirstpartySource
 from .canada_buys_dataset import CanadaBuysDatasetSource
 from .eis_rss import EisRssSource, SourceError
@@ -785,28 +784,6 @@ def build_source_catalog(
             jurisdictions=("RU",),
             languages=("ru",),
             homepage_url=DAG_PUBLIC_GRID,
-            official=True,
-            enabled=True,
-            capabilities=SourceCapabilities(
-                keyword_search=False,
-                pagination=False,
-                documents=False,
-                incremental_sync=False,
-                authentication_required=False,
-            ),
-        ))
-
-    # Samara first-party municipal list: anonymous original JSON rows are
-    # observed; independent detail pages are not verified. No automatic enable.
-    if settings.ru_samara_public_list_enabled:
-        registry.register(SourceRegistration(
-            key="ru_samara_public_list",
-            display_name="Самарская область — официальный реестр малых закупок (публичный список)",
-            source=SamaraPublicListSource(timeout=min(timeout, 30)),
-            transport=SourceTransport.API,
-            jurisdictions=("RU",),
-            languages=("ru",),
-            homepage_url=SAMARA_PUBLIC_GRID,
             official=True,
             enabled=True,
             capabilities=SourceCapabilities(

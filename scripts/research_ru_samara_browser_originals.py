@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 from scripts.research_ru_samara_browser_grid import (
     GRID, HOST, JSON_PATH, MAX_BYTES, NATIVE_ID,
@@ -42,6 +42,51 @@ def choose_originals(body: bytes) -> list[tuple[str, str, str, str]]:
         if len(selected) == 2:
             return selected
     raise ValueError("Two independent list-origin exact URLs were not disclosed")
+
+
+def classify_original_navigation(requested: str, final: str) -> str:
+    """Describe a redirect safely; accept only the same public original identity.
+
+    No raw URL, query string or cookie is emitted to CI logs.  Never accept an
+    auth redirect, a listing page, cross-host navigation or a different notice.
+    """
+    try:
+        initial, actual = urlsplit(requested), urlsplit(final)
+        if (initial.scheme != "https" or actual.scheme != "https"
+                or initial.hostname != HOST or actual.hostname != HOST
+                or initial.username or initial.password
+                or actual.username or actual.password
+                or initial.port not in (None, 443)
+                or actual.port not in (None, 443) or actual.fragment):
+            return "UNTRUSTED_ORIGIN"
+        if actual.path.lower().find("login") >= 0 or any(
+            x in actual.path.lower() for x in ("auth", "signin", "account")
+        ):
+            return "LOGIN_REQUIRED"
+        # Never confuse a registry landing with an individually verified card.
+        if actual.path in ("/smallpurchases/GzwSP/NoticesGrid",
+                           "/smallpurchases/GzwSP/NoticesJson"):
+            return "RETURNED_TO_LIST"
+        if requested == final:
+            return "EXACT_ORIGINAL"
+        def identity(parts):
+            if parts.path == "/smallpurchases/GzwSP/Notice":
+                query = parse_qs(parts.query, strict_parsing=True)
+                if set(query) != {"noticeLink"} or len(query["noticeLink"]) != 1:
+                    return None
+                raw = query["noticeLink"][0]
+                return raw if raw.isascii() and raw.isdecimal() and 6 <= len(raw) <= 12 else None
+            prefix = "/smallpurchases/GzwSP/"
+            if parts.path.startswith(prefix) and not parts.query:
+                raw = parts.path[len(prefix):]
+                return raw if raw.isascii() and raw.isdecimal() and 6 <= len(raw) <= 12 else None
+            return None
+        before, after = identity(initial), identity(actual)
+        if before is not None and before == after:
+            return "SAME_ID_CANONICAL_REDIRECT"
+        return "UNVERIFIED_REDIRECT"
+    except (TypeError, ValueError, KeyError):
+        return "UNVERIFIED_REDIRECT"
 
 
 async def observe(*, disclosed_notice_route: bool = False) -> int:
@@ -143,8 +188,12 @@ async def observe(*, disclosed_notice_route: bool = False) -> int:
                     print("RU_SAMARA_ORIGINAL_BROWSER_HTTP_STATUS=" + (
                         str(response.status) if response is not None else "NONE"
                     ))
-                    print("RU_SAMARA_ORIGINAL_FINAL_URL_MATCH=" + str(page.url == url))
-                    if response is None or response.status != 200 or page.url != url:
+                    route_class = classify_original_navigation(url, page.url)
+                    print("RU_SAMARA_ORIGINAL_NAVIGATION_CLASS=" + route_class)
+                    if (response is None or response.status != 200
+                            or route_class not in (
+                                "EXACT_ORIGINAL", "SAME_ID_CANONICAL_REDIRECT",
+                            )):
                         raise ValueError("Original detail was blocked or redirected")
                     stage = "ORIGINAL_DETAIL_PARSE"
                     html = (await page.content()).encode("utf-8")

@@ -372,3 +372,30 @@ def test_same_publisher_detail_mirror_cannot_override_bad_identity(monkeypatch):
     with pytest.raises(ValueError, match="No independently verified regional original cards"):
         asyncio.run(IngushetiaFabrikant44Source().fetch(limit=1))
     assert len(calls) == 3
+
+
+def test_worker_acceptance_uses_one_source_acquisition_not_two(monkeypatch):
+    """Offline synthetic Worker proof; not evidence of live upstream reachability."""
+    from scripts.ci_ru_ingushetia_fabrikant_worker import proof
+
+    ids = (NUMBER, "0114500000826002359")
+    titles = (TITLE, "Поставка оборудования")
+    calls = []
+
+    async def synthetic_fetch(self, limit=20):
+        calls.append(limit)
+        assert limit >= 2
+        return [
+            verified_fabrikant_notice(
+                detail(number=n, title=t), number=n,
+                url="https://" + HOST + "/44/procedure/ea21/" + n, title=t,
+            ) for n, t in zip(ids, titles)
+        ]
+
+    monkeypatch.setattr(IngushetiaFabrikant44Source, "fetch", synthetic_fetch)
+    result = proof()
+    assert calls == [3]
+    assert result["worker_state"] == "succeeded"
+    assert result["sql_and_title_number_search"] == 2
+    assert result["isolated_notification_ack"] == 2
+    assert result["real_telegram_delivery_proven"] is False

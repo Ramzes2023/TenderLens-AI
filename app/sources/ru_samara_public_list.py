@@ -186,8 +186,11 @@ class SamaraPublicListSource:
     async def fetch(self, limit=20):
         if type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError("Invalid public list fetch limit")
-        cap = min(limit, PAGE_SIZE)
-        ctx = (bounded_fetch(FetchPolicy(frozenset({HOST}), 2,
+        # HTTP 200 and twenty distinct first-party notices were independently
+        # proved from native pages zero and one; further pages are unverified.
+        cap = min(limit, 2 * PAGE_SIZE)
+        max_calls = 3 if cap > PAGE_SIZE else 2
+        ctx = (bounded_fetch(FetchPolicy(frozenset({HOST}), max_calls,
                                          max_bytes=MAX_BYTES))
                if _policy.get() is None else nullcontext())
         with ctx:
@@ -202,19 +205,36 @@ class SamaraPublicListSource:
                 if "html" not in landing.headers.get("content-type", "").lower():
                     raise ValueError("No public Samara HTML grid")
                 token = public_token(landing.content)
-                response = await client.post(
-                    JSON_URL,
-                    json={"settings": public_settings()},
-                    headers={
-                        "Accept": "application/json, text/javascript",
-                        "X-Requested-With": "XMLHttpRequest",
-                        "Referer": GRID,
-                        "RequestVerificationToken": token,
-                    },
-                )
-                response.raise_for_status()
-                if "application/json" not in response.headers.get("content-type", "").lower():
-                    raise ValueError("No native first-party JSON media type")
-                if not 0 < len(response.content) <= MAX_BYTES:
-                    raise ValueError("Native public listing response too large")
-                return parse_public_list(response.json(), limit=cap)
+                headers = {
+                    "Accept": "application/json, text/javascript",
+                    "X-Requested-With": "XMLHttpRequest",
+                    "Referer": GRID,
+                    "RequestVerificationToken": token,
+                }
+                found, ids, numbers = [], set(), set()
+                for page in range(2 if cap > PAGE_SIZE else 1):
+                    settings = public_settings()
+                    settings["page"] = page
+                    response = await client.post(
+                        JSON_URL, json={"settings": settings}, headers=headers,
+                    )
+                    response.raise_for_status()
+                    if "application/json" not in response.headers.get("content-type", "").lower():
+                        raise ValueError("No native first-party JSON media type")
+                    if not 0 < len(response.content) <= MAX_BYTES:
+                        raise ValueError("Native public listing response too large")
+                    payload = response.json()
+                    rows = parse_public_list(
+                        payload, limit=min(PAGE_SIZE, cap - len(found)),
+                    )
+                    for notice in rows:
+                        if notice.external_id in ids or notice.tender_number in numbers:
+                            raise ValueError("Duplicate Samara procurement across native pages")
+                        ids.add(notice.external_id)
+                        numbers.add(notice.tender_number)
+                    found.extend(rows)
+                    if page == 0 and (
+                        len(rows) < PAGE_SIZE or payload["totalRows"] <= len(rows)
+                    ):
+                        break
+                return found

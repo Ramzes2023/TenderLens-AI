@@ -25,6 +25,7 @@ REGION = "Республика Ингушетия"
 ORGANIZER = "КОМИТЕТ ГОСУДАРСТВЕННОГО ЗАКАЗА РЕСПУБЛИКИ ИНГУШЕТИЯ"
 INN = "0608058533"
 HOST = "44.fabrikant.ru"
+DETAIL_MIRROR_HOST = "soap4.fabrikant.ru"
 # Public GET form: q searches the procurement, placer_search_str searches
 # organizer name/INN. Sort newest first so each poll discovers new notices.
 LIST_URL = ("https://44.fabrikant.ru/44/catalog/procedure/published"
@@ -221,7 +222,7 @@ class IngushetiaFabrikant44Source:
         if type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError("Invalid Ingushetia Fabrikant limit")
         cap = min(MAX_DETAILS, limit)
-        policy = (bounded_fetch(FetchPolicy(frozenset({HOST}), MAX_DETAILS + 2,
+        policy = (bounded_fetch(FetchPolicy(frozenset({HOST, DETAIL_MIRROR_HOST}), 2 + 2 * MAX_DETAILS,
                                          max_bytes=MAX_BYTES))
                   if _policy.get() is None else nullcontext())
         with policy:
@@ -246,8 +247,20 @@ class IngushetiaFabrikant44Source:
                 valid = []
                 for number, url, title in candidates:
                     try:
-                        card = await client.get(url)
-                        card.raise_for_status()
+                        try:
+                            card = await client.get(url)
+                            card.raise_for_status()
+                        except ConnectorTransportError as error:
+                            if not error.retryable:
+                                raise
+                            # soap4.fabrikant.ru is the same official
+                            # marketplace's independently verified detail
+                            # host, never a discovery/listing substitute.
+                            # Derive the exact same canonical procedure/ID
+                            # from the publisher-owned *live* listing row.
+                            mirror_url = "https://" + DETAIL_MIRROR_HOST + urlsplit(url).path
+                            card = await client.get(mirror_url)
+                            card.raise_for_status()
                         if "html" not in card.headers.get("content-type", "").lower():
                             raise ValueError("First-party original card was not HTML")
                         notice = verified_fabrikant_notice(

@@ -163,3 +163,29 @@ def test_ingushetia_publisher_finding_is_not_a_fake_source_card():
     assert "ru_ingushetia_eis44" not in {entry["key"] for entry in base["sources"]}
     assert "ru_ingushetia_eis44" not in {entry["key"] for entry in base["candidate_sources"]}
     assert len(base["sources"]) == base["source_count"]
+
+
+
+def test_real_monitor_dispatch_path_uses_isolated_ack_sink_without_telegram_api(tmp_path):
+    """Synthetic offline contract; live CI separately supplies genuine EIS SQL rows."""
+    from scripts.ci_ru_ingushetia_live_worker import _check_isolated_dispatch
+
+    cfg = settings(ru_ingushetia_eis44_enabled=True,
+                   ru_background_catalog_enabled=True,
+                   max_notifications_per_cycle=1)
+    catalog = build_source_catalog(cfg)
+    first = normalize_ingushetia_notice(sample())
+    other_id = "0114500000826002365"
+    second = normalize_ingushetia_notice(sample(
+        tender_number=other_id,
+        url=U.replace(N, other_id),
+        external_id="EIS-GUID-" + other_id,
+        title="Поставка средств связи",
+    ))
+    assert first is not None and second is not None
+    # Only one alert can be marked as seen during this constrained cycle;
+    # the second genuinely stored record must remain eligible next cycle.
+    count = asyncio.run(_check_isolated_dispatch(
+        catalog, cfg, (first, second), tmp_path / "ingush-staging-ack.sqlite",
+    ))
+    assert count == 1

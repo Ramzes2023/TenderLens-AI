@@ -51,3 +51,14 @@ def test_known_ingushetia_vendor_failures_are_classified_without_remote_text():
         "secret upstream query and token=ABC"
     )) is None
     assert _safe_ingushetia_vendor_failure(RuntimeError("private")) is None
+
+
+def test_nested_os_socket_error_codes_are_safe_and_numeric_only():
+    error = httpx.ConnectError("private URL /?token=SHOULD_NOT_LOG")
+    socket_error = ConnectionRefusedError(10061, "private destination")
+    error.__cause__ = socket_error
+    result = transport_failure(error)
+    assert result["category"] == "connection_failure_unspecified"
+    assert result["os_error_numbers"] == [10061]
+    assert "private" not in json.dumps(result)
+    assert "SHOULD_NOT_LOG" not in json.dumps(result)

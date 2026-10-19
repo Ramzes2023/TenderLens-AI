@@ -54,8 +54,8 @@ def acceptance():
             if (len(rows) != 20
                     or len({r.external_id for r in rows}) != 20
                     or len({r.tender_number for r in rows}) != 20
-                    or any(r.url != GRID or r.deadline is not None
-                           or r.initial_price is not None for r in rows)):
+                    or any(r.url != GRID or (r.initial_price is not None and r.currency != "RUB")
+                           or (r.deadline is not None and not isinstance(r.deadline, str)) for r in rows)):
                 raise AssertionError("Unsafe or repeated Samara SQL notice provenance")
             source = snapshot_catalog(catalog, store)
             checked = 0

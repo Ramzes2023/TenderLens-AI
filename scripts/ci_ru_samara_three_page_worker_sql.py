@@ -54,8 +54,8 @@ def acceptance():
             if (len(rows) != 30
                     or len({r.external_id for r in rows}) != 30
                     or len({r.tender_number for r in rows}) != 30
-                    or any(r.url != GRID or r.deadline is not None
-                           or r.initial_price is not None for r in rows)):
+                    or any(r.url != GRID or (r.initial_price is not None and r.currency != "RUB")
+                           or (r.deadline is not None and not isinstance(r.deadline, str)) for r in rows)):
                 raise AssertionError("Unsafe/duplicated Samara SQL records")
 
             snapshot = snapshot_catalog(catalog, store)
@@ -100,6 +100,9 @@ def acceptance():
                 "third_page_title_query": True,
                 "negative_keyword_returns_none": True,
                 "idempotent": True,
+                "list_price_present": sum(r.initial_price is not None for r in rows),
+                "list_deadline_present": sum(r.deadline is not None for r in rows),
+                "list_publication_present": sum(r.published_at is not None for r in rows),
                 "independent_details_verified": False,
                 "real_external_message_sent": False,
                 "production_changed": False,

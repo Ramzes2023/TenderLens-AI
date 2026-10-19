@@ -127,6 +127,48 @@ def safe_string(row, key, max_length=1000):
     return " ".join(value.split())
 
 
+
+def public_amount(raw):
+    """Normalize first-party table НМЦК without guessing missing amounts.
+
+    Only genuine list-level \`summa\`, never the inaccessible detail card.
+    """
+    if type(raw) in (int, float):
+        amount = float(raw)
+    elif type(raw) is str and len(raw) <= 80:
+        # Thousands separators occur in native Russian UI and test fixtures.
+        value = raw.strip().replace("\u00a0", " ").replace("\u202f", " ")
+        plain = re.fullmatch(r"[0-9]+(?:[.,][0-9]{1,2})?", value)
+        grouped = re.fullmatch(r"[0-9]{1,3}(?: [0-9]{3})+(?:,[0-9]{1,2})?", value)
+        if not plain and not grouped:
+            return None
+        amount = float(value.replace(" ", "").replace(",", "."))
+    else:
+        return None
+    return amount if math.isfinite(amount) and 0 < amount <= 1e18 else None
+
+
+def public_grid_date(raw):
+    """Preserve a source-published calendar deadline, never invent a clock time.
+
+    The Samara official anonymous list publishes dd.mm.yyyy or its timed
+    variant. Keep date-only values as date-only, not midnight/end-of-day.
+    """
+    if type(raw) is not str or len(raw) > 35:
+        return None
+    value = raw.strip()
+    if not re.fullmatch(r"[0-9]{2}\.[0-9]{2}\.20[0-9]{2}(?: [0-9]{2}:[0-9]{2}(?::[0-9]{2})?)?", value):
+        return None
+    try:
+        fmt = ("%d.%m.%Y %H:%M:%S" if value.count(":") == 2 else
+               "%d.%m.%Y %H:%M" if ":" in value else "%d.%m.%Y")
+        moment = datetime.strptime(value, fmt)
+    except ValueError:
+        return None
+    # Retain the original date-only/time semantics. Local UTC offset is not
+    # present in the public list, so do not inject an assumed timezone.
+    return moment.isoformat(timespec="seconds") if value.count(":") == 2 else value
+
 def parse_public_list(data, *, limit=2):
     """Validate original Samara public-list rows; live worker demands two."""
     if type(limit) is not int or not 1 <= limit <= PAGE_SIZE:
@@ -153,9 +195,13 @@ def parse_public_list(data, *, limit=2):
             raise ValueError("Duplicated original listing notice identity")
         ids.add(identity)
         numbers.add(number)
-        # Official original list is anonymous. Details redirect to login or 404.
-        # Make GRID clickable and searchable by native procurement number,
-        # not a known-broken/inaccessible deep link.
+        # Price and dates below are directly from original anonymous JSON
+        # table fields. Individual detail documents are STILL login-protected.
+        price = public_amount(row.get("summa"))
+        published = public_grid_date(row.get("pub_date"))
+        deadline = public_grid_date(row.get("collecting_enddate"))
+        # The native HTML grid labels "summa" as НМЦК (in rubles).
+        # Keep unknown/zero/unsafe amounts absent, not synthetic.
         notice = TenderNotice(
             source=SOURCE_ID,
             external_id=identity,
@@ -163,10 +209,16 @@ def parse_public_list(data, *, limit=2):
             title=title,
             url=GRID,
             customer=buyer,
+            published_at=published,
+            initial_price=price,
+            currency="RUB" if price is not None else None,
+            deadline=deadline,
             region="Самарская область",
             summary="Публичный реестр малых закупок Самарской области. "
                     "Подробная карточка может требовать авторизацию; "
-                    "ищите по регистрационному номеру: " + number,
+                    "Цена и даты (когда указаны) взяты из публичного "
+                    "списка, не из закрытой карточки; ищите по "
+                    "регистрационному номеру: " + number,
         )
         validate_notice(notice, SOURCE_ID)
         notices.append(notice)

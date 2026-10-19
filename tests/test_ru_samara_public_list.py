@@ -49,7 +49,10 @@ def test_original_public_rows_are_searchable_not_fake_deep_links():
     assert items[1].external_id == "5611196"
     assert items[0].tender_number == "ИМЗ-2026-100001"
     assert all(n.url == mod.GRID for n in items)
-    assert all(n.initial_price is None and n.deadline is None for n in items)
+    assert [n.initial_price for n in items] == [100000.0, 200000.0]
+    assert [n.currency for n in items] == ["RUB", "RUB"]
+    assert [n.deadline for n in items] == ["22.10.2026", "25.10.2026"]
+    assert all(n.published_at is None for n in items)
     assert "авторизац" in items[0].summary
 
 
@@ -216,7 +219,8 @@ def test_verified_two_pages_return_20_distinct_native_notices_in_three_requests(
     assert observed == [("GET", mod.GRID), ("POST", 0), ("POST", 1)]
     assert len(items) == len({n.external_id for n in items}) == 20
     assert len({n.tender_number for n in items}) == 20
-    assert all(x.url == mod.GRID and x.deadline is None and x.initial_price is None for x in items)
+    assert all(x.url == mod.GRID for x in items)
+    assert all(x.deadline == "22.10.2026" and x.initial_price == 100000.0 for x in items)
 
 
 def test_repeated_original_across_pages_fails_closed(monkeypatch):
@@ -253,3 +257,26 @@ def test_repeated_original_across_pages_fails_closed(monkeypatch):
     monkeypatch.setattr(mod, "source_client", client)
     with pytest.raises(ValueError, match="across native pages"):
         asyncio.run(mod.SamaraPublicListSource().fetch(limit=20))
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("200 000,00", 200000.0), ("150000.75", 150000.75),
+    ("150000,75", 150000.75), (25000, 25000.0),
+    (0, None), (float("inf"), None), (float("nan"), None),
+    ("-100", None), ("1e99", None), ("1,000.00", None),
+    ("<script>1000</script>", None), (True, None),
+])
+def test_samara_list_amount_never_invents_values(raw, expected):
+    assert mod.public_amount(raw) == expected
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("19.10.2026", "19.10.2026"),
+    ("19.10.2026 12:30", "19.10.2026 12:30"),
+    ("19.10.2026 12:30:45", "2026-10-19T12:30:45"),
+    ("32.10.2026", None), ("19.13.2026", None),
+    ("19.10.2026 25:88", None), ("", None),
+    ("<script>19.10.2026</script>", None), (False, None),
+])
+def test_samara_source_grid_dates_do_not_fabricate_time(raw, expected):
+    assert mod.public_grid_date(raw) == expected

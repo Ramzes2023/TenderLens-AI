@@ -33,8 +33,8 @@ def test_bounded_offline_visible_original_parser():
 @pytest.mark.parametrize("wrong", [
     b"", b"<html>Login</html>",
     b"<html><script>0891200000626010069</script></html>",
-    b"<html><p>Номер извещения 0891200000626010069</p></html>",
-    b"<html><p>Сведения о процедуре</p></html>",
+    "<html><p>Номер извещения 0891200000626010069</p></html>".encode("utf-8"),
+    "<html><p>Сведения о процедуре</p></html>".encode("utf-8"),
     original("0358100002226000213"),
     original("0891200000626010069") + b"x" * 2_200_000,
 ])

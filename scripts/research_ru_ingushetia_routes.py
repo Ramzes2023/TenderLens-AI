@@ -125,6 +125,20 @@ async def observe(name, url, host, number):
                         parser = Links()
                         parser.feed(response.text)
                         status["official_detail_links_count"] = len(parser.ids)
+                        class FormKeys(HTMLParser):
+                            def __init__(self):
+                                super().__init__()
+                                self.keys = set()
+                            def handle_starttag(self, tag, attrs):
+                                if tag not in {"input", "select", "button"}:
+                                    return
+                                record = dict(attrs)
+                                name = record.get("name", "")
+                                if re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_\.\[\]-]{0,60}", name):
+                                    self.keys.add(name)
+                        form = FormKeys()
+                        form.feed(response.text)
+                        status["public_search_field_names"] = sorted(form.keys)[:40]
                         # A national listing is NOT regionally scoped just because
                         # its URL contained an organizer's INN or a place name.
                         status["known_ingushetia_numbers_in_links"] = sorted(

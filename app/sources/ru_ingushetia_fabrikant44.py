@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 import math
 import re
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 from .http import FetchPolicy, _policy, bounded_fetch, source_client
 from .models import TenderNotice
@@ -103,12 +103,22 @@ def extract_regional_listing(payload):
             continue
         identities = []
         for raw in row["links"]:
-            # Official list may carry navigation-only backurl. Strip the
-            # navigation parameter, never send it in subsequent GET requests.
-            if not raw.startswith("https://" + HOST + "/44/procedure/"):
+            # Official list may carry relative links and navigation-only
+            # backurl. Strip navigation, but never accept hostile hosts,
+            # credentials, backslashes, non-HTTPS or arbitrary parameters.
+            if (type(raw) is not str or "\\" in raw
+                    or any(ch.isspace() or ord(ch) < 32 for ch in raw)):
                 continue
-            p = urlsplit(raw)
-            original = canonical_detail("https://" + HOST + p.path)
+            try:
+                p = urlsplit(urljoin(LIST_URL, raw))
+                if p.query and not p.query.removeprefix("&").startswith("backurl="):
+                    continue
+                if (p.scheme != "https" or p.netloc != HOST or p.fragment
+                        or p.username or p.password or p.port is not None):
+                    continue
+                original = canonical_detail("https://" + HOST + p.path)
+            except ValueError:
+                continue
             if original is not None:
                 identities.append(original)
         identities = list(dict.fromkeys(identities))

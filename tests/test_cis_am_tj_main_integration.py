@@ -145,23 +145,185 @@ def test_actual_ingestion_budget_and_provenance(monkeypatch, tmp_path, key):
         database.close()
 
 
-
-def test_armenian_follow_page_two_only_when_first_page_actually_links_it(monkeypatch):
+@pytest.mark.parametrize('duplicate', [False, True])
+def test_armenian_observed_pagination_and_duplicates(monkeypatch, duplicate):
     seen = []
     def handle(request):
         seen.append(str(request.url))
-        page = len(seen)
-        base_html = html('am_armeps', page)
-        if page == 1:
-            base_html += f'<a class="pg_n" href="{am.ARMEPS_PAGE_TWO_URL}">2</a>'
-        return httpx.Response(200, text=base_html, headers={'content-type':'text/html'})
+        body = html('am_armeps', 1 if duplicate else len(seen))
+        if len(seen) == 1:
+            body += f'<a class="pg_n" href="{am.ARMEPS_PAGE_TWO_URL}">2</a>'
+        return httpx.Response(200, text=body, headers={'content-type': 'text/html'})
     monkeypatch.setattr(am, 'source_client', lambda **kw: source_client(**kw, transport=httpx.MockTransport(handle)))
-    result = asyncio.run(am.ArmeniaArmepsSource(max_pages=2).fetch(limit=20))
+    result = asyncio.run(am.ArmeniaArmepsSource().fetch(20))
     assert seen == [am.ARMEPS_LISTING_URL, am.ARMEPS_PAGE_TWO_URL]
-    assert [n.external_id for n in result] == ['1', '2']
-    assert am.observed_next_page(html('am_armeps', 1), 1) is None
-    assert am.observed_next_page(html('am_armeps', 1) + '<a class="pg_n" href="https://evil.invalid">2</a>', 1) is None
+    assert [n.external_id for n in result] == (['1'] if duplicate else ['1', '2'])
 
+
+@pytest.mark.parametrize('navigation', [
+    '', '<a class="pg_n" href="https://evil.invalid/">2</a>',
+    f'<script><a class="pg_n" href="{am.ARMEPS_PAGE_TWO_URL}">2</a></script>',
+    f'<a class="pg_n" href="{am.ARMEPS_LISTING_URL}start/3">3</a>',
+])
+def test_armenian_no_speculative_second_request(monkeypatch, navigation):
+    seen = []
+    def handle(request):
+        seen.append(str(request.url))
+        return httpx.Response(200, text=html('am_armeps') + navigation,
+                              headers={'content-type': 'text/html'})
+    monkeypatch.setattr(am, 'source_client', lambda **kw: source_client(**kw, transport=httpx.MockTransport(handle)))
+    assert len(asyncio.run(am.ArmeniaArmepsSource().fetch(20))) == 1
+    assert seen == [am.ARMEPS_LISTING_URL]
+
+
+def test_armenian_conflicting_pages_fail_before_storage(monkeypatch):
+    seen = []
+    def handle(request):
+        seen.append(str(request.url))
+        body = html('am_armeps')
+        if len(seen) == 1:
+            body += f'<a class="pg_n" href="{am.ARMEPS_PAGE_TWO_URL}">2</a>'
+        else:
+            body = body.replace('AM-1', 'AM-CHANGED')
+        return httpx.Response(200, text=body, headers={'content-type': 'text/html'})
+    monkeypatch.setattr(am, 'source_client', lambda **kw: source_client(**kw, transport=httpx.MockTransport(handle)))
+    store = Mock()
+    with pytest.raises(PermanentJobError):
+        ConnectorSyncHandler(catalog(KEYS[0], True), store)(context(), payload(KEYS[0]))
+    assert len(seen) == 2
+    store.upsert_fenced.assert_not_called()
+
+
+@pytest.mark.parametrize('key', KEYS)
+def test_acceptance_worker_repeat_original_search_and_cleanup(monkeypatch, tmp_path, key):
+    from scripts.ci_cis_am_tj_live_acceptance import verify
+    import tempfile
+    monkeypatch.setattr(tempfile, 'tempdir', str(tmp_path))
+    module = am if key == KEYS[0] else tj
+    seen = []
+    def handle(request):
+        seen.append(str(request.url))
+        return httpx.Response(200, text=html(key), headers={'content-type': 'text/html'})
+    monkeypatch.setattr(module, 'source_client', lambda **kw: source_client(**kw, transport=httpx.MockTransport(handle)))
+    result = verify(key)
+    assert result['passed'] and result['stored_notices'] == 1
+    assert result['original_field_searches'] == 2
+    assert result['repeat_inserted'] == 0 and result['repeat_updated'] == 1
+    assert result['enqueue_idempotent']
+    assert len(seen) == 2
+    assert not list(tmp_path.iterdir())  # Connections must close before Windows cleanup.
+
+
+def test_worker_page_two_transport_failure_is_not_partial_success(monkeypatch, tmp_path):
+    from scripts.ci_cis_am_tj_live_acceptance import verify
+    import tempfile
+    monkeypatch.setattr(tempfile, 'tempdir', str(tmp_path))
+    seen = []
+    def handle(request):
+        seen.append(str(request.url))
+        if str(request.url) == am.ARMEPS_PAGE_TWO_URL:
+            return httpx.Response(503, text='private upstream response')
+        body = html(KEYS[0]) + f'<a class="pg_n" href="{am.ARMEPS_PAGE_TWO_URL}">2</a>'
+        return httpx.Response(200, text=body, headers={'content-type': 'text/html'})
+    monkeypatch.setattr(am, 'source_client', lambda **kw: source_client(**kw, transport=httpx.MockTransport(handle)))
+    result = verify(KEYS[0])
+    assert not result['passed'] and result['attempts'] == 3
+    assert result['job_state'] == 'failed'
+    assert result['safe_failure_code'] == 'handler_error'
+    assert result['source_probe_rows'] == 1  # A later fetch(1) is NOT worker success.
+    assert len(result['worker_failures']) == 3
+    assert len(seen) == 7  # Three real bounded attempts plus one direct probe.
+    assert 'private upstream' not in str(result)
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize('key', KEYS)
+def test_actual_worker_recovers_using_durable_retry_slots(monkeypatch, tmp_path, key):
+    from scripts.ci_cis_am_tj_live_acceptance import verify
+    import tempfile
+    monkeypatch.setattr(tempfile, 'tempdir', str(tmp_path))
+    module = am if key == KEYS[0] else tj
+    seen = []
+    def handle(request):
+        seen.append(str(request.url))
+        if len(seen) == 1:
+            raise httpx.ReadTimeout('private timeout payload')
+        if len(seen) == 2:
+            return httpx.Response(503, text='private unavailable payload')
+        return httpx.Response(200, text=html(key), headers={'content-type': 'text/html'})
+    monkeypatch.setattr(module, 'source_client', lambda **kw: source_client(**kw, transport=httpx.MockTransport(handle)))
+    result = verify(key)
+    assert result['passed'] and result['worker_attempts'] == 3
+    assert result['repeat_attempts'] == 1
+    assert result['repeat_updated'] == 1 and len(seen) == 4
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize('key', KEYS)
+def test_actual_worker_schema_failure_stays_permanent_and_diagnostic(monkeypatch, tmp_path, key):
+    from scripts.ci_cis_am_tj_live_acceptance import verify
+    import tempfile
+    monkeypatch.setattr(tempfile, 'tempdir', str(tmp_path))
+    module = am if key == KEYS[0] else tj
+    transport = httpx.MockTransport(lambda request: httpx.Response(
+        200, text='<html>private unverified response</html>', headers={'content-type': 'text/html'}))
+    monkeypatch.setattr(module, 'source_client', lambda **kw: source_client(**kw, transport=transport))
+    result = verify(key)
+    assert not result['passed'] and result['attempts'] == 1
+    assert result['safe_failure_code'] == 'permanent_failure'
+    assert any(item.get('source_reason') == 'listing_schema' for item in result['worker_failures'][0])
+    assert 'private unverified' not in str(result)
+    assert not list(tmp_path.iterdir())
+
+
+def test_worker_diagnostic_never_serializes_exception_payloads():
+    from scripts.ci_cis_am_tj_live_acceptance import failure_chain
+    private = ValueError('private upstream https://user:secret@example.invalid/')
+    error = PermanentJobError('private handler message')
+    error.__context__ = private
+    private.__context__ = error
+    result = failure_chain(error)
+    assert [item['type'] for item in result] == ['PermanentJobError', 'ValueError']
+    assert 'private' not in str(result) and 'secret' not in str(result)
+
+
+@pytest.mark.parametrize('unsafe', [False, True])
+def test_armenian_actual_bounded_dns_chain_does_not_weaken_public_ip(monkeypatch, unsafe):
+    import httpcore
+    from app.sources.http_transport import PublicIPError
+    def handle(request):
+        cause = PublicIPError('private address') if unsafe else httpcore.ConnectError('DNS resolution failed')
+        raise httpx.ConnectError('private network message') from cause
+    monkeypatch.setattr(am, 'source_client', lambda **kw: source_client(**kw, transport=httpx.MockTransport(handle)))
+    store = Mock()
+    with pytest.raises(PermanentJobError if unsafe else RetryableJobError):
+        ConnectorSyncHandler(catalog(KEYS[0], True), store)(context(), payload(KEYS[0]))
+    store.upsert_fenced.assert_not_called()
+
+
+@pytest.mark.parametrize('status', [408, 429, 500, 502, 504])
+def test_armenian_http_transient_statuses_keep_worker_retryable(monkeypatch, status):
+    transport = httpx.MockTransport(lambda request: httpx.Response(status, text='private response'))
+    monkeypatch.setattr(am, 'source_client', lambda **kw: source_client(**kw, transport=transport))
+    store = Mock()
+    with pytest.raises(RetryableJobError):
+        ConnectorSyncHandler(catalog(KEYS[0], True), store)(context(), payload(KEYS[0]))
+    store.upsert_fenced.assert_not_called()
+
+
+def test_live_diagnostic_uses_worker_bounded_client(monkeypatch, capsys):
+    from scripts import ci_cis_am_live_dom_diagnostic as diagnostic
+    from app.sources.http import BoundedClient
+    def client(**kwargs):
+        assert _policy.get().max_requests == 1
+        transport = httpx.MockTransport(lambda request: httpx.Response(
+            200, text=html(KEYS[0]), headers={'content-type': 'text/html'}))
+        result = source_client(**kwargs, transport=transport)
+        assert isinstance(result, BoundedClient)
+        return result
+    monkeypatch.setattr(diagnostic, 'source_client', client)
+    assert asyncio.run(diagnostic.run()) == 1  # One offline row cannot satisfy live minimum.
+    assert '"accepted": 1' in capsys.readouterr().out
 
 
 @pytest.mark.parametrize('key', KEYS)

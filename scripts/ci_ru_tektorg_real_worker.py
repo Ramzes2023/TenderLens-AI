@@ -6,16 +6,15 @@ import asyncio
 import json
 import tempfile
 from pathlib import Path
-from types import SimpleNamespace
 
 from app.database.backend import Database
 from app.database.config import DatabaseSettings
-from app.jobs.models import JobScope
 from app.monitoring.config import MonitoringSettings
 from app.sources.catalog import build_source_catalog
-from app.sources.ingestion import ConnectorSyncHandler, connector_version, sync_window
+from app.sources.ingestion import connector_version
 from app.sources.opportunities import OpportunityRepository
 from app.sources.snapshots import snapshot_catalog
+from scripts.ci_ru_leased_connector import run_leased_connector
 
 SOURCE = "tektorg"
 
@@ -35,11 +34,7 @@ def proof():
         try:
             store = OpportunityRepository(db)
             store.initialize()
-            worker = ConnectorSyncHandler(catalog, store, max_records=5)
-            ctx = SimpleNamespace(job=SimpleNamespace(scope=JobScope()), should_stop=False)
-            params = {"schema":1, "source_id":SOURCE,
-                      "sync_window":sync_window(), "connector_version":connector_version(SOURCE)}
-            stats = worker(ctx, params)
+            stats = run_leased_connector(db, catalog, store, SOURCE, max_records=5)
             if not 1 <= stats["fetched_count"] <= 5:
                 raise AssertionError("No independently verified live TEK-Torg notices")
             if (stats["fetched_count"] != stats["accepted_count"]
@@ -77,6 +72,26 @@ def main():
     except Exception as e:
         print("RU_TEKTORG_REAL_WORKER=BLOCKED")
         print("FAILURE_CLASS="+type(e).__name__)
+
+        # Only emit fixed test assertions and safe queue failure code categories.
+        allowed = {
+            "No independently verified live TEK-Torg notices",
+            "TEK-Torg durable ingestion incomplete",
+            "Missing TEK-Torg SQL rows",
+            "Noncanonical TEK-Torg detail URL",
+            "Stored TEK-Torg record not found",
+            "Duplicate TEK-Torg identity inserted",
+            "No real durable connector job was claimed",
+            "Durable connector result source mismatch",
+        }
+        reason = str(e)
+        if type(e) is AssertionError:
+            if reason.startswith("Durable connector job did not succeed: "):
+                code = reason.rsplit(": ", 1)[-1]
+                if code in {"handler_error","permanent_failure","lease_expired","invalid_result","job missing"}:
+                    print("FAILURE_STAGE=LEASED_WORKER_" + code.upper())
+            elif reason in allowed:
+                print("FAILURE_STAGE=" + reason.replace(" ", "_")[:100])
         print("PRODUCTION_CHANGED=NO")
         return 1
     print("RU_TEKTORG_REAL_WORKER_EVIDENCE="+json.dumps(result,sort_keys=True))

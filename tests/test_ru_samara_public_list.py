@@ -24,12 +24,14 @@ def original_rows():
          "name": "Поставка мебели для городской больницы",
          "uchr_sname": "Городская больница Самарской области",
          "summa": "100 000,00",
+         "pub_date": "19.10.2026",
          "collecting_enddate": "22.10.2026"},
         {"link": "/smallpurchases/GzwSP/5611196",
          "number": "ИМЗ-2026-100002",
          "name": "Обслуживание компьютерной сети школы",
          "uchr_sname": "Муниципальная школа",
          "summa": "200 000,00",
+         "pub_date": "19.10.2026",
          "collecting_enddate": "25.10.2026"},
     ], "totalRows": 21739, "page": 0, "totalAmount": None}
 
@@ -52,7 +54,7 @@ def test_original_public_rows_are_searchable_not_fake_deep_links():
     assert [n.initial_price for n in items] == [100000.0, 200000.0]
     assert [n.currency for n in items] == ["RUB", "RUB"]
     assert [n.deadline for n in items] == ["22.10.2026", "25.10.2026"]
-    assert all(n.published_at is None for n in items)
+    assert all(n.published_at == "19.10.2026" for n in items)
     assert "авторизац" in items[0].summary
 
 

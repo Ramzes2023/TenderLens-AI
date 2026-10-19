@@ -55,6 +55,11 @@ CASES = (
     ("fabrikant_zmo_current_catalog", "https://zmo.fabrikant.ru/44/catalog/procedure?dir=desc&order=trade_start_datetime&page=1", HOST_ZMO, None),
     ("fabrikant_ingush_0114500000826002121", "https://soap4.fabrikant.ru/44/procedure/ea21/0114500000826002121", HOST_SOAP, "0114500000826002121"),
     ("fabrikant_ingush_0114500000826002117", "https://soap4.fabrikant.ru/44/procedure/ea21/0114500000826002117", HOST_SOAP, "0114500000826002117"),
+    # October 2026 original-card URL hypotheses: number exists in a fresh
+    # independently indexed Ingushetia EIS record but the ETP path is NOT
+    # confirmed until the exact official HTTPS detail returns and corroborates.
+    ("fabrikant_oct_candidate_0114500000826002358", "https://soap4.fabrikant.ru/44/procedure/ea21/0114500000826002358", HOST_SOAP, "0114500000826002358"),
+    ("fabrikant_oct_candidate_0114500000826002323", "https://soap4.fabrikant.ru/44/procedure/ea21/0114500000826002323", HOST_SOAP, "0114500000826002323"),
 )
 
 

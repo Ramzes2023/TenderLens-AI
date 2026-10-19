@@ -69,7 +69,7 @@ def public_post_names(data: str | None, mime: str) -> tuple[str, ...]:
     else:
         keys = (name for name, _ in parse_qsl(data, keep_blank_values=True))
     return tuple(sorted({name for name in keys if type(name) is str
-                         and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,45}", name)}))[:25])
+                         and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,45}", name)}))[:25]
 
 
 def public_row_shape(body: bytes) -> dict[str, int]:

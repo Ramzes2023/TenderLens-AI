@@ -210,7 +210,7 @@ def proof():
 
 def _safe_ingushetia_vendor_failure(exc):
     """Expose only constant contract names, never upstream pages or URL/token text."""
-    if type(exc) not in {ValueError, AssertionError}:
+    if not isinstance(exc, (ValueError, AssertionError)):
         return None
     whitelist = {
         "Insufficient current independently verified Ingushetia originals from Worker SQL": "INSUFFICIENT_REAL_WORKER_ROWS",
@@ -250,6 +250,11 @@ def main():
             diagnostic = {"route": upstream, **transport_failure(exc)}
             if upstream == "accredited_44fz_etp_mirror":
                 diagnostic["safe_contract_failure"] = _safe_ingushetia_vendor_failure(exc)
+                if type(exc).__name__ == "IngushetiaWorkerProofFailure":
+                    # Only enum-like fields built by the local durable queue;
+                    # never serialize a raw exception, payload or source URL.
+                    diagnostic["worker_job_state"] = getattr(exc, "job_state", "UNKNOWN")
+                    diagnostic["worker_failure_code"] = getattr(exc, "job_failure_code", "UNKNOWN")
             failures.append(diagnostic)
             continue
         print("FAILURE_ROUTE_SUMMARY=" + json.dumps(failures, sort_keys=True))

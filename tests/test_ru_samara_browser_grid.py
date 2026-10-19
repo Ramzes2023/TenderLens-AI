@@ -26,7 +26,10 @@ def test_original_reference_is_pinned_and_not_guessed():
     for u in (None, "", "//evil.invalid/n", "https://evil.invalid/detail",
               "/login", "/smallpurchases/Login/Form",
               "/smallpurchases/GzwSP/123?token=secret",
-              "/smallpurchases/GzwSP/123#fragment", "/smallpurchases/\\evil"):
+              "/smallpurchases/GzwSP/123#fragment",
+              "/smallpurchases/GzwSP/NoticesGrid",
+              "/smallpurchases/GzwSP/NoticesJson",
+              "/smallpurchases/Menu/Page/1", "/smallpurchases/\\evil"):
         assert not safe_original_reference(u)
 
 

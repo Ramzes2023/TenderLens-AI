@@ -14,6 +14,8 @@ on:
       - tests/test_ru_samara_browser_originals.py
       - scripts/research_ru_samara_disclosed_notice_route.py
       - scripts/research_ru_samara_browser_disclosed_notice.py
+      - scripts/research_ru_samara_native_pagination.py
+      - tests/test_ru_samara_native_pagination.py
       - tests/test_ru_samara_disclosed_notice_route.py
       - .github/workflows/ru-samara-browser-native-research.yml
 
@@ -176,3 +178,20 @@ jobs:
       - name: Demand two authentic independently readable Samara Notice pages after real current JSON listing
         timeout-minutes: 6
         run: python -B -m scripts.research_ru_samara_browser_disclosed_notice
+
+  samara-two-genuine-native-unique-pages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Prevent duplicates and empty second page from counting as real regional depth
+        run: python -B -m pytest -q tests/test_ru_samara_native_pagination.py
+      - name: Verify 20 distinct authentic first-party Samara tender IDs across public native page 0 and 1
+        timeout-minutes: 5
+        run: python -B -m scripts.research_ru_samara_native_pagination

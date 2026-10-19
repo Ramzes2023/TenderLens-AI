@@ -12,6 +12,26 @@ def test_pinned_root_fingerprint_is_full_sha256():
     assert all(ch in "0123456789abcdef" for ch in ROOT_SHA256)
 
 
+def test_scoped_context_loads_real_verified_root_without_system_install():
+    import ssl
+    from scripts.ru_eis_pinned_tls_probe import pinned_ssl_context
+
+    root = Path(__file__).resolve().parents[1] / "russian_trusted_root_ca_pem.crt"
+    context = pinned_ssl_context(root)
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is True
+    assert context.cert_store_stats()["x509_ca"] == 1
+
+
+def test_scoped_context_rejects_changed_root(tmp_path):
+    from scripts.ru_eis_pinned_tls_probe import pinned_ssl_context
+
+    root = tmp_path / "untrusted.pem"
+    root.write_bytes(b"untrusted" * 100)
+    with pytest.raises(ValueError, match="fingerprint mismatch"):
+        pinned_ssl_context(root)
+
+
 @pytest.mark.parametrize("untrusted", [b"", b"not-a-cert", b"Z" * 1000, b"P" * 65537],
                          ids=["empty", "invalid-text", "invalid-der", "oversized"])
 def test_untrusted_input_cannot_enable_eis_tls(untrusted):

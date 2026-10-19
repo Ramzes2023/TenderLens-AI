@@ -26,9 +26,10 @@ from app.monitoring.service import TenderMonitorService, prefilter_notice
 from app.bot.monitoring import monitor_loop
 from app.sources.catalog import build_source_catalog
 from app.sources.http import source_client
+from app.sources.eis_rss import EIS_USER_AGENT
 from app.sources.ingestion import JOB_TYPE, ConnectorSyncHandler, ConnectorSyncService, connector_version
 from app.sources.http import FetchPolicy, bounded_fetch
-from scripts.ru_eis_pinned_tls_probe import verify_root
+from scripts.ru_eis_pinned_tls_probe import verify_root, pinned_ssl_context
 from scripts.ru_transport_diagnostics import transport_failure
 from app.sources.opportunities import OpportunityRepository
 from app.sources.ru_ingushetia_eis44 import SOURCE_ID, RSS_URL, normalize_ingushetia_notice
@@ -61,8 +62,8 @@ def _catalog():
 async def _check_original_links(notices):
     with bounded_fetch(FetchPolicy(frozenset({'zakupki.gov.ru'}), len(notices), max_bytes=1_800_000)):
       async with source_client(
-        timeout=20, follow_redirects=False, trust_env=False, verify=str(ROOT),
-        headers={"Accept": "text/html"},
+        timeout=20, follow_redirects=False, trust_env=False, verify=pinned_ssl_context(ROOT),
+        headers={"Accept": "text/html", "User-Agent": EIS_USER_AGENT},
       ) as client:
           for notice in notices:
               original = await client.get(notice.url)

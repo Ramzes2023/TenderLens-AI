@@ -29,6 +29,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install -r requirements-dev.txt
+      - name: Observe EIS using fingerprint-verified root without changing system trust
+        run: python -B -m scripts.ru_eis_system_ca_probe --pinned-root russian_trusted_root_ca_pem.crt
       - name: Observe genuine federal and accredited first-party HTTPS sites
         timeout-minutes: 5
         run: python -B -m scripts.research_ru_ingushetia_routes

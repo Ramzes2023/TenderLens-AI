@@ -58,6 +58,16 @@ def official_download() -> bytes:
         return response.read(MAX_CERT_BYTES + 1)
 
 
+def pinned_ssl_context(source_file: Path) -> ssl.SSLContext:
+    """Load only the fingerprint-verified root in memory on Windows or Linux.
+
+    No /dev/stdin, system-store installation, environment CA or second file
+    read is needed. Hostname and certificate validation remain mandatory.
+    """
+    pem = verify_root(source_file.read_bytes())
+    return ssl.create_default_context(cadata=pem)
+
+
 def run(source_file: Path | None = None) -> int:
     data = source_file.read_bytes() if source_file else official_download()
     pem = verify_root(data)

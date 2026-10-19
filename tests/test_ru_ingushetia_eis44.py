@@ -74,6 +74,28 @@ def test_no_duplicate_eis_notifications_for_same_original():
     assert len(duplicates) == 1
 
 
+def test_original_card_probe_preserves_rss_client_identity(monkeypatch):
+    import httpx
+    from scripts import ci_ru_ingushetia_live_worker as acceptance
+    from app.sources.eis_rss import EIS_USER_AGENT
+
+    requests = []
+    def respond(request):
+        requests.append(request)
+        status = 200 if request.headers.get("User-Agent") == EIS_USER_AGENT else 404
+        return httpx.Response(status, text=N, headers={"Content-Type": "text/html"})
+
+    def client(**kwargs):
+        assert kwargs["verify"].check_hostname
+        assert kwargs["follow_redirects"] is False
+        assert kwargs["trust_env"] is False
+        return httpx.AsyncClient(transport=httpx.MockTransport(respond), **kwargs)
+
+    monkeypatch.setattr(acceptance, "source_client", client)
+    asyncio.run(acceptance._check_original_links([sample()]))
+    assert str(requests[0].url) == U
+
+
 def test_source_stays_off_by_default_and_uses_one_official_host():
     from urllib.parse import parse_qs, urlsplit
     assert RSS_URL.startswith("https://zakupki.gov.ru/")

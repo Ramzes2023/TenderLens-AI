@@ -16,7 +16,6 @@ on:
       - tests/test_ru_south_ural_adapter.py
       - scripts/ci_ru_south_ural_10_real_worker.py
       - scripts/ci_ru_south_ural_deadline.py
-      - .github/workflows/ru-south-ural-depth.yml
   workflow_dispatch:
 
 permissions:

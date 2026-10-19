@@ -7,7 +7,6 @@ on:
       - "app/sources/jp_jetro_bid_rss.py"
       - "tests/test_jp_jetro_bid_rss.py"
       - "scripts/asia_jetro_bid_worker_acceptance.py"
-      - ".github/workflows/asia-jetro-bid-acceptance.yml"
   workflow_dispatch:
 
 permissions:

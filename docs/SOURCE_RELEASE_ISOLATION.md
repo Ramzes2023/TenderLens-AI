@@ -39,6 +39,24 @@ do not share code or resources.
    a user-matching genuine tender and real delivery to a consented test chat,
    and only then enables wider customer notifications.
 
+## Workflow-file-only changes are not live-source evidence
+
+Changing a source workflow YAML file alone runs the repository-wide
+`Independent procurement source release contracts` verification and shared
+`CI`, but does **not** automatically call that publisher's external live API.
+Its `pull_request.paths` must list actual source-owned adapter/test/probe
+files rather than the workflow file itself.
+
+The strict workflow is still executable via `workflow_dispatch`, and
+existing source-specific push triggers are retained. If the workflow edit
+alters parsing, network access, commands, job dependencies, or acceptance
+semantics, reviewers MUST explicitly dispatch the affected strict live
+workflow on the candidate branch before merging that change. In particular,
+a green trigger-contract test never means a real supplier was verified.
+Where only path triggers changed, no new supplier availability claim is made.
+Real upstream failures remain red in previously executed history and in
+their own source PRs.
+
 ## Stage 1 — workflow path isolation
 
 This PR isolates an initial set of fifteen observed false dependencies:

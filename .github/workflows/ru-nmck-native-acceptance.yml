@@ -19,7 +19,6 @@ on:
       - scripts/ci_ru_nmck_real_worker.py
       - scripts/ci_ru_nmck_authenticated.py
       - tests/test_ru_nmck_native.py
-      - .github/workflows/ru-nmck-native-acceptance.yml
   workflow_dispatch:
 
 permissions:

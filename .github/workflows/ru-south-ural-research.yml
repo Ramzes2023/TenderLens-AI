@@ -16,7 +16,6 @@ on:
       - scripts/research_ru_south_ural_public.py
       - tests/test_ru_south_ural_public.py
       - tests/test_ru_south_ural_daily_health.py
-      - .github/workflows/ru-south-ural-research.yml
 permissions:
   contents: read
 jobs:

@@ -19,7 +19,6 @@ on:
       - scripts/ci_ru_south_ural_real_worker.py
       - scripts/ci_ru_south_ural_authenticated.py
       - tests/test_ru_south_ural_adapter.py
-      - .github/workflows/ru-south-ural-integration.yml
   workflow_dispatch:
 
 permissions:

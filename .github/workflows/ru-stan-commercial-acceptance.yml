@@ -19,7 +19,6 @@ on:
       - scripts/ci_ru_stan_real_worker.py
       - scripts/ci_ru_stan_authenticated.py
       - tests/test_ru_stan_commercial_adapter.py
-      - .github/workflows/ru-stan-commercial-acceptance.yml
   workflow_dispatch:
 
 permissions:

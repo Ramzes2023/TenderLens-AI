@@ -20,7 +20,6 @@ on:
       - tests/test_ru_kavkaz_firstparty_registration.py
       - scripts/ci_ru_kavkaz_real_worker.py
       - scripts/research_ru_kavkaz_live.py
-      - .github/workflows/ru-kavkaz-rf-firstparty-live.yml
   workflow_dispatch:
 
 permissions:

@@ -55,8 +55,11 @@ def test_live_pr_gates_are_owned_by_their_publisher(name, own_adapter):
     assert paths and all(isinstance(p, str) for p in paths)
     assert own_adapter in paths
     assert not GENERIC_LIVE_TRIGGERS.intersection(paths), name
-    assert f".github/workflows/{name}" in paths
-    assert "workflow_dispatch" in events, "Shared-only publisher fixes need explicit live verification"
+    # Editing the workflow's own YAML is a configuration change, not
+    # evidence that the publisher itself changed or became unavailable.
+    # The repository-wide isolation contract must check these edits instead.
+    assert f".github/workflows/{name}" not in paths
+    assert "workflow_dispatch" in events, "Strict source live verification must remain available"
 
 
 def test_shared_core_and_source_contracts_still_run():

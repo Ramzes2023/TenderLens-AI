@@ -13,7 +13,6 @@ on:
       - app/sources/south_ural_public.py
       - tests/test_ru_south_ural_adapter.py
       - scripts/ci_ru_south_ural_verified_metadata.py
-      - .github/workflows/ru-south-ural-metadata.yml
   workflow_dispatch:
 
 permissions:

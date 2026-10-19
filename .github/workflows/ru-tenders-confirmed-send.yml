@@ -1,0 +1,27 @@
+name: RU tender notifications only seen after Telegram send
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/bot/monitoring.py
+      - tests/test_ru_tenders_confirmed_send.py
+      - .github/workflows/ru-tenders-confirmed-send.yml
+
+permissions:
+  contents: read
+
+jobs:
+  manual-tenders-send-ack-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Reject pre-delivery dedup and lost notices when send fails or cycle is capped
+        run: python -m pytest -q tests/test_ru_tenders_confirmed_send.py tests/test_ru_background_telegram_catalog.py tests/test_monitoring.py

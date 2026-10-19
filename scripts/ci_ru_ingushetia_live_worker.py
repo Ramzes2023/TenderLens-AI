@@ -234,7 +234,8 @@ def main():
             })
             continue
         print("RU_INGUSHETIA_LIVE_UPSTREAM=" + upstream)
-        print("RU_INGUSHETIA_PROOF=" + json.dumps(result, ensure_ascii=False, sort_keys=True))
+        # Keep machine-readable evidence printable on legacy Windows consoles.
+        print("RU_INGUSHETIA_PROOF=" + json.dumps(result, ensure_ascii=True, sort_keys=True))
         print("RU_INGUSHETIA_LIVE_ACCEPTANCE=PASS")
         print("REAL_USER_TELEGRAM_RECEIPT=NOT_TESTED")
         print("PRODUCTION_CHANGED=NO")

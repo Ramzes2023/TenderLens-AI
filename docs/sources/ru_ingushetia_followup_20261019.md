@@ -89,3 +89,44 @@ python -B -m scripts.ci_ru_ingushetia_live_worker
 Offline contracts: **64 passed**, plus **152 passed** in Worker/jobs/monitoring
 regressions. These are separate from genuine live acceptance above. Follow-up
 draft PR: <https://github.com/Ramzes2023/TenderLens-AI/pull/226>. No merge.
+
+## Second follow-up: live CI and RU host inspection (2026-10-19)
+
+- PR #226 run 39298360268 failed upstream transport: EIS ConnectError,
+  Fabrikant ReadError. Contract jobs passed. Failed job rerun requested;
+  no checks disabled or success substituted.
+- Fixed Windows cp1252 UnicodeEncodeError when printing a successful live
+  result: evidence JSON now escapes Unicode without changing its data.
+- Corrected stale regions=06 and Fabrikant q= URLs in the fixed RU diagnostic.
+- Current repeat: 71 focused tests and 141 jobs/Worker/monitoring tests passed.
+  Initial sandbox run hit pytest shared-temp access denial; rerun used a
+  clone-local --basetemp. No application failure was hidden.
+- Fresh genuine live acceptance PASS via Fabrikant: three originals, Worker
+  succeeded, SQL/title/number search, user region/keyword/exclusion filtering,
+  three isolated notification acknowledgements. Crossfeed PASS: two actual
+  EIS RSS originals plus two Fabrikant originals, four SQL rows, two unique
+  results, zero repeat EIS alerts. See followup artifacts. Direct EIS HTML
+  cards and Telegram delivery are still not proven.
+- VALYQON-Runner WSL was stopped; started only this dedicated distribution
+  for read-only inspection. Its registration confirms RU-01 / agent 21.
+  No listener/Worker or runner systemd service was running; /mnt/c is not
+  mounted. Other distributions and Codex folders were not modified.
+- Direct no-proxy country observation from this WSL: country RU,
+  egress 94.232.94.3. Real filtered Fabrikant catalog HTTP 200 / 124422 bytes;
+  original 0114500000826002390 HTTP 200 / 140810 bytes. These are transport
+  observations, not full Worker acceptance from Linux.
+- Direct RU EIS RSS failed curl 60 (root absent from Linux trust store).
+  Attempt to supply project CA through /dev/stdin failed curl 77; no TLS
+  bypass was attempted. Need a readable CA bundle containing the verified
+  project root on the RU host and another direct EIS RSS/card test.
+- Persistent listener start was rejected by automatic approval review:
+  enabling it can claim future unreviewed jobs. It remains offline; no
+  indirect workaround was attempted. Operator approval / reviewed queue and
+  safe runner execution policy are required before enabling the listener.
+- Repository Actions secret names, variable names, environments, and current
+  process Telegram-related configuration inventories were empty. Required:
+  dedicated test TELEGRAM_BOT_TOKEN, explicit authorized test chat ID, and
+  confirmation that this bot may send test procurement alerts to that chat.
+  Do not use a production subscription as an implied test authorization.
+- PR remains draft/unmerged. Hosted live transport, runner listener recovery,
+  direct EIS access from RU, and actual Telegram receipt remain open gates.

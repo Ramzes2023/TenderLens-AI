@@ -5,7 +5,7 @@ from urllib.parse import parse_qs, urlsplit
 
 
 def procedure_key(notice):
-    if notice.source not in {'eis', 'eis_223', 'b2b_center'}:
+    if notice.source not in {'eis', 'eis_223', 'b2b_center', 'ru_ingushetia_eis44'}:
         return None
     url = notice.url
     if notice.source == 'b2b_center':

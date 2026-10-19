@@ -50,3 +50,19 @@ jobs:
           echo 'LIST_PAGE_2_ONLY=YES'
           echo 'INDIVIDUAL_DETAILS_VERIFIED=NO'
           echo 'PRODUCTION_CHANGED=NO'
+
+  samara-thirty-native-page-worker-sql:
+    needs: strict-third-page-live-official
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require 30 REAL official Samara records through a leased Worker, disposable SQLite and honest user search
+        timeout-minutes: 6
+        run: python -B -m scripts.ci_ru_samara_three_page_worker_sql

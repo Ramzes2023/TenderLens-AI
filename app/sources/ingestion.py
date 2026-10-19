@@ -175,7 +175,7 @@ class ConnectorSyncHandler:
                          else min(self.max_records, 2) + 1 if source_id == 'stan_commercial_public'
                          else min(self.max_records, 2) + 1 if source_id == 'kavkaz_rf_firstparty'
                          else min(self.max_records, 10) + 1 if source_id == 'south_ural_public'
-                         else 3 if source_id == 'ru_samara_public_list'
+                         else 1 + min(3, (self.max_records + 9) // 10) if source_id == 'ru_samara_public_list'
                          else 2 if source_id == 'ru_dagestan_public_list'
                          else 2 if source_id == 'mikroton_tender'
                          else 1)

@@ -186,10 +186,12 @@ class SamaraPublicListSource:
     async def fetch(self, limit=20):
         if type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError("Invalid public list fetch limit")
-        # HTTP 200 and twenty distinct first-party notices were independently
-        # proved from native pages zero and one; further pages are unverified.
-        cap = min(limit, 2 * PAGE_SIZE)
-        max_calls = 3 if cap > PAGE_SIZE else 2
+        # First-party pages 0, 1, and 2 independently returned thirty
+        # distinct native notices in the exact-head live research gate.
+        # Further native pages are unverified, and may not be fetched.
+        cap = min(limit, 3 * PAGE_SIZE)
+        pages = (cap + PAGE_SIZE - 1) // PAGE_SIZE
+        max_calls = 1 + pages
         ctx = (bounded_fetch(FetchPolicy(frozenset({HOST}), max_calls,
                                          max_bytes=MAX_BYTES))
                if _policy.get() is None else nullcontext())
@@ -212,7 +214,7 @@ class SamaraPublicListSource:
                     "RequestVerificationToken": token,
                 }
                 found, ids, numbers = [], set(), set()
-                for page in range(2 if cap > PAGE_SIZE else 1):
+                for page in range(pages):
                     settings = public_settings()
                     settings["page"] = page
                     response = await client.post(
@@ -233,8 +235,6 @@ class SamaraPublicListSource:
                         ids.add(notice.external_id)
                         numbers.add(notice.tender_number)
                     found.extend(rows)
-                    if page == 0 and (
-                        len(rows) < PAGE_SIZE or payload["totalRows"] <= len(rows)
-                    ):
+                    if len(rows) < PAGE_SIZE or payload["totalRows"] <= len(found):
                         break
                 return found

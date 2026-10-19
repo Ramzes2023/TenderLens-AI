@@ -49,7 +49,7 @@ def source_directory(catalog):
         # This is an editorial categorization, not a proof of a procurement law,
         # published bid limit, or current availability.
         small = any(part in (key + " " + name).lower()
-                    for part in ("small", "regional", "lenobl", "nmck", "municipal"))
+                    for part in ("small", "regional", "lenobl", "nmck", "municipal", "samara", "малых"))
         sources.append({
             "key": key, "name": name, "country": country,
             "region": region, "transport": m.transport.value,

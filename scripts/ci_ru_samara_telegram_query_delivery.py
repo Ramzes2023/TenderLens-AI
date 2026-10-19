@@ -67,13 +67,13 @@ async def acceptance():
     term = words[0]
     profile = CompanyProfile(
         profile_version="v1", company_name="Test-only Samara requester",
-        product_keywords=[term], monitoring_keywords=[term],
+        product_keywords=[term], search_keywords=[term],
         accepted_currencies=["RUB"],
     )
     if prefilter_notice(rows[0], profile) is None:
         raise AssertionError("Real title does not match its own keyword")
     negative = profile.model_copy(update={
-        "monitoring_keywords": ["valyqon_synthetic_unmatched_term_987654321"]
+        "search_keywords": ["valyqon_synthetic_unmatched_term_987654321"]
     })
     if any(prefilter_notice(n, negative) is not None for n in rows):
         raise AssertionError("Nonmatching requester leaked a real tender")

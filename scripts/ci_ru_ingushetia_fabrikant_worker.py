@@ -30,6 +30,21 @@ from app.sources.ru_notice_identity import original_notice_key
 from scripts.ci_ru_ingushetia_live_worker import _check_isolated_dispatch
 
 
+
+class IngushetiaWorkerProofFailure(AssertionError):
+    """Strictly redacted durable job outcome, never a raw upstream error."""
+
+    def __init__(self, job):
+        state = getattr(job, "state", None)
+        code = getattr(job, "failure_code", None)
+        self.job_state = state if state in {"queued", "running", "failed", "succeeded", "cancelled"} else "UNKNOWN"
+        self.job_failure_code = code if code in {
+            "retryable_failure", "permanent_failure", "handler_error",
+            "invalid_result", "lease_expired", "unknown_type",
+        } else "UNKNOWN"
+        super().__init__("Real original-card leased Worker failed")
+
+
 def proof():
     cfg = MonitoringSettings(
         enabled=False, interval_seconds=600, max_items=3,
@@ -61,7 +76,7 @@ def proof():
                 raise AssertionError("Official first-party mirrored notices Worker not claimed")
             completed = jobs.get(job.id, scope=JobScope())
             if completed is None or completed.state != "succeeded":
-                raise AssertionError("Real original-card leased Worker failed")
+                raise IngushetiaWorkerProofFailure(completed)
             rows = store.read(SOURCE_ID, limit=3)
             if len(rows) < 2:
                 raise AssertionError("Insufficient current independently verified Ingushetia originals from Worker SQL")

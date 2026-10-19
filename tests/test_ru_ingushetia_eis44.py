@@ -12,6 +12,7 @@ from app.sources.models import TenderNotice
 from app.sources.ru_dedup import deduplicate
 from app.sources.ru_ingushetia_eis44 import (
     SOURCE_ID, REGION, RSS_URL, IngushetiaEis44Source, normalize_ingushetia_notice,
+    validate_ingushetia_rss_url,
 )
 from app.sources.ru_notice_identity import original_notice_key
 
@@ -114,3 +115,38 @@ def test_live_adapter_shape_with_mocked_upstream_never_counts_as_live(monkeypatc
     assert len(notices) == 1 and notices[0].external_id == N
     with pytest.raises(ValueError):
         asyncio.run(IngushetiaEis44Source().fetch(limit=0))
+
+@pytest.mark.parametrize("url", [
+    "https://evil.example/epz/order/extendedsearch/rss.html?fz44=on",
+    "http://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on",
+    "https://zakupki.gov.ru.evil.test/epz/order/extendedsearch/rss.html?fz44=on",
+    "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz223=on",
+    "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&fz223=on",
+    "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&fz44=off",
+    "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&token=secret",
+    "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on#fragment",
+    "https://user@zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on",
+    "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on\\\\danger",
+])
+def test_operator_rss_override_rejects_untrusted_destinations(url):
+    with pytest.raises(ValueError):
+        validate_ingushetia_rss_url(url)
+
+
+def test_operator_can_supply_exact_official_eis_filter_without_scoping_shortcut():
+    url = "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&searchString=%D0%9F%D0%BE%D1%81%D1%82%D0%B0%D0%B2%D0%BA%D0%B0"
+    assert validate_ingushetia_rss_url(url) == url
+    entry = build_source_catalog(settings(
+        ru_ingushetia_eis44_enabled=True, ru_ingushetia_eis44_rss_url=url,
+    )).registry.get(SOURCE_ID)
+    assert entry.source.rss_url == url
+    assert normalize_ingushetia_notice(sample(customer="Чужой регион", region=None)) is None
+
+
+def test_env_operator_filter_is_stored_but_source_stays_disabled(monkeypatch, tmp_path):
+    monkeypatch.setenv("RU_INGUSHETIA_EIS44_RSS_URL",
+                       "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on")
+    monkeypatch.delenv("RU_INGUSHETIA_EIS44_ENABLED", raising=False)
+    cfg = load_monitoring_settings(tmp_path / "absent.env")
+    assert cfg.ru_ingushetia_eis44_rss_url.endswith("fz44=on")
+    assert SOURCE_ID not in build_source_catalog(cfg).enabled_keys

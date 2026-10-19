@@ -87,3 +87,31 @@ def test_observed_official_items_totalrows_page_schema_is_accepted_research_only
 def test_observed_official_items_schema_fails_closed_on_incomplete_pagination(bad):
     with pytest.raises(ValueError):
         parse_public_json(json.dumps(bad).encode(), "application/json")
+
+
+def test_native_public_grid_respects_explicit_ten_row_page_not_stale_legacy_five():
+    """Synthetic OFFLINE pagination contract; no live purchase is claimed."""
+    rows = [{"number": f"OFFLINE-{n}", "name": "Offline record"} for n in range(10)]
+    document = {"items": rows, "page": 0, "totalRows": 807, "totalAmount": 0}
+    payload = json.dumps(document).encode("utf-8")
+    # Legacy form without explicit page size cannot accept ten rows.
+    with pytest.raises(ValueError):
+        parse_public_json(payload, "application/json")
+    count, keys, shapes = parse_public_json(payload, "application/json", max_rows=10)
+    assert count == 10 and len(shapes) == 2
+    assert "items" in keys and "totalRows" in keys
+
+    # Never use a high totalRows count as proof of delivered rows; bounded
+    # page must actually include independent native records.
+    document["items"] = []
+    with pytest.raises(ValueError):
+        parse_public_json(json.dumps(document).encode(), "application/json", max_rows=10)
+    document["items"] = rows + [{"number": "OFFLINE-11"}]
+    with pytest.raises(ValueError):
+        parse_public_json(json.dumps(document).encode(), "application/json", max_rows=10)
+
+
+@pytest.mark.parametrize("invalid", [None, True, 0, 1, 11, 100, "10", 10.0])
+def test_native_page_size_cannot_expand_beyond_official_ten(invalid):
+    with pytest.raises(ValueError, match="Invalid bounded public grid page size"):
+        parse_public_json(b"{}", "application/json", max_rows=invalid)

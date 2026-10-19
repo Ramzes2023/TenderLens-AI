@@ -50,6 +50,11 @@ def public_visible_text(html):
 CASES = (
     ("eis_ingushetia_rss", "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&regions=06&pageNumber=1", HOST_EIS, None),
     ("fabrikant_current_catalog", "https://44.fabrikant.ru/44/catalog/procedure/published?dir=desc&order=publication_datetime", HOST_FAB, None),
+    # The 'q' query is a publicly indexed official catalogue shape; whether
+    # it searches organizers or buyers must be corroborated by live row data.
+    ("fabrikant_query_ingushetia", "https://44.fabrikant.ru/44/catalog/procedure?q=%D0%98%D0%BD%D0%B3%D1%83%D1%88%D0%B5%D1%82%D0%B8%D1%8F", HOST_FAB, None),
+    ("fabrikant_query_organizer_inn", "https://44.fabrikant.ru/44/catalog/procedure?q=0608058533", HOST_FAB, None),
+    ("fabrikant_query_recent_original", "https://44.fabrikant.ru/44/catalog/procedure?q=0114500000826002358", HOST_FAB, None),
     ("fabrikant_soap4_current_catalog", "https://soap4.fabrikant.ru/44/catalog/procedure/published", HOST_SOAP, None),
     ("fabrikant_soap4_ordered_current_catalog", "https://soap4.fabrikant.ru/44/catalog/procedure/published?dir=desc&dropOrder=1&order=procedure_number", HOST_SOAP, None),
     ("fabrikant_zmo_current_catalog", "https://zmo.fabrikant.ru/44/catalog/procedure?dir=desc&order=trade_start_datetime&page=1", HOST_ZMO, None),
@@ -102,6 +107,33 @@ async def observe(name, url, host, number):
                     status["status"] = "MARKETPLACE_LIST_RESPONSE_NOT_INGESTION_PROOF" if (
                         "html" in response.headers.get("content-type", "").lower()
                     ) else "NOT_HTML"
+                    if status["status"] == "MARKETPLACE_LIST_RESPONSE_NOT_INGESTION_PROOF":
+                        from html.parser import HTMLParser
+                        import re
+
+                        class Links(HTMLParser):
+                            def __init__(self):
+                                super().__init__()
+                                self.ids = set()
+                                self.current = None
+                            def handle_starttag(self, tag, attrs):
+                                if tag == "a":
+                                    href = dict(attrs).get("href", "")
+                                    m = re.search(r"/44/procedure/[a-z0-9-]{2,18}/([0-9]{19})(?:[?&#]|$)", href)
+                                    if m:
+                                        self.ids.add(m.group(1))
+                        parser = Links()
+                        parser.feed(response.text)
+                        status["official_detail_links_count"] = len(parser.ids)
+                        # A national listing is NOT regionally scoped just because
+                        # its URL contained an organizer's INN or a place name.
+                        status["known_ingushetia_numbers_in_links"] = sorted(
+                            n for n in parser.ids
+                            if n.startswith("01145000008")
+                        )[:10]
+                        status["shows_unfiltered_national_rows"] = (
+                            len(parser.ids) > 0 and not status["known_ingushetia_numbers_in_links"]
+                        )
     except Exception as exc:
         status["error"] = type(exc).__name__
         causes = []

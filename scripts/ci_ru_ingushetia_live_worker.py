@@ -207,6 +207,20 @@ def proof():
             db.close()
 
 
+
+def _safe_ingushetia_vendor_failure(exc):
+    """Expose only constant contract names, never upstream pages or URL/token text."""
+    if type(exc) is not ValueError:
+        return None
+    whitelist = {
+        "No source-owned Ingushetia committee tenders in live Fabrikant list": "REGIONAL_ROWS_ABSENT",
+        "No independently verified regional original cards": "ORIGINAL_CARDS_NOT_VERIFIED",
+        "First-party regional listing was not HTML": "LISTING_NOT_HTML",
+        "Untrusted Fabrikant regional listing": "LISTING_UNTRUSTED",
+    }
+    return whitelist.get(str(exc))
+
+
 def main():
     """Accept ONLY genuinely live full-chain originals from EIS or accredited ETP.
 
@@ -222,7 +236,10 @@ def main():
         try:
             result = acceptance()
         except Exception as exc:
-            failures.append({"route": upstream, **transport_failure(exc)})
+            diagnostic = {"route": upstream, **transport_failure(exc)}
+            if upstream == "accredited_44fz_etp_mirror":
+                diagnostic["safe_contract_failure"] = _safe_ingushetia_vendor_failure(exc)
+            failures.append(diagnostic)
             continue
         print("FAILURE_ROUTE_SUMMARY=" + json.dumps(failures, sort_keys=True))
         print("RU_INGUSHETIA_LIVE_UPSTREAM=" + upstream)

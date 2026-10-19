@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import tempfile
+import time
 from pathlib import Path
 
 from app.database.backend import Database
@@ -72,9 +73,22 @@ def proof():
             job = ConnectorSyncService(jobs, catalog).enqueue(SOURCE_ID)
             handlers = HandlerRegistry()
             handlers.register(JOB_TYPE, ConnectorSyncHandler(catalog, store, max_records=3))
-            if not Worker(jobs, handlers, job_types=(JOB_TYPE,)).run_once():
-                raise AssertionError("Official first-party mirrored notices Worker not claimed")
-            completed = jobs.get(job.id, scope=JobScope())
+            worker = Worker(jobs, handlers, job_types=(JOB_TYPE,))
+            # The actual production queue retries a retryable connector
+            # network failure under a bounded durable lease/backoff policy.
+            # The acceptance must exercise that real queue mechanism, not
+            # fail on the first transient network error or fabricate success.
+            # Three *actual* attempts maximum, with job-state checks on each.
+            completed = None
+            for attempt in range(3):
+                if not worker.run_once():
+                    raise AssertionError("Official first-party mirrored notices Worker not claimed")
+                completed = jobs.get(job.id, scope=JobScope())
+                if completed is not None and completed.state == "succeeded":
+                    break
+                if completed is None or completed.state != "queued" or attempt == 2:
+                    raise IngushetiaWorkerProofFailure(completed)
+                time.sleep((1.25, 2.25)[attempt])
             if completed is None or completed.state != "succeeded":
                 raise IngushetiaWorkerProofFailure(completed)
             rows = store.read(SOURCE_ID, limit=3)

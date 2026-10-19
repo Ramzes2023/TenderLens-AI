@@ -140,6 +140,22 @@ def main():
     except Exception as exc:
         print("RU_SAMARA_REAL_AUTH=BLOCKED")
         print("FAILURE_CLASS=" + type(exc).__name__)
+        # Only reveal fixed static local assertion categories, never arbitrary
+        # exception text, credentials, user data, supplier details or tokens.
+        known = {
+            "SAMARA public catalog not explicitly enabled": "CATALOG_NOT_ENABLED",
+            "No real independently verified SAMARA tender data": "EMPTY_REAL_PUBLIC_LIST",
+            "Real SAMARA notice not searchable from SQL": "SQL_SOURCE_SEARCH",
+            "Unauthenticated SAMARA scoring accepted": "UNAUTHENTICATED_REQUEST",
+            "Authorized SAMARA scoring request rejected": "AUTHORIZED_POST",
+            "Unbounded scoring jobs": "UNBOUNDED_WORKER",
+            "SAMARA scoring result inaccessible": "AUTHORIZED_RESULT",
+            "Real SAMARA tender did not reach customer scoring": "SCORING_RESULT",
+            "SAMARA scored source revisions unavailable": "REVISIONS",
+            "Cross-tenant scoring disclosure": "TENANT_ISOLATION",
+        }
+        gate = known.get(str(exc), "UNCLASSIFIED") if type(exc) is AssertionError else "NON_ASSERTION"
+        print("FAILURE_GATE=" + gate)
         print("PRODUCTION_CHANGED=NO")
         return 1
     print("RU_SAMARA_REAL_AUTH_EVIDENCE=" + json.dumps(evidence, sort_keys=True))

@@ -64,8 +64,14 @@ Strict combined live acceptance also passed via Fabrikant, explicitly reporting
 - No GitHub environments were listed. No authorized test bot configuration
   or test chat was supplied. Actual Telegram API delivery is **NOT TESTED**;
   the isolated sink is only generation/acknowledgement/dedup evidence.
-- Cross-EIS/Fabrikant canonical dedup has synthetic regression coverage;
-  fetching the same original from both live feeds is not yet demonstrated.
+- Live crossfeed proof subsequently passed: `2390` and `2391` were independently
+  acquired from current Fabrikant cards and actual EIS number-filtered RSS.
+  Two real Worker jobs succeeded, stored four source rows in disposable SQL,
+  and collapsed them to two original identities. After two mirror notification
+  acknowledgements, the actual EIS rows produced zero repeat alerts. Evidence:
+  `artifacts/ingushetia-crossfeed-20261019.txt`; repeat with
+  `python -B -m scripts.ci_ru_ingushetia_crossfeed`. This verifies EIS RSS
+  acquisition, not availability of direct EIS HTML cards or Telegram delivery.
 - Both sources remain opt-in/default OFF. Keep the follow-up PR draft and
   unmerged until real authorized Telegram delivery and all required CI pass.
   No failed checks were disabled, no fixtures used as live evidence.
@@ -80,5 +86,6 @@ python -B -m scripts.ci_ru_ingushetia_fabrikant_worker
 python -B -m scripts.ci_ru_ingushetia_live_worker
 ```
 
-Offline contracts at this stage: **64 passed**. Those are separate from the
-genuine live Worker acceptance above. No merge was performed.
+Offline contracts: **64 passed**, plus **152 passed** in Worker/jobs/monitoring
+regressions. These are separate from genuine live acceptance above. Follow-up
+draft PR: <https://github.com/Ramzes2023/TenderLens-AI/pull/226>. No merge.

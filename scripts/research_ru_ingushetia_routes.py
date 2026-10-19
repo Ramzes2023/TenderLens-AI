@@ -64,6 +64,8 @@ CASES = (
     # independently indexed Ingushetia EIS record but the ETP path is NOT
     # confirmed until the exact official HTTPS detail returns and corroborates.
     ("fabrikant_oct_candidate_0114500000826002358", "https://soap4.fabrikant.ru/44/procedure/ea21/0114500000826002358", HOST_SOAP, "0114500000826002358"),
+    ("fabrikant_main_host_oct_0114500000826002358", "https://44.fabrikant.ru/44/procedure/ea21/0114500000826002358", HOST_FAB, "0114500000826002358"),
+    ("fabrikant_main_host_oct_0114500000826002323", "https://44.fabrikant.ru/44/procedure/ea21/0114500000826002323", HOST_FAB, "0114500000826002323"),
     ("fabrikant_oct_candidate_0114500000826002323", "https://soap4.fabrikant.ru/44/procedure/ea21/0114500000826002323", HOST_SOAP, "0114500000826002323"),
 )
 

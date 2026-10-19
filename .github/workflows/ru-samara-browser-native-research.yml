@@ -8,6 +8,8 @@ on:
       - tests/test_ru_samara_browser_grid.py
       - scripts/research_ru_samara_native_http.py
       - tests/test_ru_samara_native_http.py
+      - scripts/research_ru_samara_native_details.py
+      - tests/test_ru_samara_native_details.py
       - .github/workflows/ru-samara-browser-native-research.yml
 
 permissions:
@@ -81,3 +83,32 @@ jobs:
       - name: Require real Samara anonymous GET + native CSRF JSON POST
         timeout-minutes: 3
         run: python -B -m scripts.research_ru_samara_native_http
+
+  samara-native-original-details-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Reject login pages and inconsistent number/title/buyer on independent original details
+        run: python -B -m pytest -q tests/test_ru_samara_native_details.py
+
+  samara-native-two-independent-originals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Demand two genuine current official native list-origin details before claiming full integration
+        timeout-minutes: 5
+        run: python -B -m scripts.research_ru_samara_native_details

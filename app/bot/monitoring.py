@@ -95,17 +95,18 @@ async def tenders_handler(
     report = None
 
     try:
+        owner_id = message.from_user.id
+        # Fetch and preview without changing the dedup database.  In the
+        # previous implementation scan_new*() marked *all* records seen before
+        # Telegram acknowledged any of the resulting messages, losing failed
+        # and rate-limited deliveries permanently.
         if source_catalog is None:
-            matches = await service.scan_new(
-                message.from_user.id
-            )
+            fetched = await service.fetch_matches(owner_id)
         else:
-            matches, report = (
-                await service.scan_new_from_catalog(
-                    source_catalog,
-                    message.from_user.id,
-                )
+            fetched, report = await service.fetch_matches_from_catalog(
+                source_catalog, owner_id,
             )
+        matches = await service.unseen_matches(owner_id, fetched)
 
     except (
         SourceError,
@@ -174,24 +175,20 @@ async def tenders_handler(
         .max_notifications_per_cycle
     )
 
-    for index, match in enumerate(
-        matches[:limit],
-        1,
-    ):
+    for index, match in enumerate(matches[:limit], 1):
         await message.answer(
-            format_match(
-                match,
-                index=index,
-            ),
+            format_match(match, index=index),
             disable_web_page_preview=True,
         )
+        # Each notice becomes 'seen' only after the real Telegram send
+        # succeeds.  A failed send leaves this and later notices retryable.
+        await service.claim_new(message.from_user.id, [match])
 
     remaining = len(matches) - limit
-
     if remaining > 0:
         await message.answer(
-            f"Ещё {remaining} новых записей "
-            "сохранены как просмотренные."
+            f"Ещё {remaining} новых записей не отправлены. "
+            "Для получения остальных повторите /tenders."
         )
 
 

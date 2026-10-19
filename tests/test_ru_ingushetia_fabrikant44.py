@@ -206,3 +206,56 @@ def test_no_verified_card_is_never_reported_as_success(monkeypatch):
     monkeypatch.setattr(mod, "source_client", fake_client)
     with pytest.raises(ValueError, match="No independently verified regional original cards"):
         asyncio.run(IngushetiaFabrikant44Source().fetch(limit=3))
+
+
+def test_transient_listing_failure_is_retried_once_only(monkeypatch):
+    """Synthetic connection loss, never a substitute for live HTTP proof."""
+    import app.sources.ru_ingushetia_fabrikant44 as mod
+    from app.sources.http import ConnectorTransportError
+
+    seen = []
+
+    class Client:
+        async def get(self, url):
+            seen.append(url)
+            if url == LIST_URL and seen.count(LIST_URL) == 1:
+                raise ConnectorTransportError(retryable=True)
+            return SimpleNamespace(
+                content=listing() if url == LIST_URL else detail(),
+                headers={"content-type": "text/html"},
+                raise_for_status=lambda: None,
+            )
+
+    @asynccontextmanager
+    async def fake_client(**kwargs):
+        yield Client()
+
+    async def no_delay(value):
+        assert value == 0.75
+
+    monkeypatch.setattr(mod, "source_client", fake_client)
+    monkeypatch.setattr(mod.asyncio, "sleep", no_delay)
+    result = asyncio.run(IngushetiaFabrikant44Source().fetch(limit=1))
+    assert [item.tender_number for item in result] == [NUMBER]
+    assert seen == [LIST_URL, LIST_URL, URL]
+
+
+def test_permanent_listing_failure_does_not_trigger_retry(monkeypatch):
+    import app.sources.ru_ingushetia_fabrikant44 as mod
+    from app.sources.http import ConnectorTransportError
+
+    seen = []
+
+    class Client:
+        async def get(self, url):
+            seen.append(url)
+            raise ConnectorTransportError(retryable=False)
+
+    @asynccontextmanager
+    async def fake_client(**kwargs):
+        yield Client()
+
+    monkeypatch.setattr(mod, "source_client", fake_client)
+    with pytest.raises(ConnectorTransportError):
+        asyncio.run(IngushetiaFabrikant44Source().fetch(limit=2))
+    assert seen == [LIST_URL]

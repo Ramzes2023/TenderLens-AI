@@ -17,8 +17,9 @@ from app.sources.http import (
     ConnectorTransportError, FetchPolicy, bounded_fetch, source_client,
 )
 from scripts.research_ru_dagestan_anonymous_post import (
-    HOST, INDEX, URL, MAX_BYTES, FORM, published_route, parse_public_json,
+    HOST, INDEX, URL, MAX_BYTES, published_route, parse_public_json,
 )
+from app.sources.ru_dagestan_public_list import public_settings
 
 TOKEN = re.compile(r"^[A-Za-z0-9+/_=.~-]{12,2048}$")
 
@@ -85,16 +86,20 @@ async def probe():
             token, field_names = public_grid_token(index.content)
             print("RU_DAG_GRID_PUBLIC_FILTER_NAMES=" + ",".join(field_names[:40]))
             # Do not log or export csrf token/cookie, even on failures.
-            data = dict(FORM)
-            data["__RequestVerificationToken"] = token
+            # The public site's native grid uses a JSON "settings" object,
+            # not the obsolete jqGrid page/rows form. Reuse the exact
+            # fail-closed anonymous list contract already verified in main.
+            # The CSRF token is supplied only in a header on the same
+            # first-party session and never included in logged output.
             response = await client.post(
                 URL,
                 headers={
                     "Accept": "application/json, text/javascript",
                     "X-Requested-With": "XMLHttpRequest",
                     "Referer": INDEX,
+                    "RequestVerificationToken": token,
                 },
-                data=data,
+                json={"settings": public_settings()},
             )
             # Print ONLY shape metadata; never record actual tender values.
             preliminary = response.json()

@@ -24,6 +24,26 @@ _NUMBER = re.compile(r"[0-9]{19}\Z")
 _REGION = re.compile(r"\bингушети(?:я|и|ю|ей)\b", re.I)
 
 
+def validate_ingushetia_rss_url(raw: str) -> str:
+    """Accept an operator-copied EIS 44-FZ RSS filter, not an arbitrary feed."""
+    if (type(raw) is not str or not 25 <= len(raw) <= 4000 or "\\\\" in raw
+            or any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in raw)):
+        raise ValueError("Invalid explicit Ingushetia EIS RSS URL")
+    parts = urlsplit(raw)
+    query = parse_qs(parts.query, keep_blank_values=True)
+    forbidden = {"token", "apikey", "api_key", "access_token", "password", "secret"}
+    if (parts.scheme != "https" or parts.netloc != "zakupki.gov.ru"
+            or parts.path != "/epz/order/extendedsearch/rss.html"
+            or parts.fragment or parts.username or parts.password or parts.port is not None
+            or query.get("fz44") != ["on"]
+            or "fz223" in query
+            or any(key.lower() in forbidden for key in query)
+            or any(not key or len(key) > 100 or len(value) != 1 or len(value[0]) > 1000
+                   for key, value in query.items())):
+        raise ValueError("Only an official 44-FZ EIS RSS filter is accepted")
+    return raw
+
+
 def normalize_ingushetia_notice(notice: TenderNotice) -> TenderNotice | None:
     """Fail closed on unproven origin/law; skip records without regional proof."""
     if not isinstance(notice, TenderNotice) or notice.source != SOURCE_ID:
@@ -57,7 +77,11 @@ class IngushetiaEis44Source:
     timeout: float = 25
     ca_bundle_file: Path | None = None
     system_trust: bool = False
+    rss_url: str = RSS_URL
     name: str = SOURCE_ID
+
+    def __post_init__(self):
+        validate_ingushetia_rss_url(self.rss_url)
 
     async def fetch(self, limit: int = 20) -> list[TenderNotice]:
         if self.name != SOURCE_ID or type(limit) is not int or not 1 <= limit <= 100:
@@ -65,7 +89,7 @@ class IngushetiaEis44Source:
         # Fetch up to 100 official 44-FZ entries so strict scope checks
         # do not silently accept the first unrelated national results.
         upstream = EisRssSource(
-            urls=(RSS_URL,), timeout=self.timeout, name=SOURCE_ID,
+            urls=(self.rss_url,), timeout=self.timeout, name=SOURCE_ID,
             direct=True, system_trust=self.system_trust,
             ca_bundle_file=self.ca_bundle_file,
         )

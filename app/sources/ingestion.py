@@ -38,7 +38,7 @@ HOSTS = {
     'b2b_center': frozenset({'www.b2b-center.ru'}),
     'tektorg': frozenset({'www.tektorg.ru'}),
     'gpb_etp_public': frozenset({'etpgpb.ru'}),
-    'fabrikant_44_public': frozenset({'soap4.fabrikant.ru'}),
+    'fabrikant_44_public': frozenset({'44.fabrikant.ru'}),
     'lenobl_small_public': frozenset({'zakupki.lenreg.ru'}),
     'nmck_native_public': frozenset({'xn--j1adc1b.xn--p1ai'}),
     'stan_commercial_public': frozenset({'stantorgi.ru'}),

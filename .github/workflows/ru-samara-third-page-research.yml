@@ -7,6 +7,7 @@ on:
       - scripts/research_ru_samara_third_page.py
       - tests/test_ru_samara_third_page_research.py
       - tests/test_ru_samara_thirty_row_coverage.py
+      - tests/test_ru_samara_acceptance_metadata.py
       - tests/test_ru_samara_public_list.py
       - scripts/ci_ru_samara_three_page_worker_sql.py
       - app/sources/ru_samara_public_list.py
@@ -32,7 +33,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r requirements-dev.txt
       - name: Validate official page 2 research, 30-row runtime limits and hostile amount/date parsing
-        run: python -m pytest -q tests/test_ru_samara_third_page_research.py tests/test_ru_samara_thirty_row_coverage.py tests/test_ru_samara_public_list.py
+        run: python -m pytest -q tests/test_ru_samara_third_page_research.py tests/test_ru_samara_thirty_row_coverage.py tests/test_ru_samara_public_list.py tests/test_ru_samara_acceptance_metadata.py
 
   strict-third-page-live-official:
     needs: strict-third-page-offline-contracts

@@ -25,6 +25,22 @@ from app.sources.snapshots import snapshot_catalog
 from scripts.ci_ru_samara_public_list_sql import make_research_catalog
 
 
+def require_complete_metadata(rows):
+    """Release evidence requires every original row, not one enriched example."""
+    if len(rows) != 30:
+        raise AssertionError("Exactly thirty original records required")
+    counts = {
+        "price": sum(r.initial_price is not None and r.currency == "RUB" for r in rows),
+        "publication": sum(r.published_at is not None for r in rows),
+        "deadline": sum(r.deadline is not None for r in rows),
+        "title": sum(bool(r.title and r.title.strip()) for r in rows),
+        "buyer": sum(bool(r.customer and r.customer.strip()) for r in rows),
+    }
+    if any(count != 30 for count in counts.values()):
+        raise AssertionError("Incomplete original Samara list metadata")
+    return counts
+
+
 def acceptance():
     catalog = make_research_catalog()
     with tempfile.TemporaryDirectory(prefix="valyqon-samara-30-real-") as tmp:
@@ -62,19 +78,10 @@ def acceptance():
             # + collecting-end metadata are present in the original 30 rows.
             # Persisted notices must actually contain safely normalized values
             # too: HTTP 200 + 30 IDs alone is no longer enough for acceptance.
-            metadata_counts = {
-                "price": sum(r.initial_price is not None and r.currency == "RUB" for r in rows),
-                "publication": sum(r.published_at is not None for r in rows),
-                "deadline": sum(r.deadline is not None for r in rows),
-            }
-            if any(count == 0 for count in metadata_counts.values()):
-                raise AssertionError("Original native Samara list fields were not persisted")
-            if not any(r.initial_price is not None and r.deadline is not None
-                       and r.published_at is not None for r in rows[20:]):
-                raise AssertionError("No complete third-page list metadata persisted")
+            metadata_counts = require_complete_metadata(rows)
 
             snapshot = snapshot_catalog(catalog, store)
-            probes = [rows[i] for i in (0, 9, 10, 19, 20, 29)]
+            probes = rows
             for notice in probes:
                 matched = asyncio.run(snapshot.fetch(
                     source_keys=(SOURCE_ID,),
@@ -118,6 +125,8 @@ def acceptance():
                 "list_price_present": metadata_counts["price"],
                 "list_deadline_present": metadata_counts["deadline"],
                 "list_publication_present": metadata_counts["publication"],
+                "list_title_present": metadata_counts["title"],
+                "list_buyer_present": metadata_counts["buyer"],
                 "independent_details_verified": False,
                 "real_external_message_sent": False,
                 "production_changed": False,

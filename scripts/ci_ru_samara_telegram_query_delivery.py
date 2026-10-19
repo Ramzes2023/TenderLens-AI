@@ -22,9 +22,11 @@ SOURCE = "ru_samara_public_list"
 
 
 class LocalCaptureBot:
-    def __init__(self, stop: asyncio.Event):
+    def __init__(self, stop: asyncio.Event, *, fail_delivery=False):
         self.stop = stop
         self.delivered = []
+        self.fail_delivery = fail_delivery
+        self.attempted = []
 
     async def send_message(self, chat_id, text, **kwargs):
         if chat_id != 99001 or kwargs.get("disable_web_page_preview") is not True:
@@ -35,8 +37,11 @@ class LocalCaptureBot:
             raise AssertionError("Native list price field is missing")
         # A deadline is displayed only if present and parsed in the original
         # official anonymous list, never generated from inaccessible details.
-        self.delivered.append(text)
+        self.attempted.append(text)
         self.stop.set()
+        if self.fail_delivery:
+            raise ConnectionError("Deliberate local transport failure; no Telegram I/O")
+        self.delivered.append(text)
 
 
 def settings():
@@ -83,9 +88,23 @@ async def acceptance():
         repo.initialize()
         repo.set_subscription(99000, 99001, True)
         service = TenderMonitorService(cfg, None, repo, profile)
+        # Exercise the real delivery loop's error path. A failed local send
+        # must not claim a genuine notice as seen before a retry succeeds.
+        failed_stop = asyncio.Event()
+        failed_bot = LocalCaptureBot(failed_stop, fail_delivery=True)
+        await asyncio.wait_for(
+            monitor_loop(failed_bot, service, failed_stop, source_catalog=catalog),
+            timeout=55,
+        )
+        if not failed_bot.attempted or failed_bot.delivered:
+            raise AssertionError("Local failed-send boundary was not exercised")
+        failed_matches = [MonitorMatch(n, (term,)) for n in rows
+                          if ("Номер: " + n.tender_number) in failed_bot.attempted[0]]
+        if not failed_matches or await service.unseen_matches(99000, failed_matches) != failed_matches:
+            raise AssertionError("Failed local delivery suppressed a real retry")
         stop = asyncio.Event()
         bot = LocalCaptureBot(stop)
-        # Actual API source is queried a second time through production
+        # Actual API source is queried again through production
         # monitor_loop; fake send_message is the only substituted boundary.
         await asyncio.wait_for(
             monitor_loop(bot, service, stop, source_catalog=catalog),
@@ -93,6 +112,9 @@ async def acceptance():
         )
         if not bot.delivered:
             raise AssertionError("Real Samara query emitted no local message")
+        if not any(("Номер: " + m.notice.tender_number) in message
+                   for m in failed_matches for message in bot.delivered):
+            raise AssertionError("Failed genuine notice was not retried successfully")
         # Native IDs in the message must originate from the genuine public
         # fetch, not invented fixtures or source-count metadata.
         if not any(
@@ -113,6 +135,8 @@ async def acceptance():
             "dedup_after_confirmed_local_send": True,
             "cross_customer_isolation": True,
             "negative_query_returns_no_matches": True,
+            "failed_delivery_remains_retryable": True,
+            "retry_confirmed_by_local_capture": True,
             "actual_telegram_message_delivered": False,
             "production_changed": False,
         }

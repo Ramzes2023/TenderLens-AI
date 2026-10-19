@@ -131,7 +131,7 @@ def safe_string(row, key, max_length=1000):
 def public_amount(raw):
     """Normalize first-party table НМЦК without guessing missing amounts.
 
-    Only genuine list-level \`summa\`, never the inaccessible detail card.
+    Only genuine list-level `summa`, never the inaccessible detail card.
     """
     if type(raw) in (int, float):
         amount = float(raw)

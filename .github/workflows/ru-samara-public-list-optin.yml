@@ -12,6 +12,7 @@ on:
       - scripts/ci_ru_samara_two_page_worker_sql.py
       - scripts/ci_ru_samara_authenticated.py
       - scripts/ci_ru_samara_telegram_query_delivery.py
+      - tests/test_ru_samara_local_delivery.py
       - app/sources/ru_cycle.py
       - tests/test_ru_samara_operator_queue.py
       - app/scoring/runs.py
@@ -39,7 +40,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r requirements-dev.txt
       - name: Test only public native Samara list is accepted and explicit flag gates source
-        run: python -m pytest -q tests/test_ru_samara_public_list.py tests/test_ru_samara_operator_queue.py tests/test_ru_samara_scoring_gate.py
+        run: python -m pytest -q tests/test_ru_samara_public_list.py tests/test_ru_samara_operator_queue.py tests/test_ru_samara_scoring_gate.py tests/test_ru_samara_local_delivery.py
 
   real-native-list-worker-sql-title-keyword:
     runs-on: ubuntu-latest

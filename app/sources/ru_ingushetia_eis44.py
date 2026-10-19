@@ -46,7 +46,7 @@ def normalize_ingushetia_notice(notice: TenderNotice) -> TenderNotice | None:
     evidence = " ".join(filter(None, (notice.customer, notice.region)))
     if not _REGION.search(evidence):
         return None
-    result = replace(notice, external_id=number, region=REGION)
+    result = replace(notice, external_id=number, region=REGION, enrichment=None)
     validate_notice(result, SOURCE_ID)
     return result
 

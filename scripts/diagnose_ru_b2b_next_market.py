@@ -25,7 +25,11 @@ class OriginalNextLinks(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.anchor_count = 0
+        self.same_origin_links = 0
         self.native_links = set()
+        self.native_path_candidates = set()
+        self.same_origin_app_routes = 0
+        self.with_query = 0
 
     def handle_starttag(self, tag, attrs):
         if tag != "a":
@@ -41,10 +45,19 @@ class OriginalNextLinks(HTMLParser):
         except ValueError:
             return
         if (url.scheme != "https" or url.hostname != HOST or url.username or
-                url.password or url.query or url.fragment or url.port not in (None, 443)):
+                url.password or url.fragment or url.port not in (None, 443)):
             return
+        self.same_origin_links += 1
+        if url.path.startswith("/app/"):
+            self.same_origin_app_routes += 1
+        # Distinguish plausible original detail routes from actual safe
+        # no-query accepted links, never use either as procurement evidence.
         if re.fullmatch(r"/app/market-next/[^/]{1,200}/tender-[0-9]{3,12}/", url.path):
-            self.native_links.add(url.path)
+            self.native_path_candidates.add(url.path)
+            if url.query:
+                self.with_query += 1
+            else:
+                self.native_links.add(url.path)
 
 
 def analyze_official_html(payload: bytes):
@@ -54,7 +67,12 @@ def analyze_official_html(payload: bytes):
     parser.feed(payload.decode("utf-8-sig", errors="strict"))
     parser.close()
     return {"anchor_count": parser.anchor_count,
+            "same_origin_href_count": parser.same_origin_links,
+            "same_origin_app_route_count": parser.same_origin_app_routes,
             "first_party_native_detail_links": len(parser.native_links),
+            "native_path_candidates": len(parser.native_path_candidates),
+            "native_path_candidates_with_query": parser.with_query,
+            "embedded_tender_id_markers": len(set(re.findall(rb"tender-[0-9]{4,12}", payload))),
             "html_bytes": len(payload)}
 
 

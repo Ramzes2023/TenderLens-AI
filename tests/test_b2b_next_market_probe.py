@@ -25,3 +25,19 @@ def test_original_native_detail_paths_only_and_never_foreign_or_malformed():
 def test_offline_probe_fails_closed_on_unsafe_or_invalid_html(payload):
     with pytest.raises((ValueError, UnicodeDecodeError)):
         analyze_official_html(payload)
+
+
+def test_route_with_query_is_diagnosed_but_not_accepted_as_verified_notice():
+    html = b'<a href="/app/market-next/procedure/tender-4644426/?ref=untrusted">Tender</a>'
+    evidence = analyze_official_html(html)
+    assert evidence["native_path_candidates"] == 1
+    assert evidence["native_path_candidates_with_query"] == 1
+    assert evidence["first_party_native_detail_links"] == 0
+    assert evidence["embedded_tender_id_markers"] == 1
+
+
+def test_non_anchor_embedded_id_is_not_counted_as_verified_native_link():
+    html = b'<script>var route="/app/market-next/slug/tender-4644426/";</script>'
+    evidence = analyze_official_html(html)
+    assert evidence["embedded_tender_id_markers"] == 1
+    assert evidence["first_party_native_detail_links"] == 0

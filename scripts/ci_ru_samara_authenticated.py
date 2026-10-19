@@ -97,6 +97,7 @@ def acceptance():
                 client.cookies.set(SESSION_COOKIE, state.auth.create_session(state.accounts[0]))
                 created = client.post(url, json={"sources": [SOURCE], "limit_per_source": 3})
                 if created.status_code != 202:
+                    print("RU_SAMARA_AUTH_SCORING_HTTP=" + str(created.status_code))
                     raise AssertionError("Authorized SAMARA scoring request rejected")
                 job_id = created.json()["job_id"]
                 runs = 0

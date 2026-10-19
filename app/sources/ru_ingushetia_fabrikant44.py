@@ -170,10 +170,15 @@ def verified_fabrikant_notice(payload, *, number, url, title):
     reader.feed(payload.decode("utf-8-sig", "replace"))
     reader.close()
     body = _text(reader.content).upper()
+    # The buyer/organizer proof must be in the original card's ORGANIZER
+    # section, not in an unrelated description, footer or marketing link.
+    marker = "СВЕДЕНИЯ ОБ ОРГАНИЗАТОРЕ ЗАКУПКИ"
+    at = body.find(marker)
+    organizer_area = body[at:at + 2400] if at >= 0 else ""
     if (reader.headings != ["Сведения о закупке " + number]
             or title.upper() not in body
-            or ORGANIZER not in body
-            or INN not in body):
+            or ORGANIZER not in organizer_area
+            or INN not in organizer_area):
         raise ValueError("Independent original detail fails Ingushetia publisher/identity/title checks")
     notice = TenderNotice(
         source=SOURCE_ID, external_id=number, tender_number=number,

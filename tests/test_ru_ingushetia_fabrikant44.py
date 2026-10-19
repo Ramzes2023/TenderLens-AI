@@ -399,3 +399,37 @@ def test_worker_acceptance_uses_one_source_acquisition_not_two(monkeypatch):
     assert result["sql_and_title_number_search"] == 2
     assert result["isolated_notification_ack"] == 2
     assert result["real_telegram_delivery_proven"] is False
+
+
+def test_worker_real_durable_retry_after_transient_source_failure(monkeypatch):
+    """Offline: real durable queue retries a transient fetch, no fake SQL seed."""
+    from scripts.ci_ru_ingushetia_fabrikant_worker import proof
+    from app.sources.http import ConnectorTransportError
+    import scripts.ci_ru_ingushetia_fabrikant_worker as acceptance
+
+    calls = []
+
+    async def synthetic_fetch(self, limit=20):
+        calls.append(limit)
+        if len(calls) == 1:
+            raise ConnectorTransportError(retryable=True)
+        ids = (NUMBER, "0114500000826002359")
+        titles = (TITLE, "Поставка оборудования")
+        return [
+            verified_fabrikant_notice(detail(number=n, title=t), number=n,
+                url="https://" + HOST + "/44/procedure/ea21/" + n, title=t)
+            for n, t in zip(ids, titles)
+        ]
+
+    monkeypatch.setattr(IngushetiaFabrikant44Source, "fetch", synthetic_fetch)
+    # Preserve production's real repository backoff in the Worker, but skip
+    # no database state checks and keep the offline test itself fast.
+    original_sleep = acceptance.time.sleep
+    def test_sleep(delay):
+        assert delay == 1.25
+        original_sleep(delay)
+    monkeypatch.setattr(acceptance.time, "sleep", test_sleep)
+    result = proof()
+    assert calls == [3, 3]
+    assert result["worker_state"] == "succeeded"
+    assert result["sql_and_title_number_search"] == 2

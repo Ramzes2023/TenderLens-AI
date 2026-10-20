@@ -99,12 +99,8 @@ class IngushetiaEis44Source:
             # normal opt-in operation, not only in the standalone CI script.
             # Even an operator-supplied CA override must match the same
             # published canonical-DER fingerprint. Never install it globally.
-            from scripts.ru_eis_pinned_tls_probe import verify_root
-            ca_file = ca_file or (
-                Path(__file__).resolve().parents[2] /
-                "russian_trusted_root_ca_pem.crt"
-            )
-            verify_root(ca_file.read_bytes())
+            from .eis_pinned_ca import select_verified_eis_ca
+            ca_file = select_verified_eis_ca(ca_file)
         upstream = EisRssSource(
             urls=(self.rss_url,), timeout=self.timeout, name=SOURCE_ID,
             direct=True, system_trust=self.system_trust,

@@ -28,11 +28,12 @@ def queue(tmp_path, cat):
     return db, repo, ConnectorSyncService(JobService(repo), cat)
 
 
-def test_only_seven_explicitly_verified_operator_sources_and_no_side_effects(tmp_path):
+def test_only_nine_explicitly_verified_operator_sources_and_no_side_effects(tmp_path):
     assert RU_APPROVED_SOURCES == (
         "b2b_center", "lenobl_small_public", "nmck_native_public",
         "mikroton_tender", "south_ural_public", "stan_commercial_public",
-        "kavkaz_rf_firstparty",
+        "kavkaz_rf_firstparty", "ru_ingushetia_eis44",
+        "ru_ingushetia_fabrikant44",
     )
     cat = catalog()
     with pytest.raises(ValueError, match="No operator-approved"):
@@ -55,6 +56,8 @@ def test_only_seven_explicitly_verified_operator_sources_and_no_side_effects(tmp
     ("south_ural_public_enabled", "south_ural_public"),
     ("stan_commercial_public_enabled", "stan_commercial_public"),
     ("kavkaz_rf_firstparty_enabled", "kavkaz_rf_firstparty"),
+    ("ru_ingushetia_eis44_enabled", "ru_ingushetia_eis44"),
+    ("ru_ingushetia_fabrikant44_enabled", "ru_ingushetia_fabrikant44"),
 ])
 def test_each_russian_source_requires_individual_operator_enable(tmp_path, flag, source):
     cat = catalog(**{flag: True})
@@ -79,7 +82,9 @@ def test_ru_cycle_hourly_repeat_is_idempotent_then_next_hour_unique(tmp_path):
     cat = catalog(b2b_center_enabled=True, lenobl_small_public_enabled=True,
                   nmck_native_public_enabled=True, mikroton_tender_enabled=True,
                   south_ural_public_enabled=True, stan_commercial_public_enabled=True,
-                  kavkaz_rf_firstparty_enabled=True)
+                  kavkaz_rf_firstparty_enabled=True,
+                  ru_ingushetia_eis44_enabled=True,
+                  ru_ingushetia_fabrikant44_enabled=True)
     db, jobs, service = queue(tmp_path, cat)
     try:
         start = datetime(2026, 10, 18, 13, 12, tzinfo=timezone.utc)
@@ -93,7 +98,7 @@ def test_ru_cycle_hourly_repeat_is_idempotent_then_next_hour_unique(tmp_path):
         assert all(first[key]["job_id"] != next_hour[key]["job_id"]
                    for key in RU_APPROVED_SOURCES)
         with db.connect() as conn:
-            assert conn.execute("SELECT COUNT(*) FROM durable_jobs").fetchone()[0] == 14
+            assert conn.execute("SELECT COUNT(*) FROM durable_jobs").fetchone()[0] == 18
             ids = {json.loads(row[0])["source_id"] for row in conn.execute(
                 "SELECT payload_json FROM durable_jobs"
             )}
@@ -118,3 +123,48 @@ def test_enabled_but_unverified_and_nonrussian_sources_never_queued(tmp_path):
         assert all(j["state"] == "queued" for j in result.values())
     finally:
         db.close()
+
+
+def test_ingushetia_pair_stays_default_off_and_only_explicit_opt_in_is_queued(tmp_path):
+    from app.sources.ru_notice_identity import original_notice_key
+    from app.sources.models import TenderNotice
+
+    disabled = catalog()
+    assert not any(k.startswith("ru_ingushetia_") for k in approved_ru_keys(disabled)
+                   if k in disabled.enabled_keys) if any(
+        key in disabled.enabled_keys for key in RU_APPROVED_SOURCES
+    ) else all(key not in disabled.enabled_keys for key in (
+        "ru_ingushetia_eis44", "ru_ingushetia_fabrikant44"
+    ))
+
+    cat = catalog(ru_ingushetia_eis44_enabled=True,
+                  ru_ingushetia_fabrikant44_enabled=True)
+    assert approved_ru_keys(cat) == ("ru_ingushetia_eis44", "ru_ingushetia_fabrikant44")
+    db, jobs, service = queue(tmp_path, cat)
+    try:
+        start = datetime(2026, 10, 20, 11, 15, tzinfo=timezone.utc)
+        first = enqueue_approved_ru(service, cat, now=start)
+        again = enqueue_approved_ru(service, cat, now=start + timedelta(minutes=31))
+        assert tuple(first) == ("ru_ingushetia_eis44", "ru_ingushetia_fabrikant44")
+        assert {key: job["job_id"] for key, job in first.items()} == {
+            key: job["job_id"] for key, job in again.items()
+        }
+        assert {jobs.get(data["job_id"], scope=SYSTEM_SCOPE).payload["source_id"]
+                for data in first.values()} == set(first)
+        with db.connect() as conn:
+            assert conn.execute("SELECT COUNT(*) FROM durable_jobs").fetchone()[0] == 2
+    finally:
+        db.close()
+
+    number = "0114500000826002402"
+    originals = [
+        TenderNotice(source="ru_ingushetia_eis44", external_id=number,
+                     tender_number=number, title="Ремонт улицы",
+                     url="https://zakupki.gov.ru/epz/order/notice/ok20/view/common-info.html?regNumber=" + number),
+        TenderNotice(source="ru_ingushetia_fabrikant44", external_id=number,
+                     tender_number=number, title="Ремонт улицы",
+                     url="https://44.fabrikant.ru/44/procedure/okb20/" + number),
+    ]
+    assert original_notice_key(originals[0]) == original_notice_key(originals[1]) == (
+        "eis_44", number,
+    )

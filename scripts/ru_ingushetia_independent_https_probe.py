@@ -46,8 +46,8 @@ def _pinned_resolve(host, ip):
 
 
 def curl_observation(host, url, address, *, root_path, runner=subprocess.run):
-    if host not in {"zakupki.gov.ru", FAB_HOST} or url not in {RSS_URL, LIST_URL}:
-        raise ValueError("Only fixed official diagnostic endpoints")
+    if (host, url) not in {("zakupki.gov.ru", RSS_URL), (FAB_HOST, LIST_URL)}:
+        raise ValueError("Only matched fixed official diagnostic endpoints")
     args = [
         "curl", "--silent", "--show-error", "--http1.1",
         "--proto", "=https", "--max-redirs", "0",

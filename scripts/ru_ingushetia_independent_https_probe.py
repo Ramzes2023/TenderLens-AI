@@ -9,7 +9,6 @@ discarded under a byte cap. Never treat HTTP 200 as procurement acceptance.
 from __future__ import annotations
 
 import asyncio
-import ipaddress
 import json
 from pathlib import Path
 import re
@@ -41,7 +40,7 @@ async def public_addresses(host, resolver=resolve_addresses):
 
 
 def _pinned_resolve(host, ip):
-    address = ipaddress.ip_address(ip)
+    address = _public_address(str(ip))
     literal = f"[{address}]" if address.version == 6 else str(address)
     return f"{host}:443:{literal}"
 
@@ -55,7 +54,7 @@ def curl_observation(host, url, address, *, root_path, runner=subprocess.run):
         "--noproxy", "*", "--proxy", "",
         "--connect-timeout", "7", "--max-time", "22",
         "--max-filesize", str(MAX_BYTES),
-        "--output", str(Path(tempfile.gettempdir()) / "valyqon-ing-https-diag-discard"),
+        "--output", "REPLACED_BY_ISOLATED_TEMP_DIR",
         "--write-out", "%{http_code};%{size_download}",
         "--resolve", _pinned_resolve(host, address),
     ]
@@ -70,7 +69,7 @@ def curl_observation(host, url, address, *, root_path, runner=subprocess.run):
         except (OSError, subprocess.TimeoutExpired):
             return {"status": "TRANSPORT_FAILED", "exit_code": None, "http": None}
     stdout = done.stdout.strip() if type(done.stdout) is str else ""
-    m = re.fullmatch(r"([0-9]{3});([0-9]+)(?:\\.[0-9]+)?", stdout)
+    m = re.fullmatch(r"([0-9]{3});([0-9]+)(?:\.[0-9]+)?", stdout)
     http = int(m.group(1)) if m else None
     size = int(m.group(2)) if m else None
     rc = done.returncode if type(done.returncode) is int and 0 <= done.returncode <= 127 else None

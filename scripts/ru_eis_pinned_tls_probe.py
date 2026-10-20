@@ -7,7 +7,6 @@ The provider certificate is trusted only by the two EIS test adapters.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
 import ssl
 import sys
@@ -17,36 +16,8 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 OFFICIAL_URL = "https://gu-st.ru/content/Other/doc/russian_trusted_root_ca.cer"
-ROOT_SHA256 = "d26d2d0231b7c39f92cc738512ba54103519e4405d68b5bd703e9788ca8ecf31"
-MAX_CERT_BYTES = 65536
-
-
-def verify_root(data: bytes) -> str:
-    """Accept PEM or DER transport, pin SHA-256 of the canonical DER certificate.
-
-    An official .cer can be distributed as PEM text. Hashing PEM transport
-    bytes against a DER fingerprint incorrectly rejects the exact same root.
-    No certificate is trusted unless the canonical DER fingerprint matches.
-    """
-    if not isinstance(data, bytes) or len(data) > MAX_CERT_BYTES or len(data) < 200:
-        raise ValueError("Invalid root CA certificate size")
-
-    der = data
-    if b"-----BEGIN CERTIFICATE-----" in data:
-        try:
-            pem = data.decode("ascii").strip()
-            if (not pem.startswith("-----BEGIN CERTIFICATE-----")
-                    or not pem.endswith("-----END CERTIFICATE-----")
-                    or pem.count("-----BEGIN CERTIFICATE-----") != 1
-                    or pem.count("-----END CERTIFICATE-----") != 1):
-                raise ValueError("Invalid PEM certificate wrapper")
-            der = ssl.PEM_cert_to_DER_cert(pem)
-        except (ValueError, UnicodeError) as error:
-            raise ValueError("Invalid PEM certificate format") from None
-
-    if hashlib.sha256(der).hexdigest() != ROOT_SHA256:
-        raise ValueError("Official root CA fingerprint mismatch; nothing trusted")
-    return ssl.DER_cert_to_PEM_cert(der)
+# One shared implementation is bundled with the Docker application.
+from app.sources.eis_pinned_ca import MAX_CERT_BYTES, ROOT_SHA256, verify_root
 
 
 def official_download() -> bytes:

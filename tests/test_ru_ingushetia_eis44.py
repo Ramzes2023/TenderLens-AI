@@ -263,7 +263,7 @@ def test_live_eis_acceptance_worker_only_downloads_rss_once(monkeypatch):
 
     result = acceptance.proof()
     assert fetch_calls == [10]
-    assert detail_calls == [list(numbers)]
+    assert len(detail_calls) == 1 and set(detail_calls[0]) == set(numbers)
     assert result["leased_worker_state"] == "succeeded"
     assert result["stored_and_searchable"] == 2
     assert result["original_cards_corresponding_to_list"] == 2

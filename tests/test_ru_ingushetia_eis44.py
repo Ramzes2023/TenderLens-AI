@@ -420,3 +420,52 @@ def test_explicit_windows_system_trust_mode_does_not_secretly_override_ca(monkey
     monkeypatch.setattr(EisRssSource, "fetch", source_fetch)
     assert len(asyncio.run(IngushetiaEis44Source(system_trust=True).fetch(limit=1))) == 1
     assert seen == [(None, True, True)]
+
+
+def test_pinned_eis_root_resolves_both_docker_and_checkout_layouts(tmp_path):
+    """Offline: production Docker copies app/ and /app/certs but NO scripts/."""
+    from pathlib import Path
+    from app.sources.eis_pinned_ca import select_verified_eis_ca, verify_root
+
+    original = Path(__file__).resolve().parents[1] / "russian_trusted_root_ca_pem.crt"
+    pem = original.read_bytes()
+    verify_root(pem)
+
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    (checkout / original.name).write_bytes(pem)
+    assert select_verified_eis_ca(project_root=checkout) == checkout / original.name
+
+    docker = tmp_path / "app"
+    (docker / "certs").mkdir(parents=True)
+    (docker / "certs" / original.name).write_bytes(pem)
+    assert select_verified_eis_ca(project_root=docker) == docker / "certs" / original.name
+    assert select_verified_eis_ca(docker / "certs" / original.name) == docker / "certs" / original.name
+
+
+def test_pinned_eis_root_rejects_tampered_docker_cert_and_absent_layout(tmp_path):
+    from pathlib import Path
+    from app.sources.eis_pinned_ca import select_verified_eis_ca
+
+    with pytest.raises(ValueError, match="not bundled"):
+        select_verified_eis_ca(project_root=tmp_path)
+
+    certs = tmp_path / "certs"
+    certs.mkdir()
+    (certs / "russian_trusted_root_ca_pem.crt").write_bytes(b"tampered")
+    with pytest.raises(ValueError, match="certificate"):
+        select_verified_eis_ca(project_root=tmp_path)
+
+    # A bad explicit override must not fall back to the real bundled root.
+    existing = Path(__file__).resolve().parents[1] / "russian_trusted_root_ca_pem.crt"
+    with pytest.raises(ValueError, match="certificate"):
+        select_verified_eis_ca(certs / "russian_trusted_root_ca_pem.crt",
+                               project_root=existing.parent)
+
+
+def test_pinned_root_probe_reexports_same_production_verifier():
+    from app.sources.eis_pinned_ca import verify_root as production_verify, ROOT_SHA256 as production_pin
+    from scripts.ru_eis_pinned_tls_probe import verify_root as probe_verify, ROOT_SHA256 as probe_pin
+
+    assert probe_verify is production_verify
+    assert probe_pin == production_pin

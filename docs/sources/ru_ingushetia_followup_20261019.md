@@ -130,3 +130,44 @@ draft PR: <https://github.com/Ramzes2023/TenderLens-AI/pull/226>. No merge.
   Do not use a production subscription as an implied test authorization.
 - PR remains draft/unmerged. Hosted live transport, runner listener recovery,
   direct EIS access from RU, and actual Telegram receipt remain open gates.
+
+
+## 20 October 2026: fresh operator-local EIS full-chain acceptance
+
+The operator supplied PowerShell stdout from the existing isolated Ingushetia
+checkout after a `git pull --ff-only` to PR #226 commit `17ae0f5`.
+The command executed `python -B -m scripts.ci_ru_ingushetia_live_worker`
+on that Windows host. This is *operator-provided local execution evidence*,
+not a GitHub-hosted run, signed attestation or production confirmation.
+
+The pasted output reported:
+- `RU_INGUSHETIA_LIVE_UPSTREAM=official_eis_rss`
+- `RU_INGUSHETIA_LIVE_ACCEPTANCE=PASS` and `LIVE_TEST_EXIT_CODE=0`
+- `FAILURE_ROUTE_SUMMARY=[]`
+- Worker `succeeded`, 10 EIS regional notices stored and searchable in
+  disposable SQLite, two actual first-party EIS HTML originals independently
+  checked, replay duplicates 0, isolated monitor sink dispatches 2.
+- Original EIS 44-FZ IDs `0314100001626000010` and
+  `0314100001626000012`, Rosreestr for Ingushetia.
+- `REAL_USER_TELEGRAM_RECEIPT=NOT_TESTED`;
+  `PRODUCTION_CHANGED=NO`.
+
+These newly confirmed IDs demonstrate a genuine accessible local acquisition.
+The output does not demonstrate broad Ingushetia buyer coverage, a user-specific
+keyword profile, persistent scheduled production operation or Telegram Bot API
+acceptance. They must not be conflated with the separate three committee
+originals from Fabrikant.
+
+The exact-head hosted mandatory gate remained red because direct GitHub-hosted
+HTTPS from Windows and Linux failed EIS/Fabrikant before an HTTP response
+(see native curl diagnostic run 39402379505). Green local acceptance is
+strong evidence that the code works from at least one source-reachable
+network, but does **not** justify disabling the independent hosted gate or
+merging production.
+
+On PR #226, `scripts/ci_ru_ingushetia_live_worker.py` was subsequently
+simplified to one real leased Worker RSS acquisition: the two independent
+EIS card GETs are now against the actual persisted Worker rows, not rows
+from a separate earlier RSS fetch. An offline regression verifies this.
+There is no claim yet that the revised exact-head code has passed local
+or GitHub-hosted live acceptance.

@@ -229,3 +229,44 @@ def test_real_monitor_dispatch_path_uses_isolated_ack_sink_without_telegram_api(
     finally:
         db.close()
     assert count == 1
+
+
+def test_live_eis_acceptance_worker_only_downloads_rss_once(monkeypatch):
+    """Offline synthetic contract, NOT proof of external EIS or Telegram delivery."""
+    from scripts import ci_ru_ingushetia_live_worker as acceptance
+
+    numbers = (N, "0114500000826002365")
+    titles = ("Поставка медицинских товаров", "Поставка связи")
+    fetch_calls = []
+    detail_calls = []
+
+    async def fake_fetch(self, limit=20):
+        fetch_calls.append(limit)
+        assert limit == 10
+        return [
+            normalize_ingushetia_notice(sample(
+                tender_number=number,
+                external_id="EIS-GUID-" + number,
+                url=U.replace(N, number),
+                title=title,
+            ))
+            for number, title in zip(numbers, titles)
+        ]
+
+    async def fake_original_cards(notices):
+        detail_calls.append([item.tender_number for item in notices])
+        assert all(item.source == SOURCE_ID for item in notices)
+        assert len(notices) == 2
+
+    monkeypatch.setattr(IngushetiaEis44Source, "fetch", fake_fetch)
+    monkeypatch.setattr(acceptance, "_check_original_links", fake_original_cards)
+
+    result = acceptance.proof()
+    assert fetch_calls == [10]
+    assert detail_calls == [list(numbers)]
+    assert result["leased_worker_state"] == "succeeded"
+    assert result["stored_and_searchable"] == 2
+    assert result["original_cards_corresponding_to_list"] == 2
+    assert result["isolated_staging_sink_dispatches"] == 2
+    assert result["replay_duplicates"] == 0
+    assert result["real_user_notifications_sent"] is False

@@ -171,3 +171,38 @@ EIS card GETs are now against the actual persisted Worker rows, not rows
 from a separate earlier RSS fetch. An offline regression verifies this.
 There is no claim yet that the revised exact-head code has passed local
 or GitHub-hosted live acceptance.
+
+## 20 October 2026: second operator-local PASS after EIS single-fetch repair
+
+The operator pasted a fresh PowerShell transcript showing a clean
+`git pull --ff-only` advancing the isolated Windows checkout from
+`17ae0f5` to `a12b2b9` and an actual execution of
+`scripts.ci_ru_ingushetia_live_worker` on the new commit.
+
+Reported output (operator-provided stdout, **not** CI attestation):
+- `FAILURE_ROUTE_SUMMARY=[]`
+- `RU_INGUSHETIA_LIVE_UPSTREAM=official_eis_rss`
+- `RU_INGUSHETIA_LIVE_ACCEPTANCE=PASS`
+- `LIVE_TEST_EXIT_CODE=0`
+- Leased Worker state `succeeded`; 10 genuine publisher-region-
+  corroborated EIS notices persisted in disposable SQL and searchable
+  by notice number and title; two independently retrieved EIS original
+  HTML cards verified from the same persisted Worker notices.
+- Current independently verified EIS original numbers
+  `0114500000826002380` and `0114500000826002381` from the
+  Ministry of Health of the Republic of Ingushetia.
+- Two *isolated fake-sink* monitor dispatches; replay duplicates zero;
+  `REAL_USER_TELEGRAM_RECEIPT=NOT_TESTED`; production unchanged.
+
+This corroborates that the revised **single real Worker RSS acquisition**
+method still passes an actual local network test, with genuinely different
+first-two EIS original IDs than the prior local run. It does **not**
+demonstrate new publication between two polling cycles, complete coverage
+of regional buyers, persistent cloud operation or a real Telegram send.
+
+The same PR head's 207 strict GitHub contract tests passed. Hosted live
+acceptance stayed blocked on inaccessible Russian first-party routes;
+independent native curl failed from hosted Linux *and* Windows. No
+workaround, fixture, or bypass may mark the hosted gate green. Both
+regional source flags remain opt-in/default OFF and PR #226 stays draft
+and unmerged pending approved operational acceptance.

@@ -270,3 +270,53 @@ def test_live_eis_acceptance_worker_only_downloads_rss_once(monkeypatch):
     assert result["isolated_staging_sink_dispatches"] == 2
     assert result["replay_duplicates"] == 0
     assert result["real_user_notifications_sent"] is False
+
+
+def test_eis_live_acceptance_retries_one_real_durable_queue_transport_failure(monkeypatch):
+    """Offline synthetic source outage; the actual durable Worker retries itself."""
+    from scripts import ci_ru_ingushetia_live_worker as acceptance
+    from app.sources.http import ConnectorTransportError
+
+    numbers = (N, "0114500000826002365")
+    calls = []
+
+    async def fake_fetch(self, limit=20):
+        calls.append(limit)
+        if len(calls) == 1:
+            raise ConnectorTransportError(retryable=True)
+        return [
+            normalize_ingushetia_notice(sample(
+                tender_number=number, external_id=number,
+                url=U.replace(N, number), title="Поставка медицинских товаров",
+            )) for number in numbers
+        ]
+
+    async def check_originals(notices):
+        assert {n.tender_number for n in notices} == set(numbers)
+
+    monkeypatch.setattr(IngushetiaEis44Source, "fetch", fake_fetch)
+    monkeypatch.setattr(acceptance, "_check_original_links", check_originals)
+
+    result = acceptance.proof()
+    assert calls == [10, 10]
+    assert result["leased_worker_state"] == "succeeded"
+    assert result["stored_and_searchable"] == 2
+    assert result["isolated_staging_sink_dispatches"] == 2
+
+
+def test_safe_eis_failure_shape_excludes_untrusted_job_fields():
+    from types import SimpleNamespace
+    from scripts.ci_ru_ingushetia_live_worker import IngushetiaEisWorkerFailure
+
+    errored = IngushetiaEisWorkerFailure(SimpleNamespace(
+        state="failed", failure_code="handler_error"
+    ))
+    assert errored.job_state == "failed"
+    assert errored.job_failure_code == "handler_error"
+
+    unknown = IngushetiaEisWorkerFailure(SimpleNamespace(
+        state="secret state", failure_code="token=TEST_PRIVATE_VALUE"
+    ))
+    assert unknown.job_state == "UNKNOWN"
+    assert unknown.job_failure_code == "UNKNOWN"
+    assert "TEST_PRIVATE_VALUE" not in str(unknown)

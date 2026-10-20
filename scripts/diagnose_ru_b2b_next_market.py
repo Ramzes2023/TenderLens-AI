@@ -66,14 +66,30 @@ def analyze_official_html(payload: bytes):
     parser = OriginalNextLinks()
     parser.feed(payload.decode("utf-8-sig", errors="strict"))
     parser.close()
-    return {"anchor_count": parser.anchor_count,
-            "same_origin_href_count": parser.same_origin_links,
-            "same_origin_app_route_count": parser.same_origin_app_routes,
-            "first_party_native_detail_links": len(parser.native_links),
-            "native_path_candidates": len(parser.native_path_candidates),
-            "native_path_candidates_with_query": parser.with_query,
-            "embedded_tender_id_markers": len(set(re.findall(rb"tender-[0-9]{4,12}", payload))),
-            "html_bytes": len(payload)}
+    report = {"anchor_count": parser.anchor_count,
+              "same_origin_href_count": parser.same_origin_links,
+              "same_origin_app_route_count": parser.same_origin_app_routes,
+              "first_party_native_detail_links": len(parser.native_links),
+              "native_path_candidates": len(parser.native_path_candidates),
+              "native_path_candidates_with_query": parser.with_query,
+              "embedded_tender_id_markers": len(set(re.findall(rb"tender-[0-9]{4,12}", payload))),
+              "html_bytes": len(payload)}
+    # The current official frontend serves Vue SSR procedure cards: the
+    # original /market/.../tender-N/ href includes a #btid analytics fragment
+    # and is not covered by the old anchor-only diagnostic. Reuse the exact
+    # production parser, and output counts only, NEVER notice content or URLs.
+    from app.sources.b2b_next_market import parse_next_market
+    from app.sources.eis_rss import SourceError
+    try:
+        verified = parse_next_market(payload, limit=10)
+    except (SourceError, ValueError, TypeError, UnicodeError) as error:
+        report["ssr_native_schema"] = "rejected"
+        report["ssr_rejection_class"] = type(error).__name__
+        report["ssr_verified_native_count"] = 0
+    else:
+        report["ssr_native_schema"] = "verified"
+        report["ssr_verified_native_count"] = len(verified)
+    return report
 
 
 async def probe():
@@ -109,7 +125,7 @@ def main():
     # This diagnostic is never sufficient for Worker→SQL or authenticated scoring.
     return 0 if (report.get("status") == 200
                  and report.get("html_content_type")
-                 and report.get("first_party_native_detail_links", 0) >= 1) else 1
+                 and report.get("ssr_verified_native_count", 0) >= 1) else 1
 
 
 if __name__ == "__main__":

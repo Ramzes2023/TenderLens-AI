@@ -130,12 +130,10 @@ def test_ingushetia_pair_stays_default_off_and_only_explicit_opt_in_is_queued(tm
     from app.sources.models import TenderNotice
 
     disabled = catalog()
-    assert not any(k.startswith("ru_ingushetia_") for k in approved_ru_keys(disabled)
-                   if k in disabled.enabled_keys) if any(
-        key in disabled.enabled_keys for key in RU_APPROVED_SOURCES
-    ) else all(key not in disabled.enabled_keys for key in (
-        "ru_ingushetia_eis44", "ru_ingushetia_fabrikant44"
-    ))
+    assert "ru_ingushetia_eis44" not in disabled.enabled_keys
+    assert "ru_ingushetia_fabrikant44" not in disabled.enabled_keys
+    with pytest.raises(ValueError, match="No operator-approved"):
+        approved_ru_keys(disabled)
 
     cat = catalog(ru_ingushetia_eis44_enabled=True,
                   ru_ingushetia_fabrikant44_enabled=True)

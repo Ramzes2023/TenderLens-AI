@@ -373,3 +373,50 @@ def test_eis_live_acceptance_stays_red_after_all_three_real_retry_failures(monke
     assert calls == [10, 10, 10]
     assert error.value.job_state == "failed"
     assert error.value.job_failure_code == "handler_error"
+
+
+def test_normal_operator_enabled_ingushetia_eis_uses_pinned_root_by_default(monkeypatch):
+    """Offline. Production adapter path must match the successful isolated CA test."""
+    from pathlib import Path
+    from scripts.ru_eis_pinned_tls_probe import verify_root
+
+    seen = []
+
+    async def source_fetch(self, limit=20):
+        seen.append((self.ca_bundle_file, self.system_trust, self.direct, limit))
+        assert self.ca_bundle_file is not None
+        assert Path(self.ca_bundle_file).name == "russian_trusted_root_ca_pem.crt"
+        verify_root(self.ca_bundle_file.read_bytes())
+        return [sample()]
+
+    monkeypatch.setattr(EisRssSource, "fetch", source_fetch)
+    result = asyncio.run(IngushetiaEis44Source().fetch(limit=2))
+    assert [n.tender_number for n in result] == [N]
+    assert len(seen) == 1 and seen[0][1:] == (False, True, 100)
+
+
+def test_ingushetia_eis_rejects_unpinned_ca_override_before_network(monkeypatch, tmp_path):
+    import app.sources.ru_ingushetia_eis44 as source
+
+    bad = tmp_path / "wrong-root.pem"
+    bad.write_text("-----BEGIN CERTIFICATE-----\nNOT_AN_OFFICIAL_CERT\n-----END CERTIFICATE-----\n")
+
+    async def never_network(*args, **kwargs):
+        pytest.fail("No network on bad official CA")
+
+    monkeypatch.setattr(EisRssSource, "fetch", never_network)
+    with pytest.raises(ValueError, match="root CA|certificate"):
+        asyncio.run(source.IngushetiaEis44Source(ca_bundle_file=bad).fetch(limit=2))
+
+
+def test_explicit_windows_system_trust_mode_does_not_secretly_override_ca(monkeypatch):
+    """Explicit operator choice only; real Windows trust verified in separate CI."""
+    seen = []
+
+    async def source_fetch(self, limit=20):
+        seen.append((self.ca_bundle_file, self.system_trust, self.direct))
+        return [sample()]
+
+    monkeypatch.setattr(EisRssSource, "fetch", source_fetch)
+    assert len(asyncio.run(IngushetiaEis44Source(system_trust=True).fetch(limit=1))) == 1
+    assert seen == [(None, True, True)]

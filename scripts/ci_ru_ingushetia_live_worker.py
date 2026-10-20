@@ -167,17 +167,28 @@ def proof():
             handlers = HandlerRegistry()
             handlers.register(JOB_TYPE, ConnectorSyncHandler(catalog, store, max_records=10))
             worker = Worker(jobs, handlers, job_types=(JOB_TYPE,))
-            if not worker.run_once():
-                raise AssertionError("Real EIS Worker not claimed")
-            completed = jobs.get(job.id, scope=JobScope())
-            # The durable queue has one safe automatic retry for transient
-            # EIS transport failure. Use the same idempotent job and true
-            # queue state; never seed SQL or manufacture a successful result.
-            if completed is not None and completed.state == "queued":
-                time.sleep(1.25)  # queue backoff for the first retryable failure
-                if not worker.run_once():
-                    raise AssertionError("Real EIS Worker retry not claimed")
+            # The durable repository permits exactly three attempts with
+            # deterministic backoff (1s, 2s). Do not fail acceptance while
+            # a retryable first/second transport error is still legitimately
+            # queued, and do not bypass the real Worker or advance the clock.
+            completed = None
+            for attempt in range(3):
+                claimed = worker.run_once()
+                if not claimed:
+                    raise AssertionError(
+                        "Real EIS Worker not claimed" if attempt == 0
+                        else "Real EIS Worker retry not claimed"
+                    )
                 completed = jobs.get(job.id, scope=JobScope())
+                if completed is not None and completed.state == "succeeded":
+                    break
+                if completed is None or completed.state != "queued":
+                    raise IngushetiaEisWorkerFailure(completed)
+                if attempt == 2:
+                    break
+                # Allow the genuine repository available_at deadline to pass.
+                # Never retry unboundedly or manufacture a successful job.
+                time.sleep((1.25, 2.25)[attempt])
             if completed is None or completed.state != "succeeded":
                 raise IngushetiaEisWorkerFailure(completed)
             rows = store.read(SOURCE_ID, limit=10)

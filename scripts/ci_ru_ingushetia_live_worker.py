@@ -137,15 +137,10 @@ async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, repository
 def proof():
     catalog = _catalog()
     assert SOURCE_ID in catalog.enabled_keys
-    # LIVE network to real official RSS first, never fixtures.
-    source = catalog.registry.get(SOURCE_ID).source
-    first = asyncio.run(source.fetch(limit=5))
-    if len(first) < 2:
-        raise AssertionError(
-            f"Only {len(first)} independently region-confirmed real EIS notices; minimum 2"
-        )
-    assert all(normalize_ingushetia_notice(item) is not None for item in first)
-    asyncio.run(_check_original_links(first[:2]))
+    # No redundant prefetch: the real leased Worker downloads the live
+    # first-party RSS and persists only region-verified official records.
+    # The independent original-card GET runs on the exact persisted IDs
+    # from that same Worker acquisition, never on cached or synthetic rows.
     with tempfile.TemporaryDirectory(prefix="valyqon-ru-ingushetia-") as tmp:
         db = Database(DatabaseSettings("ru-ingushetia-live", Path(tmp) / "proof.sqlite"))
         try:
@@ -163,12 +158,20 @@ def proof():
             rows = store.read(SOURCE_ID, limit=10)
             if len(rows) < 2:
                 raise AssertionError("Insufficient real Ingushetia notices persisted")
-            # Never accept two verified upstream details AND unrelated SQL rows
-            # as a complete ingestion chain; the same originals must survive.
-            original_verified_ids = {n.tender_number for n in first[:2]}
-            persisted_ids = {n.tender_number for n in rows}
-            if not original_verified_ids <= persisted_ids:
-                raise AssertionError("Original EIS detail IDs did not survive real leased Worker SQL")
+            if (completed.result is None
+                    or completed.result["fetched_count"] != len(rows)
+                    or completed.result["accepted_count"] != len(rows)
+                    or completed.result["inserted_count"] != len(rows)
+                    or completed.result["skipped_count"] != 0):
+                raise AssertionError("Real EIS Worker SQL counts do not match verified originals")
+            if (len({n.tender_number for n in rows}) != len(rows)
+                    or any(n.source != SOURCE_ID
+                           or n.external_id != n.tender_number
+                           or normalize_ingushetia_notice(n) is None for n in rows)):
+                raise AssertionError("Real EIS Worker persisted noncanonical regional original")
+            # Independently GET the two actual first-party original cards,
+            # identified by the Worker rows rather than a second RSS fetch.
+            asyncio.run(_check_original_links(rows[:2]))
             snap = snapshot_catalog(catalog, store)
             for n in rows:
                 assert normalize_ingushetia_notice(n) is not None
@@ -194,7 +197,7 @@ def proof():
             return {
                 "official_rss_origin": "zakupki.gov.ru",
                 "verified_notices": [{"number": n.tender_number, "title": n.title,
-                                      "url": n.url, "customer": n.customer} for n in first[:2]],
+                                      "url": n.url, "customer": n.customer} for n in rows[:2]],
                 "isolated_staging_sink_dispatches": staged,
                 "original_cards_corresponding_to_list": 2,
                 "leased_worker_state": completed.state,

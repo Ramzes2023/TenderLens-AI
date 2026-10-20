@@ -4,6 +4,7 @@ import ipaddress
 import subprocess
 
 import pytest
+from app.sources.http_transport import PublicIPError
 
 from scripts.ru_ingushetia_independent_https_probe import (
     MAX_BYTES, LIST_URL, RSS_URL, curl_observation, public_addresses,
@@ -33,13 +34,14 @@ def test_dns_deduplicates_public_addresses_and_caps_attempts():
     ("44.fabrikant.ru", "http://44.fabrikant.ru/private", "8.8.8.8"),
     ("44.fabrikant.ru", LIST_URL, "169.254.169.254"),
     ("zakupki.gov.ru", RSS_URL, "127.0.0.1"),
+    ("44.fabrikant.ru", RSS_URL, "8.8.8.8"),
 ])
 def test_invalid_endpoint_or_ip_never_invokes_curl(host, url, ip):
     calls = []
     def runner(*args, **kwargs):
         calls.append((args, kwargs))
         raise AssertionError("No subprocess may be launched")
-    with pytest.raises(ValueError):
+    with pytest.raises((ValueError, PublicIPError)):
         curl_observation(host, url, ip, root_path="trusted.pem", runner=runner)
     assert not calls
 

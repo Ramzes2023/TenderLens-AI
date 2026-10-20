@@ -320,3 +320,56 @@ def test_safe_eis_failure_shape_excludes_untrusted_job_fields():
     assert unknown.job_state == "UNKNOWN"
     assert unknown.job_failure_code == "UNKNOWN"
     assert "TEST_PRIVATE_VALUE" not in str(unknown)
+
+
+def test_eis_live_acceptance_survives_two_consecutive_retryable_transport_failures(monkeypatch):
+    """Offline: third and final real durable Worker attempt succeeds after two outages."""
+    from scripts import ci_ru_ingushetia_live_worker as acceptance
+    from app.sources.http import ConnectorTransportError
+
+    numbers = (N, "0114500000826002365")
+    calls = []
+
+    async def fake_fetch(self, limit=20):
+        calls.append(limit)
+        if len(calls) <= 2:
+            raise ConnectorTransportError(retryable=True)
+        return [
+            normalize_ingushetia_notice(sample(
+                tender_number=number, external_id=number,
+                url=U.replace(N, number), title="Поставка медицинских товаров",
+            )) for number in numbers
+        ]
+
+    async def check_originals(notices):
+        assert {n.tender_number for n in notices} == set(numbers)
+
+    monkeypatch.setattr(IngushetiaEis44Source, "fetch", fake_fetch)
+    monkeypatch.setattr(acceptance, "_check_original_links", check_originals)
+
+    result = acceptance.proof()
+    assert calls == [10, 10, 10]  # exactly the real queue's three attempts
+    assert result["leased_worker_state"] == "succeeded"
+    assert result["stored_and_searchable"] == 2
+    assert result["isolated_staging_sink_dispatches"] == 2
+    assert result["real_user_notifications_sent"] is False
+
+
+def test_eis_live_acceptance_stays_red_after_all_three_real_retry_failures(monkeypatch):
+    """Offline: no fixture, TLS bypass or status override can claim a failed source."""
+    from scripts import ci_ru_ingushetia_live_worker as acceptance
+    from app.sources.http import ConnectorTransportError
+    from scripts.ci_ru_ingushetia_live_worker import IngushetiaEisWorkerFailure
+
+    calls = []
+
+    async def always_down(self, limit=20):
+        calls.append(limit)
+        raise ConnectorTransportError(retryable=True)
+
+    monkeypatch.setattr(IngushetiaEis44Source, "fetch", always_down)
+    with pytest.raises(IngushetiaEisWorkerFailure) as error:
+        acceptance.proof()
+    assert calls == [10, 10, 10]
+    assert error.value.job_state == "failed"
+    assert error.value.job_failure_code == "handler_error"

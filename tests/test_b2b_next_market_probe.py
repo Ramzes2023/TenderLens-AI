@@ -41,3 +41,21 @@ def test_non_anchor_embedded_id_is_not_counted_as_verified_native_link():
     evidence = analyze_official_html(html)
     assert evidence["embedded_tender_id_markers"] == 1
     assert evidence["first_party_native_detail_links"] == 0
+
+
+def test_live_shape_fixture_diagnostic_uses_production_ssr_parser_not_legacy_anchor_guess():
+    from pathlib import Path
+    fixture = (Path(__file__).parent / "fixtures" / "ru08" / "b2b_next_ssr.html").read_bytes()
+    report = analyze_official_html(fixture)
+    assert report["ssr_native_schema"] == "verified"
+    assert report["ssr_verified_native_count"] == 2
+    assert report["ssr_verified_native_count"] > report["first_party_native_detail_links"]
+    assert not any("tender_url" in key or "notice_title" in key for key in report)
+
+
+def test_diagnostic_cannot_count_syntactic_unverified_native_anchors():
+    payload = b'<a href="/app/market-next/slug/tender-4644426/">Not a verified SSR card</a>'
+    report = analyze_official_html(payload)
+    assert report["first_party_native_detail_links"] == 1
+    assert report["ssr_native_schema"] == "rejected"
+    assert report["ssr_verified_native_count"] == 0

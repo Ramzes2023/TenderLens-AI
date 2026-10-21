@@ -39,6 +39,21 @@ def test_gpb_disabled_by_default_and_explicit_opt_in():
     assert "gpb_etp_public" in build_source_catalog(settings(True)).enabled_keys
 
 
+def test_observed_numeric_only_gpb_firstparty_route_without_synthetic_slug():
+    original = "https://etpgpb.ru/procedures/etp/1240053/"
+    assert parse_gpb_public_links(listing(original)) == [("1240053", original)]
+    notice = parse_gpb_verified_detail(detail("1240053"), "1240053", original)
+    assert notice.external_id == "1240053"
+    assert notice.url == original
+    for bad in (
+        "https://etpgpb.ru/procedures/etp/1240053/?access_token=hidden",
+        "https://etpgpb.ru/procedures/etp/1240053.evil/",
+        "https://etpgpb.ru.evil.example/procedures/etp/1240053/",
+    ):
+        with pytest.raises(ValueError):
+            parse_gpb_public_links(listing(bad))
+
+
 def test_exact_public_notice_and_independent_title():
     assert parse_gpb_public_links(listing()) == [("1299761", URL)]
     notice = parse_gpb_verified_detail(detail(), "1299761", URL)
@@ -106,3 +121,53 @@ def test_real_job_fence_and_sqlite_roundtrip_with_offline_source(monkeypatch):
     assert evidence["worker_inserted"] == 1
     assert evidence["sqlite_search_verified"] == 1
     assert evidence["idempotent_replay"]
+
+
+def test_bounded_public_gpb_skips_stale_original_and_returns_next_verified(monkeypatch):
+    """Never allow one deleted/stale first-party card to starve a current feed.
+
+    This is a MockTransport-style offline test, not live acceptance.
+    """
+    candidates = [
+        f"https://{HOST}/procedures/etp/123450{i}-procedure/"
+        for i in (1, 2, 3, 4)
+    ]
+    raw_index = "<html>" + "".join(
+        f"<a href='{url}'>First-party procedure</a>"
+        for url in candidates
+    ) + "</html>"
+    seen = []
+
+    class Reply:
+        def __init__(self, payload):
+            self.content = payload
+            self.headers = {"content-type": "text/html"}
+        def raise_for_status(self):
+            return None
+
+    class Fake:
+        async def get(self, url):
+            seen.append(url)
+            if url == LIST_URL:
+                return Reply(raw_index.encode("utf-8"))
+            if url == candidates[0]:
+                # Rejected: H1 present but no independently visible ID.
+                return Reply(b"<html><h1>Deleted</h1></html>")
+            if url == candidates[1]:
+                return Reply(detail("1234502"))
+            raise AssertionError("Unbounded extra GPB request")
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        assert kwargs["follow_redirects"] is False
+        assert kwargs["trust_env"] is False
+        yield Fake()
+
+    import app.sources.gpb_etp_public as mod
+    monkeypatch.setattr(mod, "source_client", client)
+    received = asyncio.run(GpbEtpPublicSource().fetch(1))
+    assert len(received) == 1
+    assert received[0].external_id == "1234502"
+    assert received[0].url == candidates[1]
+    assert seen == [LIST_URL, candidates[0], candidates[1]]
+

@@ -9,7 +9,7 @@ from __future__ import annotations
 from .registry import SourceRegistryError
 
 # Only adapters with a first-party/live buyer list→notice→leased Worker→SQL
-# acceptance previously checked; platform research/blocked PRs are excluded.
+# acceptance checked (Dagestan is explicitly public-list-only); platform research/blocked PRs are excluded.
 # This is a *publisher-connection* allowlist, not independent procurement
 # publication counts: buyer and marketplace copies can overlap.
 RU_APPROVED_SOURCES = (
@@ -20,6 +20,11 @@ RU_APPROVED_SOURCES = (
     "south_ural_public",
     "stan_commercial_public",
     "kavkaz_rf_firstparty",
+    "gpb_etp_public",
+    "tektorg",
+    "fabrikant_44_public",
+    "roseltorg_public",
+    "ru_dagestan_public_list",
 )
 
 

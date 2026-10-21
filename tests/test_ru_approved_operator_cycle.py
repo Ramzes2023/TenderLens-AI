@@ -28,11 +28,12 @@ def queue(tmp_path, cat):
     return db, repo, ConnectorSyncService(JobService(repo), cat)
 
 
-def test_only_seven_explicitly_verified_operator_sources_and_no_side_effects(tmp_path):
+def test_only_explicitly_verified_operator_sources_and_no_side_effects(tmp_path):
     assert RU_APPROVED_SOURCES == (
         "b2b_center", "lenobl_small_public", "nmck_native_public",
         "mikroton_tender", "south_ural_public", "stan_commercial_public",
-        "kavkaz_rf_firstparty",
+        "kavkaz_rf_firstparty", "gpb_etp_public", "tektorg",
+        "fabrikant_44_public", "roseltorg_public", "ru_dagestan_public_list",
     )
     cat = catalog()
     with pytest.raises(ValueError, match="No operator-approved"):
@@ -55,6 +56,11 @@ def test_only_seven_explicitly_verified_operator_sources_and_no_side_effects(tmp
     ("south_ural_public_enabled", "south_ural_public"),
     ("stan_commercial_public_enabled", "stan_commercial_public"),
     ("kavkaz_rf_firstparty_enabled", "kavkaz_rf_firstparty"),
+    ("gpb_etp_public_enabled", "gpb_etp_public"),
+    ("tektorg_public_enabled", "tektorg"),
+    ("fabrikant_44_public_enabled", "fabrikant_44_public"),
+    ("roseltorg_public_enabled", "roseltorg_public"),
+    ("ru_dagestan_public_list_enabled", "ru_dagestan_public_list"),
 ])
 def test_each_russian_source_requires_individual_operator_enable(tmp_path, flag, source):
     cat = catalog(**{flag: True})
@@ -79,7 +85,9 @@ def test_ru_cycle_hourly_repeat_is_idempotent_then_next_hour_unique(tmp_path):
     cat = catalog(b2b_center_enabled=True, lenobl_small_public_enabled=True,
                   nmck_native_public_enabled=True, mikroton_tender_enabled=True,
                   south_ural_public_enabled=True, stan_commercial_public_enabled=True,
-                  kavkaz_rf_firstparty_enabled=True)
+                  kavkaz_rf_firstparty_enabled=True, gpb_etp_public_enabled=True,
+                  tektorg_public_enabled=True, fabrikant_44_public_enabled=True,
+                  roseltorg_public_enabled=True, ru_dagestan_public_list_enabled=True)
     db, jobs, service = queue(tmp_path, cat)
     try:
         start = datetime(2026, 10, 18, 13, 12, tzinfo=timezone.utc)
@@ -93,7 +101,7 @@ def test_ru_cycle_hourly_repeat_is_idempotent_then_next_hour_unique(tmp_path):
         assert all(first[key]["job_id"] != next_hour[key]["job_id"]
                    for key in RU_APPROVED_SOURCES)
         with db.connect() as conn:
-            assert conn.execute("SELECT COUNT(*) FROM durable_jobs").fetchone()[0] == 14
+            assert conn.execute("SELECT COUNT(*) FROM durable_jobs").fetchone()[0] == 2 * len(RU_APPROVED_SOURCES)
             ids = {json.loads(row[0])["source_id"] for row in conn.execute(
                 "SELECT payload_json FROM durable_jobs"
             )}
@@ -102,7 +110,7 @@ def test_ru_cycle_hourly_repeat_is_idempotent_then_next_hour_unique(tmp_path):
         db.close()
 
 
-def test_enabled_but_unverified_and_nonrussian_sources_never_queued(tmp_path):
+def test_enabled_nonrussian_sources_never_queued(tmp_path):
     cat = catalog(
         kavkaz_rf_firstparty_enabled=True, south_ural_public_enabled=True,
         tektorg_public_enabled=True, gpb_etp_public_enabled=True,
@@ -111,7 +119,7 @@ def test_enabled_but_unverified_and_nonrussian_sources_never_queued(tmp_path):
     db, jobs, service = queue(tmp_path, cat)
     try:
         result = enqueue_approved_ru(service, cat)
-        assert tuple(result) == ("south_ural_public", "kavkaz_rf_firstparty")
+        assert tuple(result) == ("south_ural_public", "kavkaz_rf_firstparty", "gpb_etp_public", "tektorg")
         with db.connect() as conn:
             rows = conn.execute("SELECT payload_json FROM durable_jobs").fetchall()
         assert {json.loads(row[0])["source_id"] for row in rows} == set(result)

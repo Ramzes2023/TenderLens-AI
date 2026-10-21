@@ -4,6 +4,7 @@ Never invent notice dates/prices. No external credentials, persistent DB or LLM.
 """
 import asyncio
 import json
+import re
 import tempfile
 from pathlib import Path
 
@@ -64,7 +65,10 @@ def proof():
                 raise AssertionError("Missing GPB SQL rows")
             snapshot = snapshot_catalog(catalog,store)
             for n in stored:
-                if not n.url.startswith(f"https://etpgpb.ru/procedures/etp/{n.external_id}-"):
+                if not re.fullmatch(
+                    rf"https://etpgpb\.ru/procedures/etp/{re.escape(n.external_id)}(?:-[a-z0-9-]+)?/",
+                    n.url,
+                ):
                     raise AssertionError("Noncanonical GPB detail URL")
                 report = asyncio.run(snapshot.fetch(
                     source_keys=(SOURCE,), search_terms=(n.external_id,),

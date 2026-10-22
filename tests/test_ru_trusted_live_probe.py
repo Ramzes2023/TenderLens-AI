@@ -88,5 +88,53 @@ class ProbeSafetyTests(unittest.TestCase):
             self.assertEqual(url.scheme, "https")
             self.assertFalse(url.username or url.password or url.query or url.fragment)
 
+    def test_three_operator_only_official_gpb_targets_do_not_expand_batch(self):
+        self.assertEqual(len(TARGETS), 37)
+        self.assertEqual(ON_DEMAND_TARGETS, {
+            "gpb_public_html": Target("etpgpb.ru", "/procedures/"),
+            "gpb_new_public_html": Target("new.etpgpb.ru", "/procedures/"),
+            "gpb_new_rss": Target("new.etpgpb.ru", "/procedures.rss", "rss"),
+        })
+        self.assertFalse(set(TARGETS).intersection(ON_DEMAND_TARGETS))
+        self.assertEqual(len({(z.host, z.path) for z in ON_DEMAND_TARGETS.values()}), 3)
+
+    def test_gpb_official_only_choice_does_not_use_user_supplied_urls(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        with patch("scripts.ru_trusted_live_probe.read_public",
+                   return_value=("text/html", b"<a href='/procedures/'>list</a>")) as reader:
+            with redirect_stdout(StringIO()):
+                self.assertEqual(main("gpb_public_html"), 0)
+                self.assertEqual(main("gpb_new_public_html"), 0)
+            self.assertEqual([x.args[0] for x in reader.call_args_list], [
+                ON_DEMAND_TARGETS["gpb_public_html"],
+                ON_DEMAND_TARGETS["gpb_new_public_html"],
+            ])
+        with patch("scripts.ru_trusted_live_probe.checked_ips") as dns:
+            self.assertEqual(main("gpb_new_rss?ref=private"), 2)
+            self.assertEqual(main("http://new.etpgpb.ru/procedures.rss"), 2)
+            dns.assert_not_called()
+
+    def test_main_only_selfhosted_gpbdetection_cannot_run_on_pr(self):
+        from pathlib import Path
+        import yaml
+        root = Path(__file__).resolve().parents[1]
+        content = (root / ".github/workflows/ru-trusted-operator-only.yml").read_text(encoding="utf-8")
+        config = yaml.safe_load(content)
+        event = config.get("on", config.get(True))
+        self.assertEqual(set(event), {"workflow_dispatch"})
+        options = event["workflow_dispatch"]["inputs"]["source"]["options"]
+        for label in ON_DEMAND_TARGETS:
+            self.assertIn(label, options)
+        self.assertEqual(len(options), len(set(options)))
+        job = config["jobs"]["ru-operator-trusted-only"]
+        self.assertEqual(job["if"], "github.ref == 'refs/heads/main'")
+        self.assertEqual(job["runs-on"], ["self-hosted", "Linux", "X64"])
+        self.assertIn("VALYQON-RU-01", content)
+        self.assertIn("persist-credentials: false", content)
+        self.assertNotIn("pull_request:", content)
+
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,40 @@
+name: RU GPB separate current first-party originals to Worker SQLite
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/gpb_etp_public.py
+      - tests/test_ru_gpb_public.py
+      - scripts/ci_ru_gpb_public_worker.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gpb-numeric-and-stale-hostile-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require numeric-only official IDs, strict origin and bounded skipped stale cards
+        run: python -m pytest -q tests/test_ru_gpb_public.py
+
+  gpb-live-original-worker-sql-search:
+    runs-on: windows-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require current genuine official GPB list and independently checked detail through durable Worker SQLite and query
+        timeout-minutes: 6
+        run: python -B -m scripts.ci_ru_gpb_public_worker

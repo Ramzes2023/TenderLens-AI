@@ -236,6 +236,12 @@ def accept():
             external_ack = asyncio.run(optional_authorized_telegram_api_check(rows[0]))
             return {
                 "official_live_eis_region_notices": len(rows),
+                # Public EIS registry numbers are safe to corroborate outside
+                # the private operator environment. Never emit the RSS query,
+                # full source payload, test bot token or subscriber/chat ID.
+                "official_eis_notice_numbers": sorted({
+                    n.tender_number for n in rows
+                }),
                 "fenced_worker_inserted": stats["inserted_count"],
                 "sqlite_original_number_query": True,
                 "sqlite_real_title_keyword_query": True,

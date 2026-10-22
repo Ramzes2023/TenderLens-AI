@@ -445,3 +445,55 @@ def test_shared_regional_user_keyword_after_candidate_limit_does_not_miss_late_t
         assert bot.sent[0][0] == 11 and "0114500000826002599" in bot.sent[0][1]
         assert service.claimed == [(1, "0114500000826002599")]
     asyncio.run(run())
+
+
+def test_real_monitor_service_defaults_to_user_limit_but_shared_fetches_100_candidates():
+    """Verify the actual source-catalog boundary, not just a fake monitor method."""
+    from app.monitoring.config import MonitoringSettings
+    from app.monitoring.service import TenderMonitorService
+
+    opts = MonitoringSettings(
+        enabled=True, interval_seconds=600, max_items=3,
+        max_notifications_per_cycle=2, request_timeout=15,
+        eis_rss_urls=(), ca_bundle_file=None, profile_feeds_enabled=False,
+        ru_background_catalog_enabled=True,
+    )
+    seen = []
+
+    class Catalog:
+        async def fetch(self, *, limit_per_source, source_keys, search_terms, max_eis_feeds):
+            seen.append((limit_per_source, source_keys, search_terms))
+            all_notices = [
+                tender(str(114500000826002500 + i).zfill(19),
+                       "Поставка хозяйственных товаров", "ru_ingushetia_eis44")
+                for i in range(25)
+            ] + [tender("0114500000826002599", "Устройство ливневой канализации",
+                        "ru_ingushetia_eis44")]
+            return SimpleNamespace(notices=tuple(all_notices[:limit_per_source]))
+
+    service = TenderMonitorService(opts, None, None, None)
+
+    async def check():
+        normal, _ = await service.fetch_matches_from_catalog_for_profile(
+            Catalog(), None, source_keys=("ru_ingushetia_eis44",))
+        shared, _ = await service.fetch_matches_from_catalog_for_profile(
+            Catalog(), None, source_keys=("ru_ingushetia_eis44",), max_items=100)
+        assert len(normal) == 3
+        assert len(shared) == 26
+        assert shared[-1].notice.tender_number == "0114500000826002599"
+        for invalid in (0, 101, -1, True, 3.5, "100"):
+            try:
+                await service.fetch_matches_from_catalog_for_profile(
+                    Catalog(), None, source_keys=("ru_ingushetia_eis44",),
+                    max_items=invalid,
+                )
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("Unbounded or invalid shared poll candidate limit")
+
+    asyncio.run(check())
+    assert seen == [
+        (3, ("ru_ingushetia_eis44",), ()),
+        (100, ("ru_ingushetia_eis44",), ()),
+    ]

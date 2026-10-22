@@ -112,7 +112,7 @@ def test_live_index_can_keep_verified_az_notice_when_one_detail_is_stale(monkeyp
         if url == URL:
             return httpx.Response(200, text=detail(), headers={"content-type": "text/html"})
         if url == second:
-            return httpx.Response(404)
+            return httpx.Response(403)  # individual restricted card, not public evidence
         raise AssertionError("Unapproved source URL")
 
     @asynccontextmanager
@@ -150,3 +150,37 @@ def test_no_az_detail_verification_never_becomes_success(monkeypatch):
     monkeypatch.setattr(source, "source_client", offline_client)
     with pytest.raises(SourceError, match="complete notice batch empty"):
         asyncio.run(source.AzerbaijanHeatSource().fetch(limit=1))
+
+
+def test_az_nonhtml_detail_is_not_a_tender_but_valid_html_card_survives(monkeypatch):
+    import asyncio
+    from contextlib import asynccontextmanager
+    import httpx
+    import app.sources.az_azeristilik as source
+
+    second = "https://azeristilik.gov.az/post/outdated-details-are-a-pdf-only-2026"
+    text = ("<a href='" + second + "'>"
+            "İkinci dövlət qurumu satınalınmasına dair tender elan edir</a>"
+            "<a href='" + URL + "'>" + TITLE + "</a>")
+    urls = []
+
+    def respond(request):
+        target = str(request.url)
+        urls.append(target)
+        if target == INDEX_URL:
+            return httpx.Response(200, text=text, headers={"content-type": "text/html"})
+        if target == second:
+            return httpx.Response(200, content=b"%PDF-1.7", headers={"content-type": "application/pdf"})
+        if target == URL:
+            return httpx.Response(200, text=detail(), headers={"content-type": "text/html"})
+        raise AssertionError("unexpected source endpoint")
+
+    @asynccontextmanager
+    async def offline_client(**kwargs):
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond), **kwargs) as client:
+            yield client
+
+    monkeypatch.setattr(source, "source_client", offline_client)
+    notices = asyncio.run(source.AzerbaijanHeatSource().fetch(limit=2))
+    assert [n.url for n in notices] == [URL]
+    assert urls == [INDEX_URL, second, URL]

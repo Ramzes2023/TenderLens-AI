@@ -78,6 +78,50 @@ jobs:
             exit 1
           }
 
+  chechnya-hosted-network-signal:
+    # A read-only GitHub-hosted canary while the approved RU self-hosted Linux
+    # runner is offline/unassigned. This is NEVER regional live acceptance:
+    # network reachability depends on the runner's location and EIS policy.
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/feat/ru-chechnya-eis-rss-20261022'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Read-only EIS 44-FZ candidate probe via bounded public-IP HTTPS transport
+        env:
+          RU_CHECHNYA_EIS_ENABLED: "true"
+          EIS_DIRECT_ENABLED: "true"
+          EIS_SYSTEM_TRUST_ENABLED: "false"
+          EIS_CA_BUNDLE_FILE: ""
+          GIGACHAT_CA_BUNDLE_FILE: ""
+          MONITORING_ENABLED: "false"
+          RU_CHECHNYA_E2E_TEST_BOT_TOKEN: ""
+          RU_CHECHNYA_E2E_TEST_CHAT_ID: ""
+        shell: bash
+        run: |
+          set -euo pipefail
+          export RU_CHECHNYA_EIS_RSS_URLS="$(python -c 'from app.sources.eis_rss import build_eis_rss_url; print(build_eis_rss_url("Чеченская Республика"))')"
+          echo "EIS_NETWORK_CANARY=UNVERIFIED_TEXT_SEARCH_GITHUB_HOSTED_NOT_RELEASE_GATE"
+          # The probe logs only official public record counts and classified
+          # reasons, never a query URL, raw response or subscriber information.
+          if python -B -m scripts.ru_chechnya_eis_transport_probe; then
+            echo "EIS_HOSTED_NETWORK_CANARY=RECEIVED_ACCEPTABLE_ORIGINALS_NON_RU_RUNNER"
+          else
+            echo "EIS_HOSTED_NETWORK_CANARY=NOT_CONFIRMED_NON_RU_RUNNER"
+          fi
+          echo "EIS_HOSTED_NETWORK_CANARY_IS_NOT_PRODUCTION_ACCEPTANCE=YES"
+
   chechnya-real-live-worker:
     # workflow_dispatch is only discoverable once the workflow reaches the
     # default branch; until then, trusted feature-branch push is the live gate.

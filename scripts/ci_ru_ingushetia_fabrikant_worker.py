@@ -241,6 +241,13 @@ def main():
     except Exception as exc:
         print("INGUSHETIA_FABRIKANT_LIVE_WORKER=BLOCKED")
         print("FAILURE_CLASS=" + type(exc).__name__)
+        if isinstance(exc, IngushetiaWorkerProofFailure):
+            # Closed-category production Worker diagnostics; NO raw original
+            # notices, HTTP response, customer data or exception messages.
+            print("WORKER_STATE=" + exc.job_state)
+            print("WORKER_FAILURE_CODE=" + exc.job_failure_code)
+            print("SAFE_HANDLER_CLASSES=" + ",".join(exc.handler_failure_classes))
+            print("SAFE_HANDLER_CATEGORIES=" + ",".join(exc.handler_failure_categories))
         if type(exc) is AssertionError:
             print("FAILURE_CONTRACT=" + str(exc)[:200].replace("\n", " "))
         print("PRODUCTION_CHANGED=NO")

@@ -619,10 +619,10 @@ def test_optional_test_telegram_requires_matching_real_api_ack(monkeypatch):
 
 
 def test_strict_acceptance_full_offline_worker_sqlite_query_local_alert(monkeypatch):
-    """Integration regression: run the REAL harness and Worker on a synthetic feed.
+    """Integration regression: real parser, law, leased Worker, SQL and local alert.
 
-    The only mock is upstream EIS HTTP. This can NEVER pass the live release
-    gate: it does not verify official reachability or external Telegram delivery.
+    Only HTTP response bytes are synthetic; this NEVER proves live source
+    availability, external Bot API receipt or production readiness.
     """
     from scripts import ci_ru_chechnya_eis_real_worker as harness
 
@@ -635,19 +635,48 @@ def test_strict_acceptance_full_offline_worker_sqlite_query_local_alert(monkeypa
         eis_direct_enabled=True,
     )
     monkeypatch.setattr(harness, "isolated_settings", lambda: config)
-    original = notice(
-        "0194200000526005027",
-        customer="Комитет Правительства Чеченской Республики",
-        region="Чеченская Республика",
-    )
+    # Synthetic EIS HTTP response is the *only* mocked boundary. Exercise the
+    # production RSS XML parser + whole-feed 44-FZ law validation, source
+    # normalization, lease fencing, SQLite, user search, and local alert.
+    import httpx
+    from app.sources import eis_rss
 
-    async def synthetic_official_eis(self, limit=20):
-        assert limit == 100
-        assert self.name == SOURCE_KEY
-        return [original]
+    xml = (
+        '<rss version="2.0"><channel><item>'
+        '<title>Поставка продуктов питания</title>'
+        '<guid>amended-public-eis-rss-guid</guid>'
+        '<link>' + EIS_ORIGINAL.replace("&", "&amp;") + '</link>'
+        '<description>'
+        'Размещение выполняется по: 44-ФЗ; '
+        'Регион: Чеченская Республика; '
+        'Заказчик: Комитет Правительства Чеченской Республики; '
+        'Номер закупки 0194200000526005027'
+        '</description></item></channel></rss>'
+    ).encode("utf-8")
+    sent = []
 
-    monkeypatch.setattr(EisRssSource, "fetch", synthetic_official_eis)
+    def official_fixture_only(request):
+        assert request.url.host == "zakupki.gov.ru"
+        assert request.url.path == "/epz/order/extendedsearch/rss.html"
+        assert request.url.params.get("fz44") == "on"
+        sent.append(str(request.url.path))
+        return httpx.Response(
+            200, content=xml, headers={"content-type": "application/rss+xml"},
+        )
+
+    def mock_public_client(**kwargs):
+        # Keep the real bounded public-source client policy and strict direct
+        # HTTPS behavior; exchange only the outgoing socket for MockTransport.
+        from app.sources.http import BoundedClient
+        assert kwargs["follow_redirects"] is False
+        assert kwargs["trust_env"] is False
+        return BoundedClient(
+            **kwargs, transport=httpx.MockTransport(official_fixture_only),
+        )
+
+    monkeypatch.setattr(eis_rss, "source_client", mock_public_client)
     result = harness.accept()
+    assert sent == ["/epz/order/extendedsearch/rss.html"]
     assert result["official_live_eis_region_notices"] == 1
     assert result["fenced_worker_inserted"] == 1
     assert result["sqlite_original_number_query"]

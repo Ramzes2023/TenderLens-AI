@@ -80,11 +80,33 @@ def analyze_official_html(payload: bytes):
     # production parser, and output counts only, NEVER notice content or URLs.
     from app.sources.b2b_next_market import parse_next_market
     from app.sources.eis_rss import SourceError
+    # These codes are fixed by the strict first-party SSR parser, never
+    # populated from arbitrary HTML text, URLs or exception details.
+    codes = {
+        "B2B-Center ambiguous SSR field.": "FIELD_CARDINALITY",
+        "B2B-Center conflicting SSR identity.": "NATIVE_IDENTITY_CONFLICT",
+        "B2B-Center ambiguous SSR publication date.": "PUBLICATION_DATE_CARDINALITY",
+        "B2B-Center ambiguous SSR deadline.": "DEADLINE_CARDINALITY",
+        "B2B-Center invalid SSR date.": "DATE_FORMAT",
+        "B2B-Center unrecognized SSR price.": "PRICE_FORMAT",
+        "B2B-Center invalid SSR price.": "PRICE_RANGE",
+        "B2B-Center unsafe SSR URL.": "URL_PROVENANCE",
+        "B2B-Center conflicting duplicate identity.": "DUPLICATE_IDENTITY",
+        "B2B-Center returned no usable procurement records.": "NO_VERIFIED_NATIVE_RECORDS",
+        "B2B-Center empty or oversized HTML.": "EMPTY_OR_OVERSIZED_HTML",
+        "B2B-Center invalid HTML encoding.": "ENCODING",
+        "Invalid normalized notice.": "NORMALIZED_NOTICE_CONTRACT",
+    }
     try:
         verified = parse_next_market(payload, limit=10)
     except (SourceError, ValueError, TypeError, UnicodeError) as error:
         report["ssr_native_schema"] = "rejected"
         report["ssr_rejection_class"] = type(error).__name__
+        # Unknown exceptions are only reported by *class*, never by message.
+        report["ssr_rejection_code"] = (
+            codes.get(str(error), "UNCLASSIFIED")
+            if type(error) is SourceError else "UNCLASSIFIED"
+        )
         report["ssr_verified_native_count"] = 0
     else:
         report["ssr_native_schema"] = "verified"

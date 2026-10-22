@@ -59,3 +59,39 @@ def test_diagnostic_cannot_count_syntactic_unverified_native_anchors():
     assert report["first_party_native_detail_links"] == 1
     assert report["ssr_native_schema"] == "rejected"
     assert report["ssr_verified_native_count"] == 0
+
+
+
+def test_safe_known_ssr_failure_reports_fixed_error_code_only(monkeypatch):
+    from app.sources import b2b_next_market as mod
+    from app.sources.eis_rss import SourceError
+
+    def rejected(*args, **kwargs):
+        raise SourceError("B2B-Center ambiguous SSR deadline.")
+    monkeypatch.setattr(mod, "parse_next_market", rejected)
+    result = analyze_official_html(b"<html>dummy</html>")
+    assert result["ssr_rejection_class"] == "SourceError"
+    assert result["ssr_rejection_code"] == "DEADLINE_CARDINALITY"
+    assert result["ssr_verified_native_count"] == 0
+
+
+def test_unknown_upstream_exception_message_not_echoed_into_diagnostic(monkeypatch):
+    from app.sources import b2b_next_market as mod
+    from app.sources.eis_rss import SourceError
+    secret = "TOKEN_SHOULD_NOT_LEAK_123456"
+    def rejected(*args, **kwargs):
+        raise SourceError(secret)
+    monkeypatch.setattr(mod, "parse_next_market", rejected)
+    result = analyze_official_html(b"<html>dummy</html>")
+    assert result["ssr_rejection_code"] == "UNCLASSIFIED"
+    import json
+    assert secret not in json.dumps(result)
+
+
+def test_successful_genuine_ssr_does_not_claim_error_code():
+    from pathlib import Path
+    fixture = (Path(__file__).parent / "fixtures" / "ru08" / "b2b_next_ssr.html").read_bytes()
+    result = analyze_official_html(fixture)
+    assert result["ssr_native_schema"] == "verified"
+    assert result["ssr_verified_native_count"] == 2
+    assert "ssr_rejection_code" not in result

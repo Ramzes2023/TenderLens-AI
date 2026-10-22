@@ -1,0 +1,66 @@
+name: RU Chechnya EIS 44 regional source gated acceptance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/ru_chechnya_eis_rss.py
+      - app/sources/catalog.py
+      - app/sources/ingestion.py
+      - app/sources/ru_dedup.py
+      - app/sources/ru_notice_identity.py
+      - app/monitoring/config.py
+      - tests/test_ru_chechnya_eis_rss.py
+      - scripts/ci_ru_chechnya_eis_real_worker.py
+      - .github/workflows/ru-chechnya-eis-live.yml
+  workflow_dispatch:
+    inputs:
+      regional_rss_url:
+        description: "Exact official EIS 44-FZ Chechnya-filtered RSS URL copied from EIS advanced search"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  chechnya-offline-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Compile new source and strict live acceptance
+        run: python -m compileall -q app/sources/ru_chechnya_eis_rss.py scripts/ci_ru_chechnya_eis_real_worker.py
+      - name: Chechnya official URL, regional evidence, legal provenance, opt-in, Worker and dedup contracts
+        run: python -B -m pytest -q tests/test_ru_chechnya_eis_rss.py tests/test_ru_background_telegram_catalog.py tests/test_ru_telegram_original_dedup.py
+
+  chechnya-real-live-worker:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, Linux]
+    timeout-minutes: 15
+    env:
+      RU_CHECHNYA_EIS_ENABLED: "true"
+      RU_CHECHNYA_EIS_RSS_URLS: ${{ inputs.regional_rss_url }}
+      EIS_PROFILE_FEEDS_ENABLED: "false"
+      EIS_DIRECT_ENABLED: "true"
+      EIS_CA_BUNDLE_FILE: ${{ vars.VALYQON_RU_EIS_CA_BUNDLE_FILE }}
+      MONITORING_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Fail closed unless official LIVE feed -> real Worker -> SQLite -> keyword -> locally captured user alert succeeds
+        timeout-minutes: 7
+        run: python -B -m scripts.ci_ru_chechnya_eis_real_worker

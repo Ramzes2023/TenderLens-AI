@@ -25,7 +25,10 @@ from app.scoring.models import CompanyProfile
 from app.sources.catalog import build_source_catalog
 from app.sources.ingestion import JOB_TYPE, ConnectorSyncHandler, ConnectorSyncService, connector_version
 from app.sources.opportunities import OpportunityRepository
-from scripts.ci_ru_ingushetia_safe_handler_diagnostics import DiagnosticConnectorHandler, safe_handler_failure_classes
+from scripts.ci_ru_ingushetia_safe_handler_diagnostics import (
+    DiagnosticConnectorHandler, safe_handler_failure_classes,
+    safe_handler_failure_categories, sanitize_failure_categories,
+)
 from app.sources.snapshots import snapshot_catalog
 from app.sources.ru_ingushetia_fabrikant44 import SOURCE_ID
 from app.sources.ru_notice_identity import original_notice_key
@@ -36,7 +39,7 @@ from scripts.ci_ru_ingushetia_live_worker import _check_isolated_dispatch
 class IngushetiaWorkerProofFailure(AssertionError):
     """Strictly redacted durable job outcome, never a raw upstream error."""
 
-    def __init__(self, job, handler_failure_classes=()):
+    def __init__(self, job, handler_failure_classes=(), handler_failure_categories=()):
         state = getattr(job, "state", None)
         code = getattr(job, "failure_code", None)
         self.job_state = state if state in {"queued", "running", "failed", "succeeded", "cancelled"} else "UNKNOWN"
@@ -45,6 +48,7 @@ class IngushetiaWorkerProofFailure(AssertionError):
             "invalid_result", "lease_expired", "unknown_type",
         } else "UNKNOWN"
         self.handler_failure_classes = tuple(handler_failure_classes)[-3:]
+        self.handler_failure_categories = sanitize_failure_categories(handler_failure_categories)
         super().__init__("Real original-card leased Worker failed")
 
 
@@ -90,10 +94,16 @@ def proof():
                 if completed is not None and completed.state == "succeeded":
                     break
                 if completed is None or completed.state != "queued" or attempt == 2:
-                    raise IngushetiaWorkerProofFailure(completed, safe_handler_failure_classes(diagnostic_handler))
+                    raise IngushetiaWorkerProofFailure(
+                    completed, safe_handler_failure_classes(diagnostic_handler),
+                    safe_handler_failure_categories(diagnostic_handler),
+                )
                 time.sleep((1.25, 2.25)[attempt])
             if completed is None or completed.state != "succeeded":
-                raise IngushetiaWorkerProofFailure(completed, safe_handler_failure_classes(diagnostic_handler))
+                raise IngushetiaWorkerProofFailure(
+                    completed, safe_handler_failure_classes(diagnostic_handler),
+                    safe_handler_failure_categories(diagnostic_handler),
+                )
             rows = store.read(SOURCE_ID, limit=3)
             if len(rows) < 2:
                 raise AssertionError("Insufficient current independently verified Ingushetia originals from Worker SQL")

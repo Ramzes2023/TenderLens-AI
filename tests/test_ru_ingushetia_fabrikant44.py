@@ -433,3 +433,20 @@ def test_worker_real_durable_retry_after_transient_source_failure(monkeypatch):
     assert calls == [3, 3]
     assert result["worker_state"] == "succeeded"
     assert result["sql_and_title_number_search"] == 2
+
+
+def test_live_handler_errno_provenance_is_finite_numeric_and_does_not_echo_data():
+    from scripts.ci_ru_ingushetia_safe_handler_diagnostics import (
+        safe_handler_failure_errnos,
+    )
+    from scripts.ci_ru_ingushetia_fabrikant_worker import IngushetiaWorkerProofFailure
+    class FailedHandler:
+        failure_errno_sets = [(22, 10054), ("hidden hostname", -1, 10**9, 110)]
+    assert safe_handler_failure_errnos(FailedHandler()) == ((22, 10054), (110,))
+    failure = IngushetiaWorkerProofFailure(
+        None, handler_failure_classes=("RetryableJobError",),
+        handler_failure_categories=("connection_failure_unspecified",),
+        handler_failure_errnos=((22, 10054), ("upstream-response", 110)),
+    )
+    assert failure.handler_failure_errnos == ((22, 10054), (110,))
+    assert "upstream" not in str(failure)

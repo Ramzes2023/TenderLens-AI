@@ -15,6 +15,8 @@ from app.sources.catalog import build_source_catalog
 from app.sources.eis_rss import EisRssSource, SourceError, parse_eis_feed, verify_eis_feed_law
 from app.sources.ingestion import HOSTS, connector_version, validate_payload
 from app.sources.models import TenderNotice
+from app.sources.ru_dedup import deduplicate
+from app.sources.ru_notice_identity import original_notice_key
 from app.sources.ru_chechnya_eis_rss import (
     SOURCE_KEY,
     ChechnyaEisRssSource,
@@ -144,3 +146,13 @@ def test_disabled_configuration_does_not_auto_register(monkeypatch, tmp_path):
     cfg = load_monitoring_settings(tmp_path / "does-not-exist.env")
     assert not cfg.ru_chechnya_eis_enabled
     assert SOURCE_KEY not in build_source_catalog(cfg).enabled_keys
+
+
+def test_same_eis_original_is_never_counted_twice_across_national_and_regional_feeds():
+    from dataclasses import replace
+    regional = notice('0194200000526005027', region='Чеченская Республика')
+    national = replace(regional, source='eis')
+    assert original_notice_key(regional) == original_notice_key(national)
+    unique, duplicates = deduplicate([regional, national])
+    assert len(unique) == 1 and unique[0].source == 'eis'
+    assert len(duplicates) == 1

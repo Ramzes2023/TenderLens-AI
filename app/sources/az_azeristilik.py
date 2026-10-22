@@ -192,12 +192,13 @@ class AzerbaijanHeatSource:
                         # discard already verified tenders. All other errors
                         # (including rate limits/auth/network) keep the source
                         # fail-closed, and zero verified originals stays red.
-                        # Only confirmed stale individual details may be
-                        # skipped. Auth/rate-limit errors (401/403/429) can
-                        # indicate that the official source is inaccessible;
-                        # they must fail the batch instead of hiding degraded
-                        # live health behind other successfully parsed cards.
-                        if error.response.status_code in (404, 410):
+                        # A single access-restricted (403), deleted (404)
+                        # or gone (410) detail is NOT public tender evidence.
+                        # Exclude that individual card and require at least one
+                        # independently verified public original to survive.
+                        # Authentication (401), throttling (429), server and
+                        # transport failures still fail the entire batch.
+                        if error.response.status_code in (403, 404, 410):
                             continue
                         raise
                     if "html" not in detail.headers.get("content-type", "").lower():

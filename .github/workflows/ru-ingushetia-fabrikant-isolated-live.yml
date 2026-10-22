@@ -1,0 +1,57 @@
+name: RU Ingushetia accredited Fabrikant originals Worker SQLite and query
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/ru_ingushetia_fabrikant44.py
+      - app/monitoring/config.py
+      - app/sources/catalog.py
+      - app/sources/ingestion.py
+      - app/sources/http_transport.py
+      - app/sources/ru_notice_identity.py
+      - app/sources/ru_dedup.py
+      - tests/test_ru_ingushetia_fabrikant44.py
+      - tests/test_source_http_transport.py
+      - scripts/ci_ru_ingushetia_fabrikant_worker.py
+      - scripts/ci_ru_ingushetia_safe_handler_diagnostics.py
+      - scripts/ru_transport_diagnostics.py
+      - .github/workflows/ru-ingushetia-fabrikant-isolated-live.yml
+permissions:
+  contents: read
+jobs:
+  regional-strict-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Assert native originals, opt-in, dedup, safe Worker and notification contracts
+        env:
+          PYTHON_DOTENV_DISABLED: '1'
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python -B -m pytest -q tests/test_ru_ingushetia_fabrikant44.py tests/test_source_http_transport.py tests/test_ru_original_notice_identity.py tests/test_ru_source_integration_contract.py tests/test_ru_background_telegram_catalog.py tests/test_ru_tenders_confirmed_send.py
+  genuine-public-original-worker:
+    name: Real first-party list -> independent originals -> Worker -> SQL -> user search and local alert
+    needs: [regional-strict-contracts]
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Reject empty, stale or unverified vendor-original batches; no synthetic input
+        env:
+          PYTHON_DOTENV_DISABLED: '1'
+          PYTHONDONTWRITEBYTECODE: '1'
+        timeout-minutes: 8
+        run: python -B -m scripts.ci_ru_ingushetia_fabrikant_worker

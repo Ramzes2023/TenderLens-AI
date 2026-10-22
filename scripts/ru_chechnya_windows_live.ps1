@@ -34,7 +34,7 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $expectedBranch = 'feat/ru-chechnya-eis-rss-20261022'
 $branch = (& git -C $repo branch --show-current).Trim()
-if ($LASTEXITCODE -ne 0 -or $branch -ne $expectedBranch) {
+if (-not $ValidateUrlOnly -and ($LASTEXITCODE -ne 0 -or $branch -ne $expectedBranch)) {
     throw "Check out $expectedBranch before live acceptance; refusing to test another branch."
 }
 
@@ -66,6 +66,20 @@ if (-not $python) {
         if ($LASTEXITCODE -eq 0) {
             $python = $launcher.Source
             $pythonArgs = @('-3.12')
+        }
+    }
+}
+if (-not $python) {
+    # GitHub-hosted Windows setup-python installs a verified interpreter on PATH.
+    # Keep App Execution Alias paths forbidden and inspect the REAL version
+    # before taking it; never execute a Microsoft Store shortcut as Python.
+    $command = Get-Command 'python.exe' -ErrorAction SilentlyContinue
+    if ($command -and $command.Source -and
+            $command.Source -notmatch '[\\/]Microsoft[\\/]WindowsApps[\\/]') {
+        & $command.Source -c 'import sys; sys.exit(0 if sys.version_info[:2] == (3, 12) else 1)' 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $python = $command.Source
+            $pythonArgs = @()
         }
     }
 }

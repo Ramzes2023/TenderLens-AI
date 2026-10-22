@@ -251,3 +251,36 @@ def test_worker_snapshot_cutoff_accepts_exact_utc_and_rejects_non_utc(tmp_path):
         assert report.notices[0].tender_number == N1
     finally:
         db.close()
+
+
+def test_hourly_operator_queue_notice_remains_fresh_until_next_run_with_bounded_drift(tmp_path):
+    """Offline: hourly job identity must not create a 30-minute silent alert gap."""
+    from app.sources.snapshots import INGUSHETIA_WORKER_MAX_AGE_SECONDS
+    assert INGUSHETIA_WORKER_MAX_AGE_SECONDS == 75 * 60
+    db = Database(DatabaseSettings("ing-hourly-ttl", tmp_path / "hourly.sqlite"))
+    repo = OpportunityRepository(db)
+    repo.initialize()
+    try:
+        repo.upsert(notice(N1), connector_version(EIS))
+        catalog = fresh_ingushetia_worker_catalog(build_source_catalog(settings()), repo)
+        # Typical 10-minute notification cycle before next hourly run:
+        # the last genuine Worker observation can be 50-70 minutes old.
+        earlier = (datetime.now(timezone.utc) - timedelta(minutes=68)).isoformat()
+        with db.connect() as conn:
+            conn.execute("UPDATE source_opportunities SET last_seen=? WHERE source_id=?",
+                         (earlier, EIS))
+        report = asyncio.run(catalog.fetch(source_keys=(EIS,)))
+        assert not report.failures and [n.tender_number for n in report.notices] == [N1]
+        # A missed hourly execution, beyond bounded drift, must NOT
+        # resurrect expired tenders or claim a healthy source.
+        too_old = (datetime.now(timezone.utc) - timedelta(minutes=76)).isoformat()
+        with db.connect() as conn:
+            conn.execute("UPDATE source_opportunities SET last_seen=? WHERE source_id=?",
+                         (too_old, EIS))
+        stale = asyncio.run(catalog.fetch(source_keys=(EIS,)))
+        assert stale.total_failure and not stale.notices
+        assert stale.failures[0].source == EIS
+        # Archived database rows remain visible for explicit saved searches.
+        assert [n.tender_number for n in repo.read(EIS, limit=5)] == [N1]
+    finally:
+        db.close()

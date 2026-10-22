@@ -70,6 +70,47 @@ async def _service_or_message(message: Message, monitoring_service: TenderMonito
     return monitoring_service
 
 
+async def _manual_regional_worker_sql_search(service, source_catalog, owner_id):
+    """Deep scan only operator-enabled fixed regional SQL; no extra upstream HTTP.
+
+    A manual /tenders keyword request must not lose a stored matching item
+    behind the global 20-result candidate cap. Keep all unrelated, possibly
+    tenant-specific sources on the original default search depth, and merge
+    their results fairly. Telegram acknowledgement still gates mark_seen.
+    """
+    enabled = tuple(
+        item.key for item in source_catalog.registry.metadata()
+        if item.enabled
+    )
+    regional = tuple(k for k in enabled if k in _SHARED_INGUSHETIA_KEYS)
+    if not regional:
+        return await service.fetch_matches_from_catalog(source_catalog, owner_id)
+
+    others = tuple(k for k in enabled if k not in _SHARED_INGUSHETIA_KEYS)
+    profile = await service.profile_for_owner(owner_id)
+    regional_matches, regional_report = await service.fetch_matches_from_catalog_for_profile(
+        source_catalog, profile, source_keys=regional, max_items=100,
+    )
+    if not others:
+        return regional_matches, regional_report
+    other_matches, other_report = await service.fetch_matches_from_catalog_for_profile(
+        source_catalog, profile, source_keys=others,
+    )
+    # Interleave the two independent pools to avoid allowing up to 100
+    # regional rows to starve normal tender discovery at a low send cap.
+    matches = []
+    for idx in range(max(len(regional_matches), len(other_matches))):
+        for pool in (regional_matches, other_matches):
+            if idx < len(pool):
+                matches.append(pool[idx])
+    return matches, SimpleNamespace(
+        attempted_sources=regional_report.attempted_sources + other_report.attempted_sources,
+        successful_sources=regional_report.successful_sources + other_report.successful_sources,
+        failures=regional_report.failures + other_report.failures,
+        total_failure=not (regional_report.successful_sources or other_report.successful_sources),
+    )
+
+
 async def tenders_handler(
     message: Message,
     monitoring_service: TenderMonitorService | None = None,
@@ -110,6 +151,12 @@ async def tenders_handler(
         # and rate-limited deliveries permanently.
         if source_catalog is None:
             fetched = await service.fetch_matches(owner_id)
+        elif (getattr(service.settings, "ru_ingushetia_worker_sql_alerts_enabled", False)
+              and callable(getattr(service, "fetch_matches_from_catalog_for_profile", None))
+              and callable(getattr(service, "profile_for_owner", None))):
+            fetched, report = await _manual_regional_worker_sql_search(
+                service, source_catalog, owner_id,
+            )
         else:
             fetched, report = await service.fetch_matches_from_catalog(
                 source_catalog, owner_id,

@@ -48,3 +48,25 @@ def test_nested_tcp_reset_is_retryable_without_relaxing_first_party_policy():
             raise httpx.ConnectError("opaque connection error") from wrapper
         except httpx.ConnectError as error:
             assert az._official_peer_reset(error) is True
+
+
+def test_bounded_transport_wrapped_reset_retries_but_policy_rejection_does_not():
+    from app.sources.http import ConnectorTransportError
+    try:
+        try:
+            raise ConnectionResetError(104, "reset")
+        except ConnectionResetError as error:
+            raise httpx.ConnectError("bounded official client") from error
+    except httpx.ConnectError as connect:
+        try:
+            raise ConnectorTransportError(retryable=True, reason="network") from connect
+        except ConnectorTransportError as wrapped:
+            assert az._official_peer_reset(wrapped) is True
+        try:
+            raise ConnectorTransportError(retryable=False, reason="public_ip") from connect
+        except ConnectorTransportError as blocked:
+            assert az._official_peer_reset(blocked) is False
+        try:
+            raise ConnectorTransportError(retryable=False, reason="tls_certificate") from connect
+        except ConnectorTransportError as blocked:
+            assert az._official_peer_reset(blocked) is False

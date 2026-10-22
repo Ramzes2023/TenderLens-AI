@@ -40,24 +40,51 @@ def _money(value: float | None, currency: str | None) -> str:
     return f"{amount} {currency or ''}".strip()
 
 
+def _telegram_bounded_field(value, max_utf16: int) -> str:
+    """Trim untrusted upstream prose within Telegram's UTF-16 text budget.
+
+    Never split a surrogate pair. Preserve ordinary, already short messages.
+    Procurement number and a reasonably sized first-party URL are kept in
+    full; descriptions cannot deny delivery to the next valid notice.
+    """
+    value = str(value)
+    if len(value.encode("utf-16-le", errors="replace")) // 2 <= max_utf16:
+        return value
+    output = []
+    remaining = max_utf16 - 1  # the final ellipsis
+    for char in value:
+        units = 2 if ord(char) > 0xFFFF else 1
+        if units > remaining:
+            break
+        output.append(char)
+        remaining -= units
+    return "".join(output) + "…"
+
+
 def format_match(match, *, index: int | None = None) -> str:
     notice = match.notice
     prefix = f"{index}. " if index is not None else ""
-    lines = [f"{prefix}📌 {notice.title}"]
-    lines.append(f"Источник: {notice.source}")
+    lines = [f"{prefix}📌 {_telegram_bounded_field(notice.title, 900)}"]
+    lines.append("Источник: " + _telegram_bounded_field(notice.source, 70))
     if notice.tender_number:
-        lines.append(f"Номер: {notice.tender_number}")
+        lines.append("Номер: " + _telegram_bounded_field(notice.tender_number, 80))
     if notice.customer:
-        lines.append(f"Заказчик: {notice.customer}")
-    lines.append(f"Цена: {_money(notice.initial_price, notice.currency)}")
+        lines.append("Заказчик: " + _telegram_bounded_field(notice.customer, 400))
+    lines.append("Цена: " + _telegram_bounded_field(_money(notice.initial_price, notice.currency), 80))
     if notice.deadline:
-        lines.append(f"Подача заявок: {notice.deadline}")
+        lines.append("Подача заявок: " + _telegram_bounded_field(notice.deadline, 100))
     if notice.region:
-        lines.append(f"Регион: {notice.region}")
+        lines.append("Регион: " + _telegram_bounded_field(notice.region, 180))
     if match.reasons:
-        lines.append("Pre-filter: " + "; ".join(match.reasons))
+        lines.append("Pre-filter: " + _telegram_bounded_field("; ".join(match.reasons), 380))
     if notice.url:
-        lines.append(notice.url)
+        # A full, short original link is always retained. An exceptionally
+        # long untrusted URL cannot break the entire Bot API send; the notice
+        # number remains available to identify the original on the publisher.
+        if len(str(notice.url).encode("utf-16-le", errors="replace")) // 2 <= 1200:
+            lines.append(str(notice.url))
+        else:
+            lines.append("Ссылка превышает допустимую длину; используйте номер закупки.")
     return "\n".join(lines)
 
 

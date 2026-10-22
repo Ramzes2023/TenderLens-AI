@@ -350,11 +350,20 @@ class TenderMonitorService:
         catalog: "SourceCatalog",
         profile: CompanyProfile | None,
         *, source_keys: tuple[str, ...] | None = None,
+        max_items: int | None = None,
     ) -> tuple[
         list[MonitorMatch],
         "MultiSourceFetchReport",
     ]:
-        """Fetch global sources and pre-filter against an explicit profile."""
+        """Fetch global sources and pre-filter against an explicit profile.
+
+        max_items overrides the *per-source candidate* bound only for the
+        shared, non-personalized fixed regional poll. Callers still apply
+        their own result caps *after* tenant keyword/region filtering.
+        """
+        if max_items is not None and (type(max_items) is not int or
+                                       not 1 <= max_items <= 100):
+            raise ValueError("Invalid bounded catalog candidate limit")
 
         search_terms = (
             tuple(profile.monitoring_keywords)
@@ -363,7 +372,7 @@ class TenderMonitorService:
         )
 
         report = await catalog.fetch(
-            limit_per_source=self.settings.max_items,
+            limit_per_source=(self.settings.max_items if max_items is None else max_items),
             source_keys=source_keys,
             search_terms=search_terms,
             max_eis_feeds=self.settings.profile_feed_limit,

@@ -86,6 +86,31 @@ jobs:
             }
           }
 
+  chechnya-windows-url-preflight:
+    # Windows regression for the exact operator failure: the automatically
+    # generated official EIS RSS candidate must pass the production validator.
+    # No EIS HTTP and no Telegram; fork PR code is never run self-hosted.
+    runs-on: windows-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Official auto-generated Chechnya RSS passes Windows no-network smoke
+        shell: pwsh
+        run: |
+          & powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ru_chechnya_windows_live.ps1 -TryOfficialSearchCandidate -ValidateUrlOnly
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Official Chechnya 44-FZ RSS generator/validator mismatch on Windows'
+          }
+
   chechnya-hosted-network-signal:
     # A read-only GitHub-hosted canary while the approved RU self-hosted Linux
     # runner is offline/unassigned. This is NEVER regional live acceptance:

@@ -33,7 +33,10 @@ from app.sources.http import FetchPolicy, bounded_fetch
 from scripts.ru_eis_pinned_tls_probe import verify_root, pinned_ssl_context
 from scripts.ru_transport_diagnostics import transport_failure
 from app.sources.opportunities import OpportunityRepository
-from scripts.ci_ru_ingushetia_safe_handler_diagnostics import DiagnosticConnectorHandler, safe_handler_failure_classes
+from scripts.ci_ru_ingushetia_safe_handler_diagnostics import (
+    DiagnosticConnectorHandler, safe_handler_failure_classes,
+    safe_handler_failure_categories, sanitize_failure_categories,
+)
 from app.sources.ru_ingushetia_eis44 import SOURCE_ID, RSS_URL, normalize_ingushetia_notice
 from app.sources.snapshots import snapshot_catalog
 
@@ -44,7 +47,7 @@ ROOT = Path(__file__).resolve().parents[1] / 'russian_trusted_root_ca_pem.crt'
 class IngushetiaEisWorkerFailure(AssertionError):
     """Only allowlisted durable EIS job status; never expose upstream URLs/tokens."""
 
-    def __init__(self, job, handler_failure_classes=()):
+    def __init__(self, job, handler_failure_classes=(), handler_failure_categories=()):
         state = getattr(job, "state", None)
         code = getattr(job, "failure_code", None)
         self.job_state = state if state in {"queued", "running", "failed", "succeeded", "cancelled"} else "UNKNOWN"
@@ -53,6 +56,7 @@ class IngushetiaEisWorkerFailure(AssertionError):
             "invalid_result", "unknown_type",
         } else "UNKNOWN"
         self.handler_failure_classes = tuple(handler_failure_classes)[-3:]
+        self.handler_failure_categories = sanitize_failure_categories(handler_failure_categories)
         super().__init__("Real EIS leased Worker failed")
 
 
@@ -186,14 +190,20 @@ def proof():
                 if completed is not None and completed.state == "succeeded":
                     break
                 if completed is None or completed.state != "queued":
-                    raise IngushetiaEisWorkerFailure(completed, safe_handler_failure_classes(diagnostic_handler))
+                    raise IngushetiaEisWorkerFailure(
+                    completed, safe_handler_failure_classes(diagnostic_handler),
+                    safe_handler_failure_categories(diagnostic_handler),
+                )
                 if attempt == 2:
                     break
                 # Allow the genuine repository available_at deadline to pass.
                 # Never retry unboundedly or manufacture a successful job.
                 time.sleep((1.25, 2.25)[attempt])
             if completed is None or completed.state != "succeeded":
-                raise IngushetiaEisWorkerFailure(completed, safe_handler_failure_classes(diagnostic_handler))
+                raise IngushetiaEisWorkerFailure(
+                    completed, safe_handler_failure_classes(diagnostic_handler),
+                    safe_handler_failure_categories(diagnostic_handler),
+                )
             rows = store.read(SOURCE_ID, limit=10)
             if len(rows) < 2:
                 raise AssertionError("Insufficient real Ingushetia notices persisted")
@@ -309,6 +319,7 @@ def main():
                     diagnostic["worker_job_state"] = exc.job_state
                     diagnostic["worker_failure_code"] = exc.job_failure_code
                     diagnostic["safe_handler_exception_classes"] = list(exc.handler_failure_classes)
+                    diagnostic["safe_handler_failure_categories"] = list(exc.handler_failure_categories)
             if upstream == "accredited_44fz_etp_mirror":
                 diagnostic["safe_contract_failure"] = _safe_ingushetia_vendor_failure(exc)
                 if type(exc).__name__ == "IngushetiaWorkerProofFailure":
@@ -317,6 +328,7 @@ def main():
                     diagnostic["worker_job_state"] = getattr(exc, "job_state", "UNKNOWN")
                     diagnostic["worker_failure_code"] = getattr(exc, "job_failure_code", "UNKNOWN")
                     diagnostic["safe_handler_exception_classes"] = list(getattr(exc, "handler_failure_classes", ()))
+                    diagnostic["safe_handler_failure_categories"] = list(getattr(exc, "handler_failure_categories", ()))
             failures.append(diagnostic)
             continue
         print("FAILURE_ROUTE_SUMMARY=" + json.dumps(failures, sort_keys=True))

@@ -90,7 +90,10 @@ if __name__ == "__main__":
     unittest.main()
 
 
-def test_live_index_can_keep_verified_az_notice_when_one_detail_is_stale(monkeypatch):
+import pytest
+
+@pytest.mark.parametrize("stale_status", [403, 404, 410])
+def test_live_index_can_keep_verified_az_notice_when_one_detail_is_stale(monkeypatch, stale_status):
     """Offline: never seed fake success; valid first-party detail still required."""
     import asyncio
     from contextlib import asynccontextmanager
@@ -112,7 +115,7 @@ def test_live_index_can_keep_verified_az_notice_when_one_detail_is_stale(monkeyp
         if url == URL:
             return httpx.Response(200, text=detail(), headers={"content-type": "text/html"})
         if url == second:
-            return httpx.Response(404)  # a stale individual detail is not public evidence
+            return httpx.Response(stale_status)  # never store a non-public or deleted detail
         raise AssertionError("Unapproved source URL")
 
     @asynccontextmanager
@@ -186,8 +189,8 @@ def test_az_nonhtml_detail_is_not_a_tender_but_valid_html_card_survives(monkeypa
     assert urls == [INDEX_URL, second, URL]
 
 
-def test_az_restricted_and_rate_limited_details_fail_closed(monkeypatch):
-    """401/403/429 must block the real batch, even after one verified card."""
+def test_az_authentication_and_rate_limited_details_fail_closed(monkeypatch):
+    """401/429 must block the live batch, even after one verified card."""
     import asyncio
     from contextlib import asynccontextmanager
     import httpx
@@ -199,7 +202,7 @@ def test_az_restricted_and_rate_limited_details_fail_closed(monkeypatch):
              "<a href='" + second + "'>"
              "Təchizat xidməti satınalınmasına dair tender elan edir</a>")
 
-    for code in (401, 403, 429):
+    for code in (401, 429):
         def respond(request):
             target = str(request.url)
             if target == INDEX_URL:

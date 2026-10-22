@@ -176,10 +176,11 @@ async def tenders_handler(
     )
 
     for index, match in enumerate(matches[:limit], 1):
-        await message.answer(
+        receipt = await message.answer(
             format_match(match, index=index),
             disable_web_page_preview=True,
         )
+        _require_telegram_delivery_ack(receipt, message.chat.id)
         # Each notice becomes 'seen' only after the real Telegram send
         # succeeds.  A failed send leaves this and later notices retryable.
         await service.claim_new(message.from_user.id, [match])
@@ -276,6 +277,21 @@ async def monitor_status_handler(message: Message, monitoring_service: TenderMon
     )
 
 
+def _require_telegram_delivery_ack(response, chat_id: int) -> None:
+    """Do not consume an original procurement notice without Bot API evidence.
+
+    API calls which return None, invalid message IDs or a different chat may
+    not be marked seen. The next authorized cycle can retry the same notice.
+    Raw API responses, tokens and chat IDs are never added to logs.
+    """
+    message_id = getattr(response, "message_id", None)
+    chat = getattr(response, "chat", None)
+    recipient = getattr(chat, "id", None)
+    if (type(message_id) is not int or message_id <= 0
+            or type(recipient) is not int or recipient != chat_id):
+        raise ValueError("Telegram message acknowledgement invalid")
+
+
 async def monitor_loop(bot: Bot, service: TenderMonitorService,
                        stop_event: asyncio.Event, source_catalog: SourceCatalog | None = None) -> None:
     """Periodic source check. Russian catalog scanning is operator opt-in."""
@@ -303,11 +319,12 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService,
                             subscription.owner_user_id, matches,
                         )
                         for match in new_matches[:service.settings.max_notifications_per_cycle]:
-                            await bot.send_message(
+                            receipt = await bot.send_message(
                                 subscription.chat_id,
                                 "🆕 НОВАЯ ЗАКУПКА\n\n" + format_match(match),
                                 disable_web_page_preview=True,
                             )
+                            _require_telegram_delivery_ack(receipt, subscription.chat_id)
                             # Mark only after Telegram confirms delivery; a
                             # failed send must be retryable on the next cycle.
                             await service.claim_new(subscription.owner_user_id, [match])

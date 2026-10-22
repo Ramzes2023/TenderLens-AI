@@ -23,3 +23,19 @@ Do not merge just because the diagnostic passes offline tests. The
 source's real Worker→SQLite→query→authorized scorer must be fully GREEN on
 the exact PR HEAD; if changed upstream SSR fields cause persistent failures,
 repair only with genuine first-party evidence and adversarial contracts.
+
+
+### Bounded real-source recovery — 22 October
+
+Strict diagnostics on actual hosted runs demonstrated fluctuating Vue SSR
+results: original HTTPS returned 200 but one response had rejected URL
+provenance, while a follow-up diagnostic fetched an independently valid
+20-card list. To avoid permanent failure on the first malformed response,
+`B2BCenterSource` is now allowed **one same-URL replay** after a full
+`SourceError` parse rejection. It consumes the existing second HTTP
+request budget (no increase), clears the first response's cookies, reuses
+strict pinned TLS/public-IP transport, and accepts only if the WHOLE second
+response passes the exact same production parser. No third request, no
+cross-platform or office fallback, no acceptance of mixed malformed cards.
+Two invalid pages still fail RED, as proven by hostile offline tests. Live
+Worker/SQLite/authorized scoring cannot be skipped.

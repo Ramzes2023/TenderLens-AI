@@ -7,7 +7,7 @@ needs independently visible regional evidence in the EIS notice itself.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -75,31 +75,40 @@ class ChechnyaEisRssSource:
     async def fetch(self, limit: int = 20) -> list[TenderNotice]:
         if not 1 <= int(limit) <= 100:
             raise ValueError("limit must be between 1 and 100")
-        original = EisRssSource(
+        upstream = EisRssSource(
             urls=self.urls, timeout=self.timeout, ca_bundle_file=self.ca_bundle_file,
             name=self.name, direct=self.direct, system_trust=self.system_trust,
         )
         # EIS emits a limited feed, not a paginated regional API. Inspect all
         # available entries before applying the requested output cap.
-        notices = await original.fetch(limit=100)
+        notices = await upstream.fetch(limit=100)
         seen: set[str] = set()
         selected: list[TenderNotice] = []
         for notice in notices:
             if not is_chechnya_notice(notice):
                 continue
-            original = urlsplit(notice.url)
-            numbers = parse_qs(original.query, keep_blank_values=True).get("regNumber", [])
-            if (original.scheme != "https" or original.netloc != "zakupki.gov.ru"
-                    or not original.path.startswith("/epz/order/notice/")
-                    or original.fragment or len(numbers) != 1
+            original_link = urlsplit(notice.url)
+            numbers = parse_qs(original_link.query, keep_blank_values=True).get("regNumber", [])
+            if (original_link.scheme != "https" or original_link.netloc != "zakupki.gov.ru"
+                    or not original_link.path.startswith("/epz/order/notice/")
+                    or original_link.fragment or len(numbers) != 1
                     or not re.fullmatch(r"[0-9]{19}", numbers[0])
                     or notice.tender_number != numbers[0]):
                 # Never persist an ambiguous title-derived number as an EIS original.
                 continue
-            if notice.external_id in seen:
+            official_number = numbers[0]
+            # RSS GUID can change when EIS republishes an amended notice.
+            # A validated original number is the durable source identity, not
+            # the feed item's publisher-local GUID or position in the feed.
+            if official_number in seen:
                 continue
-            seen.add(notice.external_id)
-            selected.append(notice)
+            seen.add(official_number)
+            enrichment = notice.enrichment
+            if enrichment is not None:
+                enrichment = {**enrichment, "external_id": official_number}
+            selected.append(replace(
+                notice, external_id=official_number, enrichment=enrichment,
+            ))
             if len(selected) >= int(limit):
                 break
         return selected

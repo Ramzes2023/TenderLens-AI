@@ -21,7 +21,11 @@ if ($TryOfficialSearchCandidate) {
     if ($RegionalRssUrl) {
         throw 'Use either a copied RegionalRssUrl or TryOfficialSearchCandidate, not both.'
     }
-    $term = [Uri]::EscapeDataString('Чеченская Республика')
+    # Windows PowerShell 5.1 interprets UTF-8 .ps1 without BOM using the
+    # system ANSI codepage. A literal Cyrillic candidate can become mojibake
+    # before EscapeDataString, failing the app's required Chechnya scope gate.
+    # Use the exact UTF-8 percent-encoding; all-ASCII is locale independent.
+    $term = '%D0%A7%D0%B5%D1%87%D0%B5%D0%BD%D1%81%D0%BA%D0%B0%D1%8F%20%D0%A0%D0%B5%D1%81%D0%BF%D1%83%D0%B1%D0%BB%D0%B8%D0%BA%D0%B0'
     $RegionalRssUrl = "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?searchString=${term}&morphology=on&pageNumber=1&fz44=on"
     Write-Host 'EIS_REGION_QUERY=UNVERIFIED_TEXT_SEARCH_CANDIDATE' -ForegroundColor Yellow
 }

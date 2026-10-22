@@ -22,6 +22,8 @@ RU_APPROVED_SOURCES = (
     "kavkaz_rf_firstparty",
     # Proven native public LIST -> fenced Worker -> SQLite; original deep details not verified.
     "ru_samara_public_list",
+    # Official anonymous Dagestan list -> fenced Worker/SQL; deep details login-protected.
+    "ru_dagestan_public_list",
 )
 
 

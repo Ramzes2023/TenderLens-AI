@@ -246,3 +246,40 @@ are synthetic test conditions, not live Bot API delivery evidence.
 This change is PR-only, default source flags remain OFF and there
 is no production change, merge, remote runner enablement or
 unauthorized Telegram send.
+
+
+## 22 October 2026: manual-only Telegram Bot API acceptance prepared
+
+New `.github/workflows/ru-ingushetia-test-telegram-optin.yml`
+is an **optional** one-shot transport test for a separately provisioned test
+bot, not a source acceptance or production user alert. The workflow is not
+triggered by a push, PR or schedule. It is deliberately blocked unless an
+operator explicitly selects `authorize_test_send` and types the exact
+numeric dedicated test chat ID. The workflow requires:
+
+- GitHub Actions secret `VALYQON_INGUSHETIA_TEST_BOT_TOKEN`: token for a
+  newly created **non-production** test bot; never enter it in issue text,
+  source files, commits or chat.
+- GitHub Actions repository variable `VALYQON_INGUSHETIA_TEST_BOT_ID`:
+  numeric ID that must equal the token prefix and the Telegram `getMe` ID.
+- GitHub Actions secret `VALYQON_INGUSHETIA_TEST_CHAT_ID`: numeric dedicated
+  authorized test-chat ID. Operator must confirm the same ID manually.
+
+The explicit test sends at most one quiet message clearly labelled
+`ТЕСТ доставки`, checks `getMe`, `getChat` and Telegram's returned
+message ID/chat ID, and never retries after a potentially ambiguous send.
+Actual receipt visible to the test-chat participant is **not automatically
+proven** by Bot API acknowledgement, nor does the synthetic message prove
+actual real-tender notification end-to-end. Repository/production bot tokens
+and customer subscriptions are not consulted.
+
+A GitHub `workflow_dispatch` workflow must normally exist on the default
+branch for the ordinary GitHub Actions manual **Run workflow** interface;
+keeping PR #226 unmerged can therefore leave this UI unavailable. Do not
+merge solely to test Telegram. A local isolated test using
+`python -B -m scripts.ru_ingushetia_telegram_test --send --confirm-test-chat <numeric-test-id>`
+with the same dedicated `TEST_TELEGRAM_*` environment variables is an
+alternative, but it requires separate operator authorization. Until then
+status remains `REAL_USER_TELEGRAM_RECEIPT=NOT_TESTED`.
+
+**The new workflow is configuration-only and does NOT dispatch a send.**

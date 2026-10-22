@@ -12,12 +12,6 @@ on:
       - scripts/ru_chechnya_eis_transport_probe.py
       - scripts/ru_chechnya_windows_live.ps1
       - scripts/ru_chechnya_validate_url.py
-      - scripts/ru_chechnya_validate_url.py
-      - scripts/ru_chechnya_validate_url.py
-      - scripts/ru_chechnya_validate_url.py
-      - scripts/ru_chechnya_validate_url.py
-      - scripts/ru_chechnya_validate_url.py
-      - scripts/ru_chechnya_validate_url.py
       - scripts/ru_chechnya_windows_bootstrap.ps1
       - app/sources/ru_chechnya_eis_rss.py
       - app/sources/eis_rss.py
@@ -36,6 +30,7 @@ on:
       - tests/test_ru_chechnya_eis_rss.py
       - scripts/ci_ru_chechnya_eis_real_worker.py
       - scripts/ru_chechnya_windows_live.ps1
+      - scripts/ru_chechnya_validate_url.py
       - scripts/ru_chechnya_windows_bootstrap.ps1
       - scripts/ru_chechnya_eis_transport_probe.py
       - .github/workflows/ru-chechnya-eis-live.yml

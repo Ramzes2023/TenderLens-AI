@@ -1,5 +1,6 @@
 """Catalog-compatible read adapter. No HTTP fallback or automatic refresh."""
 import asyncio
+from datetime import datetime, timedelta, timezone
 from dataclasses import replace
 
 from .catalog import SourceCatalog
@@ -23,4 +24,57 @@ class SnapshotSource:
 def snapshot_catalog(catalog, repository):
     registry = SourceRegistry(replace(item, source=SnapshotSource(repository, item.key))
                               for item in catalog.registry.registrations())
+    return SourceCatalog(registry, MultiSourceFetcher(registry, concurrency=1))
+
+
+# Strictly opt-in Worker-SQL route for only these independently verified
+# official / accredited Ingushetia originals. All unrelated live sources
+# remain unchanged, including tenant-specific EIS searches.
+_INGUSHETIA_WORKER_KEYS = frozenset({
+    "ru_ingushetia_eis44", "ru_ingushetia_fabrikant44",
+})
+INGUSHETIA_WORKER_MAX_AGE_SECONDS = 1800
+
+
+class FreshIngushetiaWorkerSource(SnapshotSource):
+    """Never fall back to the network or notify from stale Worker storage."""
+
+    def __init__(self, repository, name, terms=()):
+        if name not in _INGUSHETIA_WORKER_KEYS:
+            raise ValueError("Unapproved regional snapshot source")
+        super().__init__(repository, name, terms)
+
+    def for_search_terms(self, terms, *, max_feeds=5):
+        return FreshIngushetiaWorkerSource(self.repository, self.name, tuple(terms)[:20])
+
+    async def fetch(self, limit=20):
+        seen = await asyncio.to_thread(self.repository.latest_seen_utc, self.name)
+        now = datetime.now(timezone.utc)
+        lower = now - timedelta(seconds=INGUSHETIA_WORKER_MAX_AGE_SECONDS)
+        # A source is healthy only after a successful, recent actual Worker
+        # persistence. Future-dated SQL records fail closed on clock skew.
+        if seen is None or not lower <= seen <= now + timedelta(seconds=120):
+            raise ValueError("Ingushetia Worker SQL source is absent or stale")
+        # Include ONLY notices observed within the freshness window; a fresh
+        # single record cannot resurrect an old unnotified procurement.
+        return await asyncio.to_thread(
+            self.repository.read, self.name, limit, self.terms,
+            not_before=lower,
+        )
+
+
+def fresh_ingushetia_worker_catalog(catalog, repository):
+    """Wrap only operator-enabled regional sources with verified fresh SQL.
+
+    This does not enqueue or run a Worker, schedule polls, or send Telegram.
+    All other enabled national / commercial adapters retain normal semantics.
+    """
+    active = _INGUSHETIA_WORKER_KEYS.intersection(catalog.enabled_keys)
+    if not active:
+        raise ValueError("No operator-enabled Ingushetia sources for Worker SQL")
+    registry = SourceRegistry(
+        replace(item, source=FreshIngushetiaWorkerSource(repository, item.key))
+        if item.key in active else item
+        for item in catalog.registry.registrations()
+    )
     return SourceCatalog(registry, MultiSourceFetcher(registry, concurrency=1))

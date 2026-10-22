@@ -7,9 +7,11 @@ on:
       - app/monitoring/config.py
       - app/sources/catalog.py
       - app/sources/ingestion.py
+      - app/sources/http_transport.py
       - app/sources/ru_notice_identity.py
       - app/sources/ru_dedup.py
       - tests/test_ru_ingushetia_fabrikant44.py
+      - tests/test_source_http_transport.py
       - scripts/ci_ru_ingushetia_fabrikant_worker.py
       - scripts/ci_ru_ingushetia_safe_handler_diagnostics.py
       - .github/workflows/ru-ingushetia-fabrikant-isolated-live.yml
@@ -32,7 +34,7 @@ jobs:
           PYTHON_DOTENV_DISABLED: '1'
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
-          python -B -m pytest -q tests/test_ru_ingushetia_fabrikant44.py tests/test_ru_original_notice_identity.py tests/test_ru_source_integration_contract.py tests/test_ru_background_telegram_catalog.py tests/test_ru_tenders_confirmed_send.py
+          python -B -m pytest -q tests/test_ru_ingushetia_fabrikant44.py tests/test_source_http_transport.py tests/test_ru_original_notice_identity.py tests/test_ru_source_integration_contract.py tests/test_ru_background_telegram_catalog.py tests/test_ru_tenders_confirmed_send.py
   genuine-public-original-worker:
     name: Real first-party list -> independent originals -> Worker -> SQL -> user search and local alert
     needs: [regional-strict-contracts]

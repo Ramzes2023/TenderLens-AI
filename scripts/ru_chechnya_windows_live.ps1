@@ -41,7 +41,7 @@ try {
     throw 'RegionalRssUrl must be a full official HTTPS EIS RSS URL.'
 }
 if ($parsed.Scheme -ne 'https' -or $parsed.Host -ne 'zakupki.gov.ru' -or
-    $parsed.AbsolutePath -ne '/epz/order/extendedsearch/rss.html' -or
+    $parsed.AbsolutePath -notin @('/epz/order/extendedsearch/rss.html', '/epz/order/extendedsearch/rss') -or
     -not $parsed.Query) {
     throw 'Only the exact official EIS 44-FZ RSS endpoint is allowed.'
 }

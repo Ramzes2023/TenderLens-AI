@@ -130,7 +130,9 @@ def public_amount(raw):
     """Optional amount from the anonymous original grid, not an inaccessible detail."""
     if type(raw) in (int, float):
         # Pre-bound integers before float conversion (huge JSON ints overflow).
-        if not math.isfinite(raw) if type(raw) is float else not 0 < raw <= 1e18:
+        if type(raw) is int and not 0 < raw <= 1e18:
+            return None
+        if type(raw) is float and not math.isfinite(raw):
             return None
         amount = float(raw)
     elif type(raw) is str and len(raw) <= 80:

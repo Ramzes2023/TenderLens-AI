@@ -85,8 +85,9 @@ class FakeService:
         return matches, report
 
     async def fetch_matches_from_catalog(self, catalog, owner_id, *, source_keys):
-        self.calls.append(("per_user", owner_id))
-        return [MonitorMatch(n, ("unfiltered",)) for n in self.notices], SimpleNamespace(
+        self.calls.append(("per_user", owner_id, tuple(source_keys)))
+        return [MonitorMatch(n, ("unfiltered",)) for n in self.notices
+                if n.source in source_keys], SimpleNamespace(
             attempted_sources=tuple(source_keys), successful_sources=tuple(source_keys),
             total_failure=False, failures=(),
         )
@@ -147,7 +148,15 @@ def test_mixed_profile_specific_eis_keeps_per_owner_upstream_search():
         bot = FakeBot()
         await monitor_loop(bot, service, stop,
                            source_catalog=FakeCatalog(("eis", "ru_ingushetia_eis44")))
-        assert service.calls == [("per_user", 1), ("per_user", 2)]
+        # Even with default broader EIS enabled, fixed regional EIS is polled
+        # once for all chats; only tenant-specific EIS requests run per-user.
+        assert service.calls == [
+            ("shared", ("ru_ingushetia_eis44",)),
+            ("per_user", 1, ("eis",)),
+            ("per_user", 2, ("eis",)),
+        ]
+        assert len(bot.sent) == 2
+        assert {chat_id for chat_id, _ in bot.sent} == {11, 22}
     asyncio.run(run())
 
 
@@ -327,3 +336,67 @@ def test_real_sqlite_shared_catalog_dedups_same_original_per_chat_only_after_ver
         assert len([a for a in bot.attempts if a[0] == 11]) == 1
 
     asyncio.run(run())
+
+
+def test_mixed_other_source_outage_keeps_independently_verified_regional_alerts(caplog):
+    async def run():
+        stop = asyncio.Event()
+        service = FakeService(stop)
+        bot = FakeBot()
+        async def failing_extra(catalog, owner_id, *, source_keys):
+            service.calls.append(("per_user", owner_id, tuple(source_keys)))
+            raise OSError("private personalized query token=SECRET_MUST_NOT_LOG")
+        service.fetch_matches_from_catalog = failing_extra
+        await monitor_loop(
+            bot, service, stop,
+            source_catalog=FakeCatalog(("eis", "ru_ingushetia_eis44", "ru_ingushetia_fabrikant44")),
+        )
+        assert service.calls == [
+            ("shared", ("ru_ingushetia_eis44", "ru_ingushetia_fabrikant44")),
+            ("per_user", 1, ("eis",)),
+            ("per_user", 2, ("eis",)),
+        ]
+        assert len(bot.sent) == 2
+        assert {chat_id for chat_id, _ in bot.sent} == {11, 22}
+        assert service.claimed == [(1, IDS[0]), (2, IDS[1])]
+    asyncio.run(run())
+    assert "Personalized RU source poll failed" in caplog.text
+    assert "SECRET_MUST_NOT_LOG" not in caplog.text
+
+
+def test_mixed_shared_outage_keeps_verified_personalized_matches(caplog):
+    async def run():
+        stop = asyncio.Event()
+        service = FakeService(stop)
+        bot = FakeBot()
+        personal = [
+            tender(IDS[0], "Устройство ливневой канализации", "eis"),
+            tender(IDS[1], "Поставка лекарственных средств", "eis"),
+        ]
+        async def failed_fixed(catalog, profile, *, source_keys):
+            service.calls.append(("shared", tuple(source_keys)))
+            raise OSError("regional transport token=SECRET_MUST_NOT_LOG")
+        async def fetched_extra(catalog, owner_id, *, source_keys):
+            service.calls.append(("per_user", owner_id, tuple(source_keys)))
+            assert source_keys == ("eis",)
+            return [MonitorMatch(n, ("personalized EIS",)) for n in personal], SimpleNamespace(
+                attempted_sources=tuple(source_keys), successful_sources=tuple(source_keys),
+                total_failure=False, failures=(),
+            )
+        service.fetch_matches_from_catalog_for_profile = failed_fixed
+        service.fetch_matches_from_catalog = fetched_extra
+        await monitor_loop(
+            bot, service, stop,
+            source_catalog=FakeCatalog(("eis", "ru_ingushetia_eis44")),
+        )
+        assert service.calls == [
+            ("shared", ("ru_ingushetia_eis44",)),
+            ("per_user", 1, ("eis",)),
+            ("per_user", 2, ("eis",)),
+        ]
+        assert len(bot.sent) == 2
+        assert {chat_id for chat_id, _ in bot.sent} == {11, 22}
+        assert service.claimed == [(1, IDS[0]), (2, IDS[1])]
+    asyncio.run(run())
+    assert "Ingushetia shared source poll failed" in caplog.text
+    assert "SECRET_MUST_NOT_LOG" not in caplog.text

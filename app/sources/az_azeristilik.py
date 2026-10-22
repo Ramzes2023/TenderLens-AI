@@ -192,11 +192,17 @@ class AzerbaijanHeatSource:
                         # discard already verified tenders. All other errors
                         # (including rate limits/auth/network) keep the source
                         # fail-closed, and zero verified originals stays red.
-                        if error.response.status_code in (404, 410):
+                        # A 403 individual post cannot be independently
+                        # validated as public. Keep other verified notices,
+                        # but never ingest that inaccessible card.
+                        if error.response.status_code in (403, 404, 410):
                             continue
                         raise
                     if "html" not in detail.headers.get("content-type", "").lower():
-                        raise SourceError("AZ official detail not HTML.")
+                        # Do not parse a non-HTML card as a tender. Other
+                        # first-party HTML details still require full
+                        # published buyer/date/title corroboration.
+                        continue
                     try:
                         notices.append(parse_public_detail(detail.text, url=url, listed_title=title))
                     except SourceError:

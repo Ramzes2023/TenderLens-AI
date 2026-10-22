@@ -1,0 +1,73 @@
+name: RU Dagestan public-grid real tenant query and local alert opt-in gate
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/ru_dagestan_public_list.py
+      - scripts/ci_ru_dagestan_authenticated.py
+      - scripts/ci_ru_dagestan_telegram_query_delivery.py
+      - tests/test_ru_dagestan_operator_queue.py
+      - tests/test_ru_dagestan_scoring_gate.py
+      - tests/test_ru_dagestan_public_list.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dagestan-operator-scoring-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Source disabled unless approved, scoring and operator isolation
+        run: python -m pytest -q tests/test_ru_dagestan_operator_queue.py tests/test_ru_dagestan_scoring_gate.py tests/test_ru_dagestan_public_list.py
+
+  dagestan-live-list-fenced-worker-sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require genuinely published Dagestan rows via leased Worker to SQLite search
+        timeout-minutes: 6
+        run: python -B -m scripts.ci_ru_dagestan_public_list_sql
+
+  dagestan-real-public-grid-authenticated-tenant-scoring:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require fresh official public rows through authenticated tenant-scoped user scoring
+        timeout-minutes: 6
+        run: python -B -m scripts.ci_ru_dagestan_authenticated
+
+  dagestan-real-keyword-to-local-telegram-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require original Dagestan IDs, positive search, failed-send retry, local bot ACK and tenant dedup
+        timeout-minutes: 8
+        run: python -B -m scripts.ci_ru_dagestan_telegram_query_delivery

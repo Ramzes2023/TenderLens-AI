@@ -1,0 +1,141 @@
+name: RU Dagestan first-party read-only anonymous POST research
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/research_ru_dagestan_anonymous_post.py
+      - tests/test_ru_dagestan_anonymous_post.py
+      - scripts/research_ru_dagestan_public_csrf_post.py
+      - tests/test_ru_dagestan_public_csrf_post.py
+      - .github/workflows/ru-dagestan-anonymous-post-research.yml
+
+permissions:
+  contents: read
+
+# Run one authoritative head check per pull request, rather than duplicating
+# every job on push and PR (the research branch never affects production).
+concurrency:
+  group: dagestan-public-post-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Basic no-CSRF POST was proven invalid (HTTP 400); never require it as a
+  # mandatory live feed. Only the true anonymous same-session CSRF gate below
+  # can pass, and even that is RESEARCH ONLY until original details + SQL search.
+  strict-offline-published-route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Validate strict publication gate and reject synthetic login/schema fraud
+        run: python -m pytest -q tests/test_ru_dagestan_anonymous_post.py tests/test_ru_dagestan_public_csrf_post.py
+
+  fixed-firstparty-method-diagnostic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Check pinned read-only public listing POST method and public HTTP status without cookies
+        shell: bash
+        run: |
+          set -euo pipefail
+          host='goszakaz.e-dag.ru'
+          # The path is present in the official unmodified public NoticesGrid.
+          # No secret, session, auth, proxy, redirect follow, or TLS weakening.
+          result="$(curl --noproxy '*' --silent --show-error --proto '=https' \
+            --retry 0 --max-redirs 0 --connect-timeout 8 --max-time 25 \
+            --header 'Accept: application/json, text/javascript' \
+            --header 'X-Requested-With: XMLHttpRequest' \
+            --header 'Content-Type: application/x-www-form-urlencoded' \
+            --header 'Referer: https://goszakaz.e-dag.ru/smallpurchases/GzwSP/NoticesGrid' \
+            --data-urlencode 'page=1' --data-urlencode 'rows=5' \
+            --data-urlencode 'sidx=' --data-urlencode 'sord=desc' \
+            --output /dev/null --write-out '%{http_code}' \
+            "https://$host/smallpurchases/GzwSP/NoticesJson")" && rc=0 || rc=$?
+          echo "RU_DAG_ANON_POST_HTTP=$result"
+          echo "RU_DAG_ANON_POST_CURL_EXIT=$rc"
+          echo "DIAGNOSTIC_ONLY=YES"
+          echo "ORIGINAL_NOTICES_PROVED=NO"
+          echo "PRODUCTION_CHANGED=NO"
+
+  official-grid-js-request-shape-diagnostic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Inspect published first-party AJAX configuration without printing values or identifying users
+        shell: bash
+        run: |
+          set -euo pipefail
+          page="$(mktemp)"
+          trap 'rm -f "$page"' EXIT
+          curl --noproxy '*' --fail --silent --show-error --proto '=https' \
+            --retry 0 --max-redirs 0 --connect-timeout 8 --max-time 25 \
+            --output "$page" 'https://goszakaz.e-dag.ru/smallpurchases/GzwSP/NoticesGrid'
+          python - "$page" <<'PY'
+          import pathlib
+          import re
+          import sys
+          html = pathlib.Path(sys.argv[1]).read_text(errors="replace")
+          marker = "/smallpurchases/GzwSP/NoticesJson"
+          indices = [m.start() for m in re.finditer(re.escape(marker), html)][:4]
+          print("RU_DAG_PUBLIC_ROUTE_OCCURRENCES=" + str(len(indices)))
+          for i, index in enumerate(indices, 1):
+              scope = html[max(0, index-1100):index+1100]
+              identifiers = list(dict.fromkeys(
+                  re.findall(r"\b[A-Za-z_$][A-Za-z0-9_$]{2,42}\b", scope)
+              ))
+              # Static identifier names, no quotations, values, numbers,
+              # form bodies, private tokens or full JavaScript are logged.
+              print("RU_DAG_ROUTE_" + str(i) + "_STATIC_IDENTIFIERS=" +
+                    ",".join(identifiers[:90]))
+          from urllib.parse import urljoin, urlsplit
+          scripts = re.findall(r"""<script\b[^>]*\bsrc\s*=\s*['"]([^'"]+)""", html, flags=re.I)
+          safe_script_names = []
+          for src in scripts:
+              url = urlsplit(urljoin("https://goszakaz.e-dag.ru/smallpurchases/", src))
+              if url.scheme != "https" or url.hostname != "goszakaz.e-dag.ru" or url.query:
+                  continue
+              if "/login" in url.path.lower() or "/auth" in url.path.lower():
+                  continue
+              safe_script_names.append(url.path.split("/")[-1][:75])
+          print("RU_DAG_PUBLIC_SCRIPT_BASENAMES=" + ",".join(safe_script_names[:100]))
+          init = html.find("gridview(")
+          if init >= 0:
+              snippet = html[init:init+2100]
+              snippet = re.sub(r"""(?is)value\s*=\s*['"][^'"]*['"]""", "value=REDACTED", snippet)
+              snippet = re.sub(r"(?is)(?:__RequestVerificationToken|password|secret|csrf)\s*[:=]\s*[^,;}]+", "REDACTED", snippet)
+              snippet = re.sub(r"[A-Za-z0-9+/_-]{70,}", "REDACTED_LONG_TOKEN", snippet)
+              print("RU_DAG_GRID_INIT_PUBLIC_STATIC=" + " ".join(snippet[:1600].split()))
+          form_csrf = html.find("__RequestVerificationToken")
+          if form_csrf >= 0:
+              form_window = html[max(0, form_csrf-350):form_csrf+350]
+              identifiers = list(dict.fromkeys(re.findall(r"\b[A-Za-z_$][A-Za-z0-9_$]{2,42}\b", form_window)))
+              print("RU_DAG_CSRF_NEARBY_PUBLIC_IDENTIFIERS=" + ",".join(identifiers[:65]))
+          print("RU_DAG_PUBLIC_HAS_AJAX_SETUP=" + str("ajaxSetup(" in html))
+          print("RU_DAG_PUBLIC_HTML_HAS_CSRF_FIELD=" +
+                str(bool(re.search("RequestVerificationToken", html, re.I))))
+          print("DIAGNOSTIC_ONLY=YES")
+          print("ORIGINAL_NOTICES_PROVED=NO")
+          print("PRODUCTION_CHANGED=NO")
+          PY
+
+  actual-anonymous-public-csrf-grid-post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Match publicly issued grid anti-CSRF token to anonymous same-origin POST and require real JSON
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_dagestan_public_csrf_post

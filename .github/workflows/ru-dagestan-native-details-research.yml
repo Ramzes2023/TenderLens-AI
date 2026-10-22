@@ -1,0 +1,152 @@
+name: RU Dagestan official native original detail proof
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/research_ru_dagestan_two_native_details.py
+      - tests/test_ru_dagestan_two_native_details.py
+      - .github/workflows/ru-dagestan-native-details-research.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ru-dag-two-details-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fixed-native-offline-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Reject original identity mismatch, fake detail or script-only placeholders
+        run: python -m pytest -q tests/test_ru_dagestan_two_native_details.py
+
+  fixed-native-live-originals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require two actual original Dagestan details with same native identifiers and tender facts
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_dagestan_two_native_details
+
+  fixed-native-public-http-diagnostic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ['5611345', '5611196']
+    steps:
+      - name: Classify direct HTTPS GET for two original published native list paths
+        env:
+          NATIVE_ID: ${{ matrix.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$NATIVE_ID" in 5611345|5611196) ;; *) exit 2;; esac
+          code="$(curl --silent --show-error --noproxy '*' --proto '=https' \
+            --retry 0 --max-redirs 0 --connect-timeout 8 --max-time 24 \
+            --output /dev/null --write-out '%{http_code}' \
+            --header 'Accept: text/html' --user-agent 'Mozilla/5.0' \
+            "https://goszakaz.e-dag.ru/smallpurchases/GzwSP/$NATIVE_ID")" && rc=0 || rc=$?
+          echo "RU_DAG_NATIVE_ID=$NATIVE_ID"
+          echo "RU_DAG_NATIVE_GET_HTTP=$code"
+          echo "RU_DAG_NATIVE_CURL_EXIT=$rc"
+          echo "ORIGINAL_DETAIL_PROVED=NO"
+          echo "PRODUCTION_CHANGED=NO"
+
+  published-notice-route-http-diagnostic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ['5611345', '5611196']
+    steps:
+      - name: Check alternate original Notice route published by official public grid
+        env:
+          NATIVE_ID: ${{ matrix.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$NATIVE_ID" in 5611345|5611196) ;; *) exit 2;; esac
+          url="https://goszakaz.e-dag.ru/smallpurchases/GzwSP/Notice?noticeLink=$NATIVE_ID"
+          status="$(curl --silent --show-error --noproxy '*' --proto '=https' \
+            --retry 0 --max-redirs 0 --connect-timeout 8 --max-time 24 \
+            --output /dev/null --write-out '%{http_code}' \
+            --header 'Accept: text/html' --user-agent 'Mozilla/5.0' \
+            "$url")" && rc=0 || rc=$?
+          echo "RU_DAG_PUBLISHED_NOTICE_ID=$NATIVE_ID"
+          echo "RU_DAG_PUBLISHED_NOTICE_HTTP=$status"
+          echo "RU_DAG_PUBLISHED_NOTICE_CURL_EXIT=$rc"
+          echo "ORIGINAL_DETAIL_PROVED=NO"
+          echo "PRODUCTION_CHANGED=NO"
+
+  published-notice-redirect-target-diagnostic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ['5611345','5611196']
+    steps:
+      - name: Classify HTTP 302 target of public Notice route without following
+        env:
+          NATIVE_ID: ${{ matrix.id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$NATIVE_ID" in 5611345|5611196) ;; *) exit 2 ;; esac
+          hdr="$(mktemp)"
+          trap 'rm -f "$hdr"' EXIT
+          curl --silent --show-error --noproxy '*' --proto '=https' \
+            --retry 0 --max-redirs 0 --connect-timeout 8 --max-time 24 \
+            --dump-header "$hdr" --output /dev/null \
+            "https://goszakaz.e-dag.ru/smallpurchases/GzwSP/Notice?noticeLink=$NATIVE_ID" || true
+          python - "$hdr" <<'PY'
+          import pathlib, sys
+          from urllib.parse import urlsplit, urljoin
+          lines = pathlib.Path(sys.argv[1]).read_text(errors="replace").splitlines()
+          headers = [x.split(":",1)[1].strip() for x in lines
+                     if x.lower().startswith("location:")]
+          if len(headers) != 1:
+              print("RU_DAG_REDIRECT_KIND=NONE_OR_AMBIGUOUS")
+          else:
+              uri = urlsplit(urljoin("https://goszakaz.e-dag.ru/", headers[0]))
+              if uri.scheme == "https" and uri.hostname == "goszakaz.e-dag.ru" and not uri.username and not uri.password and uri.port is None:
+                  print("RU_DAG_REDIRECT_KIND=SAME_FIRST_PARTY_HOST")
+                  if any(w in uri.path.lower() for w in ("/login", "/auth", "/account", "/register")):
+                      print("RU_DAG_REDIRECT_DESTINATION=AUTH_ROUTE")
+                  else:
+                      print("RU_DAG_REDIRECT_DESTINATION=OTHER_SAME_HOST")
+                  print("RU_DAG_REDIRECT_PATH=" + uri.path[:140])
+                  print("RU_DAG_REDIRECT_HAS_QUERY=" + str(bool(uri.query)))
+              else:
+                  print("RU_DAG_REDIRECT_KIND=EXTERNAL_OR_INVALID")
+                  if uri.scheme in {"http", "https"} and uri.hostname and not uri.username and not uri.password:
+                      hostname = uri.hostname
+                      if len(hostname) <= 120 and all(c.isascii() and (c.isalnum() or c in ".-") for c in hostname):
+                          print("RU_DAG_REDIRECT_SCHEME=" + uri.scheme)
+                          print("RU_DAG_REDIRECT_PORT=" + str(uri.port))
+                          print("RU_DAG_REDIRECT_USERINFO_PRESENT=" + str(bool(uri.username or uri.password)))
+                          print("RU_DAG_REDIRECT_PATH=" + uri.path[:140])
+                          print("RU_DAG_REDIRECT_PUBLIC_HOST=" + hostname)
+                          print("RU_DAG_REDIRECT_HAS_QUERY=" + str(bool(uri.query)))
+          print("ORIGINAL_DETAIL_PROVED=NO")
+          PY

@@ -150,5 +150,36 @@ class ProbeSafetyTests(unittest.TestCase):
 
 
 
+    def test_hosted_gpb_alternative_routes_are_observation_not_source_acceptance(self):
+        from pathlib import Path
+        import yaml
+        path = (Path(__file__).resolve().parents[1] / ".github" /
+                "workflows" / "ru-gpb-alternative-hosts-observation.yml")
+        raw = path.read_text(encoding="utf-8")
+        workflow = yaml.safe_load(raw)
+        event = workflow.get("on", workflow.get(True))
+        self.assertEqual(event["pull_request"]["paths"], [
+            "scripts/ru_trusted_live_probe.py",
+            "tests/test_ru_trusted_live_probe.py",
+        ])
+        self.assertEqual(workflow["permissions"], {"contents": "read"})
+        job = workflow["jobs"]["gpb-official-alternate-hosts-observation-only"]
+        self.assertEqual(job["runs-on"], "ubuntu-latest")
+        self.assertNotIn("self-hosted", raw)
+        self.assertIn("persist-credentials: false", raw)
+        command = job["steps"][-1]["run"]
+        for key in ON_DEMAND_TARGETS:
+            self.assertIn(key, command)
+        for marker in (
+            "RU_GPB_DETAIL_VERIFIED=NO",
+            "RU_GPB_WORKER_SQL_ACCEPTED=NO",
+            "RU_GPB_TENANT_NOTIFIED=NO",
+            "PRODUCTION_CHANGED=NO",
+        ):
+            self.assertIn(marker, command)
+        self.assertNotIn("curl -k", raw)
+        self.assertNotIn("verify=False", raw)
+
+
 if __name__ == "__main__":
     unittest.main()

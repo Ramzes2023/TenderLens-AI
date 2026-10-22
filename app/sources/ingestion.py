@@ -185,6 +185,11 @@ class ConnectorSyncHandler:
                 HOSTS[source_id], request_limit,
                 max_bytes=(2 * 1024 * 1024 if source_id == 'b2b_center' else
                            1_800_000 if source_id in {'nmck_native_public', 'stan_commercial_public', 'south_ural_public', 'kavkaz_rf_firstparty'} else 25 * 1024 * 1024),
+                # Inspect 403/404/410 only on Azəristiliktəchizat's own
+                # individual detail cards. They are excluded by the adapter;
+                # 401, 429, 5xx and all other sources stay fail-closed.
+                allowed_http_errors=(frozenset({403, 404, 410})
+                                     if source_id == 'az_azeristilik' else frozenset()),
             )):
                 return await asyncio.wait_for(source.fetch(self.max_records), timeout=180)
         try:

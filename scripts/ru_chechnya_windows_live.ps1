@@ -53,19 +53,36 @@ if ($parsed.Scheme -ne 'https' -or $parsed.Host -ne 'zakupki.gov.ru' -or
 # installations have used both .venv and venv on Windows.
 $pythonCandidates = @(
     (Join-Path $repo '.venv\Scripts\python.exe'),
-    (Join-Path $repo 'venv\Scripts\python.exe')
+    (Join-Path $repo 'venv\Scripts\python.exe'),
+    (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'),
+    (Join-Path $env:ProgramFiles 'Python312\python.exe')
 )
-$python = $pythonCandidates |
-    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
-    Select-Object -First 1
-if (-not $python) {
-    $command = Get-Command 'python' -ErrorAction SilentlyContinue
-    if ($null -eq $command -or -not $command.Source) {
-        throw 'Python 3.12 not found. Activate the project venv or .venv first.'
+# Reject the Windows Store App Execution Alias: Get-Command python can resolve
+# python.exe even when there is no installed interpreter behind it.
+$python = $null
+foreach ($candidate in $pythonCandidates) {
+    if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
+    & $candidate -c 'import sys; sys.exit(0 if sys.version_info[:2] == (3, 12) else 1)' 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        $python = $candidate
+        break
     }
-    $python = $command.Source
 }
-& $python -c 'import sys; assert sys.version_info >= (3,12) and sys.version_info < (3,13), "VALYQON requires Python 3.12"'
+if (-not $python) {
+    $launcher = Get-Command 'py' -ErrorAction SilentlyContinue
+    if ($launcher -and $launcher.Source) {
+        & $launcher.Source -3.12 -c 'import sys; sys.exit(0 if sys.version_info[:2] == (3, 12) else 1)' 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $python = $launcher.Source
+            $pythonArgs = @('-3.12')
+        }
+    }
+}
+if (-not $python) {
+    throw 'Python 3.12 not found. Install Python 3.12, create .venv or venv, then rerun. Windows Store python.exe alias is not an interpreter.'
+}
+if (-not $pythonArgs) { $pythonArgs = @() }
+& $python @pythonArgs -c 'import sys; assert sys.version_info[:2] == (3, 12), "VALYQON requires Python 3.12"'
 if ($LASTEXITCODE -ne 0) {
     throw 'Use Python 3.12 from the VALYQON project environment.'
 }
@@ -99,14 +116,14 @@ try {
     Push-Location $repo
     try {
         Write-Host 'CHECHNYA_ACCEPTANCE=OFFLINE_CONTRACTS' -ForegroundColor Cyan
-        & $python -B -m pytest -q tests/test_ru_chechnya_eis_rss.py tests/test_ru_background_telegram_catalog.py tests/test_ru_telegram_original_dedup.py
+        & $python @pythonArgs -B -m pytest -q tests/test_ru_chechnya_eis_rss.py tests/test_ru_background_telegram_catalog.py tests/test_ru_telegram_original_dedup.py
         if ($LASTEXITCODE -ne 0) { throw 'Chechnya offline contracts failed.' }
 
         Write-Host 'CHECHNYA_ACCEPTANCE=OFFICIAL_LIVE_EIS_TO_LOCAL_ALERT' -ForegroundColor Cyan
-        & $python -B -m scripts.ci_ru_chechnya_eis_real_worker
+        & $python @pythonArgs -B -m scripts.ci_ru_chechnya_eis_real_worker
         if ($LASTEXITCODE -ne 0) {
             Write-Host 'CHECHNYA_LIVE_FAILED=RUNNING_SAFE_NETWORK_DIAGNOSTICS' -ForegroundColor Yellow
-            & $python -B -m scripts.ru_chechnya_eis_transport_probe
+            & $python @pythonArgs -B -m scripts.ru_chechnya_eis_transport_probe
             throw 'Chechnya strict live Worker acceptance failed: no merge.'
         }
 

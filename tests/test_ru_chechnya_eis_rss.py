@@ -345,3 +345,80 @@ def test_chechnya_background_does_not_claim_without_telegram_receipt():
                                             source_catalog=FakeCatalog()), timeout=5)
 
     asyncio.run(scenario())
+
+
+def test_transport_probe_classifies_tls_and_dns_without_logging_raw_errors():
+    """Offline: connector failures must be diagnosable without secrets or TLS bypass."""
+    import socket
+    import ssl
+    import httpx
+    from scripts.ru_chechnya_eis_transport_probe import transport_category
+
+    for underlying, expected in (
+        (ssl.SSLError("synthetic-cert-failure"), "TLS_CERTIFICATE_OR_HANDSHAKE"),
+        (socket.gaierror("synthetic-dns-failure"), "DNS_RESOLUTION_FAILED"),
+    ):
+        try:
+            raise httpx.ConnectError("synthetic-eis-url") from underlying
+        except httpx.ConnectError as error:
+            assert transport_category(error) == expected
+
+    assert transport_category(httpx.ConnectTimeout("synthetic")) == "TIMEOUT"
+    assert transport_category(httpx.ConnectError("synthetic")) == "CONNECT_FAILED_UNCLASSIFIED"
+
+
+def test_offline_probe_only_counts_verified_official_chechnya_rss(monkeypatch):
+    """MockTransport-like injection: no network, no production writes or Telegram."""
+    from scripts import ru_chechnya_eis_transport_probe as probe
+
+    sample = (
+        '<rss version="2.0"><channel><item>'
+        '<title>Поставка продуктов питания</title>'
+        '<guid>first-rss-update-id</guid>'
+        '<link>' + EIS_ORIGINAL.replace("&", "&amp;") + '</link>'
+        '<description>Размещение выполняется по: 44-ФЗ. '
+        'Регион: Чеченская Республика; '
+        'Заказчик: Комитет Правительства Чеченской Республики</description>'
+        '</item></channel></rss>'
+    ).encode("utf-8")
+
+    class FakeResponse:
+        status_code = 200
+        headers = {"content-type": "application/rss+xml"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def iter_bytes(self):
+            yield sample
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            assert kwargs["verify"] is True
+            assert kwargs["follow_redirects"] is False
+            assert kwargs["trust_env"] is False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def stream(self, method, url):
+            assert method == "GET" and url == URL
+            return FakeResponse()
+
+    cfg = replace(settings(), ru_chechnya_eis_enabled=True,
+                  ru_chechnya_eis_rss_urls=(URL,), eis_direct_enabled=True)
+    monkeypatch.setattr(probe, "load_monitoring_settings", lambda: cfg)
+    monkeypatch.setattr(probe.httpx, "Client", FakeClient)
+    result = probe.run_probe()
+    assert result["state"] == "VERIFIED_FEED_WITH_REGION_EVIDENCE"
+    assert result["official_item_count"] == 1
+    assert result["regional_evidence_count"] == 1
+    assert not result["worker_sqlite_verified"]
+    assert not result["telegram_delivery_verified"]
+

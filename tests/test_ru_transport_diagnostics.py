@@ -82,3 +82,28 @@ def test_fabrikant_worker_failure_reports_only_allowlisted_job_outcome():
     assert unsafe.job_state == "UNKNOWN"
     assert unsafe.job_failure_code == "UNKNOWN"
     assert "PRIVATE" not in str(unsafe)
+
+
+def test_ci_handler_exception_telemetry_preserves_failure_and_redacts_strings():
+    from scripts.ci_ru_ingushetia_safe_handler_diagnostics import (
+        DiagnosticConnectorHandler, safe_handler_failure_classes,
+    )
+    from app.sources.ingestion import ConnectorSyncHandler
+
+    class BrokenSource:
+        def __call__(self, context, payload):
+            raise ValueError("https://private.invalid/?token=SECRET")
+
+    class CapturingDiagnostic(DiagnosticConnectorHandler):
+        pass
+
+    # The wrapper accepts only a *real* connector handler at setup. Bypass
+    # only its handler field AFTER construction for an offline test seam.
+    base = object.__new__(ConnectorSyncHandler)
+    wrapper = CapturingDiagnostic(base)
+    wrapper.handler = BrokenSource()
+    with pytest.raises(ValueError):
+        wrapper(None, None)
+    assert safe_handler_failure_classes(wrapper) == ("ValueError",)
+    assert "SECRET" not in repr(safe_handler_failure_classes(wrapper))
+    assert "private.invalid" not in repr(safe_handler_failure_classes(wrapper))

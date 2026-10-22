@@ -222,3 +222,32 @@ def test_fresh_worker_sql_reaches_per_chat_monitor_only_after_valid_bot_ack(tmp_
         assert len(bot.calls) == 2  # Cross-cycle repeat never duplicates a receipt.
     finally:
         db.close()
+
+
+def test_worker_snapshot_cutoff_accepts_exact_utc_and_rejects_non_utc(tmp_path):
+    """UTC zero offset is required and must NOT be treated as invalid."""
+    db = Database(DatabaseSettings("ing-snapshot-utc", tmp_path / "utc.sqlite"))
+    repo = OpportunityRepository(db)
+    repo.initialize()
+    try:
+        repo.upsert(notice(N1), connector_version(EIS))
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
+        assert [n.tender_number for n in repo.read(
+            EIS, limit=5, not_before=cutoff,
+        )] == [N1]
+        # A timezone-aware value with a different offset must be normalized
+        # by its caller, not silently accepted by a UTC-only API.
+        plus_two = timezone(timedelta(hours=2))
+        with pytest.raises(ValueError, match="UTC-aware"):
+            repo.read(EIS, not_before=cutoff.astimezone(plus_two))
+        with pytest.raises(ValueError, match="UTC-aware"):
+            repo.read(EIS, not_before=cutoff.replace(tzinfo=None))
+        # Fresh SQL catalog must use the exact same accepted cutoff.
+        snap = fresh_ingushetia_worker_catalog(
+            build_source_catalog(settings(ru_ingushetia_fabrikant44_enabled=False)), repo,
+        )
+        report = asyncio.run(snap.fetch(source_keys=(EIS,)))
+        assert len(report.notices) == 1 and not report.failures
+        assert report.notices[0].tender_number == N1
+    finally:
+        db.close()

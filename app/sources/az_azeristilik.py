@@ -15,6 +15,7 @@ import math
 import re
 
 import httpx
+import ssl
 
 from .eis_rss import SourceError
 from .http import ConnectorTransportError, FetchPolicy, _policy, bounded_fetch, source_client
@@ -152,6 +153,26 @@ def parse_public_detail(html, *, url, listed_title):
     return notice
 
 
+def _official_peer_reset(error):
+    """Only a directly observed TCP reset on first-party HTTPS is retryable.
+
+    Keep TLS/certificate errors, resolver/public-IP errors and unknown
+    ConnectErrors permanent. Existing durable Worker retries remain bounded.
+    """
+    if not isinstance(error, httpx.ConnectError):
+        return False
+    seen = set()
+    cause = error.__cause__
+    while isinstance(cause, BaseException) and id(cause) not in seen:
+        if isinstance(cause, ssl.SSLError):
+            return False
+        if type(cause) is ConnectionResetError:
+            return True
+        seen.add(id(cause))
+        cause = cause.__cause__
+    return False
+
+
 @dataclass(frozen=True)
 class AzerbaijanHeatSource:
     timeout: float = 12.0
@@ -213,7 +234,7 @@ class AzerbaijanHeatSource:
                         # Fail the batch if no complete notice remains.
                         continue
         except (httpx.HTTPError, ConnectorTransportError, OSError) as exc:
-            if transient_transport(exc):
+            if transient_transport(exc) or _official_peer_reset(exc):
                 raise SourceTransportError("AZ official tenders temporarily unavailable.") from None
             raise SourceError("AZ verified official HTTPS retrieval failed.") from None
         if not notices or len({x.identity for x in notices}) != len(notices):

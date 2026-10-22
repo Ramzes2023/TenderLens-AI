@@ -36,6 +36,7 @@ from app.sources.opportunities import OpportunityRepository
 from scripts.ci_ru_ingushetia_safe_handler_diagnostics import (
     DiagnosticConnectorHandler, safe_handler_failure_classes,
     safe_handler_failure_categories, sanitize_failure_categories,
+    classify_failed_live_worker,
 )
 from app.sources.ru_ingushetia_eis44 import SOURCE_ID, RSS_URL, normalize_ingushetia_notice
 from app.sources.snapshots import snapshot_catalog, fresh_ingushetia_worker_catalog
@@ -323,6 +324,9 @@ def main():
                     diagnostic["worker_failure_code"] = exc.job_failure_code
                     diagnostic["safe_handler_exception_classes"] = list(exc.handler_failure_classes)
                     diagnostic["safe_handler_failure_categories"] = list(exc.handler_failure_categories)
+                    diagnostic["safe_failure_stage"] = classify_failed_live_worker(
+                        exc.handler_failure_classes, exc.handler_failure_categories,
+                    )
             if upstream == "accredited_44fz_etp_mirror":
                 diagnostic["safe_contract_failure"] = _safe_ingushetia_vendor_failure(exc)
                 if type(exc).__name__ == "IngushetiaWorkerProofFailure":
@@ -332,6 +336,10 @@ def main():
                     diagnostic["worker_failure_code"] = getattr(exc, "job_failure_code", "UNKNOWN")
                     diagnostic["safe_handler_exception_classes"] = list(getattr(exc, "handler_failure_classes", ()))
                     diagnostic["safe_handler_failure_categories"] = list(getattr(exc, "handler_failure_categories", ()))
+                    diagnostic["safe_failure_stage"] = classify_failed_live_worker(
+                        getattr(exc, "handler_failure_classes", ()),
+                        getattr(exc, "handler_failure_categories", ()),
+                    )
             failures.append(diagnostic)
             continue
         print("FAILURE_ROUTE_SUMMARY=" + json.dumps(failures, sort_keys=True))

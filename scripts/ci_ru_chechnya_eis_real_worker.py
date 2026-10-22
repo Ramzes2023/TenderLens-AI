@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import tempfile
 from pathlib import Path
 
-from app.bot.monitoring import enabled_ru_catalog_keys, monitor_loop
+from aiogram import Bot
+from app.bot.monitoring import enabled_ru_catalog_keys, monitor_loop, _require_telegram_delivery_ack
 from app.database.backend import Database
 from app.database.config import DatabaseSettings
 from app.jobs import HandlerRegistry, JobRepository, JobSettings
@@ -52,6 +54,38 @@ class LocalCaptureBot:
             message_id=len(self.messages),
             chat=SimpleNamespace(id=chat_id),
         )
+
+
+
+async def optional_authorized_telegram_api_check(notice):
+    """One official public notice to an explicitly authorized test chat only.
+
+    No credentials -> NO network call. A partially configured target fails closed.
+    A real Bot API message receipt is distinct from the LocalCaptureBot stub.
+    """
+    token = os.environ.get("RU_CHECHNYA_E2E_TEST_BOT_TOKEN", "").strip()
+    target = os.environ.get("RU_CHECHNYA_E2E_TEST_CHAT_ID", "").strip()
+    if not token and not target:
+        return False
+    if not token or not target:
+        raise AssertionError("Both authorized test Bot token and chat ID are required")
+    if not re.fullmatch(r"-?[1-9][0-9]{0,19}", target):
+        raise AssertionError("Invalid authorized test Telegram chat ID")
+    chat_id = int(target)
+    text = (
+        "VALYQON CHECHNYA TEST — official EIS 44-FZ procurement\\n"
+        f"Источник: {SOURCE_KEY}\\n"
+        f"Номер: {notice.tender_number}\\n"
+        f"{notice.title[:550]}\\n{notice.url}"
+    )
+    # Telegram accepts messages up to 4096 characters; all fields here are
+    # official public EIS content validated before reaching this boundary.
+    async with Bot(token=token) as bot:
+        receipt = await bot.send_message(
+            chat_id=chat_id, text=text, disable_web_page_preview=True,
+        )
+        _require_telegram_delivery_ack(receipt, chat_id)
+    return True
 
 
 def isolated_settings():
@@ -185,6 +219,7 @@ def accept():
                 return len(bot.messages)
 
             local_alerts = asyncio.run(local_notification())
+            external_ack = asyncio.run(optional_authorized_telegram_api_check(rows[0]))
             return {
                 "official_live_eis_region_notices": len(rows),
                 "fenced_worker_inserted": stats["inserted_count"],
@@ -194,7 +229,7 @@ def accept():
                 "dedup_on_replay": True,
                 "local_alert_captured": local_alerts,
                 "local_alert_replay_dedup_verified": True,
-                "real_telegram_api_delivery_verified": False,
+                "real_telegram_api_delivery_verified": external_ack,
                 "production_enabled": False,
             }
         finally:
@@ -212,7 +247,9 @@ def main():
     print("RU_CHECHNYA_EIS_REAL_EVIDENCE=" +
           json.dumps(result, ensure_ascii=False, sort_keys=True))
     print("RU_CHECHNYA_EIS_STRICT_LIVE=PASS_LOCAL_CAPTURE")
-    print("REAL_TELEGRAM_DELIVERY=NOT_VERIFIED")
+    print("REAL_TELEGRAM_API_ACK=" +
+          ("VERIFIED_AUTHORIZED_TEST" if result["real_telegram_api_delivery_verified"]
+           else "NOT_VERIFIED"))
     print("PRODUCTION_CHANGED=NO")
     return 0
 

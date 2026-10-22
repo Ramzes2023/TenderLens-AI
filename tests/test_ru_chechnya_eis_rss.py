@@ -234,3 +234,72 @@ def test_user_notification_catalog_reads_real_worker_snapshot_not_second_rss(mon
     assert enabled_ru_catalog_keys(persisted) == (SOURCE_KEY,)
     rows = asyncio.run(persisted.registry.get(SOURCE_KEY).source.fetch(limit=5))
     assert rows == [stored] and store.read_count == 1
+
+
+def test_chechnya_telegram_receipt_rejected_if_absent_or_wrong_chat():
+    """Offline: transport completion without a valid Bot API receipt is not delivery."""
+    from types import SimpleNamespace
+    from app.bot.monitoring import _require_telegram_delivery_ack
+
+    invalid = [
+        None,
+        SimpleNamespace(message_id=0, chat=SimpleNamespace(id=99102)),
+        SimpleNamespace(message_id=9, chat=SimpleNamespace(id=99103)),
+        SimpleNamespace(message_id=9, chat=None),
+        SimpleNamespace(message_id="9", chat=SimpleNamespace(id=99102)),
+    ]
+    for receipt in invalid:
+        with pytest.raises(ValueError, match="Telegram did not acknowledge"):
+            _require_telegram_delivery_ack(receipt, 99102)
+
+
+def test_chechnya_background_does_not_claim_without_telegram_receipt():
+    """Offline: Chechnya alert remains retryable if a stub returns no Telegram ACK."""
+    from types import SimpleNamespace
+    from app.bot.monitoring import monitor_loop
+
+    async def scenario():
+        stop = asyncio.Event()
+        item = SimpleNamespace(
+            notice=notice("0194200000526005027", region="Чеченская Республика"),
+            reasons=("Поставка",),
+        )
+
+        class FakeRegistry:
+            def metadata(self):
+                return (SimpleNamespace(key=SOURCE_KEY, enabled=True,
+                                        jurisdictions=("RU",)),)
+
+        class FakeCatalog:
+            registry = FakeRegistry()
+
+        class FakeService:
+            settings = replace(settings(), enabled=True,
+                               ru_background_catalog_enabled=True,
+                               max_notifications_per_cycle=1)
+
+            async def active_subscriptions(self):
+                return [SimpleNamespace(owner_user_id=99101, chat_id=99102)]
+
+            async def fetch_matches_from_catalog(self, catalog, owner_user_id,
+                                                 *, source_keys):
+                assert source_keys == (SOURCE_KEY,)
+                return [item], SimpleNamespace(
+                    attempted_sources=(SOURCE_KEY,), total_failure=False
+                )
+
+            async def unseen_matches(self, owner_user_id, matches):
+                return matches
+
+            async def claim_new(self, owner_user_id, matches):
+                raise AssertionError("Chechnya alert falsely marked delivered")
+
+        class NoAckBot:
+            async def send_message(self, chat_id, text, **kwargs):
+                stop.set()
+                return None
+
+        await asyncio.wait_for(monitor_loop(NoAckBot(), FakeService(), stop,
+                                            source_catalog=FakeCatalog()), timeout=5)
+
+    asyncio.run(scenario())

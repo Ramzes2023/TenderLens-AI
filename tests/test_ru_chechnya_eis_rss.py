@@ -178,7 +178,6 @@ def test_live_local_alert_sink_returns_required_synthetic_receipt_only():
     Never treats a local-only test stub as Telegram API delivery.
     """
     from scripts.ci_ru_chechnya_eis_real_worker import LocalCaptureBot
-    from app.bot.monitoring import _require_telegram_delivery_ack
 
     async def run():
         stop = asyncio.Event()
@@ -187,7 +186,10 @@ def test_live_local_alert_sink_returns_required_synthetic_receipt_only():
         receipt = await bot.send_message(
             99102, text, disable_web_page_preview=True,
         )
-        _require_telegram_delivery_ack(receipt, 99102)
+        # The shared monitor ACK gate lives in a separate unmerged PR;
+        # this source-specific test only checks local receipt shape.
+        assert type(receipt.message_id) is int and receipt.message_id > 0
+        assert type(receipt.chat.id) is int and receipt.chat.id == 99102
         assert receipt.message_id == 1
         assert receipt.chat.id == 99102
         assert stop.is_set() and bot.messages == [text]

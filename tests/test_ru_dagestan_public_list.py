@@ -170,7 +170,7 @@ def test_runtime_accepts_single_notice_and_honest_empty_page():
 @pytest.mark.parametrize("raw,expected", [
     ("100 000,00", 100000.0), ("1\u00a0200,45", 1200.45),
     ("1200,50", 1200.50), (25000, 25000.0),
-    (0, None), (True, None), (-1, None),
+    (0, None), (True, None), (-1, None), (10**1000, None),
     ("1e15", None), ("<script>1</script>", None),
     ("1,200.00", None), (float("nan"), None), (float("inf"), None),
 ])

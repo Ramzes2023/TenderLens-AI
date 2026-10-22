@@ -101,7 +101,7 @@ def run_probe() -> dict:
 def main() -> int:
     try:
         result = run_probe()
-    except BaseException as error:
+    except Exception as error:
         # Never print raw exception: httpx errors can include full query URLs.
         result = {"state": transport_category(error), "strict_tls": True}
     print("RU_CHECHNYA_EIS_SAFE_NETWORK_DIAG=" + json.dumps(result, sort_keys=True))

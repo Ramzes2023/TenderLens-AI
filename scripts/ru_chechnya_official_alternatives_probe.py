@@ -39,7 +39,10 @@ def classify_public_page(target: str, status: int, content_type: str, payload: b
     # tag boundaries while preventing a captcha/login page from being counted.
     text = html.unescape(re.sub(r"<[^>]*>", " ", payload.decode("utf-8", errors="replace")))
     text = " ".join(text.split()).casefold()
-    if "captcha" in text or "вход в систему" in text or "авторизация" in text:
+    # A navigation/footer link named "Авторизация" does NOT by itself
+    # mean the requested public page was replaced by a login challenge.
+    # Only stronger actual challenge indicators fail closed here.
+    if "captcha" in text or "вход в систему" in text:
         return "AUTH_OR_CHALLENGE_PAGE"
     if target == "official_committee_information":
         if "комитет правительства чеченской республики" in text:

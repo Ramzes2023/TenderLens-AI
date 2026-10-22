@@ -7,7 +7,6 @@ on:
       - app/sources/ru_dagestan_public_list.py
       - scripts/ci_ru_dagestan_public_list_sql.py
       - scripts/ci_ru_dagestan_public_grid_metadata_live.py
-      - .github/workflows/ru-dagestan-public-list-optin.yml
       - tests/test_ru_dagestan_public_list.py
 
   workflow_dispatch:

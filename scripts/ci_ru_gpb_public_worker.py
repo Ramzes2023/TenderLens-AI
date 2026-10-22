@@ -94,9 +94,7 @@ def main():
     except Exception as e:
         print("RU_GPB_REAL_WORKER=BLOCKED")
         print("FAILURE_CLASS="+type(e).__name__)
-        # Only the explicit public source and isolated test DB are accessed.
-        # Keep the failure category/proximal cause visible for actual fixes.
-        cause = e.__cause__ or e.__context__
+        # Never print raw network exception text: it can contain URLs or secrets.
         print("FAILURE_REASON=redacted; consult approved transport class diagnostics")
         print("PRODUCTION_CHANGED=NO")
         return 1

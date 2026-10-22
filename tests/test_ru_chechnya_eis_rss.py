@@ -558,6 +558,30 @@ def test_offline_probe_only_counts_verified_official_chechnya_rss(monkeypatch):
 
 
 
+def test_operator_windows_safe_url_preflight_accepts_chechnya_candidate_and_rejects_foreign(monkeypatch, capsys):
+    """Windows launcher uses the exact strict Python check; never log query URLs."""
+    from scripts.ru_chechnya_validate_url import main
+
+    monkeypatch.setenv("VALYQON_CHECHNYA_URL_VALIDATE", URL)
+    assert main() == 0
+    assert "CHECHNYA_URL_PREFLIGHT=ACCEPTED" in capsys.readouterr().out
+
+    fake = "https://malicious.example/epz/order/extendedsearch/rss.html?fz44=on&searchString=test"
+    monkeypatch.setenv("VALYQON_CHECHNYA_URL_VALIDATE", fake)
+    assert main() == 2
+    output = capsys.readouterr().out
+    assert "CHECHNYA_URL_PREFLIGHT=REJECTED" in output
+    assert "malicious.example" not in output
+
+    no_chechnya = "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&searchString=milk"
+    monkeypatch.setenv("VALYQON_CHECHNYA_URL_VALIDATE", no_chechnya)
+    assert main() == 2
+    assert "CHECHNYA_URL_PREFLIGHT=REJECTED" in capsys.readouterr().out
+
+    monkeypatch.delenv("VALYQON_CHECHNYA_URL_VALIDATE", raising=False)
+    assert main() == 2
+
+
 def test_optional_authorized_telegram_api_check_never_sends_without_opt_in(monkeypatch):
     """Offline: missing test-chat credentials must not call Bot API."""
     from scripts import ci_ru_chechnya_eis_real_worker as harness

@@ -104,10 +104,20 @@ def test_manual_regional_pool_does_not_starve_other_enabled_sources():
     from app.bot.monitoring import _manual_regional_worker_sql_search
 
     class Catalog:
-        registry = SimpleNamespace(metadata=lambda: (
-            SimpleNamespace(key=EIS, enabled=True),
-            SimpleNamespace(key="kavkaz_rf_firstparty", enabled=True),
-        ))
+        class Registry:
+            def metadata(self):
+                return (
+                    SimpleNamespace(key=EIS, enabled=True),
+                    SimpleNamespace(key="kavkaz_rf_firstparty", enabled=True),
+                )
+
+            def get(self, key):
+                from app.sources.snapshots import FreshIngushetiaWorkerSource
+                assert key == EIS
+                return SimpleNamespace(
+                    source=FreshIngushetiaWorkerSource(object(), key),
+                )
+        registry = Registry()
 
     class Service:
         def __init__(self):
@@ -146,3 +156,29 @@ def test_manual_regional_pool_does_not_starve_other_enabled_sources():
     assert len(matches) == 6
     assert report.attempted_sources == (EIS, "kavkaz_rf_firstparty")
     assert not report.total_failure
+
+
+def test_manual_worker_sql_mode_rejects_unwrapped_live_catalog_without_fetching():
+    """Do not silently fetch live EIS/ETP per chat when fixed Worker SQL is mandated."""
+    import pytest
+    from app.sources.eis_rss import SourceError
+    from app.bot.monitoring import _manual_regional_worker_sql_search
+
+    class Catalog:
+        class Registry:
+            def metadata(self):
+                return (SimpleNamespace(key=EIS, enabled=True),)
+
+            def get(self, key):
+                assert key == EIS
+                return SimpleNamespace(source=object())  # accidental live adapter
+        registry = Registry()
+
+    class Service:
+        async def profile_for_owner(self, uid):
+            pytest.fail("No profile or network access permitted")
+        async def fetch_matches_from_catalog_for_profile(self, *args, **kwargs):
+            pytest.fail("Unverified catalog must never be used")
+
+    with pytest.raises(SourceError, match="Worker-SQL catalog"):
+        asyncio.run(_manual_regional_worker_sql_search(Service(), Catalog(), 101))

@@ -500,44 +500,36 @@ def test_offline_probe_only_counts_verified_official_chechnya_rss(monkeypatch):
         '</item></channel></rss>'
     ).encode("utf-8")
 
-    class FakeResponse:
-        status_code = 200
-        headers = {"content-type": "application/rss+xml"}
+    import httpx
+    from app.sources.http import BoundedClient
 
-        def __enter__(self):
-            return self
+    requests = []
 
-        def __exit__(self, *args):
-            return False
+    def official_http_response(request):
+        requests.append((request.url.host, request.url.path, request.url.params.get("fz44")))
+        assert request.url.host == "zakupki.gov.ru"
+        return httpx.Response(
+            200, content=sample, headers={"content-type": "application/rss+xml"},
+        )
 
-        def iter_bytes(self):
-            yield sample
-
-    class FakeClient:
-        def __init__(self, **kwargs):
-            assert kwargs["verify"] is True
-            assert kwargs["follow_redirects"] is False
-            assert kwargs["trust_env"] is False
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-        def stream(self, method, url):
-            assert method == "GET" and url == URL
-            return FakeResponse()
+    def bounded_client_with_offline_transport(**kwargs):
+        assert kwargs["verify"] is True
+        assert kwargs["follow_redirects"] is False
+        assert kwargs["trust_env"] is False
+        return BoundedClient(
+            **kwargs, transport=httpx.MockTransport(official_http_response),
+        )
 
     cfg = replace(settings(), ru_chechnya_eis_enabled=True,
                   ru_chechnya_eis_rss_urls=(URL,), eis_direct_enabled=True)
     monkeypatch.setattr(probe, "load_monitoring_settings", lambda: cfg)
-    monkeypatch.setattr(probe.httpx, "Client", FakeClient)
+    monkeypatch.setattr(probe, "source_client", bounded_client_with_offline_transport)
     result = probe.run_probe()
     assert result["state"] == "VERIFIED_FEED_WITH_ACCEPTED_ORIGINALS"
     assert result["official_item_count"] == 1
     assert result["regional_evidence_count"] == 1
     assert result["accepted_original_count"] == 1
+    assert requests == [("zakupki.gov.ru", "/epz/order/extendedsearch/rss.html", "on")]
     assert not result["worker_sqlite_verified"]
     assert not result["telegram_delivery_verified"]
 

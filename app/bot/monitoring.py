@@ -328,8 +328,12 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService,
                 shared_notices, shared_report = None, None
                 if share_ingushetia:
                     try:
+                        # Fetch a fixed, bounded source-owned candidate pool
+                        # ONCE per cycle. Limiting to settings.max_items here
+                        # drops matches for tenants whose keyword appears only
+                        # below the first handful of regional notices.
                         shared_matches, shared_report = await service.fetch_matches_from_catalog_for_profile(
-                            source_catalog, None, source_keys=regional_keys,
+                            source_catalog, None, source_keys=regional_keys, max_items=100,
                         )
                         shared_notices = tuple(match.notice for match in shared_matches)
                     except Exception:
@@ -355,10 +359,19 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService,
                         if service.settings.ru_background_catalog_enabled:
                             if share_ingushetia:
                                 profile = await service.profile_for_owner(subscription.owner_user_id)
-                                matches = [
-                                    match for notice in shared_notices
-                                    if (match := prefilter_notice(notice, profile)) is not None
-                                ]
+                                # The per-user bound applies AFTER tenant
+                                # keyword/region filtering, separately to each
+                                # source, preserving the previous per-source cap.
+                                matches = []
+                                per_source = {}
+                                for notice in shared_notices:
+                                    count = per_source.get(notice.source, 0)
+                                    if count >= service.settings.max_items:
+                                        continue
+                                    match = prefilter_notice(notice, profile)
+                                    if match is not None:
+                                        matches.append(match)
+                                        per_source[notice.source] = count + 1
                                 reports = [shared_report]
                                 if tenant_specific_keys:
                                     try:

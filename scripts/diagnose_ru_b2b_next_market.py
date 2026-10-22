@@ -172,11 +172,20 @@ def analyze_official_html(payload: bytes):
 
 
 async def probe():
+    observed = {}
+
+    async def observe_response(response):
+        # HTTP status is non-secret first-party metadata. Capture it before
+        # BoundedClient deliberately rejects non-2xx; never read/log headers,
+        # body, redirect target, cookies, original notice URLs or credentials.
+        observed["official_http_status"] = response.status_code
+
     try:
         policy = FetchPolicy(frozenset({HOST}), 1, max_bytes=MAX_BYTES)
         with bounded_fetch(policy):
             async with source_client(timeout=25, follow_redirects=False,
-                                     trust_env=False, headers={"Accept": "text/html"}) as client:
+                                     trust_env=False, headers={"Accept": "text/html"},
+                                     event_hooks={"response": [observe_response]}) as client:
                 response = await client.get(NEXT_MARKET_URL)
         report = {"source": "b2b_center", "diagnostic_only": True,
                   "status": response.status_code,
@@ -191,7 +200,7 @@ async def probe():
         return {"source": "b2b_center", "diagnostic_only": True,
                 "transport_error_class": type(error).__name__,
                 "reason": error.reason, "retryable": error.retryable,
-                "new_source_enabled": False}
+                **observed, "new_source_enabled": False}
     except (ValueError, UnicodeError, OSError) as error:
         return {"source": "b2b_center", "diagnostic_only": True,
                 "safe_error_class": type(error).__name__,

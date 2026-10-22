@@ -28,6 +28,7 @@ from .nmck_native_public import NmckNativePublicSource
 from .stan_commercial_public import StanCommercialPublicSource
 from .south_ural_public import SouthUralPublicSource
 from .ru_dagestan_public_list import DagestanPublicListSource, GRID as DAG_PUBLIC_GRID
+from .ru_chechnya_eis_rss import ChechnyaEisRssSource, OFFICIAL_HOMEPAGE as CHECHNYA_EIS_HOMEPAGE
 from .ru_samara_public_list import SamaraPublicListSource, GRID as SAMARA_PUBLIC_GRID
 from .kavkaz_rf_firstparty import KavkazRfFirstpartySource
 from .canada_buys_dataset import CanadaBuysDatasetSource
@@ -772,6 +773,34 @@ def build_source_catalog(
             official=False,
             enabled=True,
             capabilities=SourceCapabilities(),
+        ))
+
+    # EIS 44-FZ Chechnya: isolated regional feed configured by the operator.
+    # Disabled by default; never infer a working source from catalog existence.
+    if settings.ru_chechnya_eis_enabled and settings.ru_chechnya_eis_rss_urls:
+        registry.register(SourceRegistration(
+            key="ru_chechnya_eis",
+            display_name="Чеченская Республика — ЕИС 44-ФЗ (региональный RSS)",
+            source=ChechnyaEisRssSource(
+                urls=settings.ru_chechnya_eis_rss_urls,
+                timeout=timeout,
+                ca_bundle_file=settings.ca_bundle_file,
+                direct=settings.eis_direct_enabled,
+                system_trust=settings.eis_system_trust_enabled,
+            ),
+            transport=SourceTransport.RSS,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url=CHECHNYA_EIS_HOMEPAGE,
+            official=True,
+            enabled=True,
+            capabilities=SourceCapabilities(
+                keyword_search=False,
+                pagination=False,
+                documents=False,
+                incremental_sync=False,
+                authentication_required=False,
+            ),
         ))
 
     # Public official regional listing only: no anonymous deep detail access.

@@ -81,3 +81,51 @@ def test_non_az_bounded_http_policy_is_fail_closed_for_404():
                     await client.get(INDEX_URL)
                 assert error.value.reason == "http_status"
     asyncio.run(scenario())
+
+
+def test_bounded_official_english_index_recovers_az_tcp_failure(monkeypatch):
+    """Fallback is exactly one HTTPS request to the pinned original host."""
+    from app.sources.az_azeristilik import INDEX_EN_URL
+    calls = []
+
+    def respond(request):
+        url = str(request.url)
+        calls.append(url)
+        if url == INDEX_URL:
+            raise httpx.ConnectError("synthetic transient connection", request=request)
+        if url == INDEX_EN_URL:
+            return httpx.Response(200, text=INDEX, headers={"content-type": "text/html"})
+        if url == ORIGINAL:
+            return httpx.Response(200, text=DETAIL, headers={"content-type": "text/html"})
+        if url == SECOND:
+            return httpx.Response(404)
+        raise AssertionError("Unapproved fallback URL")
+
+    def fake_client(**kwargs):
+        assert kwargs["trust_env"] is False
+        assert kwargs["follow_redirects"] is False
+        return BoundedClient(transport=httpx.MockTransport(respond), **kwargs)
+
+    monkeypatch.setattr(source, "source_client", fake_client)
+    notices = asyncio.run(AzerbaijanHeatSource().fetch(limit=2))
+    assert [x.url for x in notices] == [ORIGINAL]
+    assert calls == [INDEX_URL, INDEX_EN_URL, ORIGINAL, SECOND]
+
+
+@pytest.mark.parametrize("status", [401, 403, 429, 500])
+def test_primary_index_http_rejection_never_uses_language_fallback(monkeypatch, status):
+    from app.sources.az_azeristilik import INDEX_EN_URL
+    called = []
+
+    def respond(request):
+        called.append(str(request.url))
+        assert str(request.url) != INDEX_EN_URL
+        return httpx.Response(status)
+
+    def fake_client(**kwargs):
+        return BoundedClient(transport=httpx.MockTransport(respond), **kwargs)
+
+    monkeypatch.setattr(source, "source_client", fake_client)
+    with pytest.raises(SourceError):
+        asyncio.run(AzerbaijanHeatSource().fetch(limit=2))
+    assert called == [INDEX_URL]

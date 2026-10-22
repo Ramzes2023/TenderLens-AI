@@ -181,9 +181,20 @@ class AzerbaijanHeatSource:
                     raise SourceError("AZ official list not HTML.")
                 cards = discover_official_posts(index.text)
                 for url, title in cards[:count]:
-                    detail = await client.get(url, headers={
-                        "Accept": "text/html", "User-Agent": "VALYQON-public-tender-audit/1.0"})
-                    detail.raise_for_status()
+                    try:
+                        detail = await client.get(url, headers={
+                            "Accept": "text/html", "User-Agent": "VALYQON-public-tender-audit/1.0"})
+                        detail.raise_for_status()
+                    except httpx.HTTPStatusError as error:
+                        # A stale official *individual* detail link can return
+                        # HTTP 404/410 even while the live agency index still
+                        # lists other corroborated purchases. Do not let it
+                        # discard already verified tenders. All other errors
+                        # (including rate limits/auth/network) keep the source
+                        # fail-closed, and zero verified originals stays red.
+                        if error.response.status_code in (404, 410):
+                            continue
+                        raise
                     if "html" not in detail.headers.get("content-type", "").lower():
                         raise SourceError("AZ official detail not HTML.")
                     try:

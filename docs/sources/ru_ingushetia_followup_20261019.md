@@ -206,3 +206,43 @@ independent native curl failed from hosted Linux *and* Windows. No
 workaround, fixture, or bypass may mark the hosted gate green. Both
 regional source flags remain opt-in/default OFF and PR #226 stays draft
 and unmerged pending approved operational acceptance.
+
+## 22 October 2026: subscriber fan-out reliability under intermittent access
+
+GitHub Actions job `ingushetia-real-publisher-original-worker-search` at
+head `d9cc153` returned `BLOCKED` for both direct EIS and accredited
+Fabrikant routes after three real durable retries. Contract tests and
+operator-queue tests passed. Historical hosted first-party Fabrikant PASS
+on 20 October does not imply that the source is consistently reachable.
+
+The bot's existing per-subscriber Russian-catalog loop independently
+issued full remote HTTP fetches for *each* subscription. For the two
+fixed Ingushetia regional routes, these requests do not use
+subscriber-specific upstream search terms, so repeating them for
+every subscriber wastes the limited source-reachable egress window.
+
+Commit `334f0e5` changes only the configuration where **all**
+enabled Russian catalog source keys are a nonempty subset of
+`{ru_ingushetia_eis44, ru_ingushetia_fabrikant44}`:
+one source-catalog fetch per monitoring cycle is distributed across
+subscribers **after** their individual, locally resolved company
+keyword/region/exclusion profiles are applied. The existing
+`unseen_matches`, real Bot API message/chat acknowledgement and
+`claim_new` remain individually scoped per subscriber. If all sources
+fail, no alert is claimed; partial source success can still generate
+alerts from the healthy source. This does not cache or invent a
+fresh tender and does not make an unreachable upstream work.
+
+If a profile-specific `eis` or any other RU source is enabled, the
+old per-owner fetch behavior is preserved; this change must not silently
+broaden a user's RSS query or expose their monitoring profile to
+other users. In particular, the existing default EIS profile-feed
+registration may remain enabled, so this optimization activates only
+in an operator-managed Ingushetia-only catalog configuration.
+
+Offline tests cover two subscribers with mutually exclusive keywords,
+a full source outage, and a mixed EIS source configuration. These
+are synthetic test conditions, not live Bot API delivery evidence.
+This change is PR-only, default source flags remain OFF and there
+is no production change, merge, remote runner enablement or
+unauthorized Telegram send.

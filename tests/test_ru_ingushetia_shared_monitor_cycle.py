@@ -497,3 +497,39 @@ def test_real_monitor_service_defaults_to_user_limit_but_shared_fetches_100_cand
         (3, ("ru_ingushetia_eis44",), ()),
         (100, ("ru_ingushetia_eis44",), ()),
     ]
+
+
+def test_late_unseen_regional_notice_is_not_starved_by_seen_per_source_prefix():
+    """Synthetic fixed regional batch; no live procurement or Bot API claims.
+
+    Five matching originals exist, first three were already delivered.
+    max_items=3 is a per-source limit of *unseen* matches, not a reason
+    to discard the fourth notice before checking durable seen identity.
+    """
+    async def run():
+        stop = asyncio.Event()
+        service = FakeService(stop)
+        service.settings.max_items = 3
+        service.settings.max_notifications_per_cycle = 2
+        service.notices = [
+            tender(f"011450000082600{2600 + i:04d}",
+                   "Устройство ливневой канализации",
+                   "ru_ingushetia_eis44")
+            for i in range(5)
+        ]
+        first_three = {n.tender_number for n in service.notices[:3]}
+        service.claimed.extend((1, number) for number in first_three)
+        bot = FakeBot()
+        await monitor_loop(
+            bot, service, stop,
+            source_catalog=FakeCatalog(("ru_ingushetia_eis44",)),
+        )
+        owner_one = [body for chat, body in bot.sent if chat == 11]
+        assert len(owner_one) == 2
+        assert service.notices[3].tender_number in owner_one[0]
+        assert service.notices[4].tender_number in owner_one[1]
+        assert not any(number in body for number in first_three for body in owner_one)
+        assert len([call for call in service.calls if call[0] == "shared"]) == 1
+        assert (1, service.notices[3].tender_number) in service.claimed
+        assert (1, service.notices[4].tender_number) in service.claimed
+    asyncio.run(run())

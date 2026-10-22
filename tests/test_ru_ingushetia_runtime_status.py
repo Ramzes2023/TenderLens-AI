@@ -141,3 +141,32 @@ def test_non_utc_clock_rejected_without_querying_repository():
         snapshot_health(settings(), object(),
                         now=datetime(2026, 10, 22, 14,
                                      tzinfo=timezone(timedelta(hours=2))))
+
+
+def test_explicit_status_cannot_create_missing_sqlite_database(monkeypatch, tmp_path, capsys):
+    """Even explicit inspect-only must not create a new file or initialize tables."""
+    import app.monitoring.config as monitoring_config
+    import app.database.config as database_config
+
+    absent = tmp_path / "not-created.sqlite"
+    monkeypatch.setattr(monitoring_config, "load_monitoring_settings", lambda: settings())
+    monkeypatch.setattr(database_config, "load_database_settings",
+                        lambda: DatabaseSettings("", absent))
+    assert not absent.exists()
+    assert main(["--inspect-only"]) == 2
+    assert not absent.exists()
+    assert "SAFE_DATABASE_OR_CONFIG_REVIEW_REQUIRED" in capsys.readouterr().out
+
+
+def test_current_sql_signal_requires_at_least_one_recent_row():
+    now = datetime(2026, 10, 22, 16, tzinfo=timezone.utc)
+    class Empty:
+        def latest_seen_utc(self, source):
+            return now
+        def read(self, source, limit, search_terms, *, not_before):
+            assert source == EIS and not_before <= now
+            assert limit == 100 and search_terms == ()
+            return []
+    report = snapshot_health(settings(), Empty(), now=now)
+    assert report["status"] == "NOT_OPERATIONALLY_READY"
+    assert report["source_states"][EIS] == "SQL_EMPTY"

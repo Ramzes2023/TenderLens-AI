@@ -29,7 +29,7 @@ from scripts.ci_ru_ingushetia_safe_handler_diagnostics import (
     DiagnosticConnectorHandler, safe_handler_failure_classes,
     safe_handler_failure_categories, sanitize_failure_categories,
 )
-from app.sources.snapshots import snapshot_catalog
+from app.sources.snapshots import fresh_ingushetia_worker_catalog
 from app.sources.ru_ingushetia_fabrikant44 import SOURCE_ID
 from app.sources.ru_notice_identity import original_notice_key
 from scripts.ci_ru_ingushetia_live_worker import _check_isolated_dispatch
@@ -120,7 +120,7 @@ def proof():
                     or stats["inserted_count"] != len(rows)
                     or stats["skipped_count"] != 0):
                 raise AssertionError("Worker verified originals / SQL insert counts diverged")
-            search = snapshot_catalog(catalog, store)
+            search = fresh_ingushetia_worker_catalog(catalog, store)
             for n in rows:
                 for keyword in (n.tender_number, n.title):
                     report = asyncio.run(search.fetch(
@@ -153,7 +153,8 @@ def proof():
             if negative.failures or negative.notices:
                 raise AssertionError("Unrelated user query returned regional tenders")
             acknowledged = asyncio.run(_check_isolated_dispatch(
-                catalog, cfg, rows, Path(d) / "monitor.sqlite", repository=store, source_id=SOURCE_ID,
+                catalog, cfg, rows, Path(d) / "monitor.sqlite", repository=store,
+                source_id=SOURCE_ID, monitor_catalog=search,
             ))
             if acknowledged != min(len(rows), cfg.max_notifications_per_cycle):
                 raise AssertionError("Isolated monitor failed to acknowledge verified rows")

@@ -65,8 +65,9 @@ class FakeService:
         return [SimpleNamespace(owner_user_id=1, chat_id=11),
                 SimpleNamespace(owner_user_id=2, chat_id=22)]
 
-    async def fetch_matches_from_catalog_for_profile(self, catalog, p, *, source_keys):
+    async def fetch_matches_from_catalog_for_profile(self, catalog, p, *, source_keys, max_items=None):
         assert p is None
+        assert max_items == 100  # regional candidate pool, pre-tenant limit
         self.calls.append(("shared", tuple(source_keys)))
         if self.total_failure:
             matches = []
@@ -169,7 +170,8 @@ def test_shared_source_exception_does_not_kill_monitor_or_claim_any_alert():
         stop = asyncio.Event()
         service = FakeService(stop)
         bot = FakeBot()
-        async def fail_shared(catalog, p, *, source_keys):
+        async def fail_shared(catalog, p, *, source_keys, max_items=None):
+            assert max_items == 100
             service.calls.append(("shared", tuple(source_keys)))
             raise OSError("internal proxy token=NEVER_LOG")
         service.fetch_matches_from_catalog_for_profile = fail_shared
@@ -376,7 +378,8 @@ def test_mixed_shared_outage_keeps_verified_personalized_matches(caplog):
             tender(IDS[0], "Устройство ливневой канализации", "eis"),
             tender(IDS[1], "Поставка лекарственных средств", "eis"),
         ]
-        async def failed_fixed(catalog, profile, *, source_keys):
+        async def failed_fixed(catalog, profile, *, source_keys, max_items=None):
+            assert max_items == 100
             service.calls.append(("shared", tuple(source_keys)))
             raise OSError("regional transport token=SECRET_MUST_NOT_LOG")
         async def fetched_extra(catalog, owner_id, *, source_keys):
@@ -403,3 +406,42 @@ def test_mixed_shared_outage_keeps_verified_personalized_matches(caplog):
     asyncio.run(run())
     assert "Ingushetia shared source poll failed" in caplog.text
     assert "SECRET_MUST_NOT_LOG" not in caplog.text
+
+
+def test_shared_regional_user_keyword_after_candidate_limit_does_not_miss_late_tender():
+    """Synthetic regional batch: matching notice is after per-user max_items."""
+    async def run():
+        stop = asyncio.Event()
+        service = FakeService(stop)
+        service.settings.max_items = 3
+        service.settings.max_notifications_per_cycle = 3
+        service.notices = [
+            tender(str(114500000826002500 + i).zfill(19),
+                   "Закупка бумаги и канцелярии", "ru_ingushetia_eis44")
+            for i in range(25)
+        ] + [tender("0114500000826002599", "Устройство ливневой канализации",
+                    "ru_ingushetia_eis44")]
+
+        async def bounded_shared(catalog, p, *, source_keys, max_items=None):
+            service.calls.append(("shared", tuple(source_keys)))
+            assert p is None and max_items == 100
+            from app.monitoring.service import MonitorMatch
+            matches = [MonitorMatch(n, ("candidate",)) for n in service.notices
+                       if n.source in source_keys][:max_items]
+            return matches, SimpleNamespace(
+                attempted_sources=tuple(source_keys),
+                successful_sources=tuple(source_keys),
+                total_failure=False, failures=(),
+            )
+        service.fetch_matches_from_catalog_for_profile = bounded_shared
+
+        # User 1 searches "канализации" while user 2 searches "лекарственных";
+        # only the first should receive the matching late regional procurement.
+        bot = FakeBot()
+        await monitor_loop(bot, service, stop,
+                           source_catalog=FakeCatalog(("ru_ingushetia_eis44",)))
+        assert service.calls == [("shared", ("ru_ingushetia_eis44",))]
+        assert len(bot.sent) == 1
+        assert bot.sent[0][0] == 11 and "0114500000826002599" in bot.sent[0][1]
+        assert service.claimed == [(1, "0114500000826002599")]
+    asyncio.run(run())

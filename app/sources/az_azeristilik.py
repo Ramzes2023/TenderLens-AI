@@ -26,6 +26,10 @@ from .transport_errors import SourceTransportError, transient_transport
 SOURCE = "az_azeristilik"
 HOST = "azeristilik.gov.az"
 INDEX_URL = "https://azeristilik.gov.az/az/imkanlar/tender-elanlari"
+# Official same-host language mirror, independently observed to expose the
+# same procurement links. Only a transport-level network failure on /az
+# permits a second bounded listing request; never bypass HTTP/TLS/auth errors.
+INDEX_EN_URL = "https://azeristilik.gov.az/en/imkanlar/tender-elanlari"
 MAX_BODY = 768 * 1024
 MAX_DETAILS = 5
 POST = re.compile(r"^/(?:(?:az|en|ru)/)?post/([a-z0-9-]{12,200})$")
@@ -194,7 +198,7 @@ class AzerbaijanHeatSource:
     async def fetch(self, limit=5):
         if _policy.get() is None:
             with bounded_fetch(FetchPolicy(
-                frozenset({HOST}), 1+MAX_DETAILS, max_bytes=MAX_BODY,
+                frozenset({HOST}), 2+MAX_DETAILS, max_bytes=MAX_BODY,
                 allowed_http_errors=frozenset({403, 404, 410}),
             )):
                 return await self._fetch(limit)
@@ -207,8 +211,18 @@ class AzerbaijanHeatSource:
         notices = []
         try:
             async with source_client(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
-                index = await client.get(INDEX_URL, headers={
-                    "Accept": "text/html", "User-Agent": "VALYQON-public-tender-audit/1.0"})
+                headers = {"Accept": "text/html",
+                           "User-Agent": "VALYQON-public-tender-audit/1.0"}
+                try:
+                    index = await client.get(INDEX_URL, headers=headers)
+                except ConnectorTransportError as error:
+                    # No generic fail-open fallback. An ordinary transient
+                    # first-party network failure may use one *official*
+                    # same-host language listing under the Worker request cap.
+                    # No alternate host, redirect, HTTP auth or TLS bypass.
+                    if not (error.retryable and error.reason == "network"):
+                        raise
+                    index = await client.get(INDEX_EN_URL, headers=headers)
                 index.raise_for_status()
                 if "html" not in index.headers.get("content-type", "").lower():
                     raise SourceError("AZ official list not HTML.")

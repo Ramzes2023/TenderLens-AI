@@ -140,8 +140,8 @@ def check_linked_details(links, opener):
     Log only categories/counts, never tender data, URLs or response bodies.
     """
     result = {"checked_details": 0, "complete_details": 0,
-              "rejected_details": 0, "detail_http_errors": {},
-              "detail_network_errors": {}}
+              "rejected_details": 0, "blocking_detail_errors": 0,
+              "detail_http_errors": {}, "detail_network_errors": {}}
     for url in links[:4]:
         result["checked_details"] += 1
         try:
@@ -153,18 +153,24 @@ def check_linked_details(links, opener):
         except HTTPError as exc:
             key = str(exc.code) if exc.code in (401, 403, 404, 410, 429, 500, 502, 503, 504) else "other"
             result["detail_http_errors"][key] = result["detail_http_errors"].get(key, 0) + 1
+            if exc.code not in (403, 404, 410):
+                result["blocking_detail_errors"] += 1
         except URLError as exc:
             key = type(exc.reason).__name__
             if key not in {"ConnectionResetError", "TimeoutError", "ConnectionRefusedError",
                            "SSLCertVerificationError", "SSLError"}:
                 key = "OtherNetworkError"
             result["detail_network_errors"][key] = result["detail_network_errors"].get(key, 0) + 1
+            if isinstance(exc.reason, ssl.SSLError):
+                result["blocking_detail_errors"] += 1
         except (TimeoutError, OSError, ValueError, ssl.SSLError) as exc:
             key = type(exc).__name__ if type(exc).__name__ in {
                 "TimeoutError", "ConnectionResetError", "ValueError", "SSLError",
                 "SSLCertVerificationError",
             } else "OtherError"
             result["detail_network_errors"][key] = result["detail_network_errors"].get(key, 0) + 1
+            if isinstance(exc, ssl.SSLError):
+                result["blocking_detail_errors"] += 1
     return result
 
 
@@ -182,7 +188,9 @@ def run():
             # A source is verified only if the listing is official AND at
             # least one independently fetched original has mandatory buyer,
             # publication and deadline. Failed cards never contribute.
-            item["verified"] = item["index_verified"] and item["complete_details"] >= 1
+            item["verified"] = (item["index_verified"]
+                                and item["complete_details"] >= 1
+                                and item["blocking_detail_errors"] == 0)
         except HTTPError as exc:
             item.update(error="HTTPError", http_status=exc.code)
         except URLError as exc:

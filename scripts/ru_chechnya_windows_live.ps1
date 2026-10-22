@@ -3,12 +3,28 @@
 # It does NOT enable production and does NOT call the Telegram Bot API.
 # Example:
 #   .\scripts\ru_chechnya_windows_live.ps1 -RegionalRssUrl '<exact official EIS 44-FZ region RSS URL>'
+#   .\scripts\ru_chechnya_windows_live.ps1 -TryOfficialSearchCandidate
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory=$true)]
-    [ValidateNotNullOrEmpty()]
-    [string]$RegionalRssUrl
+    [string]$RegionalRssUrl,
+    [switch]$TryOfficialSearchCandidate
 )
+
+# A conservative official EIS search-form shape from the existing EIS adapter.
+# This is not equivalent to a verified advanced-search customer-region filter.
+# The strict Worker only accepts notices whose original EIS card and customer
+# or geographic metadata independently prove Chechnya.
+if ($TryOfficialSearchCandidate) {
+    if ($RegionalRssUrl) {
+        throw 'Use either a copied RegionalRssUrl or TryOfficialSearchCandidate, not both.'
+    }
+    $term = [Uri]::EscapeDataString('Чеченская Республика')
+    $RegionalRssUrl = "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&searchString=$term"
+    Write-Host 'EIS_REGION_QUERY=UNVERIFIED_TEXT_SEARCH_CANDIDATE' -ForegroundColor Yellow
+}
+if (-not $RegionalRssUrl) {
+    throw 'Provide -RegionalRssUrl or -TryOfficialSearchCandidate.'
+}
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -60,7 +76,11 @@ try {
 
         Write-Host 'CHECHNYA_ACCEPTANCE=OFFICIAL_LIVE_EIS_TO_LOCAL_ALERT' -ForegroundColor Cyan
         & $python -B -m scripts.ci_ru_chechnya_eis_real_worker
-        if ($LASTEXITCODE -ne 0) { throw 'Chechnya strict live Worker acceptance failed: no merge.' }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host 'CHECHNYA_LIVE_FAILED=RUNNING_SAFE_NETWORK_DIAGNOSTICS' -ForegroundColor Yellow
+            & $python -B -m scripts.ru_chechnya_eis_transport_probe
+            throw 'Chechnya strict live Worker acceptance failed: no merge.'
+        }
 
         Write-Host 'CHECHNYA_ACCEPTANCE=PASS_LOCAL_ONLY' -ForegroundColor Green
         Write-Host 'REAL_TELEGRAM_DELIVERY=NOT_VERIFIED'

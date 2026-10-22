@@ -462,3 +462,68 @@ def test_offline_probe_only_counts_verified_official_chechnya_rss(monkeypatch):
     assert not result["worker_sqlite_verified"]
     assert not result["telegram_delivery_verified"]
 
+
+
+def test_optional_authorized_telegram_api_check_never_sends_without_opt_in(monkeypatch):
+    """Offline: missing test-chat credentials must not call Bot API."""
+    from scripts import ci_ru_chechnya_eis_real_worker as harness
+    monkeypatch.delenv("RU_CHECHNYA_E2E_TEST_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("RU_CHECHNYA_E2E_TEST_CHAT_ID", raising=False)
+
+    def forbid_bot(*args, **kwargs):
+        raise AssertionError("No Telegram API connection without authorized opt-in")
+
+    monkeypatch.setattr(harness, "Bot", forbid_bot)
+    result = asyncio.run(harness.optional_authorized_telegram_api_check(
+        notice("0194200000526005027", region="Чеченская Республика"),
+    ))
+    assert result is False
+    monkeypatch.setenv("RU_CHECHNYA_E2E_TEST_CHAT_ID", "-1001234567890")
+    with pytest.raises(AssertionError, match="Both authorized"):
+        asyncio.run(harness.optional_authorized_telegram_api_check(
+            notice("0194200000526005027", region="Чеченская Республика"),
+        ))
+
+
+def test_optional_test_telegram_requires_matching_real_api_ack(monkeypatch):
+    """Offline fake Bot transport exercises the real gated send path."""
+    from types import SimpleNamespace
+    from scripts import ci_ru_chechnya_eis_real_worker as harness
+
+    monkeypatch.setenv("RU_CHECHNYA_E2E_TEST_BOT_TOKEN", "synthetic_test_only")
+    monkeypatch.setenv("RU_CHECHNYA_E2E_TEST_CHAT_ID", "-1001234567890")
+    recorded = []
+
+    class FakeBot:
+        def __init__(self, *, token):
+            assert token == "synthetic_test_only"
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def send_message(self, *, chat_id, text, disable_web_page_preview):
+            assert chat_id == -1001234567890
+            assert disable_web_page_preview is True
+            assert "0194200000526005027" in text
+            recorded.append(text)
+            return SimpleNamespace(
+                message_id=44, chat=SimpleNamespace(id=chat_id),
+            )
+
+    monkeypatch.setattr(harness, "Bot", FakeBot)
+    original = notice("0194200000526005027", region="Чеченская Республика")
+    assert asyncio.run(harness.optional_authorized_telegram_api_check(original)) is True
+    assert len(recorded) == 1
+
+    class WrongChatBot(FakeBot):
+        async def send_message(self, *, chat_id, text, disable_web_page_preview):
+            return SimpleNamespace(
+                message_id=45, chat=SimpleNamespace(id=999),
+            )
+
+    monkeypatch.setattr(harness, "Bot", WrongChatBot)
+    with pytest.raises(ValueError, match="Telegram message acknowledgement invalid"):
+        asyncio.run(harness.optional_authorized_telegram_api_check(original))

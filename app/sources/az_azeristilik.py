@@ -159,18 +159,27 @@ def _official_peer_reset(error):
     Keep TLS/certificate errors, resolver/public-IP errors and unknown
     ConnectErrors permanent. Existing durable Worker retries remain bounded.
     """
-    if not isinstance(error, httpx.ConnectError):
+    # The bounded production HTTP client wraps real ConnectError in its own
+    # policy exception. Only its explicitly retryable "network" classification
+    # is eligible; public-IP, TLS, HTTP status and policy rejections are not.
+    if isinstance(error, ConnectorTransportError):
+        if not error.retryable or error.reason != "network":
+            return False
+    elif not isinstance(error, httpx.ConnectError):
         return False
     seen = set()
-    cause = error.__cause__
+    cause = error
+    saw_connect = saw_reset = False
     while isinstance(cause, BaseException) and id(cause) not in seen:
         if isinstance(cause, ssl.SSLError):
             return False
+        if isinstance(cause, httpx.ConnectError):
+            saw_connect = True
         if type(cause) is ConnectionResetError:
-            return True
+            saw_reset = True
         seen.add(id(cause))
         cause = cause.__cause__
-    return False
+    return saw_connect and saw_reset
 
 
 @dataclass(frozen=True)

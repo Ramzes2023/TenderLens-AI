@@ -469,3 +469,27 @@ def test_pinned_root_probe_reexports_same_production_verifier():
 
     assert probe_verify is production_verify
     assert probe_pin == production_pin
+
+
+def test_operator_enabled_ingushetia_uses_only_fingerprint_pinned_root(tmp_path):
+    """Production catalog must use the same verified CA as successful local proof."""
+    from app.sources.eis_pinned_ca import select_verified_eis_ca
+
+    bundled = select_verified_eis_ca()
+    cat = build_source_catalog(settings(
+        ru_ingushetia_eis44_enabled=True, eis_system_trust_enabled=True,
+    ))
+    source = cat.registry.get(SOURCE_ID).source
+    assert source.ca_bundle_file == bundled
+    assert source.system_trust is False  # no OS store escape hatch
+
+    malicious = tmp_path / "untrusted.pem"
+    malicious.write_bytes(b"bad root" * 100)
+    with pytest.raises(ValueError):
+        build_source_catalog(settings(
+            ru_ingushetia_eis44_enabled=True, ca_bundle_file=malicious,
+        ))
+    # No enabled regional EIS -> selecting an unrelated global EIS bundle
+    # must not activate the new source or alter existing EIS settings.
+    disabled = build_source_catalog(settings(ca_bundle_file=malicious))
+    assert SOURCE_ID not in disabled.enabled_keys

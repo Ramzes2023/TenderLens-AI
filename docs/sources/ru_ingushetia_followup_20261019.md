@@ -349,3 +349,48 @@ remains readable after 68 minutes but fails closed after 76 minutes.
 No recurring scheduler, Bot API delivery or production source activation was
 performed by this change. Operational continuity still requires a properly
 approved source-reachable, recurring enqueue/Worker process.
+
+
+## 22 October 2026: approved UTC-hourly regional enqueue (not deployed)
+
+Added `scripts/ru_ingushetia_hourly_enqueue.py` as a strictly opt-in
+queue-only process for the two individually operator-enabled sources
+`ru_ingushetia_eis44` and `ru_ingushetia_fabrikant44`. No other Russian
+sources can enter this regional loop. Normal invocation without explicit
+authorization fails without opening any database:
+
+- CLI must contain `--authorize-queue-only` plus either `--once` or
+  `--hourly`.
+- Environment must explicitly set
+  `VALYQON_INGUSHETIA_QUEUE_APPROVED=YES_INGUSHETIA_QUEUE_ONLY`.
+- At least one of the two source flags must be enabled individually.
+- The runtime calls existing `ConnectorSyncService.enqueue` using a UTC
+  clock and the existing durable `connector.sync.v1` job implementation.
+  It writes actual queue records, and therefore **must not run against
+  production until deployment is separately authorized**.
+- `--hourly` checks the UTC hour every 30 seconds, enqueues once each
+  hour and uses actual database-backed source + connector version +
+  UTC-hour idempotency so process restart in that hour cannot duplicate
+  jobs. Importing the module creates no job, subprocess or HTTP request.
+
+This queue-only process is not a Worker, source scheduler service
+deployment, monitoring bot or Telegram send. Continuous operation
+requires an explicitly approved separate connector Worker
+(`python -m app.jobs.worker --connectors`) using the identical
+`DATABASE_URL` and configured source flags. The opt-in monitor mode
+`VALYQON_RU_INGUSHETIA_WORKER_SQL_ALERTS_ENABLED=true`, enabled
+monitor, account subscriptions and a working authorized Telegram
+bot are separate requirements.
+
+An offline contract verifies that two target source flags enqueue two
+real durable SQL jobs, a process restart reuses the same UTC-hour IDs,
+and the next hour creates fresh IDs. It also verifies that an unrelated
+RU flag cannot enqueue through this narrow scheduler and that missing
+authorization makes no DB call. No listener, hosted runner, scheduler
+process, production database or Bot API was started by this PR.
+
+The earlier Worker SQL notification TTL was also aligned to this
+hourly idempotency: 75 minutes, allowing 15 minutes of processing and
+scheduling drift beyond a normal 60-minute cycle. If not updated by
+then, regional notifications fail closed rather than presenting historical
+saved searches as current observations.

@@ -110,6 +110,10 @@ jobs:
           else
             echo "RSS_SEARCH_SCOPE=OPERATOR_CONFIGURED_RSS"
           fi
+          # Validate the operator input before writing to GitHub's env file:
+          # no arbitrary hosts, redirects, control characters or nationwide RSS.
+          export RU_CHECHNYA_EIS_RSS_URLS
+          python -c 'import os; from app.sources.ru_chechnya_eis_rss import validate_chechnya_feed_urls; validate_chechnya_feed_urls((os.environ["RU_CHECHNYA_EIS_RSS_URLS"],))'
           echo "RU_CHECHNYA_EIS_RSS_URLS=${RU_CHECHNYA_EIS_RSS_URLS}" >> "$GITHUB_ENV"
       - name: Official LIVE EIS -> real Worker -> SQLite -> query -> locally captured alert
         timeout-minutes: 7

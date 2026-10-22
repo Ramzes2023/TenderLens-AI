@@ -120,3 +120,32 @@ def test_genuine_ssr_fixture_reports_counts_not_source_urls_or_secret_values():
     assert report["ssr_url_shape_counts"]["COVER_CANONICAL"] == 2
     import json
     assert "tender-4646931" not in json.dumps(report)
+
+
+def test_diagnostic_reports_only_nonsecret_http_rejection_status(monkeypatch):
+    import asyncio
+    import json
+    import httpx
+    import scripts.diagnose_ru_b2b_next_market as module
+    from app.sources.http import BoundedClient
+
+    def safe_client(**kwargs):
+        assert kwargs["follow_redirects"] is False
+        assert kwargs["trust_env"] is False
+        return BoundedClient(
+            transport=httpx.MockTransport(
+                lambda req: httpx.Response(
+                    403, content=b"PRIVATE_RESPONSE_BODY_SHOULD_NOT_APPEAR",
+                    headers={"Location": "https://evil.invalid/TOKEN_NO_LEAK"},
+                )
+            ),
+            **kwargs
+        )
+    monkeypatch.setattr(module, "source_client", safe_client)
+    output = asyncio.run(module.probe())
+    assert output["official_http_status"] == 403
+    assert output["reason"] == "http_status"
+    assert output["new_source_enabled"] is False
+    assert output["diagnostic_only"] is True
+    assert "TOKEN_NO_LEAK" not in json.dumps(output)
+    assert "PRIVATE_RESPONSE_BODY" not in json.dumps(output)

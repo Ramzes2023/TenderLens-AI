@@ -14,6 +14,9 @@ on:
           - lenobl
           - vologda
           - gpb_rss
+          - gpb_public_html
+          - gpb_new_public_html
+          - gpb_new_rss
           - rzd_eshop
           - tektorg
           - batch_priority

@@ -75,3 +75,27 @@ def test_policy_rejection_and_tls_never_get_network_reset_retry():
             raise ConnectorTransportError(retryable=True, reason="network") from network
         except ConnectorTransportError as verified_network:
             assert am._retryable_official_peer_reset(verified_network) is True
+
+
+def test_hidden_ssl_failure_cannot_masquerade_as_retryable_tcp_reset():
+    """A reset nested beneath SSL trouble is never a retryable source event."""
+    try:
+        try:
+            try:
+                raise ConnectionResetError(104, "synthetic first party reset")
+            except ConnectionResetError as reset:
+                raise ssl.SSLError("synthetic verified TLS handshake failure") from reset
+        except ssl.SSLError as invalid_tls:
+            raise httpx.ConnectError("synthetic HTTPS failure") from invalid_tls
+    except httpx.ConnectError as network:
+        try:
+            raise ConnectorTransportError(retryable=True, reason="network") from network
+        except ConnectorTransportError as wrapped:
+            assert am._retryable_official_peer_reset(wrapped) is False
+
+
+def test_generic_httpx_connect_error_never_retries_without_native_reset():
+    try:
+        raise httpx.ConnectError("generic synthetic connect failure")
+    except httpx.ConnectError as unknown:
+        assert am._retryable_official_peer_reset(unknown) is False

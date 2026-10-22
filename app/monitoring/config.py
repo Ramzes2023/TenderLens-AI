@@ -37,6 +37,7 @@ class MonitoringSettings:
     b2b_center_enabled: bool = False
     tektorg_public_enabled: bool = False
     mikroton_tender_enabled: bool = False
+    roseltorg_public_enabled: bool = False
     gpb_etp_public_enabled: bool = False
     lenobl_small_public_enabled: bool = False
     nmck_native_public_enabled: bool = False
@@ -126,6 +127,7 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         b2b_center_enabled=_bool("B2B_CENTER_ENABLED", False),
         tektorg_public_enabled=_bool("TEKTORG_PUBLIC_ENABLED", False),
         mikroton_tender_enabled=_bool("MIKROTON_TENDER_ENABLED", False),
+        roseltorg_public_enabled=_bool("ROSELTORG_PUBLIC_ENABLED", False),
         gpb_etp_public_enabled=_bool("GPB_ETP_PUBLIC_ENABLED", False),
         lenobl_small_public_enabled=_bool("LENOBL_SMALL_PUBLIC_ENABLED", False),
         nmck_native_public_enabled=_bool("NMCK_NATIVE_PUBLIC_ENABLED", False),

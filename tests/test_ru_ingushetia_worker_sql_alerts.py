@@ -450,3 +450,32 @@ def test_russian_minus_tsiya_keyword_inflections_match_without_unrelated_matches
     assert _term_match("Ремонт станции", "станция")
     assert not _term_match("Поставка бетона", "канализации")
     assert not _term_match("Новая линия", "канализации")
+
+
+def test_worker_sql_keyword_search_does_not_confuse_russian_substrings(tmp_path):
+    """A short tenant term must not match the prefix of an unrelated word."""
+    db = Database(DatabaseSettings("ing-strict-keyword", tmp_path / "keywords.sqlite"))
+    repo = OpportunityRepository(db)
+    repo.initialize()
+    try:
+        repo.upsert(
+            notice(N1, title="Поставка оборудования Газпром"),
+            connector_version(EIS),
+        )
+        repo.upsert(
+            notice(N2, title="Поставка газа для котельной"),
+            connector_version(EIS),
+        )
+        catalog = fresh_ingushetia_worker_catalog(
+            build_source_catalog(settings(ru_ingushetia_fabrikant44_enabled=False)),
+            repo,
+        )
+        source = catalog.registry.get(EIS).source
+        gas = asyncio.run(source.for_search_terms(("газ",)).fetch(limit=3))
+        assert gas == []  # No complete token "газ"; "газа" is another form.
+        unrelated = asyncio.run(source.for_search_terms(("Газпром",)).fetch(limit=3))
+        assert [n.tender_number for n in unrelated] == [N1]
+        relevant = asyncio.run(source.for_search_terms(("газа",)).fetch(limit=3))
+        assert [n.tender_number for n in relevant] == [N2]
+    finally:
+        db.close()

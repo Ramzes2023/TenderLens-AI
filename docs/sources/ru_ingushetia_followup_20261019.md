@@ -283,3 +283,52 @@ alternative, but it requires separate operator authorization. Until then
 status remains `REAL_USER_TELEGRAM_RECEIPT=NOT_TESTED`.
 
 **The new workflow is configuration-only and does NOT dispatch a send.**
+
+
+## 22 October 2026: opt-in notification reads from fresh Worker SQL
+
+Implemented a strictly **default-disabled** monitoring route for Ingushetia.
+The regular bot originally read live catalog adapters again on each monitor
+cycle, even when `connector.sync.v1` Worker had already stored the same
+official notices in SQL. A source failure between Worker ingestion and
+subscriber notification could make those proven rows invisible to users.
+
+The new operator switch
+`VALYQON_RU_INGUSHETIA_WORKER_SQL_ALERTS_ENABLED=true` requires
+`VALYQON_RU_BACKGROUND_CATALOG_ENABLED=true`,
+`MONITORING_ENABLED=true` and at least one explicitly enabled regional
+adapter (`RU_INGUSHETIA_EIS44_ENABLED` or
+`RU_INGUSHETIA_FABRIKANT44_ENABLED`). It replaces **only** those selected
+regional registrations with read-only `FreshIngushetiaWorkerSource` entries
+in the runtime catalog. Tenant-specific EIS and all unrelated RU sources
+retain their existing network behavior. An enabled bot process reads the
+same configured SQL database used by the separately running operator-approved
+connector Worker and hourly queue.
+
+The regional snapshot adapter requires a `source_opportunities.last_seen`
+UTC timestamp no older than **1800 seconds**. It rejects absent, expired or
+implausibly future-dated Worker SQL and returns only rows observed within
+that same freshness window. It **never** falls back to an HTTP request,
+does not fabricate tenders and does not mark any alert delivered when its
+source is stale. Non-regional historical saved-search reads stay unchanged.
+The user's keyword/region/exclusion profile, original 44-FZ cross-platform
+identity and Telegram message/chat acknowledgement are still enforced by
+the normal TenderMonitorService and monitor_loop.
+
+Important operational limitations: this is **not an automatic scheduler**.
+The operator still must periodically enqueue both approved sources using
+`python -m app.sources.enqueue --ru-approved` with their individual flags,
+and run the approved `python -m app.jobs.worker --connectors` process
+against the SAME DATABASE_URL as the bot. If the worker is stopped, the
+snapshot goes stale after 30 minutes and notification attempts remain
+unclaimed. Successful ingestion with **zero** verified notices also
+produces no fresh row, and therefore fails closed instead of falsely
+claiming a healthy empty upstream response. No public customer bot,
+production infrastructure, real Telegram chat or persistent worker was
+enabled by this PR.
+
+Offline tests are in `tests/test_ru_ingushetia_worker_sql_alerts.py`.
+They are synthetic SQL and freshness tests, not live delivery evidence.
+Full-chain operator-supplied local and hosted Fabrikant source acceptance
+remain separately documented above. The separate manual-only authorized
+test Telegram Bot API receipt is **still NOT TESTED**.

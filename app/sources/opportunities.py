@@ -150,12 +150,27 @@ class OpportunityRepository:
             raise ValueError('Stored last_seen is not timezone aware')
         return instant.astimezone(timezone.utc)
 
-    def read(self, source_id, limit=20, search_terms=()):
+    def read(self, source_id, limit=20, search_terms=(), *, not_before=None):
         limit = max(1, min(int(limit), 100))
+        # Optional durable Worker freshness cutoff. Legacy callers continue
+        # to read historical snapshots unchanged; opt-in notifications must
+        # never send arbitrarily old records simply because ONE row was fresh.
+        if not_before is not None:
+            if (not isinstance(not_before, datetime)
+                    or not_before.tzinfo is None
+                    or not_before.utcoffset() == timezone.utc.utcoffset(None)):
+                raise ValueError('UTC-aware snapshot cutoff required')
+            not_before = not_before.astimezone(timezone.utc).isoformat()
         # Bounded local snapshot candidate pool; filtering does not send profile data upstream.
         with closing(self.database.connect()) as conn:
-            rows = conn.execute('''SELECT notice_json FROM source_opportunities WHERE source_id=?
-                ORDER BY last_seen DESC,external_id LIMIT 1000''', (source_id,)).fetchall()
+            if not_before is None:
+                rows = conn.execute('''SELECT notice_json FROM source_opportunities WHERE source_id=?
+                    ORDER BY last_seen DESC,external_id LIMIT 1000''', (source_id,)).fetchall()
+            else:
+                rows = conn.execute('''SELECT notice_json FROM source_opportunities
+                    WHERE source_id=? AND last_seen>=?
+                    ORDER BY last_seen DESC,external_id LIMIT 1000''',
+                    (source_id, not_before)).fetchall()
         result = []
         terms = tuple(str(term).casefold() for term in search_terms if str(term).strip())[:20]
         for row in rows:

@@ -264,6 +264,49 @@ def test_eis_44_original_law_is_checked_before_regional_normalization():
     assert is_chechnya_notice(items[0])
 
 
+
+def test_official_card_number_wins_over_unrelated_19_digit_description_id():
+    """An EIS description referencing another procurement must not drop real notice."""
+    other = "0373100100726000010"
+    official = "0194200000526005027"
+    sample = (
+        '<rss version="2.0"><channel><item>'
+        '<title>Сопутствующая закупка ' + other + '</title>'
+        '<guid>upstream-update-guid-a</guid>'
+        '<link>' + EIS_ORIGINAL + '</link>'
+        '<description>Справка: ' + other + '; '
+        'Размещение выполняется по: 44-ФЗ. '
+        'Регион: Чеченская Республика; '
+        'Заказчик: Комитет Правительства Чеченской Республики'
+        '</description></item></channel></rss>'
+    ).encode("utf-8")
+    verify_eis_feed_law(sample, "44-FZ")
+    regional = parse_eis_feed(sample, source_name=SOURCE_KEY)
+    assert len(regional) == 1
+    assert regional[0].tender_number == official
+    assert is_chechnya_notice(regional[0])
+    # Existing national adapter semantics are not silently changed here.
+    national = parse_eis_feed(sample, source_name="eis")
+    assert national[0].tender_number == other
+
+
+def test_chechnya_parser_does_not_trust_foreign_original_links():
+    """Only official EIS URLs are allowed to override text-derived IDs."""
+    other = "0373100100726000010"
+    sample = (
+        '<rss version="2.0"><channel><item>'
+        '<title>Справка ' + other + '</title>'
+        '<guid>upstream-update-guid-b</guid>'
+        '<link>https://evil.example/epz/order/notice/ea20/view/common-info.html'
+        '?regNumber=0194200000526005027</link>'
+        '<description>Регион: Чеченская Республика; '
+        'Заказчик: Комитет Правительства Чеченской Республики'
+        '</description></item></channel></rss>'
+    ).encode("utf-8")
+    regional = parse_eis_feed(sample, source_name=SOURCE_KEY)
+    assert regional[0].tender_number == other
+
+
 def test_enabled_without_operator_url_fails_closed(monkeypatch, tmp_path):
     monkeypatch.setenv("RU_CHECHNYA_EIS_ENABLED", "true")
     monkeypatch.delenv("RU_CHECHNYA_EIS_RSS_URLS", raising=False)

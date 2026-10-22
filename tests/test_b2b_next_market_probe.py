@@ -59,3 +59,93 @@ def test_diagnostic_cannot_count_syntactic_unverified_native_anchors():
     assert report["first_party_native_detail_links"] == 1
     assert report["ssr_native_schema"] == "rejected"
     assert report["ssr_verified_native_count"] == 0
+
+
+
+def test_safe_known_ssr_failure_reports_fixed_error_code_only(monkeypatch):
+    from app.sources import b2b_next_market as mod
+    from app.sources.eis_rss import SourceError
+
+    def rejected(*args, **kwargs):
+        raise SourceError("B2B-Center ambiguous SSR deadline.")
+    monkeypatch.setattr(mod, "parse_next_market", rejected)
+    result = analyze_official_html(b"<html>dummy</html>")
+    assert result["ssr_rejection_class"] == "SourceError"
+    assert result["ssr_rejection_code"] == "DEADLINE_CARDINALITY"
+    assert result["ssr_verified_native_count"] == 0
+
+
+def test_unknown_upstream_exception_message_not_echoed_into_diagnostic(monkeypatch):
+    from app.sources import b2b_next_market as mod
+    from app.sources.eis_rss import SourceError
+    secret = "TOKEN_SHOULD_NOT_LEAK_123456"
+    def rejected(*args, **kwargs):
+        raise SourceError(secret)
+    monkeypatch.setattr(mod, "parse_next_market", rejected)
+    result = analyze_official_html(b"<html>dummy</html>")
+    assert result["ssr_rejection_code"] == "UNCLASSIFIED"
+    import json
+    assert secret not in json.dumps(result)
+
+
+def test_successful_genuine_ssr_does_not_claim_error_code():
+    from pathlib import Path
+    fixture = (Path(__file__).parent / "fixtures" / "ru08" / "b2b_next_ssr.html").read_bytes()
+    result = analyze_official_html(fixture)
+    assert result["ssr_native_schema"] == "verified"
+    assert result["ssr_verified_native_count"] == 2
+    assert "ssr_rejection_code" not in result
+
+
+def test_safe_href_shape_histogram_categorizes_incorrect_fragments_without_values():
+    from scripts.diagnose_ru_b2b_next_market import classify_native_href_shape
+    base = "/app/market-next/slug/tender-4646931/"
+    sqh = "a" * 40
+    assert classify_native_href_shape(base) == "CANONICAL"
+    assert classify_native_href_shape(base + "#btid=2&sqh=" + sqh + "&tsid=4646931458") == "CANONICAL"
+    assert classify_native_href_shape(base + "#btid=3&sqh=" + sqh + "&tsid=4646931458") == "FRAGMENT_BTID"
+    assert classify_native_href_shape(base + "#btid=2&sqh=" + "a" * 32 + "&tsid=4646931458") == "FRAGMENT_SQH_FORMAT"
+    assert classify_native_href_shape(base + "#btid=2&sqh=" + sqh + "&tsid=9999999999") == "FRAGMENT_TSID_FORMAT"
+    assert classify_native_href_shape(base + "?user_secret=never") == "UNEXPECTED_QUERY"
+    assert classify_native_href_shape("https://evil.example" + base) == "SCHEME_HOST_AUTHORITY"
+    assert classify_native_href_shape("/app/market-next/slug/tender-4646931") == "NATIVE_PATH_SHAPE"
+
+
+def test_genuine_ssr_fixture_reports_counts_not_source_urls_or_secret_values():
+    from pathlib import Path
+    fixture = (Path(__file__).parent / "fixtures" / "ru08" / "b2b_next_ssr.html").read_bytes()
+    report = analyze_official_html(fixture)
+    assert report["ssr_card_count"] == 2
+    assert report["ssr_url_shape_counts"]["NUMBER_CANONICAL"] == 2
+    assert report["ssr_url_shape_counts"]["COVER_CANONICAL"] == 2
+    import json
+    assert "tender-4646931" not in json.dumps(report)
+
+
+def test_diagnostic_reports_only_nonsecret_http_rejection_status(monkeypatch):
+    import asyncio
+    import json
+    import httpx
+    import scripts.diagnose_ru_b2b_next_market as module
+    from app.sources.http import BoundedClient
+
+    def safe_client(**kwargs):
+        assert kwargs["follow_redirects"] is False
+        assert kwargs["trust_env"] is False
+        return BoundedClient(
+            transport=httpx.MockTransport(
+                lambda req: httpx.Response(
+                    403, content=b"PRIVATE_RESPONSE_BODY_SHOULD_NOT_APPEAR",
+                    headers={"Location": "https://evil.invalid/TOKEN_NO_LEAK"},
+                )
+            ),
+            **kwargs
+        )
+    monkeypatch.setattr(module, "source_client", safe_client)
+    output = asyncio.run(module.probe())
+    assert output["official_http_status"] == 403
+    assert output["reason"] == "http_status"
+    assert output["new_source_enabled"] is False
+    assert output["diagnostic_only"] is True
+    assert "TOKEN_NO_LEAK" not in json.dumps(output)
+    assert "PRIVATE_RESPONSE_BODY" not in json.dumps(output)

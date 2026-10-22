@@ -47,13 +47,13 @@ jobs:
       - name: Real B2B-Center notices through leased worker, disposable SQLite and keyword query
         timeout-minutes: 4
         run: python -B -m scripts.ci_ru_b2b_real_worker
-      - name: Diagnose official native Vue SSR listing on Worker failure (not acceptance)
-        if: failure()
-        timeout-minutes: 2
-        run: python -B -m scripts.diagnose_ru_b2b_next_market
       - name: Real B2B notices into customer-scoped authorized scoring
         timeout-minutes: 4
         run: python -B scripts/ci_ru_b2b_user_scoring.py
+      - name: Diagnose official native Vue SSR on Worker OR scoring failure (not acceptance)
+        if: failure()
+        timeout-minutes: 2
+        run: python -B -m scripts.diagnose_ru_b2b_next_market
   leningrad-oblast-public-signal:
     if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest

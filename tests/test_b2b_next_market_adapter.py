@@ -99,7 +99,7 @@ def test_bad_ssr_response_does_not_downgrade_to_foreign_aggregate(monkeypatch):
                         lambda **kwargs: source_client(**kwargs, transport=httpx.MockTransport(reply)))
     with pytest.raises(SourceError):
         asyncio.run(B2BCenterSource().fetch())
-    assert calls == [B2B_CENTER_NEXT_LIST_URL]
+    assert calls == [B2B_CENTER_NEXT_LIST_URL, B2B_CENTER_NEXT_LIST_URL]
 
 
 def test_explicit_standard_tls_port_cannot_change_canonical_notice_identity():
@@ -108,3 +108,58 @@ def test_explicit_standard_tls_port_cannot_change_canonical_notice_identity():
     normalized, number = native_url(raw)
     assert normalized == "https://www.b2b-center.ru/app/market-next/slug/tender-4646888/"
     assert number == "4646888"
+
+
+
+def test_changed_official_ssr_shape_retries_once_same_pinned_native_page(monkeypatch):
+    import app.sources.b2b_center as adapter
+    calls, policies = [], []
+    def reply(request):
+        calls.append(str(request.url))
+        policies.append(_policy.get())
+        assert "cookie" not in request.headers
+        html = b"<html>temporarily changed link fragment</html>" if len(calls) == 1 else FIXTURE
+        return httpx.Response(200, content=html, headers={"content-type": "text/html",
+                                                         "set-cookie": "opaque=none; Path=/"})
+    monkeypatch.setattr(adapter, "source_client",
+                        lambda **kwargs: source_client(**kwargs, transport=httpx.MockTransport(reply)))
+    notices = asyncio.run(B2BCenterSource().fetch(limit=10))
+    assert len(notices) == 2
+    assert calls == [B2B_CENTER_NEXT_LIST_URL] * 2
+    assert policies[0] is policies[1]
+    assert policies[0].max_requests == policies[0].requests == 2
+    assert policies[0].hosts == frozenset({"www.b2b-center.ru"})
+    assert policies[0].max_bytes == 2 * 1024 * 1024
+
+
+def test_two_official_unverified_html_responses_stay_red_without_third_request(monkeypatch):
+    import app.sources.b2b_center as adapter
+    calls = []
+    def reply(request):
+        calls.append(str(request.url))
+        return httpx.Response(200, content=b"<html>not actual source notices</html>")
+    monkeypatch.setattr(adapter, "source_client",
+                        lambda **kwargs: source_client(**kwargs, transport=httpx.MockTransport(reply)))
+    with pytest.raises(SourceError):
+        asyncio.run(B2BCenterSource().fetch(limit=10))
+    assert calls == [B2B_CENTER_NEXT_LIST_URL] * 2
+
+
+def test_one_hostile_card_then_proven_original_ssr_retries_whole_batch(monkeypatch):
+    import app.sources.b2b_center as adapter
+    calls = []
+    hostile = FIXTURE.replace(
+        b"/app/market-next/postavka-smennogo-burovogo-instrumenta-i-osnastki-dlia-nuzhd/tender-4646931/",
+        b"https://outside.invalid/app/market-next/fake/tender-4646931/",
+        1,
+    )
+    assert hostile != FIXTURE
+    def reply(request):
+        calls.append(str(request.url))
+        return httpx.Response(200, content=hostile if len(calls) == 1 else FIXTURE)
+    monkeypatch.setattr(adapter, "source_client",
+                        lambda **kwargs: source_client(**kwargs, transport=httpx.MockTransport(reply)))
+    output = asyncio.run(B2BCenterSource().fetch())
+    assert len(output) == 2
+    assert all(x.url.startswith("https://www.b2b-center.ru/") for x in output)
+    assert calls == [B2B_CENTER_NEXT_LIST_URL] * 2

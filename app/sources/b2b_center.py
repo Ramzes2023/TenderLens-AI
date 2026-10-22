@@ -286,7 +286,22 @@ class B2BCenterSource:
                         raise SourceError('B2B-Center listing unavailable.')
                     if self.listing_url == B2B_CENTER_NEXT_LIST_URL:
                         from .b2b_next_market import parse_next_market
-                        return parse_next_market(response.content, limit=limit)
+                        try:
+                            return parse_next_market(response.content, limit=limit)
+                        except SourceError:
+                            # The official Vue SSR page intermittently serves
+                            # incompatible link fragments. Retry the SAME
+                            # first-party listing exactly once within the
+                            # existing two-request pinned HTTPS budget. The
+                            # second response must pass the full strict parser,
+                            # or fail red. Never accept partial/mixed cards,
+                            # third-party mirrors or a legacy office fallback.
+                            client.cookies.clear()
+                            retry = await client.get(B2B_CENTER_NEXT_LIST_URL)
+                            retry.raise_for_status()
+                            if retry.status_code != 200:
+                                raise SourceError('B2B-Center listing unavailable.')
+                            return parse_next_market(retry.content, limit=limit)
                     return parse_b2b_center_listing(response.content, limit=limit)
                 except ConnectorTransportError as error:
                     if self.listing_url == B2B_CENTER_NEXT_LIST_URL or error.reason != 'response_size':

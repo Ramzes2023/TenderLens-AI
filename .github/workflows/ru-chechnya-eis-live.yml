@@ -13,6 +13,7 @@ on:
       - app/bot/monitoring.py
       - tests/test_ru_chechnya_eis_rss.py
       - scripts/ci_ru_chechnya_eis_real_worker.py
+      - scripts/ru_chechnya_windows_live.ps1
       - .github/workflows/ru-chechnya-eis-live.yml
   workflow_dispatch:
     inputs:
@@ -41,6 +42,19 @@ jobs:
         run: python -m compileall -q app/sources/ru_chechnya_eis_rss.py scripts/ci_ru_chechnya_eis_real_worker.py
       - name: Chechnya official URL, regional evidence, legal provenance, opt-in, Worker and dedup contracts
         run: python -B -m pytest -q tests/test_ru_chechnya_eis_rss.py tests/test_ru_background_telegram_catalog.py tests/test_ru_telegram_original_dedup.py
+      - name: Parse trusted Windows operator launcher (no remote calls)
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path scripts/ru_chechnya_windows_live.ps1).Path,
+            [ref]$tokens, [ref]$parseErrors
+          ) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Error $_ }
+            exit 1
+          }
 
   chechnya-real-live-worker:
     if: github.event_name == 'workflow_dispatch'

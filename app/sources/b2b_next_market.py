@@ -74,11 +74,25 @@ def parse_next_market(payload, *, limit=100):
         # provenance fails the batch rather than being relabelled as native.
         if raw and urlsplit(raw).hostname in KNOWN_FOREIGN_AGGREGATE_HOSTS:
             continue
-        url, number = native_url(raw)
+        # A single SSR card with a broken, unproven original URL is NOT
+        # a procurement notice. Exclude ONLY that card, never infer its
+        # identifier or relabel another platform's purchase as B2B. The
+        # remaining cards still need complete first-party provenance and
+        # all original buyer/title/date/price contracts.
+        try:
+            url, number = native_url(raw)
+        except SourceError:
+            continue
         if number_link.tag != 'a' or number_link.text() != '№ ' + number:
             raise SourceError('B2B-Center conflicting SSR identity.')
         cover = _one(_nodes(card, 'panel-procedure__card-link'))
-        if cover.tag != 'a' or native_url(cover.attrs.get('href')) != (url, number):
+        if cover.tag != 'a':
+            raise SourceError('B2B-Center conflicting SSR identity.')
+        try:
+            cover_origin = native_url(cover.attrs.get('href'))
+        except SourceError:
+            continue
+        if cover_origin != (url, number):
             raise SourceError('B2B-Center conflicting SSR identity.')
         title = _one(_nodes(card, 'panel-procedure__dscr-main')).text()
         branch = _one(_nodes(card, 'panel-procedure__dscr-branch'))

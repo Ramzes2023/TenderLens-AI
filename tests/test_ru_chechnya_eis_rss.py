@@ -116,6 +116,20 @@ def test_only_verified_region_procedures_leave_adapter(monkeypatch):
     assert all(n.source == SOURCE_KEY for n in result)
 
 
+def test_rejects_procedure_number_that_does_not_match_original_eis_card(monkeypatch):
+    async def synthetic_upstream(self, limit=20):
+        return [
+            replace(notice("0194200000526005027", region="Чеченская Республика"),
+                    tender_number="0194200000526005028"),
+            replace(notice("0194200000526005027", region="Чеченская Республика"),
+                    url="https://evil.example/epz/order/notice/ea20/view/common-info.html?regNumber=0194200000526005027"),
+            notice("0194200000526005029", region="Чеченская Республика"),
+        ]
+    monkeypatch.setattr(EisRssSource, "fetch", synthetic_upstream)
+    rows = asyncio.run(ChechnyaEisRssSource((URL,)).fetch(limit=3))
+    assert [row.tender_number for row in rows] == ["0194200000526005029"]
+
+
 def test_eis_44_original_law_is_checked_before_regional_normalization():
     sample = (
         '<rss version="2.0"><channel><item>'

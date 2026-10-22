@@ -376,7 +376,8 @@ def validate_eis_direct_urls(urls) -> None:
     for raw in urls:
         parts = urlsplit(raw)
         if (parts.scheme != "https" or parts.netloc != "zakupki.gov.ru"
-                or parts.path != "/epz/order/extendedsearch/rss.html" or parts.fragment
+                or parts.path not in {"/epz/order/extendedsearch/rss.html",
+                                      "/epz/order/extendedsearch/rss"} or parts.fragment
                 or "\\" in raw or any(c.isspace() or ord(c) < 32 for c in raw)):
             raise SourceError("Direct EIS requires the official HTTPS RSS endpoint")
 

@@ -518,6 +518,17 @@ def test_optional_test_telegram_requires_matching_real_api_ack(monkeypatch):
     assert asyncio.run(harness.optional_authorized_telegram_api_check(original)) is True
     assert len(recorded) == 1
 
+    # Even when the operator configured a test chat, never allow an unverified
+    # or foreign original across the external-send boundary.
+    for tampered in (
+        replace(original, region="Москва"),
+        replace(original, url="https://evil.example/epz/order/notice/ea20/view/common-info.html?regNumber=0194200000526005027"),
+        replace(original, external_id="changing-rss-guid"),
+    ):
+        with pytest.raises(AssertionError, match="Only verified official regional"):
+            asyncio.run(harness.optional_authorized_telegram_api_check(tampered))
+    assert len(recorded) == 1
+
     class WrongChatBot(FakeBot):
         async def send_message(self, *, chat_id, text, disable_web_page_preview):
             return SimpleNamespace(

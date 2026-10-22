@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 
 import httpx
 import pytest
@@ -64,7 +65,11 @@ def test_parse_uk_fts_normalizes_realistic_release() -> None:
         ]
     }
 
-    notices = parse_uk_fts_response(payload)
+    # Reproducible historical OCDS fixture: its real tender window ended
+    # 21 October 2026. Never depend on today's wall clock for an active test.
+    notices = parse_uk_fts_response(
+        payload, now=datetime(2026, 10, 20, 12, tzinfo=timezone.utc)
+    )
 
     assert len(notices) == 1
 
@@ -95,6 +100,11 @@ def test_parse_uk_fts_normalizes_realistic_release() -> None:
         "https://www.find-tender.service.gov.uk/"
         "Notice/093514-2026"
     )
+
+    # A completed tender must NOT reappear as open procurement later.
+    assert parse_uk_fts_response(
+        payload, now=datetime(2026, 10, 22, 12, tzinfo=timezone.utc)
+    ) == []
 
 
 def test_parser_falls_back_to_release_description() -> None:

@@ -1,0 +1,32 @@
+name: CIS Uzbekistan verified official bounded regional pagination discovery
+on:
+  push:
+    branches: [research/cis-uzex-local-buyer-live-20261018]
+    paths:
+      - scripts/ci_cis_uzex_regional_page_probe.py
+      - .github/workflows/cis-uzex-regional-pagination-probe.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/ci_cis_uzex_regional_page_probe.py
+      - .github/workflows/cis-uzex-regional-pagination-probe.yml
+permissions:
+  contents: read
+jobs:
+  uzex-official-second-third-fourth-page:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Probe at most six official read-only public page requests for real regional buyers
+        timeout-minutes: 5
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHON_DOTENV_DISABLED: '1'
+        run: python -B -m scripts.ci_cis_uzex_regional_page_probe

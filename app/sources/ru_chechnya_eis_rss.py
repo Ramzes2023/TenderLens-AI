@@ -87,7 +87,14 @@ class ChechnyaEisRssSource:
         for notice in notices:
             if not is_chechnya_notice(notice):
                 continue
-            if not notice.tender_number or not notice.url:
+            original = urlsplit(notice.url)
+            numbers = parse_qs(original.query, keep_blank_values=True).get("regNumber", [])
+            if (original.scheme != "https" or original.netloc != "zakupki.gov.ru"
+                    or not original.path.startswith("/epz/order/notice/")
+                    or original.fragment or len(numbers) != 1
+                    or not re.fullmatch(r"[0-9]{19}", numbers[0])
+                    or notice.tender_number != numbers[0]):
+                # Never persist an ambiguous title-derived number as an EIS original.
                 continue
             if notice.external_id in seen:
                 continue

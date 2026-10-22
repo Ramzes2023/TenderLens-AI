@@ -77,8 +77,11 @@ class FreshIngushetiaWorkerSource(SnapshotSource):
                 notice.title, notice.summary, notice.tender_number,
                 notice.external_id, notice.customer, notice.region, notice.url,
             ))
-            return any(_term_match(text, term) or term.casefold() in text.casefold()
-                       for term in self.terms)
+            # Use exactly the monitor's token/inflection contract. A raw
+            # substring ("газ" inside "Газпром", "металл" inside unrelated
+            # longer words) would consume the 100-row candidate limit
+            # before legitimate subscriber matches are considered.
+            return any(_term_match(text, term) for term in self.terms)
         return [notice for notice in records if match(notice)][:limit]
 
 

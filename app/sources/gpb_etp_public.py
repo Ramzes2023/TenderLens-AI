@@ -36,8 +36,14 @@ class _Cards(HTMLParser):
         self.links = []
         self.headings = []
         self._heading = None
+        self.visible = []
+        self._hidden = 0
 
     def handle_starttag(self, tag, attrs):
+        if tag in {'script', 'style', 'template', 'noscript', 'svg'}:
+            self._hidden += 1
+        if self._hidden:
+            return
         a = dict(attrs)
         if tag == "a" and a.get("href"):
             self.links.append(a["href"])
@@ -45,10 +51,18 @@ class _Cards(HTMLParser):
             self._heading = []
 
     def handle_data(self, data):
+        if self._hidden:
+            return
+        self.visible.append(data)
         if self._heading is not None:
             self._heading.append(data)
 
     def handle_endtag(self, tag):
+        if tag in {'script', 'style', 'template', 'noscript', 'svg'}:
+            self._hidden = max(0, self._hidden - 1)
+            return
+        if self._hidden:
+            return
         if tag == "h1" and self._heading is not None:
             self.headings.append(" ".join(" ".join(self._heading).split()))
             self._heading = None
@@ -109,7 +123,9 @@ def parse_gpb_verified_detail(payload, identity, detail_url):
     headings = [name for name in parser.headings if name and len(name) <= 1000]
     # Demand the numeric public procedure identity in the detail document and
     # exactly one unambiguous nonempty H1 title.
-    if identity not in page or len(set(headings)) != 1:
+    # An identifier only inside a hidden script/style is NOT an independently
+    # verified native original. Require a first-party human-readable occurrence.
+    if identity not in ' '.join(parser.visible) or len(set(headings)) != 1:
         raise ValueError("GPB official public detail identity or title mismatch")
     title = headings[0]
     notice = TenderNotice(

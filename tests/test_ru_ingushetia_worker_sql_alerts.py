@@ -362,3 +362,81 @@ def test_worker_sql_26th_candidate_reaches_subscriber_after_keyword_filter(tmp_p
         assert len(bot.calls) == 1  # confirmed item is never resent
     finally:
         db.close()
+
+
+def test_regional_eis_worker_can_store_26th_real_candidate_without_lifting_other_caps(
+        monkeypatch, tmp_path):
+    """Offline Worker+SQL contract, not an actual HTTP or Telegram live proof.
+
+    A regional EIS item which falls after the global default 20-result
+    ingestion cap must still reach source SQL and per-subscriber search when
+    the separately approved regional deep scan is explicitly configured.
+    """
+    from app.jobs import HandlerRegistry, JobRepository, JobSettings
+    from app.jobs.models import JobScope
+    from app.jobs.worker import Worker
+    from app.sources.ingestion import (
+        JOB_TYPE, ConnectorSyncHandler, ConnectorSyncService,
+    )
+    from app.sources.ru_ingushetia_eis44 import IngushetiaEis44Source
+    from app.monitoring.service import TenderMonitorService
+    from app.monitoring.repository import MonitoringRepository
+    from app.scoring.models import CompanyProfile
+
+    full = []
+    for i in range(26):
+        number = f"011450000082600{2400 + i:04d}"
+        title = "Канализация в Ингушетии" if i == 25 else "Поставка бетона"
+        full.append(notice(number, source=EIS, title=title))
+    assert len({n.tender_number for n in full}) == 26
+
+    seen_limits = []
+
+    async def synthetic_first_party_rss(self, limit=20):
+        seen_limits.append(limit)
+        assert self.name == EIS
+        return full[:limit]
+
+    monkeypatch.setattr(IngushetiaEis44Source, "fetch", synthetic_first_party_rss)
+    db = Database(DatabaseSettings("regional-eis-26th", tmp_path / "worker.sqlite"))
+    repo = OpportunityRepository(db)
+    repo.initialize()
+    cat = build_source_catalog(settings(ru_ingushetia_fabrikant44_enabled=False))
+    jobs = JobRepository(db, JobSettings(lease_seconds=240, heartbeat_seconds=10))
+    jobs.initialize()
+    try:
+        # Keep ordinary connectors at 20. Only the separately authorized
+        # Ingushetia EIS source can expand to the fixed 100-item safety cap.
+        with pytest.raises(ValueError, match="Ingushetia EIS record bound"):
+            ConnectorSyncHandler(cat, repo, max_records=20,
+                                 ingushetia_eis_max_records=101)
+        handlers = HandlerRegistry()
+        handlers.register(JOB_TYPE, ConnectorSyncHandler(
+            cat, repo, max_records=20, ingushetia_eis_max_records=100,
+        ))
+        queued = ConnectorSyncService(jobs, cat).enqueue(EIS)
+        assert Worker(jobs, handlers, job_types=(JOB_TYPE,)).run_once()
+        completed = jobs.get(queued.id, scope=JobScope())
+        assert completed is not None and completed.state == "succeeded"
+        assert seen_limits == [100] and completed.result["fetched_count"] == 26
+        assert completed.result["accepted_count"] == 26
+        assert completed.result["inserted_count"] == 26
+        assert len(repo.read(EIS, limit=100)) == 26
+
+        regional_sql = fresh_ingushetia_worker_catalog(cat, repo)
+        profile = CompanyProfile(
+            profile_version="1", company_name="Regional drainage",
+            search_keywords=["канализации"],
+            allowed_regions=["Ингушетия"],
+        )
+        monitor = TenderMonitorService(
+            settings(ru_ingushetia_fabrikant44_enabled=False),
+            None, MonitoringRepository(tmp_path / "seen.sqlite"), None,
+        )
+        matches, report = asyncio.run(monitor.fetch_matches_from_catalog_for_profile(
+            regional_sql, profile, source_keys=(EIS,), max_items=100,
+        ))
+        assert not report.failures and len(matches) == 1
+        assert matches[0].notice.tender_number == full[-1].tender_number
+    finally:
+        db.close()

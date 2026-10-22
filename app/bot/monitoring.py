@@ -401,12 +401,25 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService,
         and callable(getattr(service, "fetch_matches_from_catalog_for_profile", None))
         and callable(getattr(service, "profile_for_owner", None))
     )
+    local_regional_sql = (
+        share_ingushetia
+        and bool(getattr(service.settings, "ru_ingushetia_worker_sql_alerts_enabled", False))
+    )
+    if local_regional_sql:
+        from app.sources.snapshots import FreshIngushetiaWorkerSource
+        # Never silently fall back to one HTTP request per tenant when the
+        # operator approved only Worker-SQL notifications.
+        if any(
+            not isinstance(source_catalog.registry.get(key).source, FreshIngushetiaWorkerSource)
+            for key in regional_keys
+        ):
+            raise ValueError("Ingushetia Worker SQL alert catalog not installed")
     while not stop_event.is_set():
         try:
             subscriptions = await service.active_subscriptions()
             if subscriptions:
                 shared_notices, shared_report = None, None
-                if share_ingushetia:
+                if share_ingushetia and not local_regional_sql:
                     try:
                         # Fetch a fixed, bounded source-owned candidate pool
                         # ONCE per cycle. Limiting to settings.max_items here
@@ -446,12 +459,36 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService,
                                 # The per-source limit is enforced *after* the
                                 # nonmutating unseen check below. Nothing here
                                 # marks a notice sent before Telegram receipt.
-                                matches = []
-                                for notice in shared_notices:
-                                    match = prefilter_notice(notice, profile)
-                                    if match is not None:
-                                        matches.append(match)
-                                reports = [shared_report]
+                                if local_regional_sql:
+                                    # Source is strictly read-only Worker SQL:
+                                    # per-tenant local keyword prefilter can scan
+                                    # 1000 RECENT candidates before the 100-result
+                                    # cap. This has NO per-user upstream HTTP.
+                                    # In normal network mode preserve the single
+                                    # shared real HTTP poll across all tenants.
+                                    try:
+                                        regional_matches, regional_report = await service.fetch_matches_from_catalog_for_profile(
+                                            source_catalog, profile,
+                                            source_keys=regional_keys, max_items=100,
+                                        )
+                                        matches = list(regional_matches)
+                                    except Exception:
+                                        logger.warning("Ingushetia tenant Worker SQL search failed; no regional alerts claimed.")
+                                        matches = []
+                                        regional_report = SimpleNamespace(
+                                            attempted_sources=regional_keys,
+                                            successful_sources=(),
+                                            failures=tuple(SimpleNamespace(source=k) for k in regional_keys),
+                                            total_failure=True,
+                                        )
+                                    reports = [regional_report]
+                                else:
+                                    matches = []
+                                    for notice in shared_notices:
+                                        match = prefilter_notice(notice, profile)
+                                        if match is not None:
+                                            matches.append(match)
+                                    reports = [shared_report]
                                 if tenant_specific_keys:
                                     try:
                                         extra_matches, extra_report = await service.fetch_matches_from_catalog(

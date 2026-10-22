@@ -102,7 +102,8 @@ def main(argv=None):
                     "utc_window": previous_window, "queued": queued,
                     "ingestion_performed": False,
                     "telegram_sent": False,
-                    "production_changed": False,
+                    "durable_queue_changed": True,
+                    "source_flags_changed": False,
                 }, sort_keys=True), flush=True)
             if args.once:
                 break

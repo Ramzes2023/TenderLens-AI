@@ -201,6 +201,22 @@ def main() -> int:
     try:
         monitor_settings = load_monitoring_settings()
         source_catalog = build_source_catalog(monitor_settings)
+        if monitor_settings.ru_ingushetia_worker_sql_alerts_enabled:
+            # Operator-only: connect notifications to the SAME durable Worker
+            # SQL without re-querying fragile official regional endpoints for
+            # each recipient. Never auto-start ingestion or send Telegram.
+            # If the Worker has not refreshed this source recently, the
+            # snapshot adapter fails closed and no alert is marked delivered.
+            if (not monitor_settings.ru_background_catalog_enabled
+                    or not monitor_settings.enabled):
+                raise MonitoringConfigurationError(
+                    "Ingushetia Worker SQL alerts require explicit background monitoring"
+                )
+            from app.sources.opportunities import OpportunityRepository
+            from app.sources.snapshots import fresh_ingushetia_worker_catalog
+            opportunities = OpportunityRepository(database)
+            opportunities.initialize()
+            source_catalog = fresh_ingushetia_worker_catalog(source_catalog, opportunities)
         eis_registration = (
             source_catalog.registry.get(
                 "eis"

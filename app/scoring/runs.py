@@ -27,7 +27,7 @@ MAX_SOURCES = 5
 MAX_PER_SOURCE = 100
 SCAN_PER_SOURCE = 1000
 MAX_RESULTS = MAX_SOURCES * MAX_PER_SOURCE
-SOURCE_IDS = frozenset({'eis_44_html', 'eis_223', 'b2b_center', 'mikroton_tender', 'tektorg', 'gpb_etp_public', 'lenobl_small_public', 'nmck_native_public', 'stan_commercial_public', 'south_ural_public', 'ru_samara_public_list', 'eis', 'ted', 'sam_gov', 'uk_fts', 'canada_buys', 'austender',
+SOURCE_IDS = frozenset({'eis_44_html', 'eis_223', 'b2b_center', 'mikroton_tender', 'tektorg', 'gpb_etp_public', 'roseltorg_public', 'lenobl_small_public', 'nmck_native_public', 'stan_commercial_public', 'south_ural_public', 'ru_samara_public_list', 'eis', 'ted', 'sam_gov', 'uk_fts', 'canada_buys', 'austender',
                         'nz_gets', 'india_cppp', 'kz_goszakup', 'za_etenders'})
 
 

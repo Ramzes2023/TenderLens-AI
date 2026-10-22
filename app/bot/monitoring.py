@@ -176,12 +176,14 @@ async def tenders_handler(
     )
 
     for index, match in enumerate(matches[:limit], 1):
-        await message.answer(
+        receipt = await message.answer(
             format_match(match, index=index),
             disable_web_page_preview=True,
         )
-        # Each notice becomes 'seen' only after the real Telegram send
-        # succeeds.  A failed send leaves this and later notices retryable.
+        # Manual /tenders and background monitoring use the same strict
+        # Telegram Bot API acknowledgement policy. No claimed delivery on
+        # a missing message ID, wrong chat or unconfirmed transport.
+        _require_telegram_delivery_ack(receipt, message.chat.id)
         await service.claim_new(message.from_user.id, [match])
 
     remaining = len(matches) - limit

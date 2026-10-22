@@ -22,7 +22,7 @@ def listing(url=URL):
 
 
 def detail(identity="1299761", title=TITLE):
-    return f"<html><title>Процедура {identity}</title><h1>{title}</h1></html>".encode("utf-8")
+    return f"<html><head><title>Процедура {identity}</title></head><body><nav>Закупка № {identity}</nav><h1>{title}</h1></body></html>".encode("utf-8")
 
 
 def settings(enabled=False):
@@ -198,3 +198,24 @@ def test_numeric_only_gpb_original_passes_actual_fenced_sql_worker(monkeypatch):
     assert result["worker_inserted"] == 1
     assert result["sqlite_search_verified"] == 1
     assert result["idempotent_replay"] is True
+
+
+@pytest.mark.parametrize("payload", [
+    b"<html><head><title>1299761</title></head><body><h1>Real valid title</h1></body></html>",
+    b"<html><head><meta name='x' content='1299761'></head><body><h1>Real valid title</h1></body></html>",
+    b"<html><body><p>312997619</p><h1>Real valid title</h1></body></html>",
+    b"<html><body><p>12997617</p><h1>Real valid title</h1></body></html>",
+])
+def test_original_id_must_be_visible_exact_body_number_not_header_or_substring(payload):
+    with pytest.raises(ValueError, match="identity or title mismatch"):
+        parse_gpb_verified_detail(payload, "1299761", URL)
+
+
+@pytest.mark.parametrize("malicious", [
+    "https://etpgpb.ru/procedures/etp/1299761-x/\r\n",
+    "https://etpgpb.ru/procedures/etp/1299761-x/\t",
+    "https://etpgpb.ru/procedures/etp/1299761-x/\x7f",
+])
+def test_public_index_rejects_url_control_characters_before_urljoin(malicious):
+    with pytest.raises(ValueError, match="No public GPB procedure URLs"):
+        parse_gpb_public_links(listing(malicious))

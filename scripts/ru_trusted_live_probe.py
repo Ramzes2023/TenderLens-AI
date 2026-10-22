@@ -74,6 +74,17 @@ TARGETS = {
     "stavropol_rts_small": Target("market26.rts-tender.ru", "/"),
 }
 
+# Extra official GPB endpoints are intentionally NOT in batch_priority:
+# operator must choose one fixed label per approved main-only manual run.
+# Official GPB documentation lists /procedures/ and /procedures.rss;
+# new.etpgpb.ru serves the published page with the same section.
+# Accessibility is not proof of genuine original detail or ingestion.
+ON_DEMAND_TARGETS = {
+    "gpb_public_html": Target("etpgpb.ru", "/procedures/"),
+    "gpb_new_public_html": Target("new.etpgpb.ru", "/procedures/"),
+    "gpb_new_rss": Target("new.etpgpb.ru", "/procedures.rss", "rss"),
+}
+
 class UnsafeAddress(RuntimeError):
     pass
 
@@ -186,10 +197,10 @@ def batch_priority() -> int:
 def main(label: str) -> int:
     if label == "batch_priority":
         return batch_priority()
-    if label not in TARGETS:
+    if label not in TARGETS and label not in ON_DEMAND_TARGETS:
         print("RU_PROBE=REJECTED_UNKNOWN_SOURCE")
         return 2
-    target = TARGETS[label]
+    target = TARGETS[label] if label in TARGETS else ON_DEMAND_TARGETS[label]
     print("RU_PROBE_SOURCE=" + label)
     try:
         mime, body = read_public(target)

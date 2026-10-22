@@ -58,6 +58,45 @@ def validate_chechnya_feed_urls(urls: tuple[str, ...]) -> None:
             raise ValueError("Use the EIS regional advanced search RSS link, not a nationwide feed")
 
 
+def select_verified_chechnya_originals(
+    notices: list[TenderNotice], *, limit: int = 100,
+) -> list[TenderNotice]:
+    """Pure shared gate for Worker ingestion and read-only network diagnosis.
+
+    A readable RSS payload, even with a Chechnya-labelled description, is NOT
+    evidence of an ingestible original until the official 44-FZ card and number
+    are corroborated. Never count publisher GUIDs as unique procurements.
+    """
+    if type(limit) is not int or not 1 <= limit <= 100:
+        raise ValueError("Chechnya original selection limit must be 1-100")
+    seen: set[str] = set()
+    selected: list[TenderNotice] = []
+    for notice in notices:
+        if notice.source != SOURCE_KEY or not is_chechnya_notice(notice):
+            continue
+        link = urlsplit(notice.url)
+        numbers = parse_qs(link.query, keep_blank_values=True).get("regNumber", [])
+        if (link.scheme != "https" or link.netloc != "zakupki.gov.ru"
+                or not link.path.startswith("/epz/order/notice/")
+                or link.fragment or len(numbers) != 1
+                or not re.fullmatch(r"[0-9]{19}", numbers[0])
+                or notice.tender_number != numbers[0]):
+            continue
+        number = numbers[0]
+        if number in seen:
+            continue
+        seen.add(number)
+        evidence = notice.enrichment
+        if evidence is not None:
+            evidence = {**evidence, "external_id": number}
+        selected.append(replace(
+            notice, external_id=number, enrichment=evidence,
+        ))
+        if len(selected) >= limit:
+            break
+    return selected
+
+
 @dataclass(frozen=True)
 class ChechnyaEisRssSource:
     urls: tuple[str, ...]
@@ -83,33 +122,4 @@ class ChechnyaEisRssSource:
         # EIS emits a limited feed, not a paginated regional API. Inspect all
         # available entries before applying the requested output cap.
         notices = await upstream.fetch(limit=100)
-        seen: set[str] = set()
-        selected: list[TenderNotice] = []
-        for notice in notices:
-            if not is_chechnya_notice(notice):
-                continue
-            original_link = urlsplit(notice.url)
-            numbers = parse_qs(original_link.query, keep_blank_values=True).get("regNumber", [])
-            if (original_link.scheme != "https" or original_link.netloc != "zakupki.gov.ru"
-                    or not original_link.path.startswith("/epz/order/notice/")
-                    or original_link.fragment or len(numbers) != 1
-                    or not re.fullmatch(r"[0-9]{19}", numbers[0])
-                    or notice.tender_number != numbers[0]):
-                # Never persist an ambiguous title-derived number as an EIS original.
-                continue
-            official_number = numbers[0]
-            # RSS GUID can change when EIS republishes an amended notice.
-            # A validated original number is the durable source identity, not
-            # the feed item's publisher-local GUID or position in the feed.
-            if official_number in seen:
-                continue
-            seen.add(official_number)
-            enrichment = notice.enrichment
-            if enrichment is not None:
-                enrichment = {**enrichment, "external_id": official_number}
-            selected.append(replace(
-                notice, external_id=official_number, enrichment=enrichment,
-            ))
-            if len(selected) >= int(limit):
-                break
-        return selected
+        return select_verified_chechnya_originals(notices, limit=int(limit))

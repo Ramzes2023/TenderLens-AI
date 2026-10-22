@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from types import SimpleNamespace
 
 from aiogram import Bot
 from aiogram.types import Message
@@ -313,9 +314,10 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService,
     # cycle; never make O(number_of_subscriptions) upstream HTTP requests.
     # Per-tenant profile matching and confirmed Telegram receipts remain
     # individual. Other source combinations use the unchanged legacy path.
+    regional_keys = tuple(k for k in russian_keys if k in _SHARED_INGUSHETIA_KEYS)
+    tenant_specific_keys = tuple(k for k in russian_keys if k not in _SHARED_INGUSHETIA_KEYS)
     share_ingushetia = (
-        bool(russian_keys)
-        and set(russian_keys) <= _SHARED_INGUSHETIA_KEYS
+        bool(regional_keys)
         and callable(getattr(service, "fetch_matches_from_catalog_for_profile", None))
         and callable(getattr(service, "profile_for_owner", None))
     )
@@ -327,7 +329,7 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService,
                 if share_ingushetia:
                     try:
                         shared_matches, shared_report = await service.fetch_matches_from_catalog_for_profile(
-                            source_catalog, None, source_keys=russian_keys,
+                            source_catalog, None, source_keys=regional_keys,
                         )
                         shared_notices = tuple(match.notice for match in shared_matches)
                     except Exception:
@@ -338,21 +340,62 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService,
                         # Never log raw upstream errors or tenant secrets.
                         logger.warning("Ingushetia shared source poll failed; no alerts claimed.")
                         shared_notices = ()
-                        shared_report = None
-                if share_ingushetia and shared_report is None:
-                    # Keep the task alive for the next configured cycle.
-                    # Skip ALL subscription claims on this failed fetch.
-                    subscriptions = ()
+                        # Report the failed fixed regional sources as unavailable
+                        # without disclosing upstream exceptions or treating them
+                        # as a successful empty result. Other individually searched
+                        # sources remain available to each tenant.
+                        shared_report = SimpleNamespace(
+                            attempted_sources=regional_keys,
+                            successful_sources=(),
+                            failures=tuple(SimpleNamespace(source=k) for k in regional_keys),
+                            total_failure=True,
+                        )
                 for subscription in subscriptions:
                     try:
                         if service.settings.ru_background_catalog_enabled:
                             if share_ingushetia:
-                                report = shared_report
                                 profile = await service.profile_for_owner(subscription.owner_user_id)
                                 matches = [
                                     match for notice in shared_notices
                                     if (match := prefilter_notice(notice, profile)) is not None
                                 ]
+                                reports = [shared_report]
+                                if tenant_specific_keys:
+                                    try:
+                                        extra_matches, extra_report = await service.fetch_matches_from_catalog(
+                                            source_catalog, subscription.owner_user_id,
+                                            source_keys=tenant_specific_keys,
+                                        )
+                                        matches.extend(extra_matches)
+                                    except Exception:
+                                        # A failed personalized source cannot hide
+                                        # already obtained matching regional notices.
+                                        # The report and logs expose only registered
+                                        # source keys, not tenant terms or URLs.
+                                        logger.warning("Personalized RU source poll failed; regional results retained.")
+                                        extra_report = SimpleNamespace(
+                                            attempted_sources=tenant_specific_keys,
+                                            successful_sources=(),
+                                            failures=tuple(SimpleNamespace(source=k) for k in tenant_specific_keys),
+                                            total_failure=True,
+                                        )
+                                    reports.append(extra_report)
+                                if len(reports) == 1:
+                                    report = reports[0]
+                                else:
+                                    report = SimpleNamespace(
+                                        attempted_sources=tuple(
+                                            k for part in reports for k in part.attempted_sources
+                                        ),
+                                        successful_sources=tuple(
+                                            k for part in reports for k in part.successful_sources
+                                        ),
+                                        failures=tuple(
+                                            failure for part in reports
+                                            for failure in getattr(part, "failures", ())
+                                        ),
+                                        total_failure=all(part.total_failure for part in reports),
+                                    )
                             else:
                                 matches, report = await service.fetch_matches_from_catalog(
                                     source_catalog, subscription.owner_user_id,

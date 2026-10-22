@@ -41,6 +41,7 @@ class DummyBot:
     async def send_message(self, chat_id, text, **kw):
         self.sent.append((chat_id, text, kw))
         self.event.set()
+        return SimpleNamespace(message_id=len(self.sent), chat=SimpleNamespace(id=chat_id))
 
 
 class DummyService:

@@ -41,7 +41,7 @@ jobs:
           # non-secret PR validation file.
           assert all(f"\n  {event}:" not in workflow for event in
                      ("push", "pull_request", "schedule", "workflow_call", "workflow_run"))
-          assert "TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}" not in workflow
+          assert "TELEGRAM_BOT_TOKEN: " + chr(36) + "{{ secrets.TELEGRAM_BOT_TOKEN }}" not in workflow
           assert "--insecure" not in workflow and "set -x" not in workflow
           print("MANUAL_TEST_WORKFLOW_SECURITY_CONTRACT=PASS")
           PY

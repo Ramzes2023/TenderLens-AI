@@ -41,7 +41,7 @@ def validate_chechnya_feed_urls(urls: tuple[str, ...]) -> None:
     if not urls or len(urls) > 5:
         raise ValueError("Chechnya EIS requires 1-5 operator-provided regional RSS URLs")
     # Enforce the HTTPS EIS host and exact feed endpoint, even for non-direct mode.
-    validate_eis_direct_urls(urls)
+    validate_eis_direct_urls(urls, allow_extensionless_rss=True)
     for url in urls:
         query = parse_qs(urlsplit(url).query, keep_blank_values=True)
         if query.get("fz44") != ["on"] or query.get("fz223") == ["on"]:
@@ -78,6 +78,7 @@ class ChechnyaEisRssSource:
         upstream = EisRssSource(
             urls=self.urls, timeout=self.timeout, ca_bundle_file=self.ca_bundle_file,
             name=self.name, direct=self.direct, system_trust=self.system_trust,
+            allow_extensionless_rss=True,
         )
         # EIS emits a limited feed, not a paginated regional API. Inspect all
         # available entries before applying the requested output cap.

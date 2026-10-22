@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 
 import httpx
 import pytest
@@ -64,7 +65,12 @@ def test_parse_uk_fts_normalizes_realistic_release() -> None:
         ]
     }
 
-    notices = parse_uk_fts_response(payload)
+    # This is a historical 2 Oct release with 21 Oct bid deadline.
+    # Freeze the test clock instead of misclassifying an expired notice as
+    # active whenever CI happens to run after 21 Oct 2026.
+    notices = parse_uk_fts_response(
+        payload, now=datetime(2026, 10, 20, 12, tzinfo=timezone.utc),
+    )
 
     assert len(notices) == 1
 
@@ -95,6 +101,30 @@ def test_parse_uk_fts_normalizes_realistic_release() -> None:
         "https://www.find-tender.service.gov.uk/"
         "Notice/093514-2026"
     )
+
+
+def test_uk_fts_real_deadline_excludes_expired_tenders_at_and_after_cutoff() -> None:
+    # Exact UTC deadline, not a date-only guess: FTS rejects closed tenders.
+    payload = {
+        "releases": [{
+            "id": "093514-2026",
+            "ocid": "ocds-h6vhtk-078017",
+            "date": "2026-10-02T16:18:43+01:00",
+            "tag": ["tender"],
+            "tender": {
+                "id": "C460160",
+                "status": "active",
+                "title": "Insourced Breast USC One-Stop Triple Assessment",
+                "tenderPeriod": {"endDate": "2026-10-21T12:00:00+01:00"},
+            },
+        }],
+    }
+    before = datetime(2026, 10, 21, 10, 59, 59, tzinfo=timezone.utc)
+    cutoff = datetime(2026, 10, 21, 11, 0, 0, tzinfo=timezone.utc)
+    after = datetime(2026, 10, 22, 12, 0, 0, tzinfo=timezone.utc)
+    assert len(parse_uk_fts_response(payload, now=before)) == 1
+    assert parse_uk_fts_response(payload, now=cutoff) == []
+    assert parse_uk_fts_response(payload, now=after) == []
 
 
 def test_parser_falls_back_to_release_description() -> None:

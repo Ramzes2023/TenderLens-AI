@@ -16,7 +16,8 @@ from app.sources.eis_rss import (
     SourceError, eis_tls_verify, parse_eis_feed, verify_eis_feed_law,
 )
 from app.sources.ru_chechnya_eis_rss import (
-    is_chechnya_notice, validate_chechnya_feed_urls,
+    SOURCE_KEY, is_chechnya_notice, select_verified_chechnya_originals,
+    validate_chechnya_feed_urls,
 )
 
 MAX_RSS_BYTES = 5 * 1024 * 1024
@@ -78,21 +79,34 @@ def run_probe() -> dict:
                 if "html" in response.headers.get("content-type", "").lower():
                     return {"state": "HTML_NOT_RSS", "strict_tls": True}
                 verify_eis_feed_law(bytes(payload), "44-FZ")
-                notices = parse_eis_feed(bytes(payload))
+                notices = parse_eis_feed(bytes(payload), source_name=SOURCE_KEY)
                 results.append({
                     "official_item_count": len(notices),
                     "regional_evidence_count": sum(
                         is_chechnya_notice(item) for item in notices
                     ),
+                    # EXACT same trusted card + stable number + region gate as
+                    # the live ingest adapter. Merely seeing a regional label
+                    # in an XML record is not acceptance.
+                    "accepted_original_numbers": [
+                        n.tender_number for n in select_verified_chechnya_originals(
+                            notices, limit=100,
+                        )
+                    ],
                 })
     regional = sum(item["regional_evidence_count"] for item in results)
+    originals = set(
+        number for result in results
+        for number in result["accepted_original_numbers"]
+    )
     return {
-        "state": "VERIFIED_FEED_WITH_REGION_EVIDENCE" if regional
-                 else "VALID_FEED_NO_CHECHNYA_EVIDENCE",
+        "state": "VERIFIED_FEED_WITH_ACCEPTED_ORIGINALS" if originals
+                 else "VALID_FEED_NO_ACCEPTED_ORIGINALS",
         "strict_tls": True,
         "feed_count": len(results),
         "official_item_count": sum(item["official_item_count"] for item in results),
         "regional_evidence_count": regional,
+        "accepted_original_count": len(originals),
         "worker_sqlite_verified": False,
         "telegram_delivery_verified": False,
     }
@@ -105,7 +119,7 @@ def main() -> int:
         # Never print raw exception: httpx errors can include full query URLs.
         result = {"state": transport_category(error), "strict_tls": True}
     print("RU_CHECHNYA_EIS_SAFE_NETWORK_DIAG=" + json.dumps(result, sort_keys=True))
-    return 0 if result["state"] == "VERIFIED_FEED_WITH_REGION_EVIDENCE" else 2
+    return 0 if result["state"] == "VERIFIED_FEED_WITH_ACCEPTED_ORIGINALS" else 2
 
 
 if __name__ == "__main__":

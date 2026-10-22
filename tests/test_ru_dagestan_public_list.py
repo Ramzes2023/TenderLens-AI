@@ -24,6 +24,7 @@ def original_rows():
          "name": "Поставка мебели для городской больницы",
          "uchr_sname": "Городская больница Дагестана",
          "summa": "100 000,00",
+         "pub_date": "19.10.2026",
          "collecting_enddate": "22.10.2026"},
         {"link": "/smallpurchases/GzwSP/5611196",
          "number": "ИМЗ-2026-100002",
@@ -49,7 +50,11 @@ def test_original_public_rows_are_searchable_not_fake_deep_links():
     assert items[1].external_id == "5611196"
     assert items[0].tender_number == "ИМЗ-2026-100001"
     assert all(n.url == mod.GRID for n in items)
-    assert all(n.initial_price is None and n.deadline is None for n in items)
+    assert [n.initial_price for n in items] == [100000.0, 200000.0]
+    assert [n.currency for n in items] == ["RUB", "RUB"]
+    assert [n.deadline for n in items] == ["22.10.2026", "25.10.2026"]
+    assert items[0].published_at == "19.10.2026"
+    assert items[1].published_at is None
     assert "авторизац" in items[0].summary
 
 
@@ -160,3 +165,52 @@ def test_runtime_accepts_single_notice_and_honest_empty_page():
     for total in (-1, True, '0', 2):
         with pytest.raises(ValueError):
             mod.parse_public_list({'items': [], 'totalRows': total})
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("100 000,00", 100000.0), ("1\u00a0200,45", 1200.45),
+    ("1200,50", 1200.50), (25000, 25000.0),
+    (0, None), (True, None), (-1, None),
+    ("1e15", None), ("<script>1</script>", None),
+    ("1,200.00", None), (float("nan"), None), (float("inf"), None),
+])
+def test_grid_amount_never_guesses_invalid_price(raw, expected):
+    assert mod.public_amount(raw) == expected
+
+
+@pytest.mark.parametrize("raw,expected", [
+    ("22.10.2026", "22.10.2026"),
+    ("22.10.2026 17:30", "22.10.2026 17:30"),
+    ("22.10.2026 17:30:50", "22.10.2026 17:30:50"),
+    ("32.10.2026", None), ("22.13.2026", None),
+    ("22.10.2026 25:88", None), ("", None),
+    (False, None), ("<script>22.10.2026</script>", None),
+])
+def test_grid_dates_do_not_invent_time_or_accept_hostile_values(raw, expected):
+    assert mod.public_date(raw) == expected
+
+
+def test_native_deadline_case_spelling_and_conflict_fail_closed():
+    row = original_rows()["items"][0]
+    assert mod.public_deadline(row) == "22.10.2026"
+    assert mod.public_deadline({"collecting_endDate": "23.10.2026"}) == "23.10.2026"
+    assert mod.public_deadline({
+        "collecting_enddate": "22.10.2026", "collecting_endDate": "23.10.2026",
+    }) is None
+
+
+def test_invalid_optional_grid_metadata_is_omitted_without_losing_genuine_rows():
+    row = original_rows()
+    row["items"][0].update(
+        summa="<script>5000</script>",
+        pub_date="2026-99-99",
+        collecting_enddate="99.10.2026",
+    )
+    notices = mod.parse_public_list(row)
+    assert len(notices) == 2
+    assert notices[0].initial_price is None
+    assert notices[0].currency is None
+    assert notices[0].published_at is None
+    assert notices[0].deadline is None
+    assert notices[0].url == mod.GRID
+    assert notices[1].initial_price == 200000.0

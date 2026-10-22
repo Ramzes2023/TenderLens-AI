@@ -586,6 +586,10 @@ def test_optional_test_telegram_requires_matching_real_api_ack(monkeypatch):
             assert chat_id == -1001234567890
             assert disable_web_page_preview is True
             assert "0194200000526005027" in text
+            assert text.count("\n") >= 3
+            assert "\\n" not in text
+            assert "Источник: " + SOURCE_KEY in text
+            assert "Номер: 0194200000526005027" in text
             recorded.append(text)
             return SimpleNamespace(
                 message_id=44, chat=SimpleNamespace(id=chat_id),

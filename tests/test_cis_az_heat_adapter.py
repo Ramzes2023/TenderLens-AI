@@ -112,7 +112,7 @@ def test_live_index_can_keep_verified_az_notice_when_one_detail_is_stale(monkeyp
         if url == URL:
             return httpx.Response(200, text=detail(), headers={"content-type": "text/html"})
         if url == second:
-            return httpx.Response(403)  # individual restricted card, not public evidence
+            return httpx.Response(404)  # a stale individual detail is not public evidence
         raise AssertionError("Unapproved source URL")
 
     @asynccontextmanager
@@ -184,3 +184,38 @@ def test_az_nonhtml_detail_is_not_a_tender_but_valid_html_card_survives(monkeypa
     notices = asyncio.run(source.AzerbaijanHeatSource().fetch(limit=2))
     assert [n.url for n in notices] == [URL]
     assert urls == [INDEX_URL, second, URL]
+
+
+def test_az_restricted_and_rate_limited_details_fail_closed(monkeypatch):
+    """401/403/429 must block the real batch, even after one verified card."""
+    import asyncio
+    from contextlib import asynccontextmanager
+    import httpx
+    import pytest
+    import app.sources.az_azeristilik as source
+
+    second = "https://azeristilik.gov.az/post/restricted-procurement-announcement-2026"
+    index = ("<a href='" + URL + "'>" + TITLE + "</a>"
+             "<a href='" + second + "'>"
+             "Təchizat xidməti satınalınmasına dair tender elan edir</a>")
+
+    for code in (401, 403, 429):
+        def respond(request):
+            target = str(request.url)
+            if target == INDEX_URL:
+                return httpx.Response(200, text=index, headers={"content-type": "text/html"})
+            if target == URL:
+                return httpx.Response(200, text=detail(), headers={"content-type": "text/html"})
+            if target == second:
+                return httpx.Response(code)
+            raise AssertionError("Unexpected source URL")
+
+        @asynccontextmanager
+        async def offline_client(**kwargs):
+            assert kwargs["trust_env"] is False and kwargs["follow_redirects"] is False
+            async with httpx.AsyncClient(transport=httpx.MockTransport(respond), **kwargs) as client:
+                yield client
+
+        monkeypatch.setattr(source, "source_client", offline_client)
+        with pytest.raises(SourceError, match="verified official HTTPS retrieval failed"):
+            asyncio.run(source.AzerbaijanHeatSource().fetch(limit=2))

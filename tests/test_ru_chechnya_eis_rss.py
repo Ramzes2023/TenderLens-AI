@@ -170,3 +170,32 @@ def test_same_eis_original_is_never_counted_twice_across_national_and_regional_f
     unique, duplicates = deduplicate([regional, national])
     assert len(unique) == 1 and unique[0].source == 'eis'
     assert len(duplicates) == 1
+
+
+def test_live_local_alert_sink_returns_required_synthetic_receipt_only():
+    """Offline: local capture ACK unblocks marking after successful send.
+
+    Never treats a local-only test stub as Telegram API delivery.
+    """
+    from scripts.ci_ru_chechnya_eis_real_worker import LocalCaptureBot
+    from app.bot.monitoring import _require_telegram_delivery_ack
+
+    async def run():
+        stop = asyncio.Event()
+        bot = LocalCaptureBot(stop)
+        text = "🆕 НОВАЯ ЗАКУПКА\\nИсточник: " + SOURCE_KEY
+        receipt = await bot.send_message(
+            99102, text, disable_web_page_preview=True,
+        )
+        _require_telegram_delivery_ack(receipt, 99102)
+        assert receipt.message_id == 1
+        assert receipt.chat.id == 99102
+        assert stop.is_set() and bot.messages == [text]
+        with pytest.raises(AssertionError):
+            await bot.send_message(12345, text, disable_web_page_preview=True)
+        with pytest.raises(AssertionError):
+            await bot.send_message(99102, "unverified source",
+                                   disable_web_page_preview=True)
+        assert len(bot.messages) == 1
+
+    asyncio.run(run())

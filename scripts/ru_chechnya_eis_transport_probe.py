@@ -6,6 +6,7 @@ Logs only stable classifications and record counts; never URLs or notice bodies.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import socket
 import ssl
@@ -126,6 +127,53 @@ async def _run_probe_async() -> dict:
     }
 
 
+def fixed_official_dns_tcp_diagnostic() -> dict:
+    """Public DNS + raw TCP-443 only for the ONE allowlisted EIS hostname.
+
+    This cannot confirm TLS, RSS, Worker or Telegram. Never connect to a
+    private/reserved IP returned by potentially malicious DNS, and never
+    print IPs, raw socket errors, RSS query strings or secret environment.
+    """
+    try:
+        records = socket.getaddrinfo(
+            "zakupki.gov.ru", 443, type=socket.SOCK_STREAM,
+        )
+    except (OSError, ValueError):
+        return {"dns_tcp_state": "DNS_RESOLUTION_FAILED"}
+    addresses = []
+    seen = set()
+    for family, kind, protocol, _, endpoint in records:
+        if family not in (socket.AF_INET, socket.AF_INET6):
+            continue
+        try:
+            address = ipaddress.ip_address(endpoint[0])
+        except ValueError:
+            continue
+        if not address.is_global:
+            continue
+        key = (family, endpoint[0])
+        if key not in seen:
+            seen.add(key)
+            addresses.append((family, kind, protocol, endpoint))
+    if not addresses:
+        return {"dns_tcp_state": "DNS_NO_PUBLIC_ADDRESSES"}
+    for family, kind, protocol, endpoint in addresses[:2]:
+        try:
+            with socket.socket(family, kind, protocol) as handle:
+                handle.settimeout(3.0)
+                handle.connect(endpoint)
+            return {
+                "dns_tcp_state": "TCP_443_REACHABLE_TLS_NOT_CHECKED",
+                "dns_public_ip_count": len(addresses),
+            }
+        except OSError:
+            pass
+    return {
+        "dns_tcp_state": "TCP_443_UNREACHABLE_ON_PROBED_ADDRESSES",
+        "dns_public_ip_count": len(addresses),
+    }
+
+
 def run_probe() -> dict:
     """Synchronous isolated entrypoint; only the official EIS is contacted."""
     return asyncio.run(_run_probe_async())
@@ -137,6 +185,13 @@ def main() -> int:
     except Exception as error:
         # Never print raw exception: httpx errors can include full query URLs.
         result = {"state": transport_category(error), "strict_tls": True}
+        if result["state"] in (
+            "NETWORK_TRANSPORT_FAILED", "CONNECT_FAILED_UNCLASSIFIED",
+            "DNS_RESOLUTION_FAILED", "TIMEOUT",
+        ):
+            # Only diagnostic, not an alternative HTTPS transport. A raw TCP
+            # connection does NOT bypass or establish TLS certificate trust.
+            result.update(fixed_official_dns_tcp_diagnostic())
     print("RU_CHECHNYA_EIS_SAFE_NETWORK_DIAG=" + json.dumps(result, sort_keys=True))
     return 0 if result["state"] == "VERIFIED_FEED_WITH_ACCEPTED_ORIGINALS" else 2
 

@@ -39,6 +39,14 @@ on:
 permissions:
   contents: read
 
+# Several branch pushes used to leave stale offline/live jobs queued while
+# their RSS candidate, source code and acceptance assertions had changed.
+# Only the newest proof for this exact ref and event is useful; never cancel
+# an unrelated source or the main branch's acceptance work.
+concurrency:
+  group: ru-chechnya-proof-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   chechnya-offline-contracts:
     runs-on: ubuntu-latest

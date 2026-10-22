@@ -71,3 +71,66 @@ jobs:
           echo "TENDERS_FETCHED_OR_SENT=NO"
           echo "PRODUCTION_CHANGED=NO"
           echo "RELEASE_MERGE_GATE=NOT_EVALUATED"
+
+  hosted-platform-readonly:
+    name: Hosted OS network-only comparison - ${{ matrix.os }} (not procurement proof)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 4
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Trusted push context only; no checkout or credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_EVENT_NAME:-}" == "push" ]]
+          [[ "${GITHUB_REF:-}" == "refs/heads/ops/az-firstparty-trusted-transport-audit-20261022" ]]
+          echo "AZ_HOSTED_RUNNER_OS=${RUNNER_OS}"
+      - name: Fixed two original official HTTPS sites read-only; classify status only
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          command -v curl >/dev/null
+          for source in heat adif; do
+            case "$source" in
+              heat) origin="https://azeristilik.gov.az/az/imkanlar/tender-elanlari" ;;
+              adif) origin="https://adif.gov.az/az/sale/" ;;
+            esac
+            set +e
+            status=$(curl --silent --output /dev/null \
+              --write-out '%{http_code}' \
+              --noproxy '*' --proto '=https' --tlsv1.2 \
+              --max-filesize 838860 --connect-timeout 10 --max-time 22 \
+              "$origin" 2>/dev/null)
+            code=$?
+            set -e
+            # Only code-owned categories, never host response, redirect Location,
+            # cookies, effective address, proxy settings or credentials.
+            if [[ "$code" -eq 0 ]]; then
+              case "$status" in
+                200) result="HTTPS_200" ;;
+                301|302|303|307|308) result="REDIRECT_BLOCKED" ;;
+                401|403) result="ACCESS_DENIED" ;;
+                404|410) result="UNAVAILABLE_OR_GONE" ;;
+                408|429|5??) result="UPSTREAM_TEMPORARY" ;;
+                *) result="UNEXPECTED_HTTP_STATUS" ;;
+              esac
+            else
+              case "$code" in
+                6) result="DNS_FAILED" ;;
+                7) result="CONNECT_FAILED" ;;
+                28) result="TIMEOUT" ;;
+                35|51|60) result="TLS_FAILED" ;;
+                63) result="RESPONSE_OVERSIZE" ;;
+                *) result="OTHER_NETWORK_ERROR" ;;
+              esac
+            fi
+            echo "AZ_${source^^}_TRUSTED_NETWORK=$result"
+          done
+          echo "DIAGNOSTIC_ONLY=YES"
+          echo "TENDERS_FETCHED_OR_SENT=NO"
+          echo "PRODUCTION_CHANGED=NO"
+          echo "RELEASE_MERGE_GATE=NOT_EVALUATED"

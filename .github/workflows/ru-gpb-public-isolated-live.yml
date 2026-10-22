@@ -6,6 +6,7 @@ on:
       - app/sources/gpb_etp_public.py
       - tests/test_ru_gpb_public.py
       - scripts/ci_ru_gpb_public_worker.py
+      - scripts/ci_ru_gpb_live_transport_stages.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -38,3 +39,18 @@ jobs:
       - name: Require current genuine official GPB list and independently checked detail through durable Worker SQLite and query
         timeout-minutes: 6
         run: python -B -m scripts.ci_ru_gpb_public_worker
+
+  gpb-trusted-firstparty-http-diagnostic:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Identify genuine list or detail transport failures without logging payloads
+        timeout-minutes: 6
+        run: python -B -m scripts.ci_ru_gpb_live_transport_stages

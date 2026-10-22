@@ -95,3 +95,28 @@ def test_successful_genuine_ssr_does_not_claim_error_code():
     assert result["ssr_native_schema"] == "verified"
     assert result["ssr_verified_native_count"] == 2
     assert "ssr_rejection_code" not in result
+
+
+def test_safe_href_shape_histogram_categorizes_incorrect_fragments_without_values():
+    from scripts.diagnose_ru_b2b_next_market import classify_native_href_shape
+    base = "/app/market-next/slug/tender-4646931/"
+    sqh = "a" * 40
+    assert classify_native_href_shape(base) == "CANONICAL"
+    assert classify_native_href_shape(base + "#btid=2&sqh=" + sqh + "&tsid=4646931458") == "CANONICAL"
+    assert classify_native_href_shape(base + "#btid=3&sqh=" + sqh + "&tsid=4646931458") == "FRAGMENT_BTID"
+    assert classify_native_href_shape(base + "#btid=2&sqh=" + "a" * 32 + "&tsid=4646931458") == "FRAGMENT_SQH_FORMAT"
+    assert classify_native_href_shape(base + "#btid=2&sqh=" + sqh + "&tsid=9999999999") == "FRAGMENT_TSID_FORMAT"
+    assert classify_native_href_shape(base + "?user_secret=never") == "UNEXPECTED_QUERY"
+    assert classify_native_href_shape("https://evil.example" + base) == "SCHEME_HOST_AUTHORITY"
+    assert classify_native_href_shape("/app/market-next/slug/tender-4646931") == "NATIVE_PATH_SHAPE"
+
+
+def test_genuine_ssr_fixture_reports_counts_not_source_urls_or_secret_values():
+    from pathlib import Path
+    fixture = (Path(__file__).parent / "fixtures" / "ru08" / "b2b_next_ssr.html").read_bytes()
+    report = analyze_official_html(fixture)
+    assert report["ssr_card_count"] == 2
+    assert report["ssr_url_shape_counts"]["NUMBER_CANONICAL"] == 2
+    assert report["ssr_url_shape_counts"]["COVER_CANONICAL"] == 2
+    import json
+    assert "tender-4646931" not in json.dumps(report)

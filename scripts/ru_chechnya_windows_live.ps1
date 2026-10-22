@@ -33,7 +33,13 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $expectedBranch = 'feat/ru-chechnya-eis-rss-20261022'
-$branch = (& git -C $repo branch --show-current).Trim()
+# GitHub Actions checks out a detached HEAD. Its branch --show-current
+# returns no output; checking that value is required only for real acceptance,
+# not for the no-network URL smoke test.
+$branchOutput = @(& git -C $repo branch --show-current)
+$branch = if ($branchOutput.Count -gt 0 -and $null -ne $branchOutput[0]) {
+    [string]$branchOutput[0]
+} else { '' }
 if (-not $ValidateUrlOnly -and ($LASTEXITCODE -ne 0 -or $branch -ne $expectedBranch)) {
     throw "Check out $expectedBranch before live acceptance; refusing to test another branch."
 }
@@ -99,14 +105,18 @@ if ($LASTEXITCODE -ne 0) {
 $previousCandidate = [Environment]::GetEnvironmentVariable('VALYQON_CHECHNYA_URL_VALIDATE', 'Process')
 try {
     [Environment]::SetEnvironmentVariable('VALYQON_CHECHNYA_URL_VALIDATE', $RegionalRssUrl, 'Process')
-    $urlValidation = @'
-import os
-from app.sources.ru_chechnya_eis_rss import validate_chechnya_feed_urls
-validate_chechnya_feed_urls((os.environ["VALYQON_CHECHNYA_URL_VALIDATE"],))
-'@
-    & $python @pythonArgs -c $urlValidation 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        throw 'Official Chechnya RSS URL rejected: required HTTPS zakupki.gov.ru, allowlisted RSS path, 44-FZ and Chechnya scope.'
+    # Avoid passing multiline Python code through Windows PowerShell -c. A
+    # standalone module catches expected rejects and unexpected runtime
+    # failures, prints safe categories, and never logs RSS URL/tokens.
+    Push-Location $repo
+    try {
+        & $python @pythonArgs -B -m scripts.ru_chechnya_validate_url
+        $validationExit = $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
+    if ($validationExit -ne 0) {
+        throw "Chechnya official RSS URL preflight failed (exit=$validationExit). Production is unchanged."
     }
 } finally {
     [Environment]::SetEnvironmentVariable('VALYQON_CHECHNYA_URL_VALIDATE', $previousCandidate, 'Process')

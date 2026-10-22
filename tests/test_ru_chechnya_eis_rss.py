@@ -317,7 +317,7 @@ def test_chechnya_telegram_receipt_rejected_if_absent_or_wrong_chat():
         SimpleNamespace(message_id="9", chat=SimpleNamespace(id=99102)),
     ]
     for receipt in invalid:
-        with pytest.raises(ValueError, match="Telegram did not acknowledge"):
+        with pytest.raises(ValueError, match="Telegram message acknowledgement invalid"):
             _require_telegram_delivery_ack(receipt, 99102)
 
 

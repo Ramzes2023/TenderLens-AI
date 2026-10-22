@@ -87,10 +87,10 @@ async def optional_authorized_telegram_api_check(notice):
             or notice.external_id != numbers[0]):
         raise AssertionError("Only verified official regional originals can be sent")
     text = (
-        "VALYQON CHECHNYA TEST — official EIS 44-FZ procurement\\n"
-        f"Источник: {SOURCE_KEY}\\n"
-        f"Номер: {notice.tender_number}\\n"
-        f"{notice.title[:550]}\\n{notice.url}"
+        "VALYQON CHECHNYA TEST — official EIS 44-FZ procurement\n"
+        f"Источник: {SOURCE_KEY}\n"
+        f"Номер: {notice.tender_number}\n"
+        f"{notice.title[:550]}\n{notice.url}"
     )
     # Telegram accepts messages up to 4096 characters; all fields here are
     # official public EIS content validated before reaching this boundary.

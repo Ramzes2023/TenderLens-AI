@@ -87,6 +87,20 @@ def test_refuse_insecure_ambiguous_or_nationwide_feed(url):
         validate_chechnya_feed_urls((url,))
 
 
+def test_official_eis_rss_extensionless_alias_keeps_strict_host_and_region_gate():
+    """Official RSS link can omit .html; no alternate host or arbitrary path."""
+    exact_alias = URL.replace("/rss.html?", "/rss?")
+    validate_chechnya_feed_urls((exact_alias,))
+    with pytest.raises((SourceError, ValueError)):
+        validate_chechnya_feed_urls((
+            URL.replace("/rss.html?", "/rss/evil?"),
+        ))
+    with pytest.raises((SourceError, ValueError)):
+        validate_chechnya_feed_urls((
+            exact_alias.replace("zakupki.gov.ru", "evil.example"),
+        ))
+
+
 def test_regional_evidence_from_customer_or_delivery_not_title_or_summary():
     assert is_chechnya_notice(notice("0194200000526005027",
                                     customer="Комитет правительства Чеченской Республики"))

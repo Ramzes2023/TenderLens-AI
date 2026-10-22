@@ -1,0 +1,24 @@
+name: RU RZD official public small procurement discovery
+on:
+  push:
+    branches: [research/ru-rzd-public-live-20261017]
+    paths:
+      - scripts/research_ru_eshoprzd_live.py
+      - .github/workflows/ru-rzd-public-discovery.yml
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  rzd-public-readonly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Official real homepage -> at least two independent public detail pages
+        run: python -B scripts/research_ru_eshoprzd_live.py

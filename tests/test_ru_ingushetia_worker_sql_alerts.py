@@ -386,7 +386,7 @@ def test_regional_eis_worker_can_store_26th_real_candidate_without_lifting_other
     full = []
     for i in range(26):
         number = f"011450000082600{2400 + i:04d}"
-        title = "Строительство канализации в Ингушетии" if i == 25 else "Поставка бетона"
+        title = "Канализация в Ингушетии" if i == 25 else "Поставка бетона"
         full.append(notice(number, source=EIS, title=title))
     assert len({n.tender_number for n in full}) == 26
 
@@ -440,3 +440,13 @@ def test_regional_eis_worker_can_store_26th_real_candidate_without_lifting_other
         assert matches[0].notice.tender_number == full[-1].tender_number
     finally:
         db.close()
+
+
+def test_russian_minus_tsiya_keyword_inflections_match_without_unrelated_matches():
+    """Common requested inflections must not silently drop genuine RU tenders."""
+    from app.monitoring.service import _term_match
+    assert _term_match("Канализация в Ингушетии", "канализации")
+    assert _term_match("Строительство канализации", "канализация")
+    assert _term_match("Ремонт станции", "станция")
+    assert not _term_match("Поставка бетона", "канализации")
+    assert not _term_match("Новая линия", "канализации")

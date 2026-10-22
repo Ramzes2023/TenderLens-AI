@@ -48,9 +48,26 @@ if ($parsed.Scheme -ne 'https' -or $parsed.Host -ne 'zakupki.gov.ru' -or
     throw 'Only the exact official EIS 44-FZ RSS endpoint is allowed.'
 }
 
-$python = Join-Path $repo '.venv\Scripts\python.exe'
-if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
-    $python = (Get-Command 'python' -ErrorAction Stop).Source
+# Prefer the project's pinned Python environment before an unrelated
+# machine-level python.exe (which can be the Windows Store alias).  VALYQON
+# installations have used both .venv and venv on Windows.
+$pythonCandidates = @(
+    (Join-Path $repo '.venv\Scripts\python.exe'),
+    (Join-Path $repo 'venv\Scripts\python.exe')
+)
+$python = $pythonCandidates |
+    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+    Select-Object -First 1
+if (-not $python) {
+    $command = Get-Command 'python' -ErrorAction SilentlyContinue
+    if ($null -eq $command -or -not $command.Source) {
+        throw 'Python 3.12 not found. Activate the project venv or .venv first.'
+    }
+    $python = $command.Source
+}
+& $python -c 'import sys; assert sys.version_info >= (3,12) and sys.version_info < (3,13), "VALYQON requires Python 3.12"'
+if ($LASTEXITCODE -ne 0) {
+    throw 'Use Python 3.12 from the VALYQON project environment.'
 }
 $envOverride = @{
     'RU_CHECHNYA_EIS_ENABLED' = 'true'

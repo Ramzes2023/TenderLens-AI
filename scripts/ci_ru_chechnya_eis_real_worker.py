@@ -72,6 +72,20 @@ async def optional_authorized_telegram_api_check(notice):
     if not re.fullmatch(r"-?[1-9][0-9]{0,19}", target):
         raise AssertionError("Invalid authorized test Telegram chat ID")
     chat_id = int(target)
+    # Independently enforce official provenance before even the test Bot API
+    # boundary; an arbitrary in-memory notice is not an authorized tender.
+    from urllib.parse import parse_qs, urlsplit
+    origin = urlsplit(notice.url)
+    numbers = parse_qs(origin.query).get("regNumber", [])
+    if (notice.source != SOURCE_KEY
+            or not is_chechnya_notice(notice)
+            or origin.scheme != "https" or origin.netloc != "zakupki.gov.ru"
+            or not origin.path.startswith("/epz/order/notice/")
+            or origin.fragment or len(numbers) != 1
+            or not re.fullmatch(r"[0-9]{19}", numbers[0])
+            or notice.tender_number != numbers[0]
+            or notice.external_id != numbers[0]):
+        raise AssertionError("Only verified official regional originals can be sent")
     text = (
         "VALYQON CHECHNYA TEST — official EIS 44-FZ procurement\\n"
         f"Источник: {SOURCE_KEY}\\n"

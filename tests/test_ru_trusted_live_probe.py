@@ -61,6 +61,19 @@ class ProbeSafetyTests(unittest.TestCase):
             describe("rss",b"not rss")
 
 
+    def test_rss_rejects_nonfeed_dtd_and_xml_entity_without_false_visibility(self):
+        for payload in (
+            b"<html><body>login</body></html>",
+            b"<errors><error>Not available</error></errors>",
+            b'<!DOCTYPE rss [<!ENTITY leak "secret">]><rss><channel/></rss>',
+            b'<rss><!DOCTYPE fake><channel/></rss>',
+        ):
+            with self.assertRaises(ValueError):
+                describe("rss", payload)
+        self.assertEqual(describe(
+            "rss", b'<feed xmlns="http://www.w3.org/2005/Atom"><entry/></feed>'
+        )["atom_items"], 1)
+
     def test_batch_enforces_real_reachability_and_never_marks_ingestion(self):
         from io import StringIO
         from contextlib import redirect_stdout

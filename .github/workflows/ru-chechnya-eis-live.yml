@@ -10,6 +10,7 @@ on:
       - app/sources/ru_dedup.py
       - app/sources/ru_notice_identity.py
       - app/monitoring/config.py
+      - app/bot/monitoring.py
       - tests/test_ru_chechnya_eis_rss.py
       - scripts/ci_ru_chechnya_eis_real_worker.py
       - .github/workflows/ru-chechnya-eis-live.yml

@@ -14,6 +14,7 @@ on:
       - tests/test_ru_chechnya_eis_rss.py
       - scripts/ci_ru_chechnya_eis_real_worker.py
       - scripts/ru_chechnya_windows_live.ps1
+      - scripts/ru_chechnya_eis_transport_probe.py
       - .github/workflows/ru-chechnya-eis-live.yml
   workflow_dispatch:
     inputs:
@@ -39,7 +40,7 @@ jobs:
           cache: pip
       - run: python -m pip install -r requirements-dev.txt
       - name: Compile new source and strict live acceptance
-        run: python -m compileall -q app/sources/ru_chechnya_eis_rss.py scripts/ci_ru_chechnya_eis_real_worker.py
+        run: python -m compileall -q app/sources/ru_chechnya_eis_rss.py scripts/ci_ru_chechnya_eis_real_worker.py scripts/ru_chechnya_eis_transport_probe.py
       - name: Chechnya official URL, regional evidence, legal provenance, opt-in, Worker and dedup contracts
         run: python -B -m pytest -q tests/test_ru_chechnya_eis_rss.py tests/test_ru_background_telegram_catalog.py tests/test_ru_telegram_original_dedup.py
       - name: Parse trusted Windows operator launcher (no remote calls)

@@ -117,7 +117,7 @@ def test_telegram_network_failure_retries_without_losing_procurement_notice():
             if self.try_count == 1:
                 self.event.set()
                 raise OSError("synthetic Telegram transport outage")
-            await super().send_message(chat_id, text, **kw)
+            return await super().send_message(chat_id, text, **kw)
 
     async def scenario():
         stop = asyncio.Event()

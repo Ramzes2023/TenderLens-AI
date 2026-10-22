@@ -6,6 +6,8 @@ Validating a card here cannot replace real leased Worker/SQL acceptance.
 import asyncio
 import json
 
+import httpx
+
 from app.sources.az_azeristilik import (
     HOST, INDEX_URL, MAX_BODY, MAX_DETAILS, AzerbaijanHeatSource,
     discover_official_posts, parse_public_detail,
@@ -57,6 +59,9 @@ async def examine():
                         result["transport_reason"] = error.reason
                         result["transport_retryable"] = error.retryable
                         break
+    except httpx.HTTPStatusError as error:
+        result["failed_stage"] = "index_http_status"
+        result["index_http_status"] = error.response.status_code
     except ConnectorTransportError as error:
         result["failed_stage"] = result.get("failed_stage", "index_transport")
         result["transport_reason"] = error.reason

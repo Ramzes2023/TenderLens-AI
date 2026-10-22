@@ -1,7 +1,7 @@
 """Safety and source scope contracts for operator-only trusted RU diagnostics."""
 import unittest
 from unittest.mock import patch
-from scripts.ru_trusted_live_probe import TARGETS, UnsafeAddress, checked_ips, describe, main, read_public, Target
+from scripts.ru_trusted_live_probe import TARGETS, ON_DEMAND_TARGETS, UnsafeAddress, checked_ips, describe, main, read_public, Target
 
 class ProbeSafetyTests(unittest.TestCase):
     def test_fixed_unique_approved_targets(self):

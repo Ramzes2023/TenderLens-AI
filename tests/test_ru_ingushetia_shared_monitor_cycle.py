@@ -167,3 +167,40 @@ def test_shared_source_exception_does_not_kill_monitor_or_claim_any_alert():
         assert bot.sent == []
         assert service.claimed == []
     asyncio.run(run())
+
+
+def test_shared_ingushetia_second_cycle_replays_no_old_alert_and_releases_new_match():
+    """Offline three-cycle regression: only newly matched originals get receipts."""
+    async def run():
+        stop = asyncio.Event()
+        service = FakeService(stop)
+        bot = FakeBot()
+        catalog = FakeCatalog(("ru_ingushetia_eis44", "ru_ingushetia_fabrikant44"))
+
+        await monitor_loop(bot, service, stop, source_catalog=catalog)
+        assert len(bot.sent) == 2
+        assert service.claimed == [(1, IDS[0]), (2, IDS[1])]
+
+        # The next scheduled poll rediscovers the same exact originals.
+        # Each user must retain their acknowledgement across cycles.
+        stop.clear()
+        await monitor_loop(bot, service, stop, source_catalog=catalog)
+        assert len(bot.sent) == 2
+        assert service.claimed == [(1, IDS[0]), (2, IDS[1])]
+
+        # A genuinely different regionally corroborated original later
+        # appears in the same fixed feed. Only the matching tenant gets it.
+        fresh_id = "0114500000826002403"
+        service.notices.append(tender(
+            fresh_id, "Монтаж ливневой канализации", "ru_ingushetia_fabrikant44"
+        ))
+        stop.clear()
+        await monitor_loop(bot, service, stop, source_catalog=catalog)
+        assert len(bot.sent) == 3
+        assert bot.sent[2][0] == 11 and fresh_id in bot.sent[2][1]
+        assert (1, fresh_id) in service.claimed
+        assert (2, fresh_id) not in service.claimed
+        assert len([c for c in service.calls if c[0] == "shared"]) == 3
+        assert not any(c[0] == "per_user" for c in service.calls)
+
+    asyncio.run(run())

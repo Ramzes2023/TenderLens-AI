@@ -297,6 +297,20 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService,
                             if not report.attempted_sources or report.total_failure:
                                 logger.warning("Russian source scan unavailable; no alerts claimed.")
                                 continue
+                            # Preserve positive matches from a healthy source
+                            # when another operator-enabled source is down.
+                            # Only static catalog identities may enter logs:
+                            # never log raw vendor errors, URLs, requests, user
+                            # profiles, chat IDs or bot credentials.
+                            failed_keys = tuple(sorted({
+                                failure.source for failure in getattr(report, "failures", ())
+                                if getattr(failure, "source", None) in russian_keys
+                            }))
+                            if failed_keys:
+                                logger.warning(
+                                    "Russian source partial outage: %s",
+                                    ",".join(failed_keys),
+                                )
                         else:
                             matches = await service.fetch_matches(subscription.owner_user_id)
                         new_matches = await service.unseen_matches(

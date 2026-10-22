@@ -39,15 +39,16 @@ def test_official_ssr_html_extracts_actual_fields_without_guessing_timezone():
     b'//www.b2b-center.ru/app/market-next/slug/tender-4646931/',
     b'/app/market-next/slug/tender-4646931/?token=1',
     b'/app/market-next/slug/tender-4646931/#evil',
-    b'/app/market-next/slug/tender-4646932/',
     b'/app/market-next/slug/tender-4646931/#btid=2&sqh=abcd&tsid=4646931458',
 ])
-def test_unapproved_number_and_provenance_rejected(replacement):
+def test_unapproved_number_and_provenance_excludes_only_that_card(replacement):
     first = b'/app/market-next/postavka-smennogo-burovogo-instrumenta-i-osnastki-dlia-nuzhd/tender-4646931/#btid=2&amp;sqh=77d89240a1e0f4efb423b256d22182d01f8b6c4f&amp;tsid=4646931458'
     if replacement.startswith(b'/app/') and b'#btid=' in replacement:
         replacement = replacement.replace(b'&', b'&amp;')
-    with pytest.raises(SourceError):
-        parse_next_market(FIXTURE.replace(first, replacement, 1))
+    verified = parse_next_market(FIXTURE.replace(first, replacement, 1))
+    assert [n.tender_number for n in verified] == ['4646888']
+    assert verified[0].url.startswith('https://www.b2b-center.ru/')
+    assert verified[0].origin == 'first_party'
 
 
 def test_conflicting_number_vs_card_link_fails_batch():
@@ -145,7 +146,7 @@ def test_two_official_unverified_html_responses_stay_red_without_third_request(m
     assert calls == [B2B_CENTER_NEXT_LIST_URL] * 2
 
 
-def test_one_hostile_card_then_proven_original_ssr_retries_whole_batch(monkeypatch):
+def test_one_hostile_card_is_excluded_without_replaying_or_poisoning_verified_original(monkeypatch):
     import app.sources.b2b_center as adapter
     calls = []
     hostile = FIXTURE.replace(
@@ -160,6 +161,52 @@ def test_one_hostile_card_then_proven_original_ssr_retries_whole_batch(monkeypat
     monkeypatch.setattr(adapter, "source_client",
                         lambda **kwargs: source_client(**kwargs, transport=httpx.MockTransport(reply)))
     output = asyncio.run(B2BCenterSource().fetch())
-    assert len(output) == 2
-    assert all(x.url.startswith("https://www.b2b-center.ru/") for x in output)
-    assert calls == [B2B_CENTER_NEXT_LIST_URL] * 2
+    assert len(output) == 1
+    assert [x.tender_number for x in output] == ["4646888"]
+    assert all(x.url.startswith("https://www.b2b-center.ru/") and
+               x.origin == "first_party" for x in output)
+    # The second original was verified on the SAME genuine listing; a
+    # malicious card neither contaminates SQL nor triggers extra network I/O.
+    assert calls == [B2B_CENTER_NEXT_LIST_URL]
+
+
+def test_invalid_b2b_native_ssr_cards_alone_never_create_source_success():
+    original = b'/app/market-next/postavka-smennogo-burovogo-instrumenta-i-osnastki-dlia-nuzhd/tender-4646931/#btid=2&amp;sqh=77d89240a1e0f4efb423b256d22182d01f8b6c4f&amp;tsid=4646931458'
+    # The original fixture has two independent real-shaped publisher cards.
+    # One malformed original must never poison the other; two malformed
+    # originals must NEVER be turned into a verified B2B tender.
+    damaged = FIXTURE.replace(original, b'https://evil.invalid/market/fake/tender-4646931/', 1)
+    first_good = parse_next_market(damaged)
+    assert [n.tender_number for n in first_good] == ['4646888']
+    # Replace the verified second card's native number link with a hostile
+    # host. The surviving first-party proof count is now zero.
+    second = b'/app/market-next/gofrokorob-profil-s/tender-4646888/#btid=2&amp;sqh=77d89240a1e0f4efb423b256d22182d01f8b6c4f&amp;tsid=4646888458'
+    assert second in damaged
+    with pytest.raises(SourceError, match='no usable procurement records'):
+        parse_next_market(damaged.replace(second, b'https://evil.invalid/tender-4646888/', 1))
+
+
+def test_valid_number_link_but_invalid_cover_skips_only_unproven_card():
+    # Both linked originals must independently prove the same public
+    # procedure identity. A changed cover URL cannot become evidence.
+    original_cover = b'/app/market-next/postavka-smennogo-burovogo-instrumenta-i-osnastki-dlia-nuzhd/tender-4646931/#btid=2&amp;sqh=77d89240a1e0f4efb423b256d22182d01f8b6c4f&amp;tsid=4646931458'
+    assert FIXTURE.count(original_cover) >= 2
+    damaged = FIXTURE.replace(original_cover, b'https://evil.invalid/tender-4646931/', 1)
+    rows = parse_next_market(damaged)
+    assert [n.tender_number for n in rows] == ['4646888']
+
+
+def test_two_publisher_valid_links_disagreeing_on_number_remain_hard_error():
+    first = b'/app/market-next/postavka-smennogo-burovogo-instrumenta-i-osnastki-dlia-nuzhd/tender-4646931/#btid=2&amp;sqh=77d89240a1e0f4efb423b256d22182d01f8b6c4f&amp;tsid=4646931458'
+    conflicting = first.replace(b'tender-4646931/', b'tender-4646888/').replace(
+        b'tsid=4646931458', b'tsid=4646888458'
+    )
+    with pytest.raises(SourceError, match='conflicting SSR identity'):
+        parse_next_market(FIXTURE.replace(first, conflicting, 1))
+
+
+def test_number_link_valid_origin_but_wrong_native_id_is_hard_failure():
+    correct = b'/app/market-next/postavka-smennogo-burovogo-instrumenta-i-osnastki-dlia-nuzhd/tender-4646931/#btid=2&amp;sqh=77d89240a1e0f4efb423b256d22182d01f8b6c4f&amp;tsid=4646931458'
+    forged = b'/app/market-next/slug/tender-4646932/'
+    with pytest.raises(SourceError, match='conflicting SSR identity'):
+        parse_next_market(FIXTURE.replace(correct, forged, 1))

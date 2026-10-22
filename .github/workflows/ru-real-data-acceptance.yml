@@ -13,6 +13,8 @@ on:
       - "tests/test_b2b_foreign_aggregate.py"
       - ".github/workflows/ru-real-data-acceptance.yml"
       - "app/sources/b2b_center.py"
+      - "app/sources/b2b_next_market.py"
+      - "tests/test_b2b_next_market_adapter.py"
       - "app/sources/http.py"
       - "app/sources/http_transport.py"
       - "app/sources/ingestion.py"
@@ -39,7 +41,7 @@ jobs:
       - name: Compile isolated authenticated live acceptance
         run: python -m compileall -q scripts/ci_ru_b2b_user_scoring.py
       - name: Strict B2B transport, durable retry, provenance and authorization regressions
-        run: python -B -m pytest -q tests/test_b2b_transport_acceptance.py tests/test_b2b_foreign_aggregate.py tests/test_ru_b2b_worker_fallback_budget.py
+        run: python -B -m pytest -q tests/test_b2b_transport_acceptance.py tests/test_b2b_foreign_aggregate.py tests/test_ru_b2b_worker_fallback_budget.py tests/test_b2b_next_market_adapter.py
       - name: Real public B2B notice to ephemeral SQLite to signed-in scoring and tenant isolation
         timeout-minutes: 3
         run: python -B scripts/ci_ru_b2b_user_scoring.py

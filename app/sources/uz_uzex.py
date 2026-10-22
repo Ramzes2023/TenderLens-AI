@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from itertools import zip_longest
 import math
 import re
 
@@ -163,8 +164,14 @@ class UzbekistanUzexSource:
         output = []
         # Bound result size while representing both official open tenders and
         # best-offer selections, without fetching from hidden/private routes.
-        for row in zip(*series):
-            output.extend(row)
+        # The two official categories need not contain the same number of
+        # complete rows: a source-owned row with a missing buyer/title may be
+        # rejected within its own category. zip(*series) silently truncated
+        # every remaining valid notice in the longer category. Interleave
+        # using zip_longest so no independently validated original is lost.
+        # No synthetic placeholder is ever accepted as a procurement notice.
+        for pair in zip_longest(*series):
+            output.extend(notice for notice in pair if notice is not None)
             if len(output) >= requested:
                 return output[:requested]
         return output[:requested]

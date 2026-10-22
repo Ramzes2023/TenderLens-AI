@@ -111,3 +111,47 @@ class OfficialUzexContracts(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_uneven_live_uzex_categories_preserve_every_verified_notice(monkeypatch):
+    """Synthetic official responses: type 1 has one notice, type 2 has three."""
+    import asyncio
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    import app.sources.uz_uzex as adapter
+
+    first = dict(FIRST)
+    selections = [
+        dict(FIRST, id=512029 + i, type_id=2, display_no=str(26110012512029 + i))
+        for i in range(3)
+    ]
+    seen = []
+
+    class Client:
+        async def post(self, url, *, json, headers):
+            assert url == adapter.API_URL
+            assert headers["Accept"] == "application/json"
+            kind = json["TypeId"]
+            seen.append(kind)
+            rows = [first] if kind == 1 else selections
+            return SimpleNamespace(
+                content=b"official-public-JSON",
+                headers={"content-type": "application/json"},
+                json=lambda: rows,
+                raise_for_status=lambda: None,
+            )
+
+    @asynccontextmanager
+    async def fake_client(**kwargs):
+        assert kwargs["trust_env"] is False
+        assert kwargs["follow_redirects"] is False
+        yield Client()
+
+    monkeypatch.setattr(adapter, "source_client", fake_client)
+    records = asyncio.run(adapter.UzbekistanUzexSource()._fetch(4))
+    assert seen == [1, 2]  # both real categories fetched, neither bypassed
+    assert [record.external_id for record in records] == [
+        "1-510591", "2-512029", "2-512030", "2-512031",
+    ]
+    assert all(record.title and record.customer and record.url.startswith(adapter.DETAIL_PREFIX)
+               for record in records)

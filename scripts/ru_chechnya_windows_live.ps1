@@ -60,6 +60,7 @@ $pythonCandidates = @(
 # Reject the Windows Store App Execution Alias: Get-Command python can resolve
 # python.exe even when there is no installed interpreter behind it.
 $python = $null
+$pythonArgs = @()
 foreach ($candidate in $pythonCandidates) {
     if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
     & $candidate -c 'import sys; sys.exit(0 if sys.version_info[:2] == (3, 12) else 1)' 2>$null
@@ -81,7 +82,6 @@ if (-not $python) {
 if (-not $python) {
     throw 'Python 3.12 not found. Install Python 3.12, create .venv or venv, then rerun. Windows Store python.exe alias is not an interpreter.'
 }
-if (-not $pythonArgs) { $pythonArgs = @() }
 & $python @pythonArgs -c 'import sys; assert sys.version_info[:2] == (3, 12), "VALYQON requires Python 3.12"'
 if ($LASTEXITCODE -ne 0) {
     throw 'Use Python 3.12 from the VALYQON project environment.'

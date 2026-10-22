@@ -698,6 +698,7 @@ def test_strict_acceptance_full_offline_worker_sqlite_query_local_alert(monkeypa
     result = harness.accept()
     assert sent == ["/epz/order/extendedsearch/rss.html"]
     assert result["official_live_eis_region_notices"] == 1
+    assert result["official_eis_notice_numbers"] == ["0194200000526005027"]
     assert result["fenced_worker_inserted"] == 1
     assert result["sqlite_original_number_query"]
     assert result["sqlite_real_title_keyword_query"]

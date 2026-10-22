@@ -107,3 +107,39 @@ def test_discovery_does_not_count_transport_errors_as_complete_details(monkeypat
     assert report["checked_details"] == 2
     assert report["detail_network_errors"] == {"ConnectionResetError": 2}
     assert not report["rejected_details"]
+
+
+def test_auth_and_tls_failure_cannot_hide_behind_valid_card(monkeypatch):
+    from urllib.error import HTTPError, URLError
+    import ssl
+    import scripts.ci_cis_az_heat_live_discovery as mod
+
+    first, second = extract_index(listing())
+    for failure in (HTTPError(second, 429, "limited", None, None),
+                    HTTPError(second, 401, "unauthorized", None, None),
+                    URLError(ssl.SSLCertVerificationError("certificate invalid"))):
+        def scripted(url, opener):
+            if url == first:
+                return details()
+            raise failure
+        monkeypatch.setattr(mod, "fetch", scripted)
+        report = mod.check_linked_details((first, second), object())
+        assert report["complete_details"] == 1
+        assert report["blocking_detail_errors"] == 1
+        assert not (report["complete_details"] >= 1 and report["blocking_detail_errors"] == 0)
+
+
+def test_removed_public_card_is_excluded_without_blocking_verified_neighbor(monkeypatch):
+    from urllib.error import HTTPError
+    import scripts.ci_cis_az_heat_live_discovery as mod
+
+    first, second = extract_index(listing())
+    def scripted(url, opener):
+        if url == first:
+            return details()
+        raise HTTPError(url, 410, "gone", None, None)
+    monkeypatch.setattr(mod, "fetch", scripted)
+    report = mod.check_linked_details((first, second), object())
+    assert report["complete_details"] == 1
+    assert report["blocking_detail_errors"] == 0
+    assert report["detail_http_errors"]["410"] == 1

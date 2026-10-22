@@ -86,6 +86,12 @@ async def _manual_regional_worker_sql_search(service, source_catalog, owner_id):
     if not regional:
         return await service.fetch_matches_from_catalog(source_catalog, owner_id)
 
+    # Explicit Worker-SQL mode may NEVER silently downgrade to on-demand
+    # network fetching, even if a caller supplied a live source catalog.
+    from app.sources.snapshots import FreshIngushetiaWorkerSource
+    if any(not isinstance(source_catalog.registry.get(key).source, FreshIngushetiaWorkerSource)
+           for key in regional):
+        raise SourceError("Ingushetia Worker-SQL catalog was not installed")
     others = tuple(k for k in enabled if k not in _SHARED_INGUSHETIA_KEYS)
     profile = await service.profile_for_owner(owner_id)
     regional_matches, regional_report = await service.fetch_matches_from_catalog_for_profile(

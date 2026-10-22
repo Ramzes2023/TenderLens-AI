@@ -158,7 +158,7 @@ class OpportunityRepository:
         if not_before is not None:
             if (not isinstance(not_before, datetime)
                     or not_before.tzinfo is None
-                    or not_before.utcoffset() == timezone.utc.utcoffset(None)):
+                    or not_before.utcoffset() != timezone.utc.utcoffset(None)):
                 raise ValueError('UTC-aware snapshot cutoff required')
             not_before = not_before.astimezone(timezone.utc).isoformat()
         # Bounded local snapshot candidate pool; filtering does not send profile data upstream.

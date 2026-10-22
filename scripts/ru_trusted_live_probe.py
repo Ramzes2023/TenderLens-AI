@@ -154,7 +154,14 @@ def read_public(target: Target) -> tuple[str, bytes]:
 
 def describe(mode: str, payload: bytes) -> dict[str, int]:
     if mode == "rss":
+        # Even a real HTTP 200 must not qualify a DTD, entity or login XML
+        # document as the official public procurement RSS/Atom channel.
+        upper = payload.upper()
+        if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
+            raise ValueError("Untrusted RSS document declaration")
         root = ET.fromstring(payload)
+        if root.tag not in {"rss", "{http://www.w3.org/2005/Atom}feed"}:
+            raise ValueError("Not an RSS or Atom feed")
         return {"rss_items": len(root.findall("./channel/item")), "atom_items": len(root.findall("{http://www.w3.org/2005/Atom}entry"))}
     raw = payload.decode("utf-8-sig", "replace")
     return {

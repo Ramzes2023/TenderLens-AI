@@ -1,0 +1,86 @@
+name: RU GPB independent official tenders daily worker and tenant proof
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/ru-gpb-firstparty-daily-live.yml
+      - tests/test_ru_gpb_daily_health.py
+  push:
+    branches: [ci/ru-gpb-firstparty-worker-health-20261018]
+    paths:
+      - .github/workflows/ru-gpb-firstparty-daily-live.yml
+      - tests/test_ru_gpb_daily_health.py
+permissions:
+  contents: read
+concurrency:
+  group: ru-gpb-firstparty-live-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: false
+jobs:
+  gpb-daily-health-offline-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install PyYAML pytest
+      - name: Source adapter, genuine Worker and denied cross-tenant access remain mandatory
+        run: python -m pytest -q tests/test_ru_gpb_daily_health.py
+  gpb-firstparty-live-worker-and-tenant:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Official original detail through durable lease to disposable SQLite and keyword search
+        timeout-minutes: 5
+        run: python -B -m scripts.ci_ru_gpb_public_worker
+      - name: Stored actual first-party GPB tenders reach authorized tenant scoring, not foreign tenant
+        timeout-minutes: 5
+        run: python -B -m scripts.ci_ru_gpb_authenticated
+  gpb-official-public-http-diagnostic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read two fixed first-party public URLs without redirects, TLS bypass or proxy
+        shell: bash
+        run: |
+          set -euo pipefail
+          for endpoint in legacy-list current-list; do
+            case "$endpoint" in
+              legacy-list) url="https://etpgpb.ru/procedures/" ;;
+              current-list) url="https://new.etpgpb.ru/procedures/" ;;
+              *) exit 2 ;;
+            esac
+            result="$(curl --noproxy '*' --silent --show-error --proto '=https' \
+              --max-redirs 0 --connect-timeout 8 --max-time 20 --output /dev/null \
+              --write-out '%{http_code}' "$url")" && rc=0 || rc=$?
+            echo "GPB_DIAGNOSTIC_$endpoint HTTP=$result CURL_EXIT=$rc"
+          done
+          # Inspect an advertised redirect target only as structured
+          # metadata; never follow it or print untrusted query/userinfo.
+          destination="$(curl --noproxy '*' --silent --show-error --proto '=https' \
+            --max-redirs 0 --connect-timeout 8 --max-time 20 --output /dev/null \
+            --write-out '%{redirect_url}' 'https://new.etpgpb.ru/procedures/')" && rc=0 || rc=$?
+          python3 - "$destination" "$rc" <<'PY'
+          import sys
+          from urllib.parse import urlsplit
+          u = urlsplit(sys.argv[1])
+          allowed = {'etpgpb.ru', 'new.etpgpb.ru', 'www.etpgpb.ru'}
+          print('GPB_REDIRECT_HOST=' + (u.hostname if u.hostname in allowed else 'UNAPPROVED_OR_EMPTY'))
+          print('GPB_REDIRECT_PATH=' + (u.path if u.hostname in allowed and len(u.path) < 128 else 'REDACTED'))
+          print('GPB_REDIRECT_CURL_EXIT=' + sys.argv[2])
+          PY
+          echo 'GPB_DIAGNOSTIC_ONLY=YES'
+          echo 'PRODUCTION_CHANGED=NO'

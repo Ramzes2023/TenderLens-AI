@@ -101,15 +101,16 @@ class ProbeSafetyTests(unittest.TestCase):
             self.assertEqual(url.scheme, "https")
             self.assertFalse(url.username or url.password or url.query or url.fragment)
 
-    def test_three_operator_only_official_gpb_targets_do_not_expand_batch(self):
+    def test_four_operator_only_official_gpb_targets_do_not_expand_batch(self):
         self.assertEqual(len(TARGETS), 37)
         self.assertEqual(ON_DEMAND_TARGETS, {
             "gpb_public_html": Target("etpgpb.ru", "/procedures/"),
             "gpb_new_public_html": Target("new.etpgpb.ru", "/procedures/"),
             "gpb_new_rss": Target("new.etpgpb.ru", "/procedures.rss", "rss"),
+            "gpb_gos44_html": Target("gos.etpgpb.ru", "/44/catalog/procedure"),
         })
         self.assertFalse(set(TARGETS).intersection(ON_DEMAND_TARGETS))
-        self.assertEqual(len({(z.host, z.path) for z in ON_DEMAND_TARGETS.values()}), 3)
+        self.assertEqual(len({(z.host, z.path) for z in ON_DEMAND_TARGETS.values()}), 4)
 
     def test_gpb_official_only_choice_does_not_use_user_supplied_urls(self):
         from contextlib import redirect_stdout

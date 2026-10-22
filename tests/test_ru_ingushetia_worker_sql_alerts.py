@@ -99,6 +99,11 @@ def test_fresh_sql_isolated_from_live_origin_and_read_only(tmp_path):
         assert [n.tender_number for n in asyncio.run(
             local.registry.get(EIS).source.for_search_terms(("оборудования",)).fetch()
         )] == [N1]
+        # Russian inflection is matched locally, not discarded by a raw SQL
+        # substring filter before the real profile matcher can run.
+        assert [n.tender_number for n in asyncio.run(
+            local.registry.get(EIS).source.for_search_terms(("оборудование",)).fetch()
+        )] == [N1]
         assert not asyncio.run(
             local.registry.get(EIS).source.for_search_terms(("неизвестно",)).fetch()
         )

@@ -1,0 +1,72 @@
+name: RU Roseltorg isolated first-party originals and Worker acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/roseltorg_public.py
+      - tests/test_ru_roseltorg_public.py
+      - scripts/ci_ru_roseltorg_real_worker.py
+      - scripts/ci_ru_roseltorg_authenticated.py
+      - scripts/ci_ru_roseltorg_safe_probe.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  roseltorg-offline-source-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Fail closed on forged listing, conflicting original identity and bad URLs
+        run: python -m pytest -q tests/test_ru_roseltorg_public.py
+
+  roseltorg-real-firstparty-to-leased-worker-sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require current publisher public list and verified detail through real Worker SQLite search
+        timeout-minutes: 6
+        run: python -B -m scripts.ci_ru_roseltorg_real_worker
+
+  roseltorg-real-user-tenant-scoring:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require current verified publisher detail and authenticated tenant-isolated user query
+        timeout-minutes: 6
+        run: python -B -m scripts.ci_ru_roseltorg_authenticated
+
+  roseltorg-public-transport-observation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Only first-party HTTPS and independently verified originals may pass
+        timeout-minutes: 5
+        run: python -B -m scripts.ci_ru_roseltorg_safe_probe

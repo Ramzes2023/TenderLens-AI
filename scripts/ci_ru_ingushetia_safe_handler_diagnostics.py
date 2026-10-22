@@ -73,6 +73,7 @@ class DiagnosticConnectorHandler:
         self.handler = handler
         self.failure_classes = []
         self.failure_categories = []
+        self.failure_errno_sets = []
 
     def __call__(self, context, payload):
         try:
@@ -81,6 +82,15 @@ class DiagnosticConnectorHandler:
             name = type(error).__name__
             self.failure_classes.append(name if name in _ALLOWED else "OTHER")
             self.failure_categories.append(safe_handler_failure_category(error))
+            # OS errno is a fixed numeric API field, unlike raw exception
+            # strings, IPs, hostnames, headers or upstream responses. Enforce
+            # a small finite range; do not print traceback or exception text.
+            upstream = getattr(error, "__context__", None)
+            report = transport_failure(upstream) if upstream is not None else {}
+            codes = report.get("os_error_numbers", ())
+            self.failure_errno_sets.append(tuple(
+                x for x in codes[:4] if type(x) is int and 0 <= x <= 100000
+            ))
             raise
 
 
@@ -90,3 +100,10 @@ def safe_handler_failure_classes(handler):
 
 def safe_handler_failure_categories(handler):
     return sanitize_failure_categories(handler.failure_categories)
+
+
+def safe_handler_failure_errnos(handler):
+    """Return at most three redacted numeric OS errno tuples, not error text."""
+    return tuple(tuple(code for code in group[:4]
+                       if type(code) is int and 0 <= code <= 100000)
+                 for group in handler.failure_errno_sets[-3:])

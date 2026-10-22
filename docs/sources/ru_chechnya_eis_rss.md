@@ -18,6 +18,20 @@ Status: **draft; production disabled; no verified live delivery** until all chec
 5. **Before merge, use the trusted Windows runner/host (supported):** from the exact Chechnya feature branch, execute `powershell -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\ru_chechnya_windows_live.ps1 -RegionalRssUrl '<full RSS URL copied from the official UI>'`. The launcher forces direct HTTPS, trusted Windows server-auth certificates, local offline tests and the isolated strict EIS → leased Worker → disposable SQLite → original-number and keyword searches → LOCAL alert capture and replay dedup. It restores inherited process environment variables and does not mutate production. `PASS_LOCAL_ONLY` does **not** mean Telegram Bot API delivery. No custom certificate installation or TLS bypass is performed by this script.
 6. **Workflow-dispatch limitation:** GitHub requires a `workflow_dispatch` workflow file on the repository **default branch**. While this workflow exists **only in PR #236**, its manual Run button is not a reliable pre-merge acceptance path. Do **not** merge the source just to expose that button. After an independently verified merge, the manual GitHub workflow may be used for subsequent rechecks on an approved RU runner with vetted `VALYQON_RU_EIS_CA_BUNDLE_FILE` trust. PR-triggered GitHub-hosted `chechnya-offline-contracts` is never live acceptance.
 
+## Опциональная проверка без ручного копирования RSS
+
+До подтверждения точного регионального фильтра ЕИС оператор может выполнить на Windows, находясь в ветке PR #236:
+
+```powershell
+.\\scripts\\ru_chechnya_windows_live.ps1 -TryOfficialSearchCandidate
+```
+
+Это **только кандидат** стандартного RSS-запроса ЕИС по тексту «Чеченская Республика» и 44-ФЗ, а **не** подтверждённый региональный RSS-фильтр из интерфейса сайта. Запрос не делает результаты «чеченскими» автоматически: каждый принятый номер должен иметь официальную карточку 44-ФЗ и независимое доказательство заказчика/региона в извещении. При отсутствии таких данных проверка завершится ошибкой.
+
+Если строгая Worker-приёмка завершится неуспешно, Windows-скрипт автоматически запускает отдельную read-only проверку `python -B -m scripts.ru_chechnya_eis_transport_probe`, которая не отключает TLS и выводит **только** безопасную причину (`DNS_RESOLUTION_FAILED`, `TLS_CERTIFICATE_OR_HANDSHAKE`, `TIMEOUT`, `HTTP_403`, `INVALID_RSS_OR_LAW`, `VALID_FEED_NO_CHECHNYA_EVIDENCE` и т. п.). Ни URL, ни описание закупки не печатаются. Диагностика **не** является доказательством Worker или доставки в Telegram.
+
+При успешной приёмке одна и та же закупка, даже при изменении RSS GUID, должна сохранять ключ `ru_chechnya_eis/<реестровый номер 44-ФЗ>`; соответствующий ключ в блоке публичного provenance обновляется вместе с идентификатором.
+
 ## Merge gate — all of the following
 
 - PR tests and all required repository checks green on the current head commit.
@@ -39,3 +53,4 @@ No live feed, empty/ambiguous regional data, redirect, invalid CA, challenge, HT
 - `app/sources/ru_notice_identity.py`, `app/sources/ru_dedup.py`: original EIS duplicate handling
 - `scripts/ci_ru_chechnya_eis_real_worker.py`: strict real data → Worker → SQL → search → local alert acceptance
 - `scripts/ru_chechnya_windows_live.ps1`: opt-in Windows trusted-root execution of pre-merge live acceptance
+- `scripts/ru_chechnya_eis_transport_probe.py`: official RSS safe network error categories and regional evidence count

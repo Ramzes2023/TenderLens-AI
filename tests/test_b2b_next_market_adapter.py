@@ -146,7 +146,7 @@ def test_two_official_unverified_html_responses_stay_red_without_third_request(m
     assert calls == [B2B_CENTER_NEXT_LIST_URL] * 2
 
 
-def test_one_hostile_card_then_proven_original_ssr_retries_whole_batch(monkeypatch):
+def test_one_hostile_card_is_excluded_without_replaying_or_poisoning_verified_original(monkeypatch):
     import app.sources.b2b_center as adapter
     calls = []
     hostile = FIXTURE.replace(
@@ -161,9 +161,13 @@ def test_one_hostile_card_then_proven_original_ssr_retries_whole_batch(monkeypat
     monkeypatch.setattr(adapter, "source_client",
                         lambda **kwargs: source_client(**kwargs, transport=httpx.MockTransport(reply)))
     output = asyncio.run(B2BCenterSource().fetch())
-    assert len(output) == 2
-    assert all(x.url.startswith("https://www.b2b-center.ru/") for x in output)
-    assert calls == [B2B_CENTER_NEXT_LIST_URL] * 2
+    assert len(output) == 1
+    assert [x.tender_number for x in output] == ["4646888"]
+    assert all(x.url.startswith("https://www.b2b-center.ru/") and
+               x.origin == "first_party" for x in output)
+    # The second original was verified on the SAME genuine listing; a
+    # malicious card neither contaminates SQL nor triggers extra network I/O.
+    assert calls == [B2B_CENTER_NEXT_LIST_URL]
 
 
 def test_invalid_b2b_native_ssr_cards_alone_never_create_source_success():

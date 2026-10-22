@@ -5,6 +5,7 @@ Logs only stable classifications and record counts; never URLs or notice bodies.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import socket
 import ssl
@@ -13,8 +14,9 @@ import httpx
 
 from app.monitoring.config import load_monitoring_settings
 from app.sources.eis_rss import (
-    SourceError, eis_tls_verify, parse_eis_feed, verify_eis_feed_law,
+    SourceError, eis_client, eis_tls_verify, parse_eis_feed, verify_eis_feed_law,
 )
+from app.sources.http import ConnectorTransportError, source_client
 from app.sources.ru_chechnya_eis_rss import (
     SOURCE_KEY, is_chechnya_notice, select_verified_chechnya_originals,
     validate_chechnya_feed_urls,
@@ -36,6 +38,17 @@ def transport_category(error: BaseException) -> str:
         return "TLS_CERTIFICATE_OR_HANDSHAKE"
     if any(isinstance(item, socket.gaierror) for item in observed):
         return "DNS_RESOLUTION_FAILED"
+    if isinstance(error, ConnectorTransportError):
+        # The production bounded client intentionally redacts raw httpx error
+        # details (which can include query URL tokens).
+        return {
+            "tls_certificate": "TLS_CERTIFICATE_OR_HANDSHAKE",
+            "public_ip": "DNS_NONPUBLIC_IP_REJECTED",
+            "http_status": "HTTP_REJECTED",
+            "http_transient": "HTTP_TRANSIENT",
+            "response_size": "OVER_SIZE_LIMIT",
+            "network": "NETWORK_TRANSPORT_FAILED",
+        }.get(error.reason, "BOUNDED_TRANSPORT_REJECTED")
     if isinstance(error, httpx.TimeoutException):
         return "TIMEOUT"
     if isinstance(error, httpx.ConnectError):
@@ -47,7 +60,7 @@ def transport_category(error: BaseException) -> str:
     return "UNEXPECTED_ERROR"
 
 
-def run_probe() -> dict:
+async def _run_probe_async() -> dict:
     settings = load_monitoring_settings()
     if not settings.ru_chechnya_eis_enabled:
         raise ValueError("Explicit operator enable required")
@@ -60,27 +73,28 @@ def run_probe() -> dict:
         ca_bundle_file=settings.ca_bundle_file,
     )
     results = []
-    with httpx.Client(
+    # Use the exact same public-IP-pinned, byte-bounded, no-redirect HTTP
+    # client as the real EIS Worker. A generic httpx.Client may succeed or
+    # fail for different reasons and cannot establish Worker reachability.
+    async with eis_client(
+        source_client, direct=True,
         timeout=min(settings.request_timeout, 30),
         follow_redirects=False, trust_env=False,
         verify=trust, headers={"User-Agent": "TenderLensAI/0.9 (+RSS monitor)"},
     ) as client:
         for url in settings.ru_chechnya_eis_rss_urls:
-            # URL is validated against an exact official HTTPS RSS path.
-            with client.stream("GET", url) as response:
-                status = response.status_code
-                if status != 200:
-                    return {"state": "HTTP_" + str(status), "strict_tls": True}
-                payload = bytearray()
-                for chunk in response.iter_bytes():
-                    payload.extend(chunk)
-                    if len(payload) > MAX_RSS_BYTES:
-                        return {"state": "OVER_SIZE_LIMIT", "strict_tls": True}
-                if "html" in response.headers.get("content-type", "").lower():
-                    return {"state": "HTML_NOT_RSS", "strict_tls": True}
-                verify_eis_feed_law(bytes(payload), "44-FZ")
-                notices = parse_eis_feed(bytes(payload), source_name=SOURCE_KEY)
-                results.append({
+            response = await client.get(url)
+            status = response.status_code
+            if status != 200:
+                return {"state": "HTTP_" + str(status), "strict_tls": True}
+            payload = response.content
+            if len(payload) > MAX_RSS_BYTES:
+                return {"state": "OVER_SIZE_LIMIT", "strict_tls": True}
+            if "html" in response.headers.get("content-type", "").lower():
+                return {"state": "HTML_NOT_RSS", "strict_tls": True}
+            verify_eis_feed_law(payload, "44-FZ")
+            notices = parse_eis_feed(payload, source_name=SOURCE_KEY)
+            results.append({
                     "official_item_count": len(notices),
                     "regional_evidence_count": sum(
                         is_chechnya_notice(item) for item in notices
@@ -93,7 +107,7 @@ def run_probe() -> dict:
                             notices, limit=100,
                         )
                     ],
-                })
+            })
     regional = sum(item["regional_evidence_count"] for item in results)
     originals = set(
         number for result in results
@@ -110,6 +124,11 @@ def run_probe() -> dict:
         "worker_sqlite_verified": False,
         "telegram_delivery_verified": False,
     }
+
+
+def run_probe() -> dict:
+    """Synchronous isolated entrypoint; only the official EIS is contacted."""
+    return asyncio.run(_run_probe_async())
 
 
 def main() -> int:

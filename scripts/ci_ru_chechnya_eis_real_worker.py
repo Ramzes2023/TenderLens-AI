@@ -141,6 +141,29 @@ def accept():
                     for text in bot.messages for n in rows
                 ):
                     raise AssertionError("No original Chechnya notice reached local Telegram boundary")
+                # Check delivery dedup through the actual persisted monitoring
+                # repository, not only the Worker opportunity upsert. Every
+                # captured real EIS number must be marked seen for this user.
+                delivered = {
+                    n.tender_number for n in rows
+                    if any(("Номер: " + str(n.tender_number)) in text
+                           for text in bot.messages)
+                }
+                if not delivered:
+                    raise AssertionError("No original regional notice was captured")
+                replay, replay_report = await service.fetch_matches_from_catalog(
+                    catalog, 99101, source_keys=(SOURCE_KEY,),
+                )
+                if replay_report.failures or not replay_report.attempted_sources:
+                    raise AssertionError("Replay failed to read stored regional notices")
+                replay_numbers = {match.notice.tender_number for match in replay}
+                if not delivered.issubset(replay_numbers):
+                    raise AssertionError("Captured notice not discoverable on replay")
+                unclaimed = await service.unseen_matches(99101, replay)
+                if delivered.intersection(
+                    match.notice.tender_number for match in unclaimed
+                ):
+                    raise AssertionError("Local alert delivery dedup failed on replay")
                 return len(bot.messages)
 
             local_alerts = asyncio.run(local_notification())
@@ -152,6 +175,7 @@ def accept():
                 "unmatched_keyword_returns_none": True,
                 "dedup_on_replay": True,
                 "local_alert_captured": local_alerts,
+                "local_alert_replay_dedup_verified": True,
                 "real_telegram_api_delivery_verified": False,
                 "production_enabled": False,
             }

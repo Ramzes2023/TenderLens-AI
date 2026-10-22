@@ -284,3 +284,81 @@ def test_hourly_operator_queue_notice_remains_fresh_until_next_run_with_bounded_
         assert [n.tender_number for n in repo.read(EIS, limit=5)] == [N1]
     finally:
         db.close()
+
+
+def test_worker_sql_26th_candidate_reaches_subscriber_after_keyword_filter(tmp_path):
+    """Real local SQLite/monitor path; no external source or Telegram API.
+
+    Insert the ONLY matching record first, then 25 unrelated newer records:
+    a pre-tenant max_items=3 SQL/candidate slice would silently drop it.
+    """
+    from types import SimpleNamespace
+    from app.bot.monitoring import monitor_loop
+    from app.monitoring.repository import MonitoringRepository
+    from app.monitoring.service import TenderMonitorService
+    from app.scoring.models import CompanyProfile
+
+    db = Database(DatabaseSettings("ing-late-keyword", tmp_path / "stored.sqlite"))
+    store = OpportunityRepository(db)
+    store.initialize()
+    cfg = settings(
+        ru_ingushetia_fabrikant44_enabled=False,
+        max_items=3,
+        max_notifications_per_cycle=3,
+    )
+    mrepo = MonitoringRepository(tmp_path / "monitor.sqlite")
+    mrepo.initialize()
+    mrepo.set_subscription(101, 202, True)
+    profile = CompanyProfile(
+        profile_version="1", company_name="Drainage services",
+        search_keywords=["канализации"],
+        allowed_regions=["Ингушетия"],
+    )
+    service = TenderMonitorService(
+        cfg, None, mrepo, None,
+        profile_resolver=lambda owner: profile if owner == 101 else None,
+    )
+    stop = asyncio.Event()
+    ordinary_subscriptions = service.active_subscriptions
+
+    async def one_cycle():
+        stop.set()
+        return await ordinary_subscriptions()
+
+    service.active_subscriptions = one_cycle
+
+    class LocalBot:
+        def __init__(self):
+            self.calls = []
+
+        async def send_message(self, chat, body, **kwargs):
+            self.calls.append((chat, body))
+            return SimpleNamespace(message_id=len(self.calls),
+                                   chat=SimpleNamespace(id=chat))
+
+    matching = "0114500000826002599"
+    try:
+        store.upsert(notice(matching, title="Устройство ливневой канализации"),
+                     connector_version(EIS))
+        for index in range(25):
+            number = str(114500000826002500 + index).zfill(19)
+            store.upsert(notice(number, title="Поставка канцелярских товаров"),
+                         connector_version(EIS))
+
+        # A direct SQL source limit of three excludes the older matching ID.
+        assert matching not in {n.tender_number for n in store.read(EIS, limit=3)}
+
+        live_catalog = build_source_catalog(cfg)
+        stored_catalog = fresh_ingushetia_worker_catalog(live_catalog, store)
+        bot = LocalBot()
+        asyncio.run(monitor_loop(bot, service, stop, source_catalog=stored_catalog))
+        assert len(bot.calls) == 1
+        assert bot.calls[0][0] == 202
+        assert matching in bot.calls[0][1]
+        assert mrepo.seen(101, "eis_44", matching)
+
+        stop.clear()
+        asyncio.run(monitor_loop(bot, service, stop, source_catalog=stored_catalog))
+        assert len(bot.calls) == 1  # confirmed item is never resent
+    finally:
+        db.close()

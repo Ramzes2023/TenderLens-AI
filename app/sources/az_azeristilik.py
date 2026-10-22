@@ -193,7 +193,10 @@ class AzerbaijanHeatSource:
 
     async def fetch(self, limit=5):
         if _policy.get() is None:
-            with bounded_fetch(FetchPolicy(frozenset({HOST}), 1+MAX_DETAILS, max_bytes=MAX_BODY)):
+            with bounded_fetch(FetchPolicy(
+                frozenset({HOST}), 1+MAX_DETAILS, max_bytes=MAX_BODY,
+                allowed_http_errors=frozenset({403, 404, 410}),
+            )):
                 return await self._fetch(limit)
         return await self._fetch(limit)
 

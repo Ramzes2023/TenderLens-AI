@@ -108,3 +108,51 @@ def test_ci_handler_exception_telemetry_preserves_failure_and_redacts_strings():
     assert safe_handler_failure_classes(wrapper) == ("ValueError",)
     assert "SECRET" not in repr(safe_handler_failure_classes(wrapper))
     assert "private.invalid" not in repr(safe_handler_failure_classes(wrapper))
+
+
+def test_safe_ingushetia_handler_diagnoses_wrapped_network_cause_without_leaking_urls():
+    from app.jobs.worker import RetryableJobError
+    from app.sources.ingestion import ConnectorSyncHandler
+    from scripts.ci_ru_ingushetia_safe_handler_diagnostics import (
+        DiagnosticConnectorHandler, safe_handler_failure_classes,
+        safe_handler_failure_categories,
+    )
+
+    class RealExceptionShape:
+        def __call__(self, context, payload):
+            try:
+                raise httpx.ConnectTimeout("SECRET https://private.invalid/?token=ABC")
+            except httpx.ConnectTimeout:
+                raise RetryableJobError("SECRET-UPSTREAM-PAYLOAD") from None
+
+    wrapper = DiagnosticConnectorHandler(object.__new__(ConnectorSyncHandler))
+    wrapper.handler = RealExceptionShape()
+    with pytest.raises(RetryableJobError):
+        wrapper(None, None)
+    assert safe_handler_failure_classes(wrapper) == ("RetryableJobError",)
+    assert safe_handler_failure_categories(wrapper) == ("connection_or_tls_handshake_timeout",)
+    assert "SECRET" not in repr(safe_handler_failure_categories(wrapper))
+    assert "private.invalid" not in repr(safe_handler_failure_categories(wrapper))
+
+
+def test_safe_ingushetia_handler_categories_fail_closed_on_arbitrary_values():
+    from types import SimpleNamespace
+    from scripts.ci_ru_ingushetia_safe_handler_diagnostics import (
+        sanitize_failure_categories, safe_handler_failure_category,
+    )
+    from scripts.ci_ru_ingushetia_fabrikant_worker import IngushetiaWorkerProofFailure
+    from scripts.ci_ru_ingushetia_live_worker import IngushetiaEisWorkerFailure
+
+    kinds = ["response_read_timeout", "token=SECRET", "tls_certificate_verification"]
+    assert sanitize_failure_categories(kinds) == (
+        "response_read_timeout", "handler_other", "tls_certificate_verification",
+    )
+    assert safe_handler_failure_category(ValueError("https://private.invalid")) == "handler_other"
+    dummy = SimpleNamespace(state="failed", failure_code="handler_error")
+    for constructor in (IngushetiaWorkerProofFailure, IngushetiaEisWorkerFailure):
+        value = constructor(dummy, ("RetryableJobError",), kinds)
+        assert value.handler_failure_categories == (
+            "response_read_timeout", "handler_other", "tls_certificate_verification",
+        )
+        assert "SECRET" not in repr(value.handler_failure_categories)
+        assert "SECRET" not in str(value)

@@ -24,7 +24,7 @@ from app.sources.ru_chechnya_eis_rss import (
 
 URL = (
     "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html"
-    "?fz44=on&searchString=%D0%A7%D0%B5%D1%87%D0%B5%D0%BD%D1%81%D0%BA%D0%B0%D1%8F"
+    "?fz44=on&searchString=%D0%A7%D0%B5%D1%87%D0%B5%D0%BD%D1%81%D0%BA%D0%B0%D1%8F%20%D0%A0%D0%B5%D1%81%D0%BF%D1%83%D0%B1%D0%BB%D0%B8%D0%BA%D0%B0"
 )
 EIS_ORIGINAL = (
     "https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html"

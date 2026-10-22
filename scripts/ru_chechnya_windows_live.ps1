@@ -21,7 +21,7 @@ if ($TryOfficialSearchCandidate) {
         throw 'Use either a copied RegionalRssUrl or TryOfficialSearchCandidate, not both.'
     }
     $term = [Uri]::EscapeDataString('Чеченская Республика')
-    $RegionalRssUrl = "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&searchString=$term"
+    $RegionalRssUrl = "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?searchString=$term&morphology=on&pageNumber=1&fz44=on"
     Write-Host 'EIS_REGION_QUERY=UNVERIFIED_TEXT_SEARCH_CANDIDATE' -ForegroundColor Yellow
 }
 if (-not $RegionalRssUrl) {

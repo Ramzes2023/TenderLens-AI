@@ -359,19 +359,18 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService,
                         if service.settings.ru_background_catalog_enabled:
                             if share_ingushetia:
                                 profile = await service.profile_for_owner(subscription.owner_user_id)
-                                # The per-user bound applies AFTER tenant
-                                # keyword/region filtering, separately to each
-                                # source, preserving the previous per-source cap.
+                                # Filter the full bounded shared candidate pool
+                                # per tenant. DO NOT apply max_items yet: the
+                                # first max_items matches may all be marked seen,
+                                # while a later genuine regional original is new.
+                                # The per-source limit is enforced *after* the
+                                # nonmutating unseen check below. Nothing here
+                                # marks a notice sent before Telegram receipt.
                                 matches = []
-                                per_source = {}
                                 for notice in shared_notices:
-                                    count = per_source.get(notice.source, 0)
-                                    if count >= service.settings.max_items:
-                                        continue
                                     match = prefilter_notice(notice, profile)
                                     if match is not None:
                                         matches.append(match)
-                                        per_source[notice.source] = count + 1
                                 reports = [shared_report]
                                 if tenant_specific_keys:
                                     try:
@@ -436,6 +435,21 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService,
                         new_matches = await service.unseen_matches(
                             subscription.owner_user_id, matches,
                         )
+                        if share_ingushetia and service.settings.ru_background_catalog_enabled:
+                            # Bound only regionally shared sources *after*
+                            # dedup/seen filtering. Other tenant-personalized
+                            # sources already carry their original fetch cap.
+                            unseen_per_source = {}
+                            bounded = []
+                            for match in new_matches:
+                                source = match.notice.source
+                                if source in regional_keys:
+                                    count = unseen_per_source.get(source, 0)
+                                    if count >= service.settings.max_items:
+                                        continue
+                                    unseen_per_source[source] = count + 1
+                                bounded.append(match)
+                            new_matches = bounded
                         for match in new_matches[:service.settings.max_notifications_per_cycle]:
                             receipt = await bot.send_message(
                                 subscription.chat_id,

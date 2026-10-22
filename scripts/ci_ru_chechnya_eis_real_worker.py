@@ -102,7 +102,7 @@ def accept():
                 raise AssertionError("No usable published title keyword")
             term = terms[0]
             snapshot = snapshot_catalog(catalog, store)
-            for query in (first.external_id, term):
+            for query in (first.tender_number, term):
                 report = asyncio.run(snapshot.fetch(
                     source_keys=(SOURCE_KEY,), search_terms=(query,), limit_per_source=5,
                 ))

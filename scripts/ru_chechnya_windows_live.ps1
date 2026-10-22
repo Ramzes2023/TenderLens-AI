@@ -9,7 +9,8 @@
 param(
     [string]$RegionalRssUrl,
     [switch]$TryOfficialSearchCandidate,
-    [switch]$SendAuthorizedTelegramTest
+    [switch]$SendAuthorizedTelegramTest,
+    [switch]$ValidateUrlOnly
 )
 
 # A conservative official EIS search-form shape from the existing EIS adapter.
@@ -21,7 +22,7 @@ if ($TryOfficialSearchCandidate) {
         throw 'Use either a copied RegionalRssUrl or TryOfficialSearchCandidate, not both.'
     }
     $term = [Uri]::EscapeDataString('Чеченская Республика')
-    $RegionalRssUrl = "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?searchString=$term&morphology=on&pageNumber=1&fz44=on"
+    $RegionalRssUrl = "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?searchString=${term}&morphology=on&pageNumber=1&fz44=on"
     Write-Host 'EIS_REGION_QUERY=UNVERIFIED_TEXT_SEARCH_CANDIDATE' -ForegroundColor Yellow
 }
 if (-not $RegionalRssUrl) {
@@ -35,17 +36,6 @@ $expectedBranch = 'feat/ru-chechnya-eis-rss-20261022'
 $branch = (& git -C $repo branch --show-current).Trim()
 if ($LASTEXITCODE -ne 0 -or $branch -ne $expectedBranch) {
     throw "Check out $expectedBranch before live acceptance; refusing to test another branch."
-}
-
-try {
-    $parsed = [uri]$RegionalRssUrl
-} catch {
-    throw 'RegionalRssUrl must be a full official HTTPS EIS RSS URL.'
-}
-if ($parsed.Scheme -ne 'https' -or $parsed.Host -ne 'zakupki.gov.ru' -or
-    $parsed.AbsolutePath -notin @('/epz/order/extendedsearch/rss.html', '/epz/order/extendedsearch/rss') -or
-    -not $parsed.Query) {
-    throw 'Only the exact official EIS 44-FZ RSS endpoint is allowed.'
 }
 
 # Prefer the project's pinned Python environment before an unrelated
@@ -85,6 +75,32 @@ if (-not $python) {
 & $python @pythonArgs -c 'import sys; assert sys.version_info[:2] == (3, 12), "VALYQON requires Python 3.12"'
 if ($LASTEXITCODE -ne 0) {
     throw 'Use Python 3.12 from the VALYQON project environment.'
+}
+
+# One source of truth for EIS URL validation. The old PowerShell [uri]
+# precheck rejected an automatically generated official RSS candidate on a
+# real operator's Windows PowerShell, before any source/network test ran.
+# Keep the actual app-level strict HTTPS host, RSS route, 44-FZ and Chechnya
+# scope checks; never open an arbitrary URL or disable TLS verification.
+$previousCandidate = [Environment]::GetEnvironmentVariable('VALYQON_CHECHNYA_URL_VALIDATE', 'Process')
+try {
+    [Environment]::SetEnvironmentVariable('VALYQON_CHECHNYA_URL_VALIDATE', $RegionalRssUrl, 'Process')
+    $urlValidation = @'
+import os
+from app.sources.ru_chechnya_eis_rss import validate_chechnya_feed_urls
+validate_chechnya_feed_urls((os.environ["VALYQON_CHECHNYA_URL_VALIDATE"],))
+'@
+    & $python @pythonArgs -c $urlValidation 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Official Chechnya RSS URL rejected: required HTTPS zakupki.gov.ru, allowlisted RSS path, 44-FZ and Chechnya scope.'
+    }
+} finally {
+    [Environment]::SetEnvironmentVariable('VALYQON_CHECHNYA_URL_VALIDATE', $previousCandidate, 'Process')
+}
+Write-Host 'CHECHNYA_EIS_OFFICIAL_URL=VALIDATED' -ForegroundColor Green
+if ($ValidateUrlOnly) {
+    Write-Host 'CHECHNYA_URL_SMOKE=PASS_NO_NETWORK' -ForegroundColor Green
+    return
 }
 $envOverride = @{
     'RU_CHECHNYA_EIS_ENABLED' = 'true'

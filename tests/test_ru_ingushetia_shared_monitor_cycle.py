@@ -73,7 +73,8 @@ class FakeService:
             success = ()
             failed = ("ru_ingushetia_eis44", "ru_ingushetia_fabrikant44")
         else:
-            matches = [MonitorMatch(n, ("no prefilter",)) for n in self.notices]
+            matches = [MonitorMatch(n, ("no prefilter",)) for n in self.notices
+                       if n.source in source_keys]
             success = tuple(source_keys)
             failed = ()
         report = SimpleNamespace(
@@ -155,8 +156,10 @@ def test_mixed_profile_specific_eis_keeps_per_owner_upstream_search():
             ("per_user", 1, ("eis",)),
             ("per_user", 2, ("eis",)),
         ]
-        assert len(bot.sent) == 2
-        assert {chat_id for chat_id, _ in bot.sent} == {11, 22}
+        # Only the fixed EIS branch is enabled. Fabrikant notices from
+        # the synthetic pool must never leak through a disabled source.
+        assert len(bot.sent) == 1
+        assert bot.sent[0][0] == 22 and IDS[1] in bot.sent[0][1]
     asyncio.run(run())
 
 

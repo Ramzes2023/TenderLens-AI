@@ -39,7 +39,6 @@ def test_official_ssr_html_extracts_actual_fields_without_guessing_timezone():
     b'//www.b2b-center.ru/app/market-next/slug/tender-4646931/',
     b'/app/market-next/slug/tender-4646931/?token=1',
     b'/app/market-next/slug/tender-4646931/#evil',
-    b'/app/market-next/slug/tender-4646932/',
     b'/app/market-next/slug/tender-4646931/#btid=2&sqh=abcd&tsid=4646931458',
 ])
 def test_unapproved_number_and_provenance_excludes_only_that_card(replacement):
@@ -200,3 +199,10 @@ def test_two_publisher_valid_links_disagreeing_on_number_remain_hard_error():
     )
     with pytest.raises(SourceError, match='conflicting SSR identity'):
         parse_next_market(FIXTURE.replace(first, conflicting, 1))
+
+
+def test_number_link_valid_origin_but_wrong_native_id_is_hard_failure():
+    correct = b'/app/market-next/postavka-smennogo-burovogo-instrumenta-i-osnastki-dlia-nuzhd/tender-4646931/#btid=2&amp;sqh=77d89240a1e0f4efb423b256d22182d01f8b6c4f&amp;tsid=4646931458'
+    forged = b'/app/market-next/slug/tender-4646932/'
+    with pytest.raises(SourceError, match='conflicting SSR identity'):
+        parse_next_market(FIXTURE.replace(correct, forged, 1))

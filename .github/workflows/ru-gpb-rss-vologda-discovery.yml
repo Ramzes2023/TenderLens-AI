@@ -1,0 +1,40 @@
+name: RU official GPB RSS and Vologda public small procurement live discovery
+on:
+  push:
+    branches: [research/ru-gpb-rss-vologda-public-20261017]
+    paths:
+      - scripts/research_ru_official_rss.py
+      - .github/workflows/ru-gpb-rss-vologda-discovery.yml
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  official-gpb-rss-source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Official Gazprombank ETP RSS plus two independent real detail pages
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_official_rss gpb
+  official-vologda-public-detail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Official Vologda public list UUIDs and strict detail HTML
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_official_rss vologda

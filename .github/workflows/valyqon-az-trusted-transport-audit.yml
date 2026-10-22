@@ -60,7 +60,8 @@ jobs:
                 6) result="DNS_FAILED" ;;
                 7) result="CONNECT_FAILED" ;;
                 28) result="TIMEOUT" ;;
-                35|51|60) result="TLS_FAILED" ;;
+                35) result="TLS_HANDSHAKE_FAILED" ;;
+                51|60) result="TLS_CERTIFICATE_VERIFICATION_FAILED" ;;
                 63) result="RESPONSE_OVERSIZE" ;;
                 *) result="OTHER_NETWORK_ERROR" ;;
               esac
@@ -123,7 +124,8 @@ jobs:
                 6) result="DNS_FAILED" ;;
                 7) result="CONNECT_FAILED" ;;
                 28) result="TIMEOUT" ;;
-                35|51|60) result="TLS_FAILED" ;;
+                35) result="TLS_HANDSHAKE_FAILED" ;;
+                51|60) result="TLS_CERTIFICATE_VERIFICATION_FAILED" ;;
                 63) result="RESPONSE_OVERSIZE" ;;
                 *) result="OTHER_NETWORK_ERROR" ;;
               esac

@@ -1,0 +1,54 @@
+name: Ingushetia manually authorized test Telegram receipt (pinned code)
+
+# Standalone workflow on default branch is needed for workflow_dispatch.
+# No automatic triggers, no customer/production credentials, and no source enable.
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type SEND_ONE_TEST_MESSAGE to authorize one diagnostic Telegram message to the dedicated test chat"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: valyqon-ingushetia-manual-telegram-pinned-test
+  cancel-in-progress: false
+
+jobs:
+  dedicated-test-chat-only:
+    # The repository owner must manually start a default-branch run.
+    # No fork/PR, schedule, workflow_call or ordinary push can send messages.
+    if: ${{ github.repository == 'Ramzes2023/TenderLens-AI' && github.actor == 'Ramzes2023' && github.ref == 'refs/heads/main' && inputs.confirmation == 'SEND_ONE_TEST_MESSAGE' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Checkout immutable reviewed test harness, never moving PR HEAD
+        uses: actions/checkout@v4
+        with:
+          ref: da06c174f5b3178a46555152b5e8dbddaf4bc503
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependencies from pinned reviewed revision
+        run: python -m pip install -r requirements-dev.txt
+      - name: Offline security and no-delivery-by-default tests
+        run: python -m pytest -q tests/test_ru_ingushetia_telegram_test.py
+      - name: Exactly one explicit test-only Bot API send
+        shell: bash
+        env:
+          TEST_TELEGRAM_SEND_AUTHORIZED: YES_TEST_CHAT_ONLY
+          TEST_TELEGRAM_BOT_TOKEN: ${{ secrets.VALYQON_INGUSHETIA_TEST_BOT_TOKEN }}
+          TEST_TELEGRAM_BOT_ID: ${{ vars.VALYQON_INGUSHETIA_TEST_BOT_ID }}
+          TEST_TELEGRAM_CHAT_ID: ${{ secrets.VALYQON_INGUSHETIA_TEST_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          # Never echo the test token or recipient ID. No production fallbacks.
+          if [[ -z "$TEST_TELEGRAM_BOT_TOKEN" || -z "$TEST_TELEGRAM_BOT_ID" || -z "$TEST_TELEGRAM_CHAT_ID" ]]; then
+            echo "BLOCKED: dedicated test-only Bot API configuration is missing. No message sent."
+            exit 2
+          fi
+          python -B -m scripts.ru_ingushetia_telegram_test --send --confirm-test-chat "$TEST_TELEGRAM_CHAT_ID"

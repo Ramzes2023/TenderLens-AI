@@ -154,3 +154,66 @@ def test_future_worker_observation_and_naive_cutoff_fail_closed(tmp_path):
             repo.read(EIS, not_before=datetime.now())
     finally:
         db.close()
+
+
+def test_fresh_worker_sql_reaches_per_chat_monitor_only_after_valid_bot_ack(tmp_path):
+    """Offline production-component chain: Worker SQL -> profile -> receipt -> seen."""
+    from types import SimpleNamespace
+    from app.bot.monitoring import monitor_loop
+    from app.monitoring.repository import MonitoringRepository
+    from app.monitoring.service import TenderMonitorService
+    from app.scoring.models import CompanyProfile
+
+    db = Database(DatabaseSettings("ing-bot-chain", tmp_path / "stored.sqlite"))
+    store = OpportunityRepository(db)
+    store.initialize()
+    profile = CompanyProfile(
+        profile_version="1", company_name="Medical buyer",
+        search_keywords=["оборудования"], allowed_regions=["Ингушетия"],
+    )
+    mrepo = MonitoringRepository(tmp_path / "ack.sqlite")
+    mrepo.initialize()
+    mrepo.set_subscription(101, 5001, True)
+    cfg = settings(ru_ingushetia_fabrikant44_enabled=False)
+    live_catalog = build_source_catalog(cfg)
+    stored_catalog = fresh_ingushetia_worker_catalog(live_catalog, store)
+    service = TenderMonitorService(
+        cfg, None, mrepo, None,
+        profile_resolver=lambda uid: profile if uid == 101 else None,
+    )
+    stop = asyncio.Event()
+    active = service.active_subscriptions
+
+    async def cycle():
+        stop.set()  # Complete exactly one normal monitoring iteration.
+        return await active()
+    service.active_subscriptions = cycle
+
+    class Bot:
+        def __init__(self):
+            self.calls = []
+        async def send_message(self, chat, message, **kwargs):
+            self.calls.append((chat, message))
+            if len(self.calls) == 1:
+                # First bot response is for the WRONG chat: no SQL seen claim.
+                return SimpleNamespace(message_id=42, chat=SimpleNamespace(id=9999))
+            return SimpleNamespace(message_id=43, chat=SimpleNamespace(id=chat))
+
+    try:
+        store.upsert(notice(N1), connector_version(EIS))
+        bot = Bot()
+        asyncio.run(monitor_loop(bot, service, stop, source_catalog=stored_catalog))
+        assert len(bot.calls) == 1
+        assert bot.calls[0][0] == 5001 and N1 in bot.calls[0][1]
+        assert not mrepo.seen(101, "eis_44", N1)
+
+        stop.clear()
+        asyncio.run(monitor_loop(bot, service, stop, source_catalog=stored_catalog))
+        assert len(bot.calls) == 2
+        assert mrepo.seen(101, "eis_44", N1)
+
+        stop.clear()
+        asyncio.run(monitor_loop(bot, service, stop, source_catalog=stored_catalog))
+        assert len(bot.calls) == 2  # Cross-cycle repeat never duplicates a receipt.
+    finally:
+        db.close()

@@ -152,7 +152,7 @@ def accept():
                 if not delivered:
                     raise AssertionError("No original regional notice was captured")
                 replay, replay_report = await service.fetch_matches_from_catalog(
-                    catalog, 99101, source_keys=(SOURCE_KEY,),
+                    snapshot, 99101, source_keys=(SOURCE_KEY,),
                 )
                 if replay_report.failures or not replay_report.attempted_sources:
                     raise AssertionError("Replay failed to read stored regional notices")

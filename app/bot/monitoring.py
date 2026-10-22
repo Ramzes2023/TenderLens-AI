@@ -276,6 +276,23 @@ async def monitor_status_handler(message: Message, monitoring_service: TenderMon
     )
 
 
+def _require_telegram_delivery_ack(response, chat_id: int) -> None:
+    """Fail closed before marking a notice as seen.
+
+    An awaited API call that returns no message, an invalid message ID, or
+    confirmation for a different chat is not a verified send. Exception
+    details are never exposed to logs, and the next monitoring cycle can
+    retry the unchanged original notice.
+    """
+    message_id = getattr(response, "message_id", None)
+    chat = getattr(response, "chat", None)
+    returned_chat_id = getattr(chat, "id", None)
+    if (type(message_id) is not int or message_id <= 0
+            or type(returned_chat_id) is not int
+            or returned_chat_id != chat_id):
+        raise ValueError("Telegram message acknowledgement invalid")
+
+
 async def monitor_loop(bot: Bot, service: TenderMonitorService,
                        stop_event: asyncio.Event, source_catalog: SourceCatalog | None = None) -> None:
     """Periodic source check. Russian catalog scanning is operator opt-in."""
@@ -317,11 +334,12 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService,
                             subscription.owner_user_id, matches,
                         )
                         for match in new_matches[:service.settings.max_notifications_per_cycle]:
-                            await bot.send_message(
+                            receipt = await bot.send_message(
                                 subscription.chat_id,
                                 "🆕 НОВАЯ ЗАКУПКА\n\n" + format_match(match),
                                 disable_web_page_preview=True,
                             )
+                            _require_telegram_delivery_ack(receipt, subscription.chat_id)
                             # Mark only after Telegram confirms delivery; a
                             # failed send must be retryable on the next cycle.
                             await service.claim_new(subscription.owner_user_id, [match])

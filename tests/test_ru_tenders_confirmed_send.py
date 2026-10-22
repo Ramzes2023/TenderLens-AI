@@ -27,6 +27,7 @@ def notice(n):
 
 class FakeMessage:
     from_user = SimpleNamespace(id=777)
+    chat = SimpleNamespace(id=888)
 
     def __init__(self, *, fail_on_nth_tender=0):
         self.sent = []
@@ -39,7 +40,8 @@ class FakeMessage:
             if self.tenders_attempted == self.fail_on_nth_tender:
                 raise OSError("Synthetic Telegram send failed")
         self.sent.append((text, kwargs))
-        return SimpleNamespace(edit_text=self.edit_text)
+        return SimpleNamespace(edit_text=self.edit_text,
+                               message_id=len(self.sent), chat=self.chat)
 
     async def edit_text(self, text):
         self.sent.append((text, {}))
@@ -121,4 +123,30 @@ def test_legacy_manual_tenders_also_wait_for_send_ack():
         assert service.legacy_fetched == 1 and service.claimed == []
         await tenders_handler(FakeMessage(), monitoring_service=service)
         assert service.claimed == ["1"]
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("receipt", [
+    None,
+    SimpleNamespace(message_id=0, chat=SimpleNamespace(id=888)),
+    SimpleNamespace(message_id=55, chat=SimpleNamespace(id=999)),
+])
+def test_manual_tenders_bad_telegram_receipt_keeps_original_for_retry(receipt):
+    class UnconfirmedMessage(FakeMessage):
+        async def answer(self, text, **kwargs):
+            if text.startswith("1. 📌"):
+                self.tenders_attempted += 1
+                return receipt
+            return await super().answer(text, **kwargs)
+
+    async def run():
+        service = FakeService()
+        with pytest.raises(ValueError, match="acknowledgement invalid"):
+            await tenders_handler(UnconfirmedMessage(), monitoring_service=service)
+        assert service.claimed == []
+        retry = FakeMessage()
+        await tenders_handler(retry, monitoring_service=service)
+        assert service.claimed == ["1"]
+        assert any("Номер: ИМЗ-2026-000001" in text for text, _ in retry.sent)
+
     asyncio.run(run())

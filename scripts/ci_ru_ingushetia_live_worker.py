@@ -38,7 +38,7 @@ from scripts.ci_ru_ingushetia_safe_handler_diagnostics import (
     safe_handler_failure_categories, sanitize_failure_categories,
 )
 from app.sources.ru_ingushetia_eis44 import SOURCE_ID, RSS_URL, normalize_ingushetia_notice
-from app.sources.snapshots import snapshot_catalog
+from app.sources.snapshots import snapshot_catalog, fresh_ingushetia_worker_catalog
 
 
 ROOT = Path(__file__).resolve().parents[1] / 'russian_trusted_root_ca_pem.crt'
@@ -221,7 +221,7 @@ def proof():
             # Independently GET the two actual first-party original cards,
             # identified by the Worker rows rather than a second RSS fetch.
             asyncio.run(_check_original_links(rows[:2]))
-            snap = snapshot_catalog(catalog, store)
+            snap = fresh_ingushetia_worker_catalog(catalog, store)
             for n in rows:
                 assert normalize_ingushetia_notice(n) is not None
                 report = asyncio.run(snap.fetch(
@@ -242,7 +242,10 @@ def proof():
                     raise AssertionError('Real Ingushetia notice not searchable by title')
                 if store.upsert(n, connector_version(SOURCE_ID)):
                     raise AssertionError("Replay inserted duplicate regional notice")
-            staged = asyncio.run(_check_isolated_dispatch(catalog, _catalog_settings(), rows, Path(tmp) / "notifications.sqlite", repository=store))
+            staged = asyncio.run(_check_isolated_dispatch(
+                catalog, _catalog_settings(), rows, Path(tmp) / "notifications.sqlite",
+                repository=store, monitor_catalog=snap,
+            ))
             return {
                 "official_rss_origin": "zakupki.gov.ru",
                 "verified_notices": [{"number": n.tender_number, "title": n.title,

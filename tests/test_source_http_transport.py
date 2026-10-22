@@ -524,3 +524,30 @@ def test_source_clients_use_pinned_tcp_and_original_tls(worker, addresses, peer,
         if tcp.calls:
             assert raw.closed == 1
     asyncio.run(run())
+
+
+def test_first_public_address_timeout_falls_back_to_next_within_total_deadline():
+    """Real AnyIO timeouts, synthetic DNS/TCP. No external network or TLS bypass."""
+    async def run():
+        class SlowFirstTCP(TCP):
+            async def connect_tcp(self, host, port, **kwargs):
+                self.calls.append((host, port, kwargs))
+                if host == '2606:4700:4700::1111':
+                    # Mimic a first resolved address that blackholes SYNs
+                    # until its per-address connect timeout expires.
+                    try:
+                        with anyio.fail_after(kwargs['timeout']):
+                            await anyio.sleep_forever()
+                    except TimeoutError:
+                        raise httpcore.ConnectTimeout('public first IP timed out') from None
+                return Stream((host, port))
+
+        tcp = SlowFirstTCP()
+        subject, _, _ = backend(['2606:4700:4700::1111', '8.8.8.8'], tcp)
+        stream = await subject.connect_tcp('origin.example', 443, timeout=0.12)
+        assert [call[0] for call in tcp.calls] == ['2606:4700:4700::1111', '8.8.8.8']
+        assert 0 < tcp.calls[0][2]['timeout'] <= 0.06
+        assert 0 < tcp.calls[1][2]['timeout'] <= 0.12
+        assert tcp.calls[1][2]['timeout'] > 0
+        await stream.aclose()
+    asyncio.run(run())

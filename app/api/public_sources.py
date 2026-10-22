@@ -22,6 +22,7 @@ _RU_OPT_IN_ADAPTERS = (
     ("nmck_native_public", "NMCK — first-party public small-purchase notices", "html", False, "regional_small", "https://xn--j1adc1b.xn--p1ai/procedures"),
     ("gpb_etp_public", "Gazprombank ETP public procurement (law unverified)", "html", False, "general", "https://etpgpb.ru/procedures/"),
     ("ru_samara_public_list", "Самарская область — официальный публичный список малых закупок (только список)", "api", True, "regional_small", "https://webtorgi.samregion.ru/smallpurchases/GzwSP/NoticesGrid"),
+    ("ru_chechnya_eis", "Чеченская Республика — ЕИС 44-ФЗ (региональный RSS; ожидает live-приёмку)", "rss", True, "regional", "https://zakupki.gov.ru/"),
 )
 
 

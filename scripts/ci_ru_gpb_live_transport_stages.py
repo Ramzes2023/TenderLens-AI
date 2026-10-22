@@ -48,7 +48,7 @@ def _cause_category(error):
 async def probe():
     stage = "LIST_GET"
     try:
-        with bounded_fetch(FetchPolicy(frozenset({HOST}), 2, max_bytes=MAX_BYTES)):
+        with bounded_fetch(FetchPolicy(frozenset({HOST}), 4, max_bytes=MAX_BYTES)):
             async with source_client(
                 timeout=25, follow_redirects=False, trust_env=False,
                 headers={"Accept": "text/html", "User-Agent": "Mozilla/5.0"},
@@ -57,19 +57,35 @@ async def probe():
                 if "html" not in response.headers.get("content-type", "").lower():
                     print("GPB_STAGE=LIST_NON_HTML")
                     return 2
-                found = parse_gpb_public_links(response.content, limit=1)
-                print("GPB_LIST_FIRSTPARTY_LINKS=1")
+                found = parse_gpb_public_links(response.content, limit=3)
+                print("GPB_LIST_FIRSTPARTY_LINKS=" + str(len(found)))
                 stage = "DETAIL_GET"
-                identity, url = found[0]
-                detail = await client.get(url)
-                if "html" not in detail.headers.get("content-type", "").lower():
-                    print("GPB_STAGE=DETAIL_NON_HTML")
-                    return 2
-                parse_gpb_verified_detail(detail.content, identity, url)
-                print("GPB_STAGE=FIRSTPARTY_FIRST_DETAIL_VERIFIED")
-                print("GPB_FIRST_PARTY_REQUESTS=2")
+                stale = 0
+                for identity, url in found:
+                    try:
+                        detail = await client.get(url)
+                        if "html" not in detail.headers.get("content-type", "").lower():
+                            stale += 1
+                            continue
+                        parse_gpb_verified_detail(detail.content, identity, url)
+                    except ConnectorTransportError as error:
+                        # A deleted/not-public original cannot be used; never
+                        # mask a network/TLS failure as a stale individual card.
+                        if error.reason != "http_status":
+                            raise
+                        stale += 1
+                        continue
+                    except ValueError:
+                        stale += 1
+                        continue
+                    print("GPB_STAGE=FIRSTPARTY_DETAIL_VERIFIED")
+                    print("GPB_STALE_DETAILS_IGNORED=" + str(stale))
+                    print("PRODUCTION_CHANGED=NO")
+                    return 0
+                print("GPB_STAGE=NO_VERIFIED_FIRSTPARTY_DETAIL")
+                print("GPB_STALE_DETAILS_IGNORED=" + str(stale))
                 print("PRODUCTION_CHANGED=NO")
-                return 0
+                return 2
     except ConnectorTransportError as error:
         print("GPB_STAGE=" + stage)
         reason = error.reason if error.reason in REASONS else "unclassified"

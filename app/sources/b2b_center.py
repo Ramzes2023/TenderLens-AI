@@ -303,6 +303,24 @@ class B2BCenterSource:
                                 raise SourceError('B2B-Center listing unavailable.')
                             return parse_next_market(retry.content, limit=limit)
                     return parse_b2b_center_listing(response.content, limit=limit)
+                except SourceError as error:
+                    # A changed URL shape in the official Vue SSR listing is
+                    # not evidence of a native procedure. Do not relax the
+                    # SSR parser: independently validate the legacy first-
+                    # party structured aggregate with the remaining single
+                    # request. It is auditable by its own listing_url in the
+                    # persisted notice, and rejects foreign platform cards.
+                    if (self.listing_url != B2B_CENTER_NEXT_LIST_URL
+                            or str(error) != 'B2B-Center unsafe SSR URL.'):
+                        raise
+                    client.cookies.clear()
+                    fallback = await client.get(B2B_CENTER_LIST_URL)
+                    fallback.raise_for_status()
+                    if fallback.status_code != 200:
+                        raise SourceError('B2B-Center verified legacy listing unavailable.')
+                    return parse_b2b_center_listing(
+                        fallback.content, limit=limit, listing_url=B2B_CENTER_LIST_URL,
+                    )
                 except ConnectorTransportError as error:
                     if self.listing_url == B2B_CENTER_NEXT_LIST_URL or error.reason != 'response_size':
                         raise

@@ -113,6 +113,59 @@ jobs:
             throw 'Official Chechnya 44-FZ RSS generator/validator mismatch on Windows'
           }
 
+  chechnya-hosted-windows-live-signal:
+    # Independent, NO-SECRETS EIS→real Worker→disposable SQLite→search→
+    # LocalCaptureBot canary. Runs only on our exact trusted feature-branch
+    # push; it cannot write to production or use the external Telegram API.
+    # Success proves only this GitHub-hosted Windows environment, not RU
+    # self-hosted availability or real Telegram delivery.
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/feat/ru-chechnya-eis-rss-20261022'
+    runs-on: windows-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    env:
+      RU_CHECHNYA_EIS_ENABLED: "true"
+      EIS_DIRECT_ENABLED: "true"
+      EIS_SYSTEM_TRUST_ENABLED: "true"
+      EIS_CA_BUNDLE_FILE: ""
+      GIGACHAT_CA_BUNDLE_FILE: ""
+      EIS_PROFILE_FEEDS_ENABLED: "false"
+      MONITORING_ENABLED: "false"
+      RU_CHECHNYA_E2E_TEST_BOT_TOKEN: ""
+      RU_CHECHNYA_E2E_TEST_CHAT_ID: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Try real Chechnya 44-FZ EIS originals through isolated Windows Worker
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $env:RU_CHECHNYA_EIS_RSS_URLS = python -c 'from app.sources.eis_rss import build_eis_rss_url; print(build_eis_rss_url("Чеченская Республика"))'
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot generate official candidate URL' }
+          Write-Host 'CHECHNYA_WINDOWS_CANARY=UNVERIFIED_TEXT_QUERY_LOCAL_CAPTURE_ONLY'
+          python -B -m scripts.ci_ru_chechnya_eis_real_worker
+          $workerExit = $LASTEXITCODE
+          if ($workerExit -eq 0) {
+            Write-Host 'CHECHNYA_WINDOWS_CANARY=WORKER_SQLITE_QUERY_LOCAL_CAPTURE_VERIFIED'
+          } else {
+            Write-Host 'CHECHNYA_WINDOWS_CANARY=LIVE_WORKER_NOT_VERIFIED'
+            python -B -m scripts.ru_chechnya_eis_transport_probe
+            Write-Host 'CHECHNYA_WINDOWS_CANARY=OFFICIAL_EIS_NETWORK_DIAG_RECORDED'
+          }
+          Write-Host 'CHECHNYA_WINDOWS_CANARY_IS_NOT_RELEASE_GATE=YES'
+          Write-Host 'REAL_TELEGRAM_API_ACK=NOT_VERIFIED'
+          Write-Host 'PRODUCTION_CHANGED=NO'
+
   chechnya-hosted-network-signal:
     # A read-only GitHub-hosted canary while the approved RU self-hosted Linux
     # runner is offline/unassigned. This is NEVER regional live acceptance:

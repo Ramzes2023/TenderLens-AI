@@ -90,7 +90,7 @@ def test_manual_tenders_reaches_late_matching_ingushetia_original_via_sql(tmp_pa
         assert len(sent) == 1
         assert "Номер: " + selected in sent[0]
         assert seen.seen(101, "eis_44", selected)
-        assert "Найдено новых подходящих закупок: 1" in msg.edited
+        assert any("Найдено новых подходящих закупок: 1" in status for status in msg.edited)
         again = Message()
         asyncio.run(tenders_handler(again, monitoring_service=service, source_catalog=catalog))
         assert not any(selected in body for body in again.sent)

@@ -33,7 +33,11 @@ def snapshot_catalog(catalog, repository):
 _INGUSHETIA_WORKER_KEYS = frozenset({
     "ru_ingushetia_eis44", "ru_ingushetia_fabrikant44",
 })
-INGUSHETIA_WORKER_MAX_AGE_SECONDS = 1800
+# ConnectorSyncService uses one idempotent job per UTC hour. A 30-minute
+# snapshot TTL wrongly makes the bot declare a healthy hourly run stale for
+# half the hour. Allow one full hour plus 15 minutes of bounded scheduling
+# drift; still fail closed if the source is not refreshed within that window.
+INGUSHETIA_WORKER_MAX_AGE_SECONDS = 75 * 60
 
 
 class FreshIngushetiaWorkerSource(SnapshotSource):

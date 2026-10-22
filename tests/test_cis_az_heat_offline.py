@@ -59,3 +59,51 @@ class AzerbaijanHeatOfflineContracts(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_bounded_discovery_keeps_only_fully_verified_first_party_detail(monkeypatch):
+    """Offline resilience is never evidence for production activation."""
+    from urllib.error import HTTPError, URLError
+    import scripts.ci_cis_az_heat_live_discovery as mod
+
+    first, second = extract_index(listing())
+    third = "https://azeristilik.gov.az/post/official-published-procurement-card"
+    fourth = "https://azeristilik.gov.az/post/another-expired-procurement-card"
+    fifth = "https://azeristilik.gov.az/post/not-fetched-outside-budget"
+    seen = []
+
+    def scripted(url, opener):
+        seen.append(url)
+        if url == first:
+            raise URLError(TimeoutError("network timeout"))
+        if url == second:
+            return details()
+        if url == third:
+            raise HTTPError(url, 404, "not found", None, None)
+        if url == fourth:
+            return b"<html>Loading...</html>"
+        raise AssertionError("Exceeded detail budget")
+
+    monkeypatch.setattr(mod, "fetch", scripted)
+    report = mod.check_linked_details((first, second, third, fourth, fifth), object())
+    assert report["checked_details"] == 4
+    assert report["complete_details"] == 1
+    assert report["detail_network_errors"] == {"TimeoutError": 1}
+    assert report["detail_http_errors"] == {"404": 1}
+    assert report["rejected_details"] == 1
+    assert seen == [first, second, third, fourth]
+
+
+def test_discovery_does_not_count_transport_errors_as_complete_details(monkeypatch):
+    from urllib.error import URLError
+    import scripts.ci_cis_az_heat_live_discovery as mod
+
+    def unavailable(url, opener):
+        raise URLError(ConnectionResetError("official unavailable"))
+
+    monkeypatch.setattr(mod, "fetch", unavailable)
+    report = mod.check_linked_details((SAMPLE, SAMPLE), object())
+    assert report["complete_details"] == 0
+    assert report["checked_details"] == 2
+    assert report["detail_network_errors"] == {"ConnectionResetError": 2}
+    assert not report["rejected_details"]

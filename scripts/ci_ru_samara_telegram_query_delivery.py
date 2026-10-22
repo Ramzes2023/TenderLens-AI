@@ -10,6 +10,7 @@ import asyncio
 import re
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 from app.bot.monitoring import format_match, monitor_loop, enabled_ru_catalog_keys
 from app.monitoring.config import MonitoringSettings
@@ -42,6 +43,13 @@ class LocalCaptureBot:
         if self.fail_delivery:
             raise ConnectionError("Deliberate local transport failure; no Telegram I/O")
         self.delivered.append(text)
+        # Local-only synthetic receipt follows the *production* Bot API shape.
+        # An absent/invalid ACK must never cause monitor_loop to claim a
+        # real notice as seen. This is NOT an external Telegram response.
+        return SimpleNamespace(
+            message_id=len(self.delivered),
+            chat=SimpleNamespace(id=chat_id),
+        )
 
 
 def settings():

@@ -92,6 +92,12 @@ def accept():
                 raise AssertionError("No regional Worker job was claimed")
             completed = jobs.get(queued.id, scope=JobScope())
             if completed is None or completed.state != "succeeded":
+                # Print only stable Job status codes; never dump the RSS URL,
+                # response body, certificate contents or personal searches.
+                print("RU_CHECHNYA_EIS_WORKER_STATE=" +
+                      (completed.state if completed is not None else "missing"))
+                print("RU_CHECHNYA_EIS_WORKER_FAILURE_CODE=" +
+                      (completed.failure_code or "none" if completed is not None else "none"))
                 raise AssertionError("Chechnya Worker did not succeed")
             stats = completed.result
             rows = store.read(SOURCE_KEY, limit=5)

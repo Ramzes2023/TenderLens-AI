@@ -498,6 +498,64 @@ def test_transport_probe_classifies_tls_and_dns_without_logging_raw_errors():
         assert transport_category(ConnectorTransportError(reason=reason)) == expected
 
 
+def test_safe_eis_dns_tcp_probe_distinguishes_public_dns_and_tcp_without_network(monkeypatch):
+    """Classify hosted EIS transport without leaking resolved IPs or dialing LAN."""
+    import socket
+    from scripts import ru_chechnya_eis_transport_probe as probe
+
+    class FakeSocket:
+        def __init__(self, *args):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def settimeout(self, value):
+            assert value == 3.0
+
+        def connect(self, endpoint):
+            assert endpoint[0] == "93.184.216.34"
+            assert endpoint[1] == 443
+
+    def public_dns(host, port, *, type):
+        assert (host, port, type) == (
+            "zakupki.gov.ru", 443, socket.SOCK_STREAM,
+        )
+        return [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 443)),
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
+        ]
+
+    monkeypatch.setattr(probe.socket, "getaddrinfo", public_dns)
+    monkeypatch.setattr(probe.socket, "socket", FakeSocket)
+    accepted = probe.fixed_official_dns_tcp_diagnostic()
+    assert accepted == {
+        "dns_tcp_state": "TCP_443_REACHABLE_TLS_NOT_CHECKED",
+        "dns_public_ip_count": 1,
+    }
+    assert "93.184.216.34" not in str(accepted)
+
+    def only_private(*args, **kwargs):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "",
+                 ("192.168.1.1", 443))]
+
+    monkeypatch.setattr(probe.socket, "getaddrinfo", only_private)
+    assert probe.fixed_official_dns_tcp_diagnostic() == {
+        "dns_tcp_state": "DNS_NO_PUBLIC_ADDRESSES",
+    }
+
+    def dns_failed(*args, **kwargs):
+        raise socket.gaierror("synthetic private detail")
+
+    monkeypatch.setattr(probe.socket, "getaddrinfo", dns_failed)
+    assert probe.fixed_official_dns_tcp_diagnostic() == {
+        "dns_tcp_state": "DNS_RESOLUTION_FAILED",
+    }
+
+
 def test_offline_probe_only_counts_verified_official_chechnya_rss(monkeypatch):
     """MockTransport-like injection: no network, no production writes or Telegram."""
     from scripts import ru_chechnya_eis_transport_probe as probe

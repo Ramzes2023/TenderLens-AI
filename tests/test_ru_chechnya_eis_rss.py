@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
+from pathlib import Path
+import tempfile
 
 import pytest
 
@@ -169,6 +171,30 @@ def test_amended_rss_guids_have_one_durable_official_identity(monkeypatch):
     assert len(newer) == 1
     assert newer[0].identity == accepted[0].identity
     assert validate_notice(newer[0], SOURCE_KEY) is newer[0]
+
+    # Actual disposable SQLite regression: changed upstream GUID must UPDATE
+    # the original procedure, not INSERT a second opportunity.
+    from app.database.backend import Database
+    from app.database.config import DatabaseSettings
+    from app.jobs import JobRepository
+    from app.sources.opportunities import OpportunityRepository
+
+    with tempfile.TemporaryDirectory(prefix="chechnya-guid-regression-") as tmp:
+        db = Database(DatabaseSettings("", Path(tmp) / "procurements.sqlite"))
+        try:
+            JobRepository(db).initialize()
+            repository = OpportunityRepository(db)
+            repository.initialize()
+            version = connector_version(SOURCE_KEY)
+            assert repository.upsert(accepted[0], version)
+            assert not repository.upsert(newer[0], version)
+            stored = repository.read(SOURCE_KEY, limit=10)
+            assert len(stored) == 1
+            assert stored[0].external_id == number
+            assert stored[0].title == "Поставка продуктов питания (изменение)"
+            assert validate_enrichment(stored[0].enrichment, SOURCE_KEY, number)
+        finally:
+            db.close()
 
 
 

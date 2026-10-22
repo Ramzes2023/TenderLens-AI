@@ -1,6 +1,7 @@
 # VALYQON Chechnya official 44-FZ acceptance from a trusted Windows machine.
 # This is an isolated read-only acceptance: temporary SQLite + LOCAL fake Bot.
-# It does NOT enable production and does NOT call the Telegram Bot API.
+# Production is never enabled. Real Telegram API is disabled unless both
+# -SendAuthorizedTelegramTest and explicit operator test-only credentials exist.
 # Example:
 #   .\scripts\ru_chechnya_windows_live.ps1 -RegionalRssUrl '<exact official EIS 44-FZ region RSS URL>'
 #   .\scripts\ru_chechnya_windows_live.ps1 -TryOfficialSearchCandidate

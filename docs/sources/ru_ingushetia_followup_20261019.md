@@ -306,7 +306,7 @@ same configured SQL database used by the separately running operator-approved
 connector Worker and hourly queue.
 
 The regional snapshot adapter requires a `source_opportunities.last_seen`
-UTC timestamp no older than **1800 seconds**. It rejects absent, expired or
+UTC timestamp no older than **4500 seconds (75 minutes)**. It rejects absent, expired or
 implausibly future-dated Worker SQL and returns only rows observed within
 that same freshness window. It **never** falls back to an HTTP request,
 does not fabricate tenders and does not mark any alert delivered when its
@@ -320,7 +320,7 @@ The operator still must periodically enqueue both approved sources using
 `python -m app.sources.enqueue --ru-approved` with their individual flags,
 and run the approved `python -m app.jobs.worker --connectors` process
 against the SAME DATABASE_URL as the bot. If the worker is stopped, the
-snapshot goes stale after 30 minutes and notification attempts remain
+snapshot goes stale after 75 minutes and notification attempts remain
 unclaimed. Successful ingestion with **zero** verified notices also
 produces no fresh row, and therefore fails closed instead of falsely
 claiming a healthy empty upstream response. No public customer bot,
@@ -332,3 +332,20 @@ They are synthetic SQL and freshness tests, not live delivery evidence.
 Full-chain operator-supplied local and hosted Fabrikant source acceptance
 remain separately documented above. The separate manual-only authorized
 test Telegram Bot API receipt is **still NOT TESTED**.
+
+
+## 22 October 2026: hourly queue / notification freshness alignment
+
+The operator enqueue API deliberately deduplicates jobs by **UTC hour**.
+The initial Worker SQL alert source TTL of 30 minutes could therefore
+produce a silent gap for part of every otherwise successful hour.
+Adjusted only the strictly opt-in Ingushetia Worker SQL notification
+snapshot to a maximum of **75 minutes** (one hourly interval plus 15 minutes
+of scheduling/processing drift); this does **not** relax publisher-origin
+verification or bypass failed upstream Worker acquisition. Data older than
+75 minutes still fails closed, and historical source rows cannot be silently
+marked delivered. The new offline regression verifies a real stored notice
+remains readable after 68 minutes but fails closed after 76 minutes.
+No recurring scheduler, Bot API delivery or production source activation was
+performed by this change. Operational continuity still requires a properly
+approved source-reachable, recurring enqueue/Worker process.

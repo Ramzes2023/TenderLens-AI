@@ -201,3 +201,61 @@ def test_ru_background_env_is_strict_and_defaults_off(monkeypatch, tmp_path):
     monkeypatch.setenv("VALYQON_RU_BACKGROUND_CATALOG_ENABLED", "invalid")
     with pytest.raises(ValueError):
         load_monitoring_settings(env)
+
+
+def test_partial_ingushetia_outage_keeps_valid_etp_alert_and_redacts_network_error(caplog):
+    """Synthetic monitoring regression, not real Bot API or source acceptance."""
+    from app.monitoring.service import MonitorMatch
+    from app.sources.models import TenderNotice
+
+    class IngushRegistry:
+        def metadata(self):
+            return (
+                SimpleNamespace(key="ru_ingushetia_eis44", enabled=True, jurisdictions=("RU",)),
+                SimpleNamespace(key="ru_ingushetia_fabrikant44", enabled=True, jurisdictions=("RU",)),
+            )
+
+    class IngushCatalog:
+        registry = IngushRegistry()
+
+    class PartiallyUnavailable(DummyService):
+        async def fetch_matches_from_catalog(self, catalog, owner_user_id, *, source_keys):
+            assert source_keys == ("ru_ingushetia_eis44", "ru_ingushetia_fabrikant44")
+            self.fetched.append((catalog, owner_user_id, source_keys))
+            self.event.set()
+            notice = TenderNotice(
+                source="ru_ingushetia_fabrikant44",
+                external_id="0114500000826002402",
+                tender_number="0114500000826002402",
+                title="Устройство ливневой канализации",
+                customer="КОМИТЕТ ГОСУДАРСТВЕННОГО ЗАКАЗА РЕСПУБЛИКИ ИНГУШЕТИЯ",
+                url="https://44.fabrikant.ru/44/procedure/okb20/0114500000826002402",
+                region="Республика Ингушетия",
+            )
+            # Unknown names and exception text in a failure must not be
+            # forwarded into the operator logs or Telegram messages.
+            report = SimpleNamespace(
+                attempted_sources=source_keys, total_failure=False,
+                successful_sources=("ru_ingushetia_fabrikant44",),
+                failures=(
+                    SimpleNamespace(source="ru_ingushetia_eis44", error="private-token-DO-NOT-LOG"),
+                    SimpleNamespace(source="evil-external-input", error="secret-credentials"),
+                ),
+            )
+            return [MonitorMatch(notice, ("ливневая канализация",))], report
+
+    async def scenario():
+        stop = asyncio.Event()
+        bot, service = DummyBot(stop), PartiallyUnavailable(stop)
+        await monitor_loop(bot, service, stop, source_catalog=IngushCatalog())
+        assert len(bot.sent) == 1
+        assert len(service.claimed) == 1
+        assert "0114500000826002402" in bot.sent[0][1]
+        assert "НОВАЯ ЗАКУПКА" in bot.sent[0][1]
+        assert not any("token" in text for _, text, _ in bot.sent)
+
+    asyncio.run(scenario())
+    assert "Russian source partial outage: ru_ingushetia_eis44" in caplog.text
+    assert "private-token-DO-NOT-LOG" not in caplog.text
+    assert "secret-credentials" not in caplog.text
+    assert "evil-external-input" not in caplog.text

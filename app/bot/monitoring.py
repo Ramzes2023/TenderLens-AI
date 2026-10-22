@@ -25,6 +25,20 @@ def enabled_ru_catalog_keys(catalog: SourceCatalog | None) -> tuple[str, ...]:
 
 
 
+def _require_telegram_delivery_ack(receipt, chat_id: int) -> None:
+    """Fail closed when Telegram does not confirm a Chechnya alert.
+
+    A successful send_message/send reply normally yields an aiogram Message
+    with a positive message_id and matching chat.id. Merely not raising
+    is not a delivery acknowledgement.
+    """
+    message_id = getattr(receipt, "message_id", None)
+    target = getattr(getattr(receipt, "chat", None), "id", None)
+    if (type(message_id) is not int or message_id <= 0
+            or type(target) is not int or target != chat_id):
+        raise ValueError("Telegram did not acknowledge the target chat/message")
+
+
 def _money(value: float | None, currency: str | None) -> str:
     if value is None:
         return "не указана источником"
@@ -176,10 +190,12 @@ async def tenders_handler(
     )
 
     for index, match in enumerate(matches[:limit], 1):
-        await message.answer(
+        receipt = await message.answer(
             format_match(match, index=index),
             disable_web_page_preview=True,
         )
+        if match.notice.source == "ru_chechnya_eis":
+            _require_telegram_delivery_ack(receipt, message.chat.id)
         # Each notice becomes 'seen' only after the real Telegram send
         # succeeds.  A failed send leaves this and later notices retryable.
         await service.claim_new(message.from_user.id, [match])
@@ -303,11 +319,13 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService,
                             subscription.owner_user_id, matches,
                         )
                         for match in new_matches[:service.settings.max_notifications_per_cycle]:
-                            await bot.send_message(
+                            receipt = await bot.send_message(
                                 subscription.chat_id,
                                 "🆕 НОВАЯ ЗАКУПКА\n\n" + format_match(match),
                                 disable_web_page_preview=True,
                             )
+                            if match.notice.source == "ru_chechnya_eis":
+                                _require_telegram_delivery_ack(receipt, subscription.chat_id)
                             # Mark only after Telegram confirms delivery; a
                             # failed send must be retryable on the next cycle.
                             await service.claim_new(subscription.owner_user_id, [match])

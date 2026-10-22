@@ -128,6 +128,28 @@ class OpportunityRepository:
             raise RuntimeError('Invalid fenced connector write callback.')
         return persisted[0]
 
+    def latest_seen_utc(self, source_id):
+        """Read-only Worker freshness signal, not tender publication time.
+
+        Empty source snapshots have no proven successful live acquisition and
+        must fail closed when used for Telegram delivery. No tenant data enters
+        this query.
+        """
+        if type(source_id) is not str or not re.fullmatch(
+                r'[a-z0-9][a-z0-9_-]{0,63}', source_id):
+            raise ValueError('Invalid source identity')
+        with closing(self.database.connect()) as conn:
+            row = conn.execute(
+                'SELECT MAX(last_seen) FROM source_opportunities WHERE source_id=?',
+                (source_id,),
+            ).fetchone()
+        if not row or row[0] is None:
+            return None
+        instant = datetime.fromisoformat(row[0])
+        if instant.tzinfo is None:
+            raise ValueError('Stored last_seen is not timezone aware')
+        return instant.astimezone(timezone.utc)
+
     def read(self, source_id, limit=20, search_terms=()):
         limit = max(1, min(int(limit), 100))
         # Bounded local snapshot candidate pool; filtering does not send profile data upstream.

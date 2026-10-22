@@ -616,6 +616,38 @@ def test_offline_probe_only_counts_verified_official_chechnya_rss(monkeypatch):
 
 
 
+def test_chechnya_independent_official_etp_discovery_is_never_rss_acceptance():
+    """Secondary static discovery links are neither live nor queryable feeds."""
+    from scripts.ru_chechnya_official_alternatives_probe import (
+        TARGETS, classify_public_page,
+    )
+    assert TARGETS["official_committee_information"][1] == "www.gostorgi-chr.ru"
+    assert TARGETS["fabrikant_historical_public_example"][1] == "soap4.fabrikant.ru"
+
+    official = "<html><body>Комитет Правительства Чеченской Республики</body></html>"
+    etp = "<html><body>44-ФЗ goszakaz@gostorgi-chr.ru</body></html>"
+    assert classify_public_page(
+        "official_committee_information", 200, "text/html", official.encode()
+    ) == "OFFICIAL_INFORMATION_PAGE_ONLY_NO_TENDER_FEED"
+    assert classify_public_page(
+        "fabrikant_historical_public_example", 200, "text/html", etp.encode()
+    ) == "HISTORICAL_PUBLIC_ETP_EXAMPLE_ONLY_NO_DISCOVERY_FEED"
+    assert classify_public_page(
+        "fabrikant_historical_public_example", 200, "text/html",
+        b"<html>login required</html>",
+    ) == "INSUFFICIENT_PUBLISHER_EVIDENCE"
+    assert classify_public_page(
+        "fabrikant_historical_public_example", 200, "text/html",
+        "<html>Вход в систему 44-ФЗ goszakaz@gostorgi-chr.ru</html>".encode(),
+    ) == "AUTH_OR_CHALLENGE_PAGE"
+    assert classify_public_page(
+        "official_committee_information", 302, "text/html", official.encode()
+    ) == "HTTP_NOT_PUBLIC_OR_UNAVAILABLE"
+    assert classify_public_page(
+        "fabrikant_historical_public_example", 200, "application/json", etp.encode()
+    ) == "NON_HTML_RESPONSE"
+
+
 def test_operator_windows_safe_url_preflight_accepts_chechnya_candidate_and_rejects_foreign(monkeypatch, capsys):
     """Windows launcher uses the exact strict Python check; never log query URLs."""
     from scripts.ru_chechnya_validate_url import main

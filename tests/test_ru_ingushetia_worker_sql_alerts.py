@@ -479,3 +479,43 @@ def test_worker_sql_keyword_search_does_not_confuse_russian_substrings(tmp_path)
         assert [n.tender_number for n in relevant] == [N2]
     finally:
         db.close()
+
+
+def test_regional_worker_sql_keyword_after_first_hundred_is_not_silently_lost(tmp_path):
+    """Bounded 1000-record local scan; independent of live EIS and Telegram API."""
+    db = Database(DatabaseSettings("ing-deep-sql", tmp_path / "regional.sqlite"))
+    repo = OpportunityRepository(db)
+    repo.initialize()
+    matching_id = "0114500000826002900"
+    try:
+        repo.upsert(notice(matching_id, title="Устройство ливневой канализации"),
+                    connector_version(EIS))
+        for index in range(112):
+            unrelated_id = str(114500000826002700 + index).zfill(19)
+            repo.upsert(notice(unrelated_id, title="Поставка канцелярских товаров"),
+                        connector_version(EIS))
+
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
+        assert matching_id not in {
+            n.tender_number for n in repo.read(EIS, limit=100, not_before=cutoff)
+        }
+
+        source = fresh_ingushetia_worker_catalog(
+            build_source_catalog(settings(ru_ingushetia_fabrikant44_enabled=False)), repo
+        ).registry.get(EIS).source
+        found = asyncio.run(source.for_search_terms(("канализации",)).fetch(limit=3))
+        assert [item.tender_number for item in found] == [matching_id]
+        assert [item.tender_number for item in asyncio.run(source.fetch(limit=3))] != [matching_id]
+
+        # Internal deep scan must not unlock an unbounded path for other
+        # sources, stale snapshots, or caller-supplied raw substring searches.
+        with pytest.raises(ValueError):
+            repo.read("eis", limit=1000, not_before=cutoff,
+                      _fresh_ingushetia_candidate_scan=True)
+        with pytest.raises(ValueError):
+            repo.read(EIS, limit=1000, _fresh_ingushetia_candidate_scan=True)
+        with pytest.raises(ValueError):
+            repo.read(EIS, limit=1000, search_terms=("secret",),
+                      not_before=cutoff, _fresh_ingushetia_candidate_scan=True)
+    finally:
+        db.close()

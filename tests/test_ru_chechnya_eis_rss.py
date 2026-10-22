@@ -636,6 +636,12 @@ def test_chechnya_independent_official_etp_discovery_is_never_rss_acceptance():
         "fabrikant_historical_public_example", 200, "text/html",
         b"<html>login required</html>",
     ) == "INSUFFICIENT_PUBLISHER_EVIDENCE"
+    # Region committee page may have a login link in site navigation
+    # without being an actual authorization/challenge page.
+    assert classify_public_page(
+        "official_committee_information", 200, "text/html",
+        "<html>Комитет Правительства Чеченской Республики | Авторизация</html>".encode(),
+    ) == "OFFICIAL_INFORMATION_PAGE_ONLY_NO_TENDER_FEED"
     assert classify_public_page(
         "fabrikant_historical_public_example", 200, "text/html",
         "<html>Вход в систему 44-ФЗ goszakaz@gostorgi-chr.ru</html>".encode(),

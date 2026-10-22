@@ -149,3 +149,21 @@ def test_mixed_profile_specific_eis_keeps_per_owner_upstream_search():
                            source_catalog=FakeCatalog(("eis", "ru_ingushetia_eis44")))
         assert service.calls == [("per_user", 1), ("per_user", 2)]
     asyncio.run(run())
+
+
+def test_shared_source_exception_does_not_kill_monitor_or_claim_any_alert():
+    """An upstream exception before the per-user loop must not crash the bot."""
+    async def run():
+        stop = asyncio.Event()
+        service = FakeService(stop)
+        bot = FakeBot()
+        async def fail_shared(catalog, p, *, source_keys):
+            service.calls.append(("shared", tuple(source_keys)))
+            raise OSError("internal proxy token=NEVER_LOG")
+        service.fetch_matches_from_catalog_for_profile = fail_shared
+        await monitor_loop(bot, service, stop,
+                           source_catalog=FakeCatalog(("ru_ingushetia_eis44",)))
+        assert service.calls == [("shared", ("ru_ingushetia_eis44",))]
+        assert bot.sent == []
+        assert service.claimed == []
+    asyncio.run(run())

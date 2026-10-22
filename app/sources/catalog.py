@@ -29,6 +29,7 @@ from .stan_commercial_public import StanCommercialPublicSource
 from .south_ural_public import SouthUralPublicSource
 from .ru_dagestan_public_list import DagestanPublicListSource, GRID as DAG_PUBLIC_GRID
 from .kavkaz_rf_firstparty import KavkazRfFirstpartySource
+from .eis_pinned_ca import select_verified_eis_ca
 from .ru_ingushetia_eis44 import IngushetiaEis44Source, RSS_URL as ING_RSS_URL
 from .ru_ingushetia_fabrikant44 import IngushetiaFabrikant44Source, LIST_URL as ING_FAB_LIST
 from .canada_buys_dataset import CanadaBuysDatasetSource
@@ -783,8 +784,8 @@ def build_source_catalog(
             key="ru_ingushetia_eis44",
             display_name="Ингушетия — ЕИС 44-ФЗ (регионально подтверждённые извещения)",
             source=IngushetiaEis44Source(timeout=min(timeout, 30),
-                                         ca_bundle_file=settings.ca_bundle_file,
-                                         system_trust=settings.eis_system_trust_enabled,
+                                         ca_bundle_file=select_verified_eis_ca(settings.ca_bundle_file),
+                                         system_trust=False,
                                          rss_url=settings.ru_ingushetia_eis44_rss_url or ING_RSS_URL),
             transport=SourceTransport.RSS,
             jurisdictions=("RU",),

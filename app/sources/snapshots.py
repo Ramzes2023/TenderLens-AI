@@ -57,10 +57,25 @@ class FreshIngushetiaWorkerSource(SnapshotSource):
             raise ValueError("Ingushetia Worker SQL source is absent or stale")
         # Include ONLY notices observed within the freshness window; a fresh
         # single record cannot resurrect an old unnotified procurement.
-        return await asyncio.to_thread(
-            self.repository.read, self.name, limit, self.terms,
-            not_before=lower,
+        # Stored DB exact-substring searches are not a substitute for the
+        # monitor's Russian morphology matching: "оборудование" should
+        # match a profile keyword "оборудования" without querying upstream.
+        # Filter terms locally using the same tokenizer *before* applying
+        # the notification limit, to avoid undercounting legitimate matches.
+        records = await asyncio.to_thread(
+            self.repository.read, self.name, 100, (), not_before=lower,
         )
+        if not self.terms:
+            return records[:limit]
+        from app.monitoring.service import _term_match
+        def match(notice):
+            text = " ".join(str(v or "") for v in (
+                notice.title, notice.summary, notice.tender_number,
+                notice.external_id, notice.customer, notice.region, notice.url,
+            ))
+            return any(_term_match(text, term) or term.casefold() in text.casefold()
+                       for term in self.terms)
+        return [notice for notice in records if match(notice)][:limit]
 
 
 def fresh_ingushetia_worker_catalog(catalog, repository):

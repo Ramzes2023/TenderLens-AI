@@ -44,6 +44,14 @@ class LocalCaptureBot:
             raise AssertionError("Expected original-link preview to be disabled")
         self.messages.append(text)
         self.stop.set()
+        # A local-only synthetic Bot API acknowledgment is required by
+        # monitor_loop before marking this real original as delivered to the
+        # isolated test subscription. This is NOT Telegram API delivery.
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            message_id=len(self.messages),
+            chat=SimpleNamespace(id=chat_id),
+        )
 
 
 def isolated_settings():

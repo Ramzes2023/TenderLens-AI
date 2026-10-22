@@ -534,11 +534,22 @@ def test_offline_probe_only_counts_verified_official_chechnya_rss(monkeypatch):
     monkeypatch.setattr(probe, "load_monitoring_settings", lambda: cfg)
     monkeypatch.setattr(probe.httpx, "Client", FakeClient)
     result = probe.run_probe()
-    assert result["state"] == "VERIFIED_FEED_WITH_REGION_EVIDENCE"
+    assert result["state"] == "VERIFIED_FEED_WITH_ACCEPTED_ORIGINALS"
     assert result["official_item_count"] == 1
     assert result["regional_evidence_count"] == 1
+    assert result["accepted_original_count"] == 1
     assert not result["worker_sqlite_verified"]
     assert not result["telegram_delivery_verified"]
+
+    # Still a valid EIS 44-FZ XML route and Chechnya customer, but the
+    # original number is not a 19-digit procedure. The Worker would reject
+    # it: network diagnostics MUST NOT claim ingestible verified tenders.
+    sample = sample.replace(b"0194200000526005027", b"019420000052600502")
+    rejected = probe.run_probe()
+    assert rejected["official_item_count"] == 1
+    assert rejected["regional_evidence_count"] == 1
+    assert rejected["accepted_original_count"] == 0
+    assert rejected["state"] == "VALID_FEED_NO_ACCEPTED_ORIGINALS"
 
 
 

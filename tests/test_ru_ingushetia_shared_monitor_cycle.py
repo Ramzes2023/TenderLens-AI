@@ -379,7 +379,7 @@ def test_mixed_shared_outage_keeps_verified_personalized_matches(caplog):
         async def fetched_extra(catalog, owner_id, *, source_keys):
             service.calls.append(("per_user", owner_id, tuple(source_keys)))
             assert source_keys == ("eis",)
-            return [MonitorMatch(n, ("personalized EIS",)) for n in personal], SimpleNamespace(
+            return [MonitorMatch(personal[owner_id - 1], ("personalized EIS",))], SimpleNamespace(
                 attempted_sources=tuple(source_keys), successful_sources=tuple(source_keys),
                 total_failure=False, failures=(),
             )

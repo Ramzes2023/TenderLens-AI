@@ -171,3 +171,30 @@ def test_bounded_public_gpb_skips_stale_original_and_returns_next_verified(monke
     assert received[0].url == candidates[1]
     assert seen == [LIST_URL, candidates[0], candidates[1]]
 
+
+
+
+@pytest.mark.parametrize("html", [
+    b"<html><script>procedure number 1299761</script><h1>Real offer</h1></html>",
+    b"<html><style>.x { content: '1299761' }</style><h1>Real offer</h1></html>",
+    b"<html><template><p>1299761</p></template><h1>Real offer</h1></html>",
+])
+def test_gpb_script_only_native_id_is_not_verified_original(html):
+    # Native ID must be independently evidenced in visible publisher HTML.
+    with pytest.raises(ValueError, match="identity or title mismatch"):
+        parse_gpb_verified_detail(html, "1299761", URL)
+
+
+def test_numeric_only_gpb_original_passes_actual_fenced_sql_worker(monkeypatch):
+    # Offline mock exercises the real Worker, queue lease, SQLite and identity.
+    # It deliberately does NOT assert that an upstream real original is reachable.
+    native_url = "https://etpgpb.ru/procedures/etp/1240053/"
+    async def synthetic_fetch(self, limit=20):
+        return [parse_gpb_verified_detail(detail("1240053"), "1240053", native_url)]
+
+    monkeypatch.setattr(GpbEtpPublicSource, "fetch", synthetic_fetch)
+    from scripts.ci_ru_gpb_public_worker import proof
+    result = proof()
+    assert result["worker_inserted"] == 1
+    assert result["sqlite_search_verified"] == 1
+    assert result["idempotent_replay"] is True

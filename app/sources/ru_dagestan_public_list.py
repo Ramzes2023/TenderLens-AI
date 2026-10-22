@@ -126,6 +126,53 @@ def safe_string(row, key, max_length=1000):
     return " ".join(value.split())
 
 
+def public_amount(raw):
+    """Optional amount from the anonymous original grid, not an inaccessible detail."""
+    if type(raw) in (int, float):
+        # Pre-bound integers before float conversion (huge JSON ints overflow).
+        if type(raw) is int and not 0 < raw <= 1e18:
+            return None
+        if type(raw) is float and not math.isfinite(raw):
+            return None
+        amount = float(raw)
+    elif type(raw) is str and len(raw) <= 80:
+        value = raw.strip().replace("\u00a0", " ").replace("\u202f", " ")
+        if not (re.fullmatch(r"[0-9]+(?:[.,][0-9]{1,2})?", value)
+                or re.fullmatch(r"[0-9]{1,3}(?: [0-9]{3})+(?:,[0-9]{1,2})?", value)):
+            return None
+        amount = float(value.replace(" ", "").replace(",", "."))
+    else:
+        return None
+    return amount if math.isfinite(amount) and 0 < amount <= 1e18 else None
+
+
+def public_date(raw):
+    """Only retain a valid first-party calendar value; the source gives no timezone."""
+    if type(raw) is not str or len(raw) > 35:
+        return None
+    value = raw.strip()
+    if not re.fullmatch(
+        r"[0-9]{2}\.[0-9]{2}\.20[0-9]{2}(?: [0-9]{2}:[0-9]{2}(?::[0-9]{2})?)?",
+        value,
+    ):
+        return None
+    fmt = ("%d.%m.%Y %H:%M:%S" if value.count(":") == 2 else
+           "%d.%m.%Y %H:%M" if ":" in value else "%d.%m.%Y")
+    try:
+        datetime.strptime(value, fmt)
+    except ValueError:
+        return None
+    return value
+
+
+def public_deadline(row):
+    """Accept either native JSON field spelling, never conflicting deadline fields."""
+    a, b = row.get("collecting_enddate"), row.get("collecting_endDate")
+    if a is not None and b is not None and a != b:
+        return None
+    return public_date(a if a is not None else b)
+
+
 def parse_public_list(data, *, limit=2):
     """Validate government list rows; live acceptance separately requires two."""
     if type(limit) is not int or not 1 <= limit <= PAGE_SIZE:
@@ -150,6 +197,11 @@ def parse_public_list(data, *, limit=2):
             raise ValueError("Duplicated original listing notice identity")
         ids.add(identity)
         numbers.add(number)
+        # These optional fields are from the *public JSON list* only. Never
+        # infer absent values, timezone, open status, or inaccessible details.
+        price = public_amount(row.get("summa"))
+        published = public_date(row.get("pub_date"))
+        deadline = public_deadline(row)
         # Official original list is anonymous. Details redirect to login or 404.
         # Make GRID clickable and searchable by native procurement number,
         # not a known-broken/inaccessible deep link.
@@ -160,6 +212,10 @@ def parse_public_list(data, *, limit=2):
             title=title,
             url=GRID,
             customer=buyer,
+            initial_price=price,
+            currency="RUB" if price is not None else None,
+            published_at=published,
+            deadline=deadline,
             region="Республика Дагестан",
             summary="Публичный реестр малых закупок Дагестана. "
                     "Подробная карточка может требовать авторизацию; "

@@ -111,6 +111,25 @@ def test_regional_evidence_from_customer_or_delivery_not_title_or_summary():
                                         title="Доставка в Чеченскую Республику"))
 
 
+def test_foreign_groznenskaya_street_is_not_chechnya_regional_proof():
+    """Grozny city != a Groznenskaya street named in another region."""
+    for region, customer in (
+        ("Московская область, Грозненская улица", "Муниципальный заказчик МО"),
+        ("Ставропольский край", "Отдел по ул. Грозненской, 5"),
+        ("Москва, Грозненский проезд", "Организация Москва"),
+        ("Республика Дагестан", "Грозненский участок"),
+    ):
+        assert not is_chechnya_notice(notice(
+            "0194200000526005027", region=region, customer=customer,
+        ))
+    assert is_chechnya_notice(notice(
+        "0194200000526005027", region="г. Грозного",
+    ))
+    assert is_chechnya_notice(notice(
+        "0194200000526005027", region="Чеченской Республики",
+    ))
+
+
 def test_only_verified_region_procedures_leave_adapter(monkeypatch):
     async def synthetic_upstream(self, limit=20):
         assert self.name == SOURCE_KEY and limit == 100

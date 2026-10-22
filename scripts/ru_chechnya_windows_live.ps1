@@ -93,8 +93,14 @@ try {
             throw 'Chechnya strict live Worker acceptance failed: no merge.'
         }
 
-        Write-Host 'CHECHNYA_ACCEPTANCE=PASS_LOCAL_ONLY' -ForegroundColor Green
-        Write-Host 'REAL_TELEGRAM_DELIVERY=NOT_VERIFIED'
+        if ($SendAuthorizedTelegramTest) {
+            # The strict Python acceptance exits nonzero unless the test Bot
+            # API returns an acknowledged message in the exact target chat.
+            Write-Host 'CHECHNYA_ACCEPTANCE=PASS_LOCAL_AND_TEST_BOT_ACK' -ForegroundColor Green
+        } else {
+            Write-Host 'CHECHNYA_ACCEPTANCE=PASS_LOCAL_ONLY' -ForegroundColor Green
+        }
+        Write-Host 'PRODUCTION_USER_DELIVERY=NOT_VERIFIED'
         Write-Host 'PRODUCTION_CHANGED=NO'
     } finally {
         Pop-Location

@@ -66,6 +66,36 @@ def safe_handler_failure_category(error):
     return "handler_other"
 
 
+
+
+# Exact CI diagnostic only. This never converts an upstream failure to success,
+# changes the production Worker, or changes the number of retries.
+_RETRYABLE_NETWORK_CATEGORIES = frozenset({
+    "response_read_timeout", "response_read_failure",
+    "connection_or_tls_handshake_timeout", "connection_failure_unspecified",
+    "tls_certificate_verification",
+})
+
+
+def classify_failed_live_worker(classes, categories):
+    """Classify three attempted live Worker operations with fixed safe labels.
+
+    Durable queue reports final exhaustion as handler_error, but that name
+    alone does not distinguish repeated network failures from parser/SQL bugs.
+    No user/vendor exception text, URLs or credentials are inspected.
+    """
+    safe_classes = tuple(classes)[-3:]
+    safe_categories = sanitize_failure_categories(categories)
+    if (len(safe_classes) == len(safe_categories) == 3
+            and all(name == "RetryableJobError" for name in safe_classes)
+            and all(name in _RETRYABLE_NETWORK_CATEGORIES for name in safe_categories)):
+        return "UPSTREAM_NETWORK_RETRIES_EXHAUSTED"
+    if "durable_storage" in safe_categories:
+        return "DURABLE_STORAGE_FAILURE_OBSERVED"
+    if "source_contract_or_schema" in safe_categories:
+        return "SOURCE_CONTRACT_FAILURE_OBSERVED"
+    return "UNDETERMINED_FAILURE"
+
 class DiagnosticConnectorHandler:
     def __init__(self, handler):
         if not isinstance(handler, ConnectorSyncHandler):

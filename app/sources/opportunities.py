@@ -150,8 +150,17 @@ class OpportunityRepository:
             raise ValueError('Stored last_seen is not timezone aware')
         return instant.astimezone(timezone.utc)
 
-    def read(self, source_id, limit=20, search_terms=(), *, not_before=None):
-        limit = max(1, min(int(limit), 100))
+    def read(self, source_id, limit=20, search_terms=(), *, not_before=None,
+             _fresh_ingushetia_candidate_scan=False):
+        # Most callers may return at most 100 rows. The opt-in source-owned
+        # Ingushetia Worker SQL adapter alone may inspect a bounded 1000-row
+        # *fresh* candidate pool before applying tenant keyword matching.
+        # This cannot trigger upstream HTTP or expose unrelated sources.
+        if _fresh_ingushetia_candidate_scan:
+            if (source_id not in {'ru_ingushetia_eis44', 'ru_ingushetia_fabrikant44'}
+                    or not_before is None or search_terms):
+                raise ValueError('Only fresh regional Worker SQL candidate scans are supported')
+        limit = max(1, min(int(limit), 1000 if _fresh_ingushetia_candidate_scan else 100))
         # Optional durable Worker freshness cutoff. Legacy callers continue
         # to read historical snapshots unchanged; opt-in notifications must
         # never send arbitrarily old records simply because ONE row was fresh.

@@ -130,6 +130,48 @@ def test_rejects_procedure_number_that_does_not_match_original_eis_card(monkeypa
     assert [row.tender_number for row in rows] == ["0194200000526005029"]
 
 
+
+def test_amended_rss_guids_have_one_durable_official_identity(monkeypatch):
+    """Synthetic GUID rotations must not create a second original or alert."""
+    from app.sources.enrichment import enrichment, validate_enrichment
+    from app.sources.opportunities import validate_notice
+
+    number = "0194200000526005027"
+    base = notice(number, customer="Комитет Правительства Чеченской Республики")
+    first = replace(
+        base, external_id="rss-guid-version-1",
+        enrichment=enrichment(SOURCE_KEY, "rss-guid-version-1"),
+    )
+    amendment = replace(
+        base, external_id="rss-guid-version-2",
+        title="Поставка продуктов питания (изменение)",
+        enrichment=enrichment(SOURCE_KEY, "rss-guid-version-2"),
+    )
+
+    async def different_guids(self, limit=20):
+        assert limit == 100
+        return [first, amendment]
+
+    monkeypatch.setattr(EisRssSource, "fetch", different_guids)
+    accepted = asyncio.run(ChechnyaEisRssSource((URL,)).fetch(limit=5))
+    assert len(accepted) == 1
+    assert accepted[0].external_id == number
+    assert accepted[0].tender_number == number
+    assert original_notice_key(accepted[0]) == ("eis_44", number)
+    assert validate_notice(accepted[0], SOURCE_KEY) is accepted[0]
+    assert validate_enrichment(accepted[0].enrichment, SOURCE_KEY, number)
+
+    async def amended_only(self, limit=20):
+        return [amendment]
+
+    monkeypatch.setattr(EisRssSource, "fetch", amended_only)
+    newer = asyncio.run(ChechnyaEisRssSource((URL,)).fetch(limit=5))
+    assert len(newer) == 1
+    assert newer[0].identity == accepted[0].identity
+    assert validate_notice(newer[0], SOURCE_KEY) is newer[0]
+
+
+
 def test_eis_44_original_law_is_checked_before_regional_normalization():
     sample = (
         '<rss version="2.0"><channel><item>'

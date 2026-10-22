@@ -260,3 +260,50 @@ def test_partial_ingushetia_outage_keeps_valid_etp_alert_and_redacts_network_err
     assert "private-token-DO-NOT-LOG" not in caplog.text
     assert "secret-credentials" not in caplog.text
     assert "evil-external-input" not in caplog.text
+
+
+
+@pytest.mark.parametrize("receipt", [
+    None,
+    SimpleNamespace(message_id=0, chat=SimpleNamespace(id=201)),
+    SimpleNamespace(message_id=True, chat=SimpleNamespace(id=201)),
+    SimpleNamespace(message_id=37, chat=SimpleNamespace(id=999)),
+    SimpleNamespace(message_id=37),
+])
+def test_malformed_bot_api_ack_does_not_mark_original_seen_and_can_retry(receipt):
+    """Offline: a returned object without a valid message and chat is NOT delivery."""
+    class UnconfirmedBot(DummyBot):
+        async def send_message(self, chat_id, text, **kw):
+            self.sent.append((chat_id, text, kw))
+            self.event.set()
+            return receipt
+
+    async def scenario():
+        stop = asyncio.Event()
+        service = DummyService(stop)
+        await monitor_loop(UnconfirmedBot(stop), service, stop, source_catalog=Catalog())
+        assert service.claimed == []
+
+        # Simulated later successful Telegram Bot API acknowledgement is the
+        # first time the procurement may enter the delivered/seen ledger.
+        stop.clear()
+        valid_bot = DummyBot(stop)
+        await monitor_loop(valid_bot, service, stop, source_catalog=Catalog())
+        assert len(valid_bot.sent) == 1
+        assert len(service.claimed) == 1
+
+    asyncio.run(scenario())
+
+
+def test_bot_api_success_receipt_requires_exact_chat_and_positive_message_number():
+    from app.bot.monitoring import _require_telegram_delivery_ack
+
+    _require_telegram_delivery_ack(
+        SimpleNamespace(message_id=19, chat=SimpleNamespace(id=-1007000001)),
+        -1007000001,
+    )
+    with pytest.raises(ValueError, match="acknowledgement invalid"):
+        _require_telegram_delivery_ack(
+            SimpleNamespace(message_id=19, chat=SimpleNamespace(id=-1007000001)),
+            -1007000002,
+        )

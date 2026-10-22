@@ -9,10 +9,17 @@ from aiogram import Bot
 from aiogram.types import Message
 
 from app.monitoring import MonitoringRepositoryError, TenderMonitorService
+from app.monitoring.service import prefilter_notice
 from app.companies import CompanyRepositoryError, CompanyService
 from app.sources import SourceCatalog, SourceError
 
 logger = logging.getLogger(__name__)
+
+# Only these fixed regional routes ignore caller-specific upstream search terms.
+# Never pool tenant-specific EIS profile RSS requests or any other source.
+_SHARED_INGUSHETIA_KEYS = frozenset({
+    "ru_ingushetia_eis44", "ru_ingushetia_fabrikant44",
+})
 
 def enabled_ru_catalog_keys(catalog: SourceCatalog | None) -> tuple[str, ...]:
     """Only explicitly enabled RU registrations; no guessed or draft sources."""
@@ -302,17 +309,36 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService,
                     if service.settings.ru_background_catalog_enabled else ())
     if service.settings.ru_background_catalog_enabled and not russian_keys:
         raise ValueError("No approved Russian sources for the background monitor.")
+    # Fixed, non-personalized regional listings can be obtained once each
+    # cycle; never make O(number_of_subscriptions) upstream HTTP requests.
+    # Per-tenant profile matching and confirmed Telegram receipts remain
+    # individual. Other source combinations use the unchanged legacy path.
+    share_ingushetia = bool(russian_keys) and set(russian_keys) <= _SHARED_INGUSHETIA_KEYS
     while not stop_event.is_set():
         try:
             subscriptions = await service.active_subscriptions()
             if subscriptions:
+                shared_notices, shared_report = None, None
+                if share_ingushetia:
+                    shared_matches, shared_report = await service.fetch_matches_from_catalog_for_profile(
+                        source_catalog, None, source_keys=russian_keys,
+                    )
+                    shared_notices = tuple(match.notice for match in shared_matches)
                 for subscription in subscriptions:
                     try:
                         if service.settings.ru_background_catalog_enabled:
-                            matches, report = await service.fetch_matches_from_catalog(
-                                source_catalog, subscription.owner_user_id,
-                                source_keys=russian_keys,
-                            )
+                            if share_ingushetia:
+                                report = shared_report
+                                profile = await service.profile_for_owner(subscription.owner_user_id)
+                                matches = [
+                                    match for notice in shared_notices
+                                    if (match := prefilter_notice(notice, profile)) is not None
+                                ]
+                            else:
+                                matches, report = await service.fetch_matches_from_catalog(
+                                    source_catalog, subscription.owner_user_id,
+                                    source_keys=russian_keys,
+                                )
                             if not report.attempted_sources or report.total_failure:
                                 logger.warning("Russian source scan unavailable; no alerts claimed.")
                                 continue

@@ -67,7 +67,8 @@ class FreshIngushetiaWorkerSource(SnapshotSource):
         # Filter terms locally using the same tokenizer *before* applying
         # the notification limit, to avoid undercounting legitimate matches.
         records = await asyncio.to_thread(
-            self.repository.read, self.name, 100, (), not_before=lower,
+            self.repository.read, self.name, 1000, (), not_before=lower,
+            _fresh_ingushetia_candidate_scan=True,
         )
         if not self.terms:
             return records[:limit]

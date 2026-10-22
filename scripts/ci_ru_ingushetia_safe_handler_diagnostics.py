@@ -24,6 +24,18 @@ _CATEGORY_ALLOWLIST = frozenset({
     "response_read_timeout", "response_read_failure",
     "connection_or_tls_handshake_timeout", "connection_failure_unspecified",
 })
+SAFE_FAILURE_CATEGORIES = _CATEGORY_ALLOWLIST | frozenset({
+    "handler_other", "handler_without_upstream_context",
+    "upstream_http_429", "upstream_http_5xx", "upstream_http_other",
+    "source_contract_or_schema", "durable_storage",
+})
+
+
+def sanitize_failure_categories(categories):
+    """Never pass through arbitrary strings supplied by an exception."""
+    return tuple(label if type(label) is str and label in SAFE_FAILURE_CATEGORIES
+                 else "handler_other" for label in tuple(categories)[-3:])
+
 
 
 def safe_handler_failure_category(error):
@@ -77,4 +89,4 @@ def safe_handler_failure_classes(handler):
 
 
 def safe_handler_failure_categories(handler):
-    return tuple(handler.failure_categories[-3:])
+    return sanitize_failure_categories(handler.failure_categories)

@@ -1,0 +1,97 @@
+name: RU Dagestan original regional small purchases real discovery
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/research_ru_dagestan_small_originals.py
+      - scripts/research_ru_dagestan_json_probe.py
+      - scripts/research_ru_dagestan_export.py
+      - tests/test_ru_dagestan_small_originals.py
+      - .github/workflows/ru-dagestan-small-original-research.yml
+  push:
+    branches: [research/ru-dagestan-small-original-notices-20261018]
+    paths:
+      - scripts/research_ru_dagestan_small_originals.py
+      - scripts/research_ru_dagestan_json_probe.py
+      - scripts/research_ru_dagestan_export.py
+      - tests/test_ru_dagestan_small_originals.py
+      - .github/workflows/ru-dagestan-small-original-research.yml
+permissions:
+  contents: read
+jobs:
+  dagestan-strict-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Reject forged native records, lookalike hosts and historical-only cards
+        run: python -m pytest -q tests/test_ru_dagestan_small_originals.py
+  dagestan-official-two-originals-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require official live list to two independently fetched real original notices
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_dagestan_small_originals
+  dagestan-official-public-grid-json:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require current official site to advertise an accessible original JSON registry
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_dagestan_json_probe
+  dagestan-official-public-export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require authentic original Dagestan notices export from published first-party route
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_dagestan_export
+  dagestan-public-http-diagnostic-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read public fixed Dagestan response status, never follow redirects or disable TLS
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in NoticesJson NoticesExport; do
+            case "$name" in
+              NoticesJson) path='NoticesJson' ;;
+              NoticesExport) path='NoticesExport' ;;
+              *) exit 2 ;;
+            esac
+            code="$(curl --noproxy '*' --silent --show-error --proto '=https' \
+              --max-redirs 0 --connect-timeout 8 --max-time 24 \
+              --output /dev/null --write-out '%{http_code}' \
+              "https://goszakaz.e-dag.ru/smallpurchases/GzwSP/$path")" && rc=0 || rc=$?
+            echo "RU_DAG_PUBLIC_$name HTTP_STATUS=$code CURL_EXIT=$rc"
+          done
+          echo "PRODUCTION_CHANGED=NO"

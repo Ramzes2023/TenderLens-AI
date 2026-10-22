@@ -101,6 +101,22 @@ def test_official_eis_rss_extensionless_alias_keeps_strict_host_and_region_gate(
         ))
 
 
+def test_extensionless_rss_does_not_relax_existing_national_eis_default():
+    """Only Chechnya opts in; national direct EIS preserves .html-only gate."""
+    from app.sources.eis_rss import validate_eis_direct_urls
+
+    alias = URL.replace("/rss.html?", "/rss?")
+    with pytest.raises(SourceError):
+        validate_eis_direct_urls((alias,))
+    validate_eis_direct_urls((alias,), allow_extensionless_rss=True)
+    # The regular national adapter must still reject the alias in direct mode,
+    # before any HTTP request or certificate override.
+    async def check():
+        with pytest.raises(SourceError):
+            await EisRssSource((alias,), direct=True).fetch()
+    asyncio.run(check())
+
+
 def test_regional_evidence_from_customer_or_delivery_not_title_or_summary():
     assert is_chechnya_notice(notice("0194200000526005027",
                                     customer="Комитет правительства Чеченской Республики"))

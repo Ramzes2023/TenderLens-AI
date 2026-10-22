@@ -322,7 +322,16 @@ def test_timeout_budget_includes_dns_and_fallback(monkeypatch):
         with pytest.raises(httpcore.ConnectTimeout):
             await subject.connect_tcp('origin.example', 443, timeout=0.1)
         assert len(tcp.calls) == 2
-        assert 0 < tcp.calls[1][2]['timeout'] < tcp.calls[0][2]['timeout'] < 0.1
+        # DNS took 0.02 of the 0.10 overall budget. The first of two
+        # prevalidated public addresses gets half the remaining 0.08;
+        # after a quick 0.03 connection failure, the final public peer
+        # gets the remaining 0.05. The second allowance can be LONGER
+        # than the first without exceeding the global fail_after deadline.
+        first = tcp.calls[0][2]['timeout']
+        second = tcp.calls[1][2]['timeout']
+        assert 0 < first <= 0.04 + 1e-8
+        assert 0 < second <= 0.05 + 1e-8
+        assert 0.02 + 0.03 + second <= 0.1 + 1e-8
     asyncio.run(run())
 
 

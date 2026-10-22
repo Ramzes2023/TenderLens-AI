@@ -573,3 +573,44 @@ def test_optional_test_telegram_requires_matching_real_api_ack(monkeypatch):
     monkeypatch.setattr(harness, "Bot", WrongChatBot)
     with pytest.raises(ValueError, match="Telegram message acknowledgement invalid"):
         asyncio.run(harness.optional_authorized_telegram_api_check(original))
+
+
+def test_strict_acceptance_full_offline_worker_sqlite_query_local_alert(monkeypatch):
+    """Integration regression: run the REAL harness and Worker on a synthetic feed.
+
+    The only mock is upstream EIS HTTP. This can NEVER pass the live release
+    gate: it does not verify official reachability or external Telegram delivery.
+    """
+    from scripts import ci_ru_chechnya_eis_real_worker as harness
+
+    monkeypatch.delenv("RU_CHECHNYA_E2E_TEST_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("RU_CHECHNYA_E2E_TEST_CHAT_ID", raising=False)
+    config = replace(
+        settings(),
+        enabled=True, ru_background_catalog_enabled=True,
+        ru_chechnya_eis_enabled=True, ru_chechnya_eis_rss_urls=(URL,),
+        eis_direct_enabled=True,
+    )
+    monkeypatch.setattr(harness, "isolated_settings", lambda: config)
+    original = notice(
+        "0194200000526005027",
+        customer="Комитет Правительства Чеченской Республики",
+        region="Чеченская Республика",
+    )
+
+    async def synthetic_official_eis(self, limit=20):
+        assert limit == 100
+        assert self.name == SOURCE_KEY
+        return [original]
+
+    monkeypatch.setattr(EisRssSource, "fetch", synthetic_official_eis)
+    result = harness.accept()
+    assert result["official_live_eis_region_notices"] == 1
+    assert result["fenced_worker_inserted"] == 1
+    assert result["sqlite_original_number_query"]
+    assert result["sqlite_real_title_keyword_query"]
+    assert result["unmatched_keyword_returns_none"]
+    assert result["local_alert_captured"] == 1
+    assert result["local_alert_replay_dedup_verified"]
+    assert result["real_telegram_api_delivery_verified"] is False
+    assert result["production_enabled"] is False

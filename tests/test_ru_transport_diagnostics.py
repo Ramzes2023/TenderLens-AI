@@ -156,3 +156,21 @@ def test_safe_ingushetia_handler_categories_fail_closed_on_arbitrary_values():
         )
         assert "SECRET" not in repr(value.handler_failure_categories)
         assert "SECRET" not in str(value)
+
+
+def test_exactly_three_wrapped_transient_failures_are_classified_as_network_exhaustion():
+    from scripts.ci_ru_ingushetia_safe_handler_diagnostics import classify_failed_live_worker
+
+    classes = ("RetryableJobError",) * 3
+    causes = (
+        "connection_failure_unspecified",
+        "connection_or_tls_handshake_timeout",
+        "response_read_failure",
+    )
+    assert classify_failed_live_worker(classes, causes) == "UPSTREAM_NETWORK_RETRIES_EXHAUSTED"
+    assert classify_failed_live_worker(classes[:2], causes[:2]) == "UNDETERMINED_FAILURE"
+    assert classify_failed_live_worker(("RetryableJobError", "TypeError", "RetryableJobError"), causes) == "UNDETERMINED_FAILURE"
+    assert classify_failed_live_worker(classes, causes[:2] + ("source_contract_or_schema",)) == "SOURCE_CONTRACT_FAILURE_OBSERVED"
+    assert classify_failed_live_worker(classes, causes[:2] + ("durable_storage",)) == "DURABLE_STORAGE_FAILURE_OBSERVED"
+    assert classify_failed_live_worker(classes, causes[:2] + ("token=SECRET",)) == "UNDETERMINED_FAILURE"
+    assert "SECRET" not in classify_failed_live_worker(classes, causes[:2] + ("token=SECRET",))

@@ -83,6 +83,8 @@ ON_DEMAND_TARGETS = {
     "gpb_public_html": Target("etpgpb.ru", "/procedures/"),
     "gpb_new_public_html": Target("new.etpgpb.ru", "/procedures/"),
     "gpb_new_rss": Target("new.etpgpb.ru", "/procedures.rss", "rss"),
+    # Accredited GPB state procurement registry; 44-FZ cross-posts with EIS.
+    "gpb_gos44_html": Target("gos.etpgpb.ru", "/44/catalog/procedure"),
 }
 
 class UnsafeAddress(RuntimeError):

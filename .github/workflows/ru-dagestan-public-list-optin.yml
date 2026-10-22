@@ -6,6 +6,8 @@ on:
     paths:
       - app/sources/ru_dagestan_public_list.py
       - scripts/ci_ru_dagestan_public_list_sql.py
+      - scripts/ci_ru_dagestan_public_grid_metadata_live.py
+      - .github/workflows/ru-dagestan-public-list-optin.yml
       - tests/test_ru_dagestan_public_list.py
 
   workflow_dispatch:
@@ -46,3 +48,18 @@ jobs:
       - name: Prove actual first-party list from real HTTP -> leased fenced worker -> disposable SQLite -> keyword user search
         timeout-minutes: 6
         run: python -B -m scripts.ci_ru_dagestan_public_list_sql
+
+  real-native-amount-and-deadline-through-worker-sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require actual current public Dagestan amount and deadline through leased Worker SQLite
+        timeout-minutes: 6
+        run: python -B -m scripts.ci_ru_dagestan_public_grid_metadata_live

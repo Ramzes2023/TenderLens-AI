@@ -386,7 +386,7 @@ def test_regional_eis_worker_can_store_26th_real_candidate_without_lifting_other
     full = []
     for i in range(26):
         number = f"011450000082600{2400 + i:04d}"
-        title = "Канализация в Ингушетии" if i == 25 else "Поставка бетона"
+        title = "Строительство канализации в Ингушетии" if i == 25 else "Поставка бетона"
         full.append(notice(number, source=EIS, title=title))
     assert len({n.tender_number for n in full}) == 26
 

@@ -55,3 +55,23 @@ jobs:
           PYTHONDONTWRITEBYTECODE: '1'
         timeout-minutes: 8
         run: python -B -m scripts.ci_ru_ingushetia_fabrikant_worker
+
+  genuine-public-original-worker-linux:
+    name: Linux independent first-party originals -> Worker -> SQL -> query -> local alert
+    needs: [regional-strict-contracts]
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Same strict live publisher proof from Linux network (independent of Windows)
+        env:
+          PYTHON_DOTENV_DISABLED: '1'
+          PYTHONDONTWRITEBYTECODE: '1'
+        timeout-minutes: 8
+        run: python -B -m scripts.ci_ru_ingushetia_fabrikant_worker

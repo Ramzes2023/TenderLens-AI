@@ -44,6 +44,7 @@ HOSTS = {
     'kavkaz_rf_firstparty': frozenset({'xn--80aafvlc.xn--p1ai'}),
     'south_ural_public': frozenset({'www.vendorportal.ru'}),
     'ru_dagestan_public_list': frozenset({'goszakaz.e-dag.ru'}),
+    'ru_chechnya_eis': frozenset({'zakupki.gov.ru'}),
     'ru_samara_public_list': frozenset({'webtorgi.samregion.ru'}),
     'eis_223': frozenset({'zakupki.gov.ru'}),
     'eis_44_html': frozenset({'zakupki.gov.ru'}),

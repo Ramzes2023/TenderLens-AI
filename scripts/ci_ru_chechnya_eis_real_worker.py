@@ -141,7 +141,11 @@ def accept():
                 stop = asyncio.Event()
                 bot = LocalCaptureBot(stop)
                 await asyncio.wait_for(
-                    monitor_loop(bot, service, stop, source_catalog=catalog),
+                    # The real original was already obtained and fenced-written
+                    # by the Worker. User notifications must read that exact
+                    # persisted SQL snapshot rather than making an unrelated
+                    # second upstream RSS request, which could fail or change.
+                    monitor_loop(bot, service, stop, source_catalog=snapshot),
                     timeout=75,
                 )
                 if not bot.messages or not any(

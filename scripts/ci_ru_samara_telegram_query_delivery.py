@@ -10,6 +10,7 @@ import asyncio
 import re
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 from app.bot.monitoring import format_match, monitor_loop, enabled_ru_catalog_keys
 from app.monitoring.config import MonitoringSettings
@@ -42,6 +43,14 @@ class LocalCaptureBot:
         if self.fail_delivery:
             raise ConnectionError("Deliberate local transport failure; no Telegram I/O")
         self.delivered.append(text)
+        # A local-only, shape-compatible synthetic Bot API receipt.
+        # The production monitor checks recipient and positive message ID
+        # before marking an actual procured ID delivered. This is NOT
+        # confirmation from Telegram servers or a user.
+        return SimpleNamespace(
+            message_id=len(self.delivered),
+            chat=SimpleNamespace(id=chat_id),
+        )
 
 
 def settings():

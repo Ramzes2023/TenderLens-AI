@@ -1,7 +1,7 @@
 """Safety and source scope contracts for operator-only trusted RU diagnostics."""
 import unittest
 from unittest.mock import patch
-from scripts.ru_trusted_live_probe import TARGETS, UnsafeAddress, checked_ips, describe, main, read_public, Target
+from scripts.ru_trusted_live_probe import TARGETS, ON_DEMAND_TARGETS, UnsafeAddress, checked_ips, describe, main, read_public, Target
 
 class ProbeSafetyTests(unittest.TestCase):
     def test_fixed_unique_approved_targets(self):
@@ -61,10 +61,27 @@ class ProbeSafetyTests(unittest.TestCase):
             describe("rss",b"not rss")
 
 
+    def test_rss_rejects_nonfeed_dtd_and_xml_entity_without_false_visibility(self):
+        for payload in (
+            b"<html><body>login</body></html>",
+            b"<errors><error>Not available</error></errors>",
+            b'<!DOCTYPE rss [<!ENTITY leak "secret">]><rss><channel/></rss>',
+            b'<rss><!DOCTYPE fake><channel/></rss>',
+        ):
+            with self.assertRaises(ValueError):
+                describe("rss", payload)
+        self.assertEqual(describe(
+            "rss", b'<feed xmlns="http://www.w3.org/2005/Atom"><entry/></feed>'
+        )["atom_items"], 1)
+
     def test_batch_enforces_real_reachability_and_never_marks_ingestion(self):
         from io import StringIO
         from contextlib import redirect_stdout
-        with patch("scripts.ru_trusted_live_probe.read_public", return_value=("text/html", b"<a href='/proc/123'>test</a>")) as fn:
+        def visible(target):
+            if target.mode == "rss":
+                return ("application/rss+xml", b"<rss><channel><item/></channel></rss>")
+            return ("text/html", b"<a href='/proc/123'>test</a>")
+        with patch("scripts.ru_trusted_live_probe.read_public", side_effect=visible) as fn:
             output = StringIO()
             with redirect_stdout(output):
                 self.assertEqual(main("batch_priority"), 0)
@@ -74,7 +91,7 @@ class ProbeSafetyTests(unittest.TestCase):
         def blocked(target):
             if target.host == "44.fabrikant.ru":
                 raise TimeoutError("no official response")
-            return ("text/html", b"<a href='/proc/123'>test</a>")
+            return visible(target)
         with patch("scripts.ru_trusted_live_probe.read_public", side_effect=blocked):
             with redirect_stdout(StringIO()):
                 self.assertEqual(main("batch_priority"), 2)
@@ -87,6 +104,70 @@ class ProbeSafetyTests(unittest.TestCase):
             self.assertEqual(url.hostname, item.host)
             self.assertEqual(url.scheme, "https")
             self.assertFalse(url.username or url.password or url.query or url.fragment)
+
+    def test_four_operator_only_official_gpb_targets_do_not_expand_batch(self):
+        self.assertEqual(len(TARGETS), 37)
+        self.assertEqual(ON_DEMAND_TARGETS, {
+            "gpb_public_html": Target("etpgpb.ru", "/procedures/"),
+            "gpb_new_public_html": Target("new.etpgpb.ru", "/procedures/"),
+            "gpb_new_rss": Target("new.etpgpb.ru", "/procedures.rss", "rss"),
+            "gpb_gos44_html": Target("gos.etpgpb.ru", "/44/catalog/procedure"),
+        })
+        self.assertFalse(set(TARGETS).intersection(ON_DEMAND_TARGETS))
+        self.assertEqual(len({(z.host, z.path) for z in ON_DEMAND_TARGETS.values()}), 4)
+
+    def test_gpb_official_only_choice_does_not_use_user_supplied_urls(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        with patch("scripts.ru_trusted_live_probe.read_public",
+                   return_value=("text/html", b"<a href='/procedures/'>list</a>")) as reader:
+            with redirect_stdout(StringIO()):
+                self.assertEqual(main("gpb_public_html"), 0)
+                self.assertEqual(main("gpb_new_public_html"), 0)
+            self.assertEqual([x.args[0] for x in reader.call_args_list], [
+                ON_DEMAND_TARGETS["gpb_public_html"],
+                ON_DEMAND_TARGETS["gpb_new_public_html"],
+            ])
+        with patch("scripts.ru_trusted_live_probe.checked_ips") as dns:
+            self.assertEqual(main("gpb_new_rss?ref=private"), 2)
+            self.assertEqual(main("http://new.etpgpb.ru/procedures.rss"), 2)
+            dns.assert_not_called()
+
+    def test_main_only_selfhosted_gpbdetection_cannot_run_on_pr(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1]
+        text = (root / ".github/workflows/ru-trusted-operator-only.yml").read_text(encoding="utf-8")
+        self.assertIn("on:\n  workflow_dispatch:\n", text)
+        self.assertNotIn("  pull_request:", text)
+        for label in ON_DEMAND_TARGETS:
+            self.assertEqual(text.count("          - " + label + "\n"), 1)
+        self.assertIn("if: github.ref == 'refs/heads/main'", text)
+        self.assertIn("runs-on: [self-hosted, Linux, X64]", text)
+        self.assertIn('test "$ACTUAL_RUNNER_NAME" = "VALYQON-RU-01"', text)
+        self.assertIn("persist-credentials: false", text)
+
+    def test_hosted_gpb_alternative_routes_are_observation_not_source_acceptance(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1]
+        raw = (root / ".github/workflows/ru-gpb-alternative-hosts-observation.yml").read_text(encoding="utf-8")
+        self.assertIn("on:\n  pull_request:\n    branches: [main]", raw)
+        self.assertIn("      - scripts/ru_trusted_live_probe.py", raw)
+        self.assertIn("      - tests/test_ru_trusted_live_probe.py", raw)
+        self.assertIn("    runs-on: ubuntu-latest", raw)
+        self.assertNotIn("self-hosted", raw)
+        self.assertIn("persist-credentials: false", raw)
+        for key in ON_DEMAND_TARGETS:
+            self.assertIn(key, raw)
+        for marker in (
+            "RU_GPB_DETAIL_VERIFIED=NO",
+            "RU_GPB_WORKER_SQL_ACCEPTED=NO",
+            "RU_GPB_TENANT_NOTIFIED=NO",
+            "PRODUCTION_CHANGED=NO",
+        ):
+            self.assertIn(marker, raw)
+        self.assertNotIn("curl -k", raw)
+        self.assertNotIn("verify=False", raw)
+
 
 if __name__ == "__main__":
     unittest.main()

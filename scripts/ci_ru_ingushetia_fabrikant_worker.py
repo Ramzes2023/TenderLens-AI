@@ -27,7 +27,8 @@ from app.sources.ingestion import JOB_TYPE, ConnectorSyncHandler, ConnectorSyncS
 from app.sources.opportunities import OpportunityRepository
 from scripts.ci_ru_ingushetia_safe_handler_diagnostics import (
     DiagnosticConnectorHandler, safe_handler_failure_classes,
-    safe_handler_failure_categories, sanitize_failure_categories,
+    safe_handler_failure_categories, safe_handler_failure_errnos,
+    sanitize_failure_categories,
 )
 from app.sources.snapshots import snapshot_catalog
 from app.sources.ru_ingushetia_fabrikant44 import SOURCE_ID
@@ -101,7 +102,7 @@ async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, repository
 class IngushetiaWorkerProofFailure(AssertionError):
     """Strictly redacted durable job outcome, never a raw upstream error."""
 
-    def __init__(self, job, handler_failure_classes=(), handler_failure_categories=()):
+    def __init__(self, job, handler_failure_classes=(), handler_failure_categories=(), handler_failure_errnos=()):
         state = getattr(job, "state", None)
         code = getattr(job, "failure_code", None)
         self.job_state = state if state in {"queued", "running", "failed", "succeeded", "cancelled"} else "UNKNOWN"
@@ -111,6 +112,8 @@ class IngushetiaWorkerProofFailure(AssertionError):
         } else "UNKNOWN"
         self.handler_failure_classes = tuple(handler_failure_classes)[-3:]
         self.handler_failure_categories = sanitize_failure_categories(handler_failure_categories)
+        self.handler_failure_errnos = tuple(tuple(x for x in group if type(x) is int and 0 <= x <= 100000)
+                                           for group in tuple(handler_failure_errnos)[-3:])
         super().__init__("Real original-card leased Worker failed")
 
 
@@ -159,12 +162,14 @@ def proof():
                     raise IngushetiaWorkerProofFailure(
                     completed, safe_handler_failure_classes(diagnostic_handler),
                     safe_handler_failure_categories(diagnostic_handler),
+                    safe_handler_failure_errnos(diagnostic_handler),
                 )
                 time.sleep((1.25, 2.25)[attempt])
             if completed is None or completed.state != "succeeded":
                 raise IngushetiaWorkerProofFailure(
                     completed, safe_handler_failure_classes(diagnostic_handler),
                     safe_handler_failure_categories(diagnostic_handler),
+                    safe_handler_failure_errnos(diagnostic_handler),
                 )
             rows = store.read(SOURCE_ID, limit=3)
             if len(rows) < 2:
@@ -248,6 +253,7 @@ def main():
             print("WORKER_FAILURE_CODE=" + exc.job_failure_code)
             print("SAFE_HANDLER_CLASSES=" + ",".join(exc.handler_failure_classes))
             print("SAFE_HANDLER_CATEGORIES=" + ",".join(exc.handler_failure_categories))
+            print("SAFE_HANDLER_OS_ERRNOS=" + json.dumps(exc.handler_failure_errnos))
         if type(exc) is AssertionError:
             print("FAILURE_CONTRACT=" + str(exc)[:200].replace("\n", " "))
         print("PRODUCTION_CHANGED=NO")

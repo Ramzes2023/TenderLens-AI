@@ -199,3 +199,36 @@ def test_live_local_alert_sink_returns_required_synthetic_receipt_only():
         assert len(bot.messages) == 1
 
     asyncio.run(run())
+
+
+def test_user_notification_catalog_reads_real_worker_snapshot_not_second_rss(monkeypatch):
+    """Offline boundary: monitoring must consume the persisted Worker identity."""
+    from app.bot.monitoring import enabled_ru_catalog_keys
+    from app.sources.snapshots import snapshot_catalog
+
+    stored = notice(
+        "0194200000526005027",
+        customer="Комитет Правительства Чеченской Республики",
+    )
+    class IsolatedStore:
+        def __init__(self):
+            self.read_count = 0
+
+        def read(self, source, limit, terms):
+            assert source == SOURCE_KEY and limit == 5
+            self.read_count += 1
+            return [stored]
+
+    async def forbidden_second_network_fetch(self, limit=20):
+        raise AssertionError("No fresh EIS fetch after leased Worker persisted original")
+
+    monkeypatch.setattr(ChechnyaEisRssSource, "fetch", forbidden_second_network_fetch)
+    catalog = build_source_catalog(
+        replace(settings(), ru_chechnya_eis_enabled=True,
+                ru_chechnya_eis_rss_urls=(URL,))
+    )
+    store = IsolatedStore()
+    persisted = snapshot_catalog(catalog, store)
+    assert enabled_ru_catalog_keys(persisted) == (SOURCE_KEY,)
+    rows = asyncio.run(persisted.registry.get(SOURCE_KEY).source.fetch(limit=5))
+    assert rows == [stored] and store.read_count == 1

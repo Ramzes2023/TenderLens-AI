@@ -325,10 +325,24 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService,
             if subscriptions:
                 shared_notices, shared_report = None, None
                 if share_ingushetia:
-                    shared_matches, shared_report = await service.fetch_matches_from_catalog_for_profile(
-                        source_catalog, None, source_keys=russian_keys,
-                    )
-                    shared_notices = tuple(match.notice for match in shared_matches)
+                    try:
+                        shared_matches, shared_report = await service.fetch_matches_from_catalog_for_profile(
+                            source_catalog, None, source_keys=russian_keys,
+                        )
+                        shared_notices = tuple(match.notice for match in shared_matches)
+                    except Exception:
+                        # The shared request is outside the individual
+                        # subscription handler. One transient upstream error
+                        # must not terminate the entire background monitor.
+                        # Nothing is delivered or marked seen in this cycle.
+                        # Never log raw upstream errors or tenant secrets.
+                        logger.warning("Ingushetia shared source poll failed; no alerts claimed.")
+                        shared_notices = ()
+                        shared_report = None
+                if share_ingushetia and shared_report is None:
+                    # Keep the task alive for the next configured cycle.
+                    # Skip ALL subscription claims on this failed fetch.
+                    subscriptions = ()
                 for subscription in subscriptions:
                     try:
                         if service.settings.ru_background_catalog_enabled:

@@ -23,7 +23,11 @@ HOST = "etpgpb.ru"
 LIST_URL = f"https://{HOST}/procedures/"
 MAX_BYTES = 1_800_000
 MAX_DETAILS = 3
-_PATH = re.compile(r"/procedures/etp/([0-9]{5,10})-[a-z0-9-]+/")
+# Public index may contain stale procedures. Inspect a bounded surplus of
+# first-party detail links, but publish only independently verified originals.
+MAX_CANDIDATES = 9
+# First-party GPB detail URLs include both <number>/ and <number>-<slug>/.
+_PATH = re.compile(r"/procedures/etp/([0-9]{5,10})(?:-[a-z0-9-]+)?/")
 
 
 class _Cards(HTMLParser):
@@ -57,7 +61,7 @@ def _html(payload):
 
 
 def parse_gpb_public_links(payload, limit=MAX_DETAILS):
-    if type(limit) is not int or not 1 <= limit <= MAX_DETAILS:
+    if type(limit) is not int or not 1 <= limit <= MAX_CANDIDATES:
         raise ValueError("Invalid GPB public fetch limit")
     parser = _Cards()
     parser.feed(_html(payload))
@@ -129,7 +133,8 @@ class GpbEtpPublicSource:
         if type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError("Invalid GPB source limit")
         cap = min(limit, MAX_DETAILS)
-        policy = (bounded_fetch(FetchPolicy(frozenset({HOST}), cap + 1, max_bytes=MAX_BYTES))
+        candidate_count = min(MAX_CANDIDATES, cap * 3)
+        policy = (bounded_fetch(FetchPolicy(frozenset({HOST}), candidate_count + 1, max_bytes=MAX_BYTES))
                   if _policy.get() is None else nullcontext())
         with policy:
             async with source_client(
@@ -143,7 +148,7 @@ class GpbEtpPublicSource:
                 res.raise_for_status()
                 if "html" not in res.headers.get("content-type", "").lower():
                     raise ValueError("Public GPB listing is not HTML")
-                records = parse_gpb_public_links(res.content, limit=cap)
+                records = parse_gpb_public_links(res.content, limit=candidate_count)
                 verified = []
                 for identity, detail_url in records:
                     try:
@@ -152,6 +157,8 @@ class GpbEtpPublicSource:
                         if "html" not in item.headers.get("content-type", "").lower():
                             raise ValueError("Public GPB detail is not HTML")
                         verified.append(parse_gpb_verified_detail(item.content, identity, detail_url))
+                        if len(verified) >= cap:
+                            break
                     except (ValueError, httpx.HTTPStatusError):
                         # Fail closed for stale individual notices; never store an
                         # unverified card or substitute a fabricated fallback.

@@ -2,6 +2,7 @@ import json
 import ssl
 
 import httpx
+import pytest
 
 from scripts.ru_transport_diagnostics import transport_failure
 

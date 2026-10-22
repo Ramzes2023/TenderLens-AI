@@ -32,6 +32,20 @@ Status: **draft; production disabled; no verified live delivery** until all chec
 
 При успешной приёмке одна и та же закупка, даже при изменении RSS GUID, должна сохранять ключ `ru_chechnya_eis/<реестровый номер 44-ФЗ>`; соответствующий ключ в блоке публичного provenance обновляется вместе с идентификатором.
 
+## Отдельное подтверждение Telegram Bot API
+
+По умолчанию живой скрипт **не отправляет** внешних сообщений. Чтобы добровольно проверить внешний Bot API **после** успешной загрузки настоящей закупки, оператор предварительно задаёт в текущем PowerShell-процессе токен отдельного тестового бота и идентификатор разрешённого тестового чата, не сохраняя их в GitHub или в логи:
+
+```powershell
+$env:RU_CHECHNYA_E2E_TEST_BOT_TOKEN = '<test-bot-token>'
+$env:RU_CHECHNYA_E2E_TEST_CHAT_ID = '<authorized-test-chat-id>'
+.\\scripts\\ru_chechnya_windows_live.ps1 -TryOfficialSearchCandidate -SendAuthorizedTelegramTest
+```
+
+Можно вместо `-TryOfficialSearchCandidate` использовать проверенный `-RegionalRssUrl '<точная-ссылка-ЕИС>'`. Без `-SendAuthorizedTelegramTest` скрипт временно скрывает тестовые реквизиты от процесса приёмки, даже если они были заданы ранее, и возвращает исходные значения после завершения. При включённом флаге отправляется **один** проверенный публичный оригинал 44-ФЗ, только в явно указанный чат; наличие валидного `message_id` и совпадение `chat.id` проверяются по реальному ответу Telegram. API acknowledgement означает принято сервером Telegram, но не доказывает прочтение пользователем. Уведомления рабочим пользователям и production не включаются.
+
+Токен, полный URL запроса и ID тестового чата не выводятся в диагностические логи. Никогда не публикуйте тестовые токены в PR, workflow inputs или issue.
+
 ## Merge gate — all of the following
 
 - PR tests and all required repository checks green on the current head commit.

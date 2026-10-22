@@ -519,3 +519,84 @@ def test_regional_worker_sql_keyword_after_first_hundred_is_not_silently_lost(tm
                       not_before=cutoff, _fresh_ingushetia_candidate_scan=True)
     finally:
         db.close()
+
+
+def test_background_worker_sql_113th_candidate_reaches_correct_chat_once(tmp_path):
+    """End-to-end OFFLINE SQL + profile + monitor + confirmed fake-sink receipt.
+
+    No upstream network, no Bot API and no automatic production activation.
+    """
+    from types import SimpleNamespace
+    from app.bot.monitoring import monitor_loop
+    from app.monitoring.repository import MonitoringRepository
+    from app.monitoring.service import TenderMonitorService
+    from app.scoring.models import CompanyProfile
+
+    db = Database(DatabaseSettings("ing-deep-monitor", tmp_path / "data.sqlite"))
+    store = OpportunityRepository(db)
+    store.initialize()
+    cfg = settings(ru_ingushetia_fabrikant44_enabled=False, max_items=3)
+    local_catalog = fresh_ingushetia_worker_catalog(build_source_catalog(cfg), store)
+    mrepo = MonitoringRepository(tmp_path / "monitor.sqlite")
+    mrepo.initialize()
+    mrepo.set_subscription(103, 203, True)
+    expected = "0114500000826002901"
+    profile = CompanyProfile(
+        profile_version="1", company_name="Regional drainage company",
+        search_keywords=["канализации"], allowed_regions=["Ингушетия"],
+    )
+    service = TenderMonitorService(
+        cfg, None, mrepo, None,
+        profile_resolver=lambda user_id: profile if user_id == 103 else None,
+    )
+    stop = asyncio.Event()
+    original_subscriptions = service.active_subscriptions
+
+    async def once():
+        stop.set()
+        return await original_subscriptions()
+
+    service.active_subscriptions = once
+
+    class LocalBot:
+        def __init__(self):
+            self.calls = []
+
+        async def send_message(self, chat, message, **kwargs):
+            self.calls.append((chat, message))
+            return SimpleNamespace(message_id=len(self.calls), chat=SimpleNamespace(id=chat))
+
+    try:
+        store.upsert(notice(expected, title="Устройство ливневой канализации"),
+                     connector_version(EIS))
+        for i in range(112):
+            number = str(114500000826002700 + i).zfill(19)
+            store.upsert(notice(number, title="Поставка канцелярских товаров"),
+                         connector_version(EIS))
+        bot = LocalBot()
+        asyncio.run(monitor_loop(bot, service, stop, source_catalog=local_catalog))
+        assert len(bot.calls) == 1
+        assert bot.calls[0][0] == 203 and expected in bot.calls[0][1]
+        assert mrepo.seen(103, "eis_44", expected)
+
+        stop.clear()
+        asyncio.run(monitor_loop(bot, service, stop, source_catalog=local_catalog))
+        assert len(bot.calls) == 1  # confirmed first delivery is not replayed
+    finally:
+        db.close()
+
+
+def test_background_worker_sql_never_uses_live_regional_catalog(tmp_path):
+    """An accidentally unwrapped live regional adapter must fail closed."""
+    from app.bot.monitoring import monitor_loop
+    from app.monitoring.repository import MonitoringRepository
+    from app.monitoring.service import TenderMonitorService
+
+    cfg = settings(ru_ingushetia_fabrikant44_enabled=False)
+    live_catalog = build_source_catalog(cfg)
+    mrepo = MonitoringRepository(tmp_path / "monitor.sqlite")
+    mrepo.initialize()
+    service = TenderMonitorService(cfg, None, mrepo, None)
+    with pytest.raises(ValueError, match="Worker SQL alert catalog not installed"):
+        asyncio.run(monitor_loop(object(), service, asyncio.Event(),
+                                 source_catalog=live_catalog))

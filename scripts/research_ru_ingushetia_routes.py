@@ -58,6 +58,12 @@ CASES = (
     ("fabrikant_query_ingushetia", "https://44.fabrikant.ru/44/catalog/procedure?q=%D0%98%D0%BD%D0%B3%D1%83%D1%88%D0%B5%D1%82%D0%B8%D1%8F", HOST_FAB, None),
     ("fabrikant_query_organizer_inn", LIST_URL, HOST_FAB, None),
     ("fabrikant_query_recent_original", "https://44.fabrikant.ru/44/catalog/procedure?q=0114500000826002358", HOST_FAB, None),
+    # Observation only: independently establish that soap4 offers a *fresh*
+    # organizer-filtered first-party list before it may ever be considered as
+    # a discovery alternative. Old/detail-only records are not live proof.
+    ("fabrikant_soap4_organizer_filtered_current",
+     "https://soap4.fabrikant.ru/44/catalog/procedure/published?placer_search_str=0608058533&order=publication_datetime&dir=desc",
+     HOST_SOAP, None),
     ("fabrikant_soap4_current_catalog", "https://soap4.fabrikant.ru/44/catalog/procedure/published", HOST_SOAP, None),
     ("fabrikant_soap4_ordered_current_catalog", "https://soap4.fabrikant.ru/44/catalog/procedure/published?dir=desc&dropOrder=1&order=procedure_number", HOST_SOAP, None),
     ("fabrikant_zmo_current_catalog", "https://zmo.fabrikant.ru/44/catalog/procedure?dir=desc&order=trade_start_datetime&page=1", HOST_ZMO, None),

@@ -484,6 +484,19 @@ def test_transport_probe_classifies_tls_and_dns_without_logging_raw_errors():
     assert transport_category(httpx.ConnectTimeout("synthetic")) == "TIMEOUT"
     assert transport_category(httpx.ConnectError("synthetic")) == "CONNECT_FAILED_UNCLASSIFIED"
 
+    # Production bounded transport redacts raw URL, so operators must retain
+    # actionable safe categories without relying on httpx message text.
+    from app.sources.http import ConnectorTransportError
+    for reason, expected in (
+        ("tls_certificate", "TLS_CERTIFICATE_OR_HANDSHAKE"),
+        ("public_ip", "DNS_NONPUBLIC_IP_REJECTED"),
+        ("network", "NETWORK_TRANSPORT_FAILED"),
+        ("http_status", "HTTP_REJECTED"),
+        ("http_transient", "HTTP_TRANSIENT"),
+        ("response_size", "OVER_SIZE_LIMIT"),
+    ):
+        assert transport_category(ConnectorTransportError(reason=reason)) == expected
+
 
 def test_offline_probe_only_counts_verified_official_chechnya_rss(monkeypatch):
     """MockTransport-like injection: no network, no production writes or Telegram."""

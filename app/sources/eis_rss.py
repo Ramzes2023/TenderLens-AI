@@ -372,12 +372,16 @@ def verify_eis_feed_law(payload: bytes, wanted: str) -> None:
             raise SourceError("EIS law verification failed: mixed, unknown or conflicting result")
 
 
-def validate_eis_direct_urls(urls) -> None:
+def validate_eis_direct_urls(urls, *, allow_extensionless_rss=False) -> None:
+    # National EIS callers retain their historical .html-only contract.
+    # The Chechnya adapter explicitly opts in to the verified same-host alias.
+    paths = {"/epz/order/extendedsearch/rss.html"}
+    if allow_extensionless_rss:
+        paths.add("/epz/order/extendedsearch/rss")
     for raw in urls:
         parts = urlsplit(raw)
         if (parts.scheme != "https" or parts.netloc != "zakupki.gov.ru"
-                or parts.path not in {"/epz/order/extendedsearch/rss.html",
-                                      "/epz/order/extendedsearch/rss"} or parts.fragment
+                or parts.path not in paths or parts.fragment
                 or "\\" in raw or any(c.isspace() or ord(c) < 32 for c in raw)):
             raise SourceError("Direct EIS requires the official HTTPS RSS endpoint")
 
@@ -475,6 +479,7 @@ class EisRssSource:
     name: str = "eis"
     direct: bool = False
     system_trust: bool = False
+    allow_extensionless_rss: bool = False
 
     def __post_init__(self):
         if not math.isfinite(self.timeout) or not 0 < self.timeout <= 120:
@@ -489,6 +494,7 @@ class EisRssSource:
             name=self.name,
             direct=self.direct,
             system_trust=self.system_trust,
+            allow_extensionless_rss=self.allow_extensionless_rss,
         )
 
     async def fetch(self, limit: int = 20) -> list[TenderNotice]:
@@ -496,7 +502,7 @@ class EisRssSource:
         if not self.urls:
             return []
         if self.direct:
-            validate_eis_direct_urls(self.urls)
+            validate_eis_direct_urls(self.urls, allow_extensionless_rss=self.allow_extensionless_rss)
         verify = eis_tls_verify(direct=self.direct, system_trust=self.system_trust,
                                 ca_bundle_file=self.ca_bundle_file)
         merged: list[TenderNotice] = []

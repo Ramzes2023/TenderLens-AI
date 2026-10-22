@@ -86,7 +86,10 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' &&
        github.ref == 'refs/heads/feat/ru-chechnya-eis-rss-20261022')
-    needs: [chechnya-offline-contracts]
+    # Run the strictly isolated, read-only live diagnostic in parallel with
+    # Github-hosted contracts. Waiting for a busy ubuntu-latest queue would
+    # otherwise prevent the trusted RU runner from proving source reachability.
+    # Both jobs (and all required repository checks) must be green before merge.
     runs-on: [self-hosted, Linux]
     timeout-minutes: 15
     env:

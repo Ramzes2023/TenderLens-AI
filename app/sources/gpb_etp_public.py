@@ -40,7 +40,7 @@ class _Cards(HTMLParser):
         self._hidden = 0
 
     def handle_starttag(self, tag, attrs):
-        if tag in {'script', 'style', 'template', 'noscript', 'svg'}:
+        if tag in {'head', 'title', 'script', 'style', 'template', 'noscript', 'svg'}:
             self._hidden += 1
         if self._hidden:
             return
@@ -58,7 +58,7 @@ class _Cards(HTMLParser):
             self._heading.append(data)
 
     def handle_endtag(self, tag):
-        if tag in {'script', 'style', 'template', 'noscript', 'svg'}:
+        if tag in {'head', 'title', 'script', 'style', 'template', 'noscript', 'svg'}:
             self._hidden = max(0, self._hidden - 1)
             return
         if self._hidden:
@@ -83,7 +83,9 @@ def parse_gpb_public_links(payload, limit=MAX_DETAILS):
     records = []
     seen = {}
     for href in parser.links:
-        if type(href) is not str or len(href) > 1500 or "\\" in href:
+        if (type(href) is not str or not href or len(href) > 1500
+                or chr(92) in href
+                or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in href)):
             continue
         try:
             url = urlsplit(urljoin(LIST_URL, href))
@@ -125,7 +127,8 @@ def parse_gpb_verified_detail(payload, identity, detail_url):
     # exactly one unambiguous nonempty H1 title.
     # An identifier only inside a hidden script/style is NOT an independently
     # verified native original. Require a first-party human-readable occurrence.
-    if identity not in ' '.join(parser.visible) or len(set(headings)) != 1:
+    if (not re.search(r"(?<![0-9])" + re.escape(identity) + r"(?![0-9])",
+                      " ".join(parser.visible)) or len(set(headings)) != 1):
         raise ValueError("GPB official public detail identity or title mismatch")
     title = headings[0]
     notice = TenderNotice(

@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 
 import httpx
 import pytest
@@ -64,7 +65,9 @@ def test_parse_uk_fts_normalizes_realistic_release() -> None:
         ]
     }
 
-    notices = parse_uk_fts_response(payload)
+    # A 2026-10-21 deadline is legitimately expired after that date.
+    # Freeze the parser clock at the fixture's October 2026 publication window.
+    notices = parse_uk_fts_response(payload, now=datetime(2026, 10, 11, 12, tzinfo=timezone.utc))
 
     assert len(notices) == 1
 

@@ -96,7 +96,7 @@ async def _check_original_links(notices):
                   raise AssertionError("Official original card does not corroborate EIS number")
 
 
-async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, repository, source_id=SOURCE_ID):
+async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, repository, source_id=SOURCE_ID, monitor_catalog=None):
     """Real stored notices -> real monitor dedup -> Telegram-format fake sink.
 
     Intentionally uses no bot credentials, chat API, network send, or user data.
@@ -109,7 +109,7 @@ async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, repository
 
     # Read the actual Worker database through the production snapshot and
     # monitoring service. Do not override catalog fetching with in-memory rows.
-    persisted_catalog = snapshot_catalog(catalog, repository)
+    persisted_catalog = monitor_catalog if monitor_catalog is not None else snapshot_catalog(catalog, repository)
     service = TenderMonitorService(cfg, None, monitor_repo, None)
     stored_matches, report = await service.fetch_matches_from_catalog(
         persisted_catalog, fake_owner, source_keys=(source_id,),

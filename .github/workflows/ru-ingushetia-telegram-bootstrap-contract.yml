@@ -1,0 +1,60 @@
+name: Ingushetia manual Telegram bootstrap security and offline contract
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/ru-ingushetia-telegram-test-bootstrap.yml
+      - .github/workflows/ru-ingushetia-telegram-bootstrap-contract.yml
+
+permissions:
+  contents: read
+
+jobs:
+  manual-workflow-no-secret-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify new manual workflow has no automatic send trigger
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path(".github/workflows/ru-ingushetia-telegram-test-bootstrap.yml")
+          workflow = p.read_text(encoding="utf-8")
+          required = (
+              "  workflow_dispatch:", "github.actor == 'Ramzes2023'",
+              "github.ref == 'refs/heads/main'",
+              "inputs.confirmation == 'SEND_ONE_TEST_MESSAGE'",
+              "ref: da06c174f5b3178a46555152b5e8dbddaf4bc503",
+              "persist-credentials: false",
+              "secrets.VALYQON_INGUSHETIA_TEST_BOT_TOKEN",
+              "vars.VALYQON_INGUSHETIA_TEST_BOT_ID",
+              "secrets.VALYQON_INGUSHETIA_TEST_CHAT_ID",
+              "scripts.ru_ingushetia_telegram_test --send",
+          )
+          assert all(needle in workflow for needle in required)
+          # These checks apply to the dispatch-only workflow, not this separate
+          # non-secret PR validation file.
+          assert all(f"\n  {event}:" not in workflow for event in
+                     ("push", "pull_request", "schedule", "workflow_call", "workflow_run"))
+          assert "TELEGRAM_BOT_TOKEN: " + chr(36) + "{{ secrets.TELEGRAM_BOT_TOKEN }}" not in workflow
+          assert "--insecure" not in workflow and "set -x" not in workflow
+          print("MANUAL_TEST_WORKFLOW_SECURITY_CONTRACT=PASS")
+          PY
+      - uses: actions/checkout@v4
+        with:
+          ref: da06c174f5b3178a46555152b5e8dbddaf4bc503
+          path: reviewed-harness
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install reviewed offline test dependencies
+        run: python -m pip install -r reviewed-harness/requirements-dev.txt
+      - name: Test pinned review code without bot/chat secrets or network sends
+        working-directory: reviewed-harness
+        run: python -m pytest -q tests/test_ru_ingushetia_telegram_test.py

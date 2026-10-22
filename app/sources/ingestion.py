@@ -169,7 +169,7 @@ class ConnectorSyncHandler:
                          else 5 if source_id in {'eis', 'eis_223', 'india_cppp', 'kz_goszakup'}
                          else 2 if source_id in {'jp_jetro_national', 'jp_jetro_local'}
                          else min(self.max_records, 5) + 1 if source_id == 'tektorg'
-                         else 4 if source_id == 'gpb_etp_public'
+                         else min(self.max_records, 3) * 3 + 1 if source_id == 'gpb_etp_public'
                          else 4 if source_id == 'lenobl_small_public'
                          else min(self.max_records, 2) + 1 if source_id == 'nmck_native_public'
                          else min(self.max_records, 2) + 1 if source_id == 'stan_commercial_public'

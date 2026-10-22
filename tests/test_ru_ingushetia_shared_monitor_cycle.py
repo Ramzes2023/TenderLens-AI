@@ -308,8 +308,10 @@ def test_real_sqlite_shared_catalog_dedups_same_original_per_chat_only_after_ver
         await monitor_loop(bot, service, stop, source_catalog=catalog)
         assert len([item for item in events if item[0] == "fetch"]) == 2
         assert len(bot.attempts) == 2
-        assert bot.attempts[0][0] == 11 and number in bot.attempts[0][1]
-        assert bot.attempts[1][0] == 22 and other in bot.attempts[1][1]
+        by_chat = {chat: text for chat, text in bot.attempts}
+        assert set(by_chat) == {11, 22}
+        assert number in by_chat[11] and other not in by_chat[11]
+        assert other in by_chat[22] and number not in by_chat[22]
         assert repo.seen(1, "eis_44", number)
         assert not repo.seen(2, "eis_44", other)
 

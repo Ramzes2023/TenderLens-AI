@@ -80,3 +80,28 @@ def test_one_allowlisted_send_only_after_identity_checks_and_no_retry(failure):
         assert result["recipient_confirmation"] == "PENDING"
         assert cfg.token not in json.dumps(result)
         assert calls == ["getMe", "getChat", "sendMessage"]
+
+
+def test_optin_telegram_workflow_cannot_autosend_on_git_push_or_pr():
+    """Static deployment safety: dedicated Bot API workflow is manual-only."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/ru-ingushetia-test-telegram-optin.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "  workflow_dispatch:" in workflow
+    assert "  push:" not in workflow
+    assert "  pull_request:" not in workflow
+    assert "  schedule:" not in workflow
+    assert "authorize_test_send:" in workflow
+    assert "default: false" in workflow
+    assert "confirm_test_chat:" in workflow
+    assert "dedicated-bot-api-test:" in workflow
+    assert "inputs.authorize_test_send == true" in workflow
+    assert "TEST_TELEGRAM_SEND_AUTHORIZED: YES_TEST_CHAT_ONLY" in workflow
+    assert "secrets.VALYQON_INGUSHETIA_TEST_BOT_TOKEN" in workflow
+    assert "secrets.VALYQON_INGUSHETIA_TEST_CHAT_ID" in workflow
+    assert "vars.VALYQON_INGUSHETIA_TEST_BOT_ID" in workflow
+    assert "secrets.TELEGRAM_BOT_TOKEN" not in workflow
+    assert "BOT_TOKEN:" not in workflow.replace("TEST_TELEGRAM_BOT_TOKEN:", "")

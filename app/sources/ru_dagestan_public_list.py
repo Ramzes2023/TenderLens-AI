@@ -129,6 +129,9 @@ def safe_string(row, key, max_length=1000):
 def public_amount(raw):
     """Optional amount from the anonymous original grid, not an inaccessible detail."""
     if type(raw) in (int, float):
+        # Pre-bound integers before float conversion (huge JSON ints overflow).
+        if not math.isfinite(raw) if type(raw) is float else not 0 < raw <= 1e18:
+            return None
         amount = float(raw)
     elif type(raw) is str and len(raw) <= 80:
         value = raw.strip().replace("\u00a0", " ").replace("\u202f", " ")

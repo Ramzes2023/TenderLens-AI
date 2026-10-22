@@ -7,7 +7,8 @@
 [CmdletBinding()]
 param(
     [string]$RegionalRssUrl,
-    [switch]$TryOfficialSearchCandidate
+    [switch]$TryOfficialSearchCandidate,
+    [switch]$SendAuthorizedTelegramTest
 )
 
 # A conservative official EIS search-form shape from the existing EIS adapter.
@@ -59,6 +60,15 @@ $envOverride = @{
     'GIGACHAT_CA_BUNDLE_FILE' = ''
     'EIS_PROFILE_FEEDS_ENABLED' = 'false'
     'MONITORING_ENABLED' = 'false'
+}
+# No external Telegram sends unless the operator additionally passes an
+# explicit switch AND has preconfigured the authorized test-only credentials.
+# Clearing is PROCESS-LOCAL, restored by the existing finally block.
+if (-not $SendAuthorizedTelegramTest) {
+    $envOverride['RU_CHECHNYA_E2E_TEST_BOT_TOKEN'] = ''
+    $envOverride['RU_CHECHNYA_E2E_TEST_CHAT_ID'] = ''
+} elseif (-not $env:RU_CHECHNYA_E2E_TEST_BOT_TOKEN -or -not $env:RU_CHECHNYA_E2E_TEST_CHAT_ID) {
+    throw 'Authorized Telegram test requires both test-only environment variables.'
 }
 $previous = @{}
 foreach ($key in $envOverride.Keys) {

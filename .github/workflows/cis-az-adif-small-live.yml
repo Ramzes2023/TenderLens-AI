@@ -9,6 +9,7 @@ on:
       - app/sources/ingestion.py
       - tests/test_cis_az_adif_small.py
       - scripts/ci_cis_az_adif_small_live_acceptance.py
+      - scripts/diagnose_cis_az_adif_live.py
       - .github/workflows/cis-az-adif-small-live.yml
   pull_request:
     branches: [main]
@@ -18,6 +19,7 @@ on:
       - app/sources/ingestion.py
       - tests/test_cis_az_adif_small.py
       - scripts/ci_cis_az_adif_small_live_acceptance.py
+      - scripts/diagnose_cis_az_adif_live.py
       - .github/workflows/cis-az-adif-small-live.yml
 permissions:
   contents: read
@@ -56,3 +58,10 @@ jobs:
           PYTHONDONTWRITEBYTECODE: '1'
           PYTHON_DOTENV_DISABLED: '1'
         run: python -B -m scripts.ci_cis_az_adif_small_live_acceptance --source az_adif_small
+      - name: Diagnose failed official article acquisition without treating it as a tender
+        if: failure()
+        timeout-minutes: 3
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          PYTHON_DOTENV_DISABLED: '1'
+        run: python -B -m scripts.diagnose_cis_az_adif_live

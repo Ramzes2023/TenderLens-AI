@@ -55,6 +55,40 @@ def _retryable_official_dns_failure(error):
     return matched_dns
 
 
+
+def _retryable_official_peer_reset(error):
+    """Retry only observed native first-party TCP resets, never TLS/policy.
+
+    HTTPX/HTTPCore may wrap ConnectionResetError while the bounded client
+    emits a retryable network ConnectorTransportError. Preserve the exact
+    chain provenance: a generic ConnectError or rejected public-IP/TLS
+    attempt is NOT an authorized upstream retry.
+    """
+    if _is_public_ip_error(error):
+        return False
+    if isinstance(error, ConnectorTransportError):
+        if not error.retryable or error.reason != "network":
+            return False
+    elif not isinstance(error, httpx.ConnectError):
+        return False
+    seen = set()
+    current = error
+    observed_httpx = observed_reset = False
+    while isinstance(current, BaseException) and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, ssl.SSLError):
+            return False
+        if isinstance(current, ConnectorTransportError) and (
+                not current.retryable or current.reason != "network"):
+            return False
+        if isinstance(current, httpx.ConnectError):
+            observed_httpx = True
+        if type(current) is ConnectionResetError:
+            observed_reset = True
+        current = current.__cause__
+    return observed_httpx and observed_reset
+
+
 ARMEPS_LISTING_URL = "https://eauction.armeps.am/en/public/tender/"
 ARMEPS_PAGE_TWO_URL = ARMEPS_LISTING_URL + "start/2"
 MAX_BYTES = 1024 * 1024
@@ -248,7 +282,8 @@ class ArmeniaArmepsSource:
                         break
                     url = next_url
         except (httpx.HTTPError, ConnectorTransportError, OSError) as error:
-            if transient_transport(error) or _retryable_official_dns_failure(error):
+            if (transient_transport(error) or _retryable_official_dns_failure(error)
+                    or _retryable_official_peer_reset(error)):
                 raise SourceTransportError("Temporary source transport failure.") from None
             # Strictly sanitized transport diagnosis. Do not echo upstream URLs,
             # exception string, data, TLS contents, or DNS address. Security

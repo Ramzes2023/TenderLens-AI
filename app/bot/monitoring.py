@@ -313,7 +313,12 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService,
     # cycle; never make O(number_of_subscriptions) upstream HTTP requests.
     # Per-tenant profile matching and confirmed Telegram receipts remain
     # individual. Other source combinations use the unchanged legacy path.
-    share_ingushetia = bool(russian_keys) and set(russian_keys) <= _SHARED_INGUSHETIA_KEYS
+    share_ingushetia = (
+        bool(russian_keys)
+        and set(russian_keys) <= _SHARED_INGUSHETIA_KEYS
+        and callable(getattr(service, "fetch_matches_from_catalog_for_profile", None))
+        and callable(getattr(service, "profile_for_owner", None))
+    )
     while not stop_event.is_set():
         try:
             subscriptions = await service.active_subscriptions()

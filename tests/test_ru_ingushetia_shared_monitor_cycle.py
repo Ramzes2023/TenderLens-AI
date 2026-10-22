@@ -204,3 +204,124 @@ def test_shared_ingushetia_second_cycle_replays_no_old_alert_and_releases_new_ma
         assert not any(c[0] == "per_user" for c in service.calls)
 
     asyncio.run(run())
+
+
+def test_real_sqlite_shared_catalog_dedups_same_original_per_chat_only_after_verified_ack(tmp_path):
+    """Offline: actual multi-source merge, tenant profiles, SQL receipts, and retry.
+
+    Not a live procurement fetch or actual Telegram network delivery proof.
+    """
+    from app.monitoring.config import MonitoringSettings
+    from app.monitoring.repository import MonitoringRepository
+    from app.monitoring.service import TenderMonitorService
+    from app.scoring.models import CompanyProfile
+    from app.sources.catalog import SourceCatalog
+    from app.sources.multi import MultiSourceFetcher
+    from app.sources.registry import SourceRegistry, SourceRegistration
+
+    number = "0114500000826002402"
+    other = "0114500000826002403"
+    events = []
+    class SyntheticFixedSource:
+        def __init__(self, name, notices):
+            self.name, self.notices = name, notices
+        async def fetch(self, limit=20):
+            events.append(("fetch", self.name))
+            return self.notices[:limit]
+
+    official = TenderNotice(
+        source="ru_ingushetia_eis44", external_id=number, tender_number=number,
+        title="Поставка медицинского оборудования",
+        region="Республика Ингушетия",
+        customer="КОМИТЕТ ГОСЗАКАЗА РЕСПУБЛИКИ ИНГУШЕТИЯ",
+        url="https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber=" + number,
+    )
+    mirror = TenderNotice(
+        source="ru_ingushetia_fabrikant44", external_id=number, tender_number=number,
+        title=official.title, region=official.region, customer=official.customer,
+        url="https://44.fabrikant.ru/44/procedure/ea21/" + number,
+    )
+    repair = TenderNotice(
+        source="ru_ingushetia_fabrikant44", external_id=other, tender_number=other,
+        title="Ремонт кровли школы", region=official.region, customer=official.customer,
+        url="https://44.fabrikant.ru/44/procedure/ea21/" + other,
+    )
+
+    registry = SourceRegistry([
+        SourceRegistration(
+            key="ru_ingushetia_eis44", display_name="Synthetic EIS fixed regional",
+            source=SyntheticFixedSource("ru_ingushetia_eis44", [official]),
+            jurisdictions=("RU",),
+        ),
+        SourceRegistration(
+            key="ru_ingushetia_fabrikant44", display_name="Synthetic Fabrikant fixed regional",
+            source=SyntheticFixedSource("ru_ingushetia_fabrikant44", [mirror, repair]),
+            jurisdictions=("RU",),
+        ),
+    ])
+    catalog = SourceCatalog(registry, MultiSourceFetcher(registry))
+    repo = MonitoringRepository(tmp_path / "monitor-real.sqlite")
+    repo.initialize()
+    repo.set_subscription(1, 11, True)
+    repo.set_subscription(2, 22, True)
+    settings = MonitoringSettings(
+        enabled=True, interval_seconds=600, max_items=10,
+        max_notifications_per_cycle=5, request_timeout=15,
+        eis_rss_urls=(), ca_bundle_file=None, profile_feeds_enabled=False,
+        ru_background_catalog_enabled=True,
+    )
+
+    profiles = {
+        1: CompanyProfile(profile_version="1", company_name="Tenant equipment",
+                          search_keywords=["оборудования"],
+                          allowed_regions=["Ингушетия"]),
+        2: CompanyProfile(profile_version="1", company_name="Tenant repairs",
+                          search_keywords=["ремонт"],
+                          allowed_regions=["Ингушетия"]),
+    }
+    service = TenderMonitorService(
+        settings, None, repo, None,
+        profile_resolver=lambda owner: profiles[owner],
+    )
+    stop = asyncio.Event()
+    actual_subscriptions = service.active_subscriptions
+    async def one_cycle():
+        stop.set()
+        return await actual_subscriptions()
+    service.active_subscriptions = one_cycle
+
+    class BotWithOneFailedAck:
+        def __init__(self):
+            self.attempts = []
+            self.fail_chat22_once = True
+        async def send_message(self, chat_id, text, **kwargs):
+            self.attempts.append((chat_id, text))
+            if chat_id == 22 and self.fail_chat22_once:
+                self.fail_chat22_once = False
+                return SimpleNamespace(message_id=0, chat=SimpleNamespace(id=22))
+            return SimpleNamespace(
+                message_id=len(self.attempts), chat=SimpleNamespace(id=chat_id)
+            )
+
+    async def run():
+        bot = BotWithOneFailedAck()
+        await monitor_loop(bot, service, stop, source_catalog=catalog)
+        assert len([item for item in events if item[0] == "fetch"]) == 2
+        assert len(bot.attempts) == 2
+        assert bot.attempts[0][0] == 11 and number in bot.attempts[0][1]
+        assert bot.attempts[1][0] == 22 and other in bot.attempts[1][1]
+        assert repo.seen(1, "eis_44", number)
+        assert not repo.seen(2, "eis_44", other)
+
+        # The retry must not re-notify tenant 1 about the EIS/Fabrikant
+        # duplicate. Tenant 2 gets only its previously unconfirmed repair.
+        stop.clear()
+        await monitor_loop(bot, service, stop, source_catalog=catalog)
+        assert len([item for item in events if item[0] == "fetch"]) == 4
+        assert len(bot.attempts) == 3
+        assert bot.attempts[-1][0] == 22 and other in bot.attempts[-1][1]
+        assert repo.seen(2, "eis_44", other)
+        assert not repo.seen(2, "eis_44", number)
+        assert len([a for a in bot.attempts if a[0] == 11]) == 1
+
+    asyncio.run(run())

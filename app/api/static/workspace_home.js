@@ -109,6 +109,46 @@
   const usableCompany=()=>accountLoaded()&&Number.isInteger(state.activeCompanyId);
   const setStatus=(id,en,russian)=>changeText(get(id),en,russian);
 
+  // Last completed Discovery report, not source health or an API scan.
+  let lastSourceReport=null;
+  let sourceReportScope=null;
+  const scope=()=>typeof state!=='undefined'
+    ? String(state.organizationId)+':'+String(state.activeCompanyId)
+    : 'unknown';
+
+  function paintSourceReport(){
+    const block=get('vqSourceCheck'),rows=get('vqSourceCheckRows');
+    if(!block||!rows)return;
+    if(!lastSourceReport||sourceReportScope!==scope()){
+      block.hidden=true;
+      rows.replaceChildren();
+      return;
+    }
+    const report=lastSourceReport;
+    const values=[
+      [tr('Requested','Запрошено'),report.attempted_sources.length,'requested'],
+      [tr('Responding','Ответили'),report.successful_sources.length,'responding'],
+      [tr('Unavailable','Недоступны'),report.failed_sources.length,'unavailable']
+    ];
+    const maximum=Math.max(1,...values.map(([,n])=>n));
+    rows.replaceChildren();
+    values.forEach(([name,n,kind])=>{
+      const line=document.createElement('div');
+      line.className='vq-source-check-row';
+      const title=document.createElement('span');title.textContent=name;
+      const meter=document.createElement('div');meter.className='vq-source-check-track';
+      const fill=document.createElement('div');
+      fill.className='vq-source-check-fill '+kind;
+      fill.style.width=(100*n/maximum).toFixed(1)+'%';
+      meter.append(fill);
+      const number=document.createElement('strong');number.textContent=String(n);
+      line.append(title,meter,number);
+      rows.append(line);
+    });
+    rows.setAttribute('aria-label',values.map(([name,n])=>name+': '+n).join('; '));
+    block.hidden=false;
+  }
+
   function paintReadiness(){
     if(!accountLoaded()){
       setStatus('vqWorkbenchState','Account data not loaded','Данные аккаунта не загружены');
@@ -211,11 +251,29 @@
     paintReadiness();
   }
   window.addEventListener('hashchange',refresh);
-  window.addEventListener('workspace-context',paintReadiness);
-  window.addEventListener('discovery-report',paintReadiness);
+  window.addEventListener('workspace-context',()=>{
+    if(sourceReportScope!==scope()){lastSourceReport=null;sourceReportScope=null;}
+    paintReadiness();
+    paintSourceReport();
+  });
+  window.addEventListener('discovery-report',event=>{
+    const report=event.detail;
+    if(report && ['attempted_sources','successful_sources','failed_sources']
+      .every(key=>Array.isArray(report[key]))){
+      lastSourceReport=report;
+      sourceReportScope=scope();
+    } else{
+      lastSourceReport=null;
+      sourceReportScope=null;
+    }
+    paintReadiness();
+    paintSourceReport();
+  });
   window.addEventListener('shell-locale-change',()=>{
     drawLinks();
     paintReadiness();
+    paintSourceReport();
   });
   refresh();
+  paintSourceReport();
 })();

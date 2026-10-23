@@ -107,3 +107,40 @@ VALYQON_WEBSITE_REVIEW_ONLY=1, as it is in the isolated review compose.
 Real public deployments do not enable it. No fake tender records are inserted,
 the guest search still fetches only actual DB data, and the source/buyer/link
 redaction policy is unchanged.
+
+
+## Public marketing demonstration until a verified data launch
+
+The public launch Compose explicitly sets:
+
+\`\`\`yaml
+VALYQON_PUBLIC_ANALYTICS_MODE: "demo"
+\`\`\`
+
+This means the public analytics wall **and** the smaller 14-day market-pulse
+chart show visibly labelled, invented illustrative values. They are an
+**interface demonstration, not actual procurement market counts**. Each area
+displays its own disclosure; the premium product hero is watermarked.
+
+It does **not** seed fake tenders into SQLite/PostgreSQL, alter
+\`/api/v1/public/opportunities\`, bypass any buyer/source/detail lock, or change
+\`/api/v1/public/market-intelligence\` and \`/market-pulse\` API responses.
+The real guest search remains empty until actual source records have been stored.
+
+**Switch to real statistics only after verification, not simply after 30 days.**
+Requirements: one or more independently verified live source adapters and
+Worker ingestion; persisted, dated notice IDs in the shared database; at least
+one full source-to-worker-to-database-to-guest-HTTP acceptance; clearly
+communicated coverage, freshness and missing-data limitations. Then update
+\`VALYQON_PUBLIC_ANALYTICS_MODE\` to \`real\` and redeploy, retaining the
+commercial paid-source-details gate until verified billing exists. No date-based
+switch or imaginary market growth is implemented.
+
+## Authenticated workspace navigation refresh
+
+The workspace uses the **same existing routes, permissions and data**. New
+progressive features include grouped collapsible nav, persistent compact
+desktop sidebar, route-highlighted quick shortcuts, and an overview action hub
+to discover, saved, monitoring and team. The \`Ctrl+K\` menu remains
+navigation-only, not procurement search. No fake tender counters appear in
+the signed-in dashboard.

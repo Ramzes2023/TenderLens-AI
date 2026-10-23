@@ -600,3 +600,71 @@ def test_background_worker_sql_never_uses_live_regional_catalog(tmp_path):
     with pytest.raises(ValueError, match="Worker SQL alert catalog not installed"):
         asyncio.run(monitor_loop(object(), service, asyncio.Event(),
                                  source_catalog=live_catalog))
+
+
+def test_dual_ingushetia_worker_sql_alert_deduplicates_eis_and_etp_after_bot_ack(tmp_path):
+    """Real SQL -> monitor path, fake Bot only; no Telegram network or source fixtures treated as live."""
+    from types import SimpleNamespace
+    from app.bot.monitoring import monitor_loop
+    from app.monitoring.repository import MonitoringRepository
+    from app.monitoring.service import TenderMonitorService
+
+    db = Database(DatabaseSettings("ing-cross-source-bot", tmp_path / "both.sqlite"))
+    store = OpportunityRepository(db)
+    store.initialize()
+    mrepo = MonitoringRepository(tmp_path / "seen.sqlite")
+    mrepo.initialize()
+    mrepo.set_subscription(101, 5001, True)
+    cfg = settings()
+    catalog = fresh_ingushetia_worker_catalog(build_source_catalog(cfg), store)
+    service = TenderMonitorService(cfg, None, mrepo, None)
+    stop = asyncio.Event()
+    get_subscriptions = service.active_subscriptions
+
+    async def one_cycle():
+        stop.set()
+        return await get_subscriptions()
+    service.active_subscriptions = one_cycle
+
+    class FakeBot:
+        def __init__(self):
+            self.calls = []
+            self.wrong_first_chat = True
+
+        async def send_message(self, chat_id, body, **kwargs):
+            self.calls.append((chat_id, body, kwargs))
+            assert chat_id == 5001
+            assert N1 in body
+            assert "НОВАЯ ЗАКУПКА" in body
+            assert kwargs["disable_web_page_preview"] is True
+            received_chat = 9009 if self.wrong_first_chat else chat_id
+            self.wrong_first_chat = False
+            return SimpleNamespace(
+                message_id=len(self.calls),
+                chat=SimpleNamespace(id=received_chat),
+            )
+
+    try:
+        # Two first-party platform records map to the SAME original 44-FZ
+        # notice; this is one procurement, not two independent alerts.
+        for source in (EIS, FAB):
+            assert store.upsert(notice(N1, source=source),
+                                connector_version(source)) is True
+
+        bot = FakeBot()
+        asyncio.run(monitor_loop(bot, service, stop, source_catalog=catalog))
+        assert len(bot.calls) == 1
+        # Telegram claimed receipt for another chat: MUST remain unseen.
+        assert not mrepo.seen(101, "eis_44", N1)
+
+        stop.clear()
+        asyncio.run(monitor_loop(bot, service, stop, source_catalog=catalog))
+        assert len(bot.calls) == 2
+        assert mrepo.seen(101, "eis_44", N1)
+
+        stop.clear()
+        asyncio.run(monitor_loop(bot, service, stop, source_catalog=catalog))
+        assert len(bot.calls) == 2
+        assert {match[0] for match in bot.calls} == {5001}
+    finally:
+        db.close()

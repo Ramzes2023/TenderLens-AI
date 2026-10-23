@@ -319,3 +319,67 @@ def test_gpb_both_official_routes_down_never_returns_fabricated_tenders(monkeypa
     with pytest.raises(httpx.ConnectTimeout):
         asyncio.run(GpbEtpPublicSource().fetch(1))
     assert seen == [LIST_URL, "https://etpgpb.ru/procedures.rss"]
+
+
+def test_official_gpb_rss_one_transient_failure_then_visible_native_original(monkeypatch):
+    from app.sources.http import ConnectorTransportError
+    calls = []
+
+    class Reply:
+        def __init__(self, body, mime):
+            self.content, self.headers = body, {"content-type": mime}
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        async def get(self, url, **kwargs):
+            calls.append(url)
+            if url == LIST_URL:
+                raise ConnectorTransportError(retryable=True, reason="network")
+            if url == f"https://{HOST}/procedures.rss":
+                if calls.count(url) == 1:
+                    raise ConnectorTransportError(retryable=True, reason="network")
+                assert kwargs["headers"]["Accept"] == "application/rss+xml, application/xml"
+                return Reply(rss(), "application/rss+xml")
+            if url == URL:
+                return Reply(detail(), "text/html")
+            raise AssertionError("Unexpected unbounded or off-host request")
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        assert kwargs["trust_env"] is False
+        assert kwargs["follow_redirects"] is False
+        yield Client()
+
+    import app.sources.gpb_etp_public as mod
+    monkeypatch.setattr(mod, "source_client", client)
+    async def no_wait(_):
+        return None
+    monkeypatch.setattr(mod.asyncio, "sleep", no_wait)
+    out = asyncio.run(GpbEtpPublicSource().fetch(1))
+    assert [x.external_id for x in out] == ["1299761"]
+    assert calls == [LIST_URL, f"https://{HOST}/procedures.rss",
+                     f"https://{HOST}/procedures.rss", URL]
+
+
+@pytest.mark.parametrize("reason", ["public_ip", "tls_certificate", "policy"])
+def test_gpb_rss_security_failure_never_retried(monkeypatch, reason):
+    from app.sources.http import ConnectorTransportError
+    seen = []
+
+    class Client:
+        async def get(self, url, **kwargs):
+            seen.append(url)
+            raise ConnectorTransportError(
+                retryable=(url == LIST_URL), reason="network" if url == LIST_URL else reason,
+            )
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        yield Client()
+
+    import app.sources.gpb_etp_public as mod
+    monkeypatch.setattr(mod, "source_client", client)
+    with pytest.raises(ConnectorTransportError):
+        asyncio.run(GpbEtpPublicSource().fetch(1))
+    assert seen == [LIST_URL, f"https://{HOST}/procedures.rss"]

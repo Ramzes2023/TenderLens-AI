@@ -225,5 +225,32 @@ class ProbeSafetyTests(unittest.TestCase):
         self.assertNotIn("pull_request:", raw)
 
 
+
+    def test_scoped_cert_pinned_russian_eis_tls_without_global_trust_mutation(self):
+        import ssl
+        from scripts.ru_trusted_live_probe import publisher_tls_context
+        # The preinstalled repository EIS root is an immutable local file,
+        # validated against the separately pinned canonical DER SHA-256.
+        verified = publisher_tls_context("zakupki.gov.ru")
+        self.assertTrue(verified.check_hostname)
+        self.assertEqual(verified.verify_mode, ssl.CERT_REQUIRED)
+
+        # Other official sites NEVER receive the EIS-specific CA.
+        with patch("scripts.ru_eis_pinned_tls_probe.verify_root",
+                   side_effect=AssertionError("should not load for another publisher")):
+            for host in ("etpgpb.ru", "44.fabrikant.ru", "www.roseltorg.ru",
+                         "www.tektorg.ru"):
+                context = publisher_tls_context(host)
+                self.assertTrue(context.check_hostname)
+                self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
+
+        # If the pinned EIS root fingerprint differs, reject before TLS
+        # connection; do not silently trust an arbitrary local CA bundle.
+        with patch("scripts.ru_eis_pinned_tls_probe.verify_root",
+                   side_effect=ValueError("Root DER fingerprint mismatch")):
+            with self.assertRaises(ValueError):
+                publisher_tls_context("zakupki.gov.ru")
+
+
 if __name__ == "__main__":
     unittest.main()

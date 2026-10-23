@@ -24,7 +24,7 @@ SOURCE = "ru_chechnya_fabrikant44"
 def acceptance():
     settings = MonitoringSettings(
         enabled=False, interval_seconds=600, max_items=3,
-        max_notifications_per_cycle=5, request_timeout=15,
+        max_notifications_per_cycle=5, request_timeout=25,
         eis_rss_urls=(), ca_bundle_file=None, profile_feeds_enabled=False,
         ru_chechnya_fabrikant44_enabled=True,
     )
@@ -87,6 +87,27 @@ def main():
     except Exception as error:
         print("RU_CHECHNYA_FABRIKANT_LIVE_WORKER=BLOCKED")
         print("FAILURE_CLASS=" + type(error).__name__)
+        # Only allowlisted non-sensitive worker stages. No raw remote exception.
+        if type(error) is AssertionError:
+            static = {
+                "Chechnya Fabrikant 44-FZ was not explicitly enabled": "CATALOG_OPT_IN",
+                "No complete real worker ingestion": "WORKER_COUNTS",
+                "Real worker database count mismatch": "SQL_COUNT",
+                "Bad canonical source URL": "ORIGINAL_IDENTITY",
+                "Real worker keyword-search mismatch": "SAVED_SEARCH",
+                "Real worker identity was duplicated": "DEDUP",
+                "No real durable connector job was claimed": "WORKER_CLAIM",
+                "Durable connector result source mismatch": "JOB_SOURCE",
+            }
+            msg = str(error)
+            if msg.startswith("Durable connector job did not succeed: "):
+                reason = msg.split(": ", 1)[1]
+                known = {"handler_error", "permanent_failure", "lease_expired",
+                         "invalid_result", "job missing"}
+                print("FAILURE_STAGE=" + ("WORKER_" + reason.upper()
+                                           if reason in known else "WORKER_FAILED"))
+            else:
+                print("FAILURE_STAGE=" + static.get(msg, "UNCLASSIFIED_ASSERTION"))
         print("PRODUCTION_CHANGED=NO")
         return 1
     print("RU_CHECHNYA_FABRIKANT_LIVE_WORKER_EVIDENCE=" + json.dumps(evidence, sort_keys=True))

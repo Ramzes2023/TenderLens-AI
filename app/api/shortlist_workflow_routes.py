@@ -113,3 +113,15 @@ async def team_events(organization_id: int, saved_id: int, request: Request):
     service, scope = await _team_scope(request, organization_id, saved_id)
     result = await _call(service.events, **scope)
     return JSONResponse(result, headers={"Cache-Control": "private, no-store"})
+
+
+# Real recorded EIS metadata revisions for authenticated saved-company notices.
+from app.workspaces.source_history import SavedSourceHistory
+
+
+@router.get("/{saved_id}/source-history")
+async def saved_source_history(organization_id: int, saved_id: int, request: Request):
+    _, scope = await _scope(request, organization_id, saved_id)
+    evidence = SavedSourceHistory(request.app.state.runtime.database)
+    result = await _call(evidence.get, **scope)
+    return JSONResponse(result, headers={"Cache-Control": "private, no-store"})

@@ -406,5 +406,10 @@
   "Open Support Center to send a message →": "Открыть Центр поддержки и написать сообщение →",
   "Sign-in is required to create a support request. The authenticated workspace includes AI support where configured.": "Для отправки обращения необходимо войти. В рабочем кабинете доступна ИИ-поддержка при наличии соответствующей настройки.",
   "Open product help": "Открыть помощь по сервису",
-  "Product help": "Помощь по сервису"
+  "Product help": "Помощь по сервису",
+  "Quick answers · AI when configured": "Быстрые ответы · ИИ при наличии настройки",
+  "Ask the AI about VALYQON AI": "Спросите ИИ о VALYQON AI",
+  "For example: how does tender search work?": "Например: как работает поиск тендеров?",
+  "Ask AI ↗": "Спросить ИИ ↗",
+  "AI answers are available only when the provider is configured. Do not share private information.": "Ответы ИИ доступны только при настроенном провайдере. Не сообщайте личные данные."
 }

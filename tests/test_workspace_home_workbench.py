@@ -45,7 +45,6 @@ def test_workbench_contains_no_fake_tender_values_or_live_source_promises():
     start = html.index('id="vqWorkbench"')
     end = html.index('id="firstRunPreview"', start)
     part = html[start:end]
-    assert 'Not run' not in part or 'Not run' in part
     for invented in ('186', '12500', '89%', '50,000', '23.4%', 'market share'):
         assert invented not in part
     assert "A search attempt is not proof that sources work" in part

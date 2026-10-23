@@ -71,4 +71,5 @@ PUBLIC_SUPPORT_HTML = """<section class="vq-support-strip" aria-labelledby="vqSu
   </div>
   <a class="vq-help-contact" href="/dashboard#support">Open Support Center to send a message →</a>
   <p>Sign-in is required to create a support request. The authenticated workspace includes AI support where configured.</p>
-</div>"""
+</div>
+<button type="button" class="vq-help-bubble" id="vqFloatingHelp" aria-label="Open product help" aria-controls="vqHelpDrawer" aria-expanded="false" title="Product help">✦</button>"""

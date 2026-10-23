@@ -68,6 +68,16 @@ Windows-скрипт отличает `PASS_LOCAL_ONLY` от `PASS_LOCAL_AND_TES
 - Диагностика GitHub-hosted Ubuntu от 22.10.2026: страница комитета первоначально получила `AUTH_OR_CHALLENGE_PAGE` (этот результат мог быть вызван обычным словом «авторизация» в меню; классификатор ужесточён), а историческая публичная карточка «Фабриканта» — `NETWORK_OR_TLS_UNAVAILABLE`. **Ни один маршрут не дал подтверждённого потока новых закупок.**
 - Получение реальных карточек из динамической выдачи «Фабриканта» с поиском и сквозной доставкой потребует **отдельного** адаптера и собственной живой приёмки. Источник `ru_chechnya_eis` по-прежнему требует ЕИС → Worker → SQLite → поиск → подтверждённую отправку в тестовый Telegram-чат. Никакой «резервный» сайт не снимает это требование.
 
+## GitHub strict release gate — real Telegram acknowledgement
+
+The GitHub workflow `.github/workflows/ru-chechnya-eis-live.yml` separates **untrusted pull_request offline tests** from **trusted repository-owned feature-branch push / manual self-hosted live acceptance**.
+
+The trusted `chechnya-real-live-worker` now sets `RU_CHECHNYA_REQUIRE_TEST_BOT_ACK=true`. Therefore it **cannot return a successful release-grade status with local fake `LocalCaptureBot` alone**. After the real official EIS → Worker → temporary SQLite → query → local alert chain, the harness sends exactly one provenance-checked public EIS original through Telegram Bot API to the explicitly authorized **test** chat, validating `message_id` and `chat.id`.
+
+Only GitHub Actions secrets `VALYQON_RU_CHECHNYA_E2E_TEST_BOT_TOKEN` and `VALYQON_RU_CHECHNYA_E2E_TEST_CHAT_ID` provide the test bot credentials to the trusted job. If either is absent or Bot API rejects the message, the job **fails closed** with no merge. This is a test-chat **server acceptance receipt**, not evidence that any production subscriber received or read an alert. Production remains disabled until a separately approved deployment and operator verification.
+
+The non-Russian GitHub-hosted network probes **never receive those secrets** and always operate without external Telegram. Run ownership, runner connectivity, verified EIS RSS contents, authorized test chat and all CI checks remain independent mandatory prerequisites.
+
 ## Merge gate — all of the following
 
 - PR tests and all required repository checks green on the current head commit.

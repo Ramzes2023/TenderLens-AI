@@ -83,6 +83,22 @@ def test_planner_javascript_is_valid_when_node_available():
     assert p.returncode==0,p.stderr
 
 
+def test_planner_stages_and_detail_openings_stay_tenant_scoped():
+    planner=(ROOT/'app/api/static/planner.js').read_text(encoding='utf-8')
+    saved=(ROOT/'app/api/static/saved.js').read_text(encoding='utf-8')
+    for token in ("draggingSavedId", "record.workflow", "updateStage(record,key,select)",
+                  "canEdit()", "expected_revision:previous.revision",
+                  "valyqon-open-saved", "organizationId:state.organizationId",
+                  "companyId:state.activeCompanyId", "vqPlannerUrgency"):
+        assert token in planner, token
+    for token in ("window.addEventListener('valyqon-open-saved'",
+                  "item.organizationId!==state.organizationId",
+                  "item.companyId!==state.activeCompanyId",
+                  "pendingPlannerScope=identity()", "if(pendingPlannerScope!==next)",
+                  "records.findIndex", "openDetail(index)"):
+        assert token in saved, token
+
+
 def test_existing_workflow_roles_and_conflict_detection_not_changed():
     from app.workspaces.lifecycle import WRITE_ROLES, STAGES
     assert {'owner','admin','member'} == WRITE_ROLES

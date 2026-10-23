@@ -109,3 +109,43 @@ def test_fetch_only_expected_two_https_urls(monkeypatch):
 def test_listing_limit_strict(limit):
     with pytest.raises(ValueError):
         parse_lenobl_listing(listing(), limit=limit)
+
+
+@pytest.mark.parametrize("container", [
+    "head", "template", "noscript", "svg",
+])
+def test_hidden_original_list_anchor_is_not_an_advertised_procurement(container):
+    malicious = (
+        f"<html><{container}><a href='{URL}'>{TITLE}</a></{container}>"
+        "<main><p>No public tender available</p></main></html>"
+    ).encode("utf-8")
+    with pytest.raises(ValueError, match="No public Lenobl"):
+        parse_lenobl_listing(malicious)
+
+
+def test_hidden_template_duplicate_does_not_replace_visible_original_card():
+    hidden = (f"<template><a href='{URL}'>Несовпадающий предмет закупки</a>"
+              "</template>").encode("utf-8")
+    verified = parse_lenobl_listing(hidden + listing())
+    assert verified == [(IDENT, URL, TITLE)]
+
+
+@pytest.mark.parametrize("payload", [
+    (f"<html><head><title>Запрос № {IDENT}</title></head><body>"
+     f"<h1>Закупка: {TITLE}</h1></body></html>").encode("utf-8"),
+    (f"<html><body><template>Группа {IDENT}</template>"
+     f"<h1>Закупка: {TITLE}</h1></body></html>").encode("utf-8"),
+    (f"<html><body><p>1352174820</p>"
+     f"<h1>Закупка: {TITLE}</h1></body></html>").encode("utf-8"),
+])
+def test_hidden_or_embedded_native_group_id_not_verified_original_detail(payload):
+    with pytest.raises(ValueError, match="not visible"):
+        parse_lenobl_detail(payload, identity=IDENT, url=URL, listing_title=TITLE)
+
+
+def test_visible_native_detail_keeps_verified_number_even_with_hidden_metadata():
+    payload = (f"<head><title>Other unrelated metadata</title></head>"
+               f"<body><p>Группа закупок № {IDENT}</p>"
+               f"<h1>Закупка: {TITLE}</h1></body>").encode("utf-8")
+    notice = parse_lenobl_detail(payload, identity=IDENT, url=URL, listing_title=TITLE)
+    assert notice.external_id == IDENT and notice.url == URL

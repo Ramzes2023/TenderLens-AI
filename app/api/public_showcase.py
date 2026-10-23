@@ -73,9 +73,9 @@ PUBLIC_SUPPORT_HTML = """<section class="vq-support-strip" aria-labelledby="vqSu
     <label for="vqAIQuestion">Ask the AI about VALYQON AI</label>
     <textarea id="vqAIQuestion" name="question" rows="2" minlength="3" maxlength="450" placeholder="For example: how does tender search work?" required></textarea>
     <button type="submit" id="vqAISend">Ask AI ↗</button>
-    <p id="vqAIStatus" role="status" aria-live="polite">AI answers are available only when the provider is configured. Do not share private information.</p>
+    <p id="vqAIStatus" role="status" aria-live="polite">Public AI requires activation and a configured provider. Do not share private information.</p>
   </form>
-  <a class="vq-help-contact" href="/dashboard#support">Open Support Center to send a message →</a>
+  <a class="vq-help-contact" href="/login">Sign in to write to Support →</a>
   <p>Sign-in is required to create a support request. The authenticated workspace includes AI support where configured.</p>
 </div>
 <button type="button" class="vq-help-bubble" id="vqFloatingHelp" aria-label="Open product help" aria-controls="vqHelpDrawer" aria-expanded="false" title="Product help">✦</button>"""

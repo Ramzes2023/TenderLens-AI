@@ -40,6 +40,11 @@ WORKSPACE_WORKBENCH_HTML = """
       <h3 id="vqNextTitle" data-ui-en="Make the next move" data-ui-ru="Продолжите работу">Make the next move</h3>
       <p id="vqNextText" role="status" aria-live="polite" data-ui-en="Checking your verified account and company setup." data-ui-ru="Проверяем состояние аккаунта и настройку компании.">Checking your verified account and company setup.</p>
       <a id="vqNextLink" href="#team" data-ui-en="Open team setup →" data-ui-ru="Открыть настройку команды →">Open team setup →</a>
+      <div class="vq-source-check" id="vqSourceCheck" aria-labelledby="vqSourceCheckTitle" hidden>
+        <div class="vq-source-check-head"><strong id="vqSourceCheckTitle" data-ui-en="Latest Discovery · source response" data-ui-ru="Последний поиск · ответы источников">Latest Discovery · source response</strong><span data-ui-en="THIS SESSION" data-ui-ru="ЭТА СЕССИЯ">THIS SESSION</span></div>
+        <div id="vqSourceCheckRows" class="vq-source-check-bars" role="img" aria-label="Sources requested, responding and unavailable in latest Discovery"></div>
+        <p data-ui-en="Requested sources are not proof of working integrations. Based only on the last browser search." data-ui-ru="Запрошенные источники не означают подтверждённую интеграцию. Только результат последнего поиска в браузере.">Requested sources are not proof of working integrations. Based only on the last browser search.</p>
+      </div>
       <div class="vq-next-disclaimer" data-ui-en="No scans, alerts or AI tasks run automatically from this panel." data-ui-ru="Эта панель не запускает сканирование, уведомления или ИИ автоматически.">No scans, alerts or AI tasks run automatically from this panel.</div>
     </article>
 

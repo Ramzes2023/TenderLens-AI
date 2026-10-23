@@ -259,11 +259,14 @@
         :t('This isolated local preview contains no source data. Turn on illustrative charts only to review the layout.',
            'В этой изолированной копии нет закупок. Для оценки дизайна можно отдельно включить учебные графики.');
       if(sample){
-        render(makeIllustrativeChartData());
+        const example=makeIllustrativeChartData();
+        render(example);
+        broadcastDemo(true,example.daily);
         put('vqxIntelligenceStatus',t('ILLUSTRATIVE GRAPHICS · NO REAL PROCUREMENT STATISTICS',
           'УЧЕБНЫЕ ГРАФИКИ · НЕ РЕАЛЬНАЯ СТАТИСТИКА ЗАКУПОК'));
-      } else if(realReport) render(realReport);
+      } else if(realReport){ render(realReport); broadcastDemo(false,null); }
       else{
+        broadcastDemo(false,null);
         for(const id of ['vqxHeroTotal','vqxHeroFresh','vqxHeroPriced','vqxStatObserved','vqxStatNew','vqxStatPriced','vqxStatDeadline'])put(id,'—');
         ['vqxHeroLine','vqxDailyChart','vqxPriceLegend','vqxPriceHistogram','vqxWeeksBars','vqxDeadlineBars','vqxCurrencyBars','vqxCoverageBars'].forEach(id=>{
           const elem=el(id);if(elem)elem.replaceChildren();
@@ -279,7 +282,38 @@
     paint();
   }
 
+
+  function broadcastDemo(enabled, daily) {
+    window.dispatchEvent(new CustomEvent('valyqon-demo-chart-mode', {
+      detail: {demo: Boolean(enabled), daily: enabled ? daily : null}
+    }));
+  }
+  function setupPublicDemo() {
+    const panel=el('vqxReviewTools'),button=el('vqxToggleDemo'),
+          disclosure=el('vqxReviewDisclosure');
+    if(panel) {
+      panel.hidden=false;
+      panel.classList.add('is-public-demo');
+    }
+    if(button)button.hidden=true;
+    if(disclosure) disclosure.textContent=t(
+      'DEMONSTRATION ONLY: All chart statistics, KPIs and trends on this page are invented illustrations, not real market results. Guest procurement search still uses only persisted records. Switch to real-data mode after source verification.',
+      'ТОЛЬКО ДЕМОНСТРАЦИЯ: все цифры, показатели и тренды в графиках на этой странице вымышлены для показа интерфейса, а не являются статистикой рынка. Гостевой поиск использует только настоящие сохранённые закупки. Реальные графики включаются после проверки источников.'
+    );
+    const heading=panel?.querySelector('strong');
+    if(heading)heading.textContent=t('ILLUSTRATIVE ANALYTICS · NOT REAL TENDERS',
+      'ДЕМОНСТРАЦИОННАЯ АНАЛИТИКА · НЕ РЕАЛЬНЫЕ ЗАКУПКИ');
+    document.body.dataset.chartPreview='illustrative';
+    const dataset=makeIllustrativeChartData();
+    render(dataset);
+    put('vqxIntelligenceStatus',t(
+      'ILLUSTRATIVE FIGURES ONLY · REAL TENDER SEARCH REMAINS SEPARATE',
+      'ТОЛЬКО УЧЕБНЫЕ ЧИСЛА · НАСТОЯЩИЙ ПОИСК ЗАКУПОК РАБОТАЕТ ОТДЕЛЬНО'));
+    broadcastDemo(true,dataset.daily);
+  }
+
   const getReport=async()=>{
+    if (document.body.dataset.publicAnalyticsMode==='demo') { setupPublicDemo(); return; }
     try {
       const response=await fetch('/api/v1/public/market-intelligence',{credentials:'omit',
         cache:'no-store',headers:{'Accept':'application/json'}});

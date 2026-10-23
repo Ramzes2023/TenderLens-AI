@@ -133,8 +133,17 @@ def public_amount(raw):
 
     Only genuine list-level `summa`, never the inaccessible detail card.
     """
-    if type(raw) in (int, float):
+    if type(raw) is int:
+        # Native JSON may contain unbounded-precision ints. Bound them before
+        # float conversion so one malformed optional price cannot abort an
+        # otherwise valid real page of municipal procurement notices.
+        if not 0 < raw <= 1e18:
+            return None
         amount = float(raw)
+    elif type(raw) is float:
+        if not math.isfinite(raw):
+            return None
+        amount = raw
     elif type(raw) is str and len(raw) <= 80:
         # Thousands separators occur in native Russian UI and test fixtures.
         value = raw.strip().replace("\u00a0", " ").replace("\u202f", " ")

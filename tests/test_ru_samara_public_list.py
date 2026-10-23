@@ -265,6 +265,9 @@ def test_repeated_original_across_pages_fails_closed(monkeypatch):
     ("200 000,00", 200000.0), ("150000.75", 150000.75),
     ("150000,75", 150000.75), (25000, 25000.0),
     (0, None), (float("inf"), None), (float("nan"), None),
+    pytest.param(10**10000, None, id="oversized-native-positive"),
+    pytest.param(-(10**10000), None, id="oversized-native-negative"),
+    (10**308, None), (1e18, 1e18), (False, None),
     ("-100", None), ("1e99", None), ("1,000.00", None),
     ("<script>1000</script>", None), (True, None),
 ])
@@ -282,3 +285,28 @@ def test_samara_list_amount_never_invents_values(raw, expected):
 ])
 def test_samara_source_grid_dates_do_not_fabricate_time(raw, expected):
     assert mod.public_grid_date(raw) == expected
+
+
+def test_large_native_json_price_is_optional_not_a_whole_real_page_failure():
+    # A malformed optional 'summa' must not prevent valid original IDs,
+    # title, buyer, deadline or later notices from reaching the Worker.
+    payload = original_rows()
+    payload["items"][0]["summa"] = 10**10000
+    payload["items"][1]["summa"] = "200 000,00"
+    received = mod.parse_public_list(payload)
+    assert [notice.external_id for notice in received] == ["5611345", "5611196"]
+    assert received[0].initial_price is None
+    assert received[0].currency is None
+    assert received[0].published_at == "19.10.2026"
+    assert received[0].deadline == "22.10.2026"
+    assert received[1].initial_price == 200000.0
+    assert received[1].currency == "RUB"
+    assert all(notice.url == mod.GRID for notice in received)
+
+
+def test_native_price_boolean_and_nan_do_not_claim_ruble_value():
+    for invalid in (True, False, float("nan"), float("inf"), float("-inf")):
+        payload = original_rows()
+        payload["items"][0]["summa"] = invalid
+        notice = mod.parse_public_list(payload, limit=1)[0]
+        assert notice.initial_price is None and notice.currency is None

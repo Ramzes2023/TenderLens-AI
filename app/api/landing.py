@@ -1,5 +1,6 @@
 """Public product story describing supported workflows without fabricated results."""
 from html import escape
+import os
 from .public_locale import public_html, language_selector
 from .guest_search_ui import GUEST_SEARCH_HTML
 from .public_showcase import MARKET_PULSE_HTML, PUBLIC_SUPPORT_HTML
@@ -7,12 +8,13 @@ from .public_analytics_showcase import HERO_DASHBOARD_HTML, ANALYTICS_WALL_HTML
 
 
 def landing_html(authenticated: bool = False) -> str:
+    review_attr = ' data-review-charts="true"' if os.getenv('VALYQON_WEBSITE_REVIEW_ONLY') == '1' else ''
     secondary = 'Open Dashboard' if authenticated else 'Sign In'
     target = '/dashboard' if authenticated else '/login'
     steps = [('Discover', 'Explore official procurement sources.'), ('Match', 'Compare metadata with your company.'), ('Analyze', 'Review documents through supported workflows.'), ('Decide', 'Use evidence, completeness and fit.'), ('Win', 'Pursue the right opportunities. Outcomes are never guaranteed.')]
     workflow = ''.join(f'<article><span class="step-number">0{i}</span><h3>{title}</h3><p>{text}</p></article>' for i, (title, text) in enumerate(steps, 1))
     return public_html(f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VALYQON AI · Global Procurement Intelligence</title><link rel="stylesheet" href="/assets/saas.css"><link rel="stylesheet" href="/assets/premium.css"><link rel="stylesheet" href="/assets/responsive.css?v=phase24q"><link rel="stylesheet" href="/assets/market_depth.css?v=20261017"><link rel="stylesheet" href="/assets/guest_search.css?v=20261023"><link rel="stylesheet" href="/assets/public_showcase.css?v=20261023b"><link rel="stylesheet" href="/assets/public_luxe.css?v=20261023d"></head>
-<body class="landing premium"><a class="skip-link" href="#content">Skip to content</a>
+<body class="landing premium"{review_attr}><a class="skip-link" href="#content">Skip to content</a>
 <header class="landing-top"><a class="brand" href="/">VALYQON<span> AI</span></a><button class="public-menu" id="publicMenu" type="button" aria-expanded="false" aria-controls="publicNav">Menu</button><nav id="publicNav" aria-label="Product navigation"><a href="#product">Product</a><a href="#coverage">Coverage</a><a href="#intelligence">Intelligence</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="/how-it-works">How it works</a><a href="/usage-guidelines">Usage guidelines</a>{language_selector()}</nav><div class="toolbar"><a href="{target}">{secondary}</a><a class="cta compact" href="/register">Create account</a></div><div class="mobile-public-locale">{language_selector()}</div></header>
 <main id="content"><div class="vqx-hero-shell"><section class="hero premium-hero" aria-labelledby="vqxHeroHeading">
 <div class="vqx-hero-intro"><span class="vqx-hero-pill">✧ AI-POWERED PROCUREMENT INTELLIGENCE</span><h1 id="vqxHeroHeading">Find every match<br><span>in procurement.</span></h1>

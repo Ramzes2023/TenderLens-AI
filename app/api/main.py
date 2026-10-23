@@ -17,6 +17,7 @@ from .operator_routes import router as operator_router
 from .billing_routes import router as billing_router
 from .guest_search_routes import router as guest_search_router
 from .public_market_routes import router as public_market_router
+from .public_assistant_routes import router as public_assistant_router
 from .operator_support_routes import router as operator_support_router
 from .public_status_routes import router as public_status_router
 from .organization_routes import router as organization_router
@@ -73,12 +74,16 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
     app.state.guest_search_limiter = AuthRateLimiter(
         policies={"guest-search": AuthRatePolicy(24, 24, 60)}, max_entries=8192
     )
+    app.state.guest_ai_limiter = AuthRateLimiter(
+        policies={"guest-ai": AuthRatePolicy(3, 3, 600)}, max_entries=8192
+    )
     app.include_router(auth_router)
     app.include_router(support_router)
     app.include_router(operator_router)
     app.include_router(billing_router)
     app.include_router(guest_search_router)
     app.include_router(public_market_router)
+    app.include_router(public_assistant_router)
     app.include_router(operator_support_router)
     app.include_router(public_status_router)
     app.include_router(organization_router)

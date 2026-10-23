@@ -30,7 +30,7 @@ HERO_DASHBOARD_HTML = """<aside class="vqx-product" aria-label="Live-data produc
    <div class="vqx-hero-bottom"><span>◈ Source data protected</span><span>◉ Transparent sample scope</span></div>
   </div>
  </div>
- <div class="vqx-tour-foot">INTERACTIVE DEMO · NO LIVE TENDERS IN THE ILLUSTRATION. No search has been run here. The metrics above are fetched from the actual stored data.</div>
+ <div class="vqx-tour-foot">INTERACTIVE DEMO · NO LIVE TENDERS IN THE ILLUSTRATION. No search has been run here. Metrics come from stored data unless the optional local illustrative-chart mode is visibly enabled.</div>
 </aside>"""
 
 ANALYTICS_WALL_HTML = """<section class="vqx-analytics" id="market-analytics" aria-labelledby="vqxAnalyticsHeading">

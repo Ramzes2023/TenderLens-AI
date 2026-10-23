@@ -67,6 +67,9 @@ def test_gh_hosted_runner_and_unassigned_linux_are_rejected():
         {"runner_id": None},
         {"runner_name": ""},
         {"runner_name": None},
+        {"runner_name": "VALYQON-INT-02"},
+        {"runner_name": "VALYQON-ASIA-03"},
+        {"labels": ["self-hosted", "Linux"]},
         {"runner_id": True},
     ]:
         assert not successful_trusted_live_job(SHA, [_run()], {1234: [_job(**fields)]})

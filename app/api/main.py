@@ -15,6 +15,7 @@ from .auth_routes import router as auth_router
 from .support_routes import router as support_router
 from .operator_routes import router as operator_router
 from .billing_routes import router as billing_router
+from .guest_search_routes import router as guest_search_router
 from .operator_support_routes import router as operator_support_router
 from .public_status_routes import router as public_status_router
 from .organization_routes import router as organization_router
@@ -31,7 +32,7 @@ from .saved_filter_routes import router as saved_filter_router
 from .organization_activity_routes import router as organization_activity_router
 from .routes import router
 from .runtime import ApiRuntime, build_runtime
-from .security import LoginRateLimiter
+from .security import LoginRateLimiter, AuthRateLimiter, AuthRatePolicy
 
 
 def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None = None) -> FastAPI:
@@ -68,10 +69,14 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
     mimetypes.add_type("application/geo+json", ".geojson")
     app.mount("/assets", StaticFiles(directory=Path(__file__).parent / "static"), name="assets")
     app.state.login_rate_limiter = LoginRateLimiter()
+    app.state.guest_search_limiter = AuthRateLimiter(
+        policies={"guest-search": AuthRatePolicy(24, 24, 60)}, max_entries=8192
+    )
     app.include_router(auth_router)
     app.include_router(support_router)
     app.include_router(operator_router)
     app.include_router(billing_router)
+    app.include_router(guest_search_router)
     app.include_router(operator_support_router)
     app.include_router(public_status_router)
     app.include_router(organization_router)

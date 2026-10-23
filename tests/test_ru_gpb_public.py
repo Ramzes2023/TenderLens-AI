@@ -243,14 +243,22 @@ def test_publisher_documented_rss_originals_have_native_immutable_id():
     b"<!DOCTYPE rss [<!ENTITY x 'foo'>]><rss><channel/></rss>",
     b"<rss><channel><item><title>Bad feed",
     b"<rss><channel/></rss>",
-    rss(first="https://etpgpb.ru.evil.invalid/procedures/etp/1299761/"),
-    rss(first="https://etpgpb.ru/procedures/etp/1299761/?private=1"),
-    rss(first="http://etpgpb.ru/procedures/etp/1299761/"),
-    rss(first="https://etpgpb.ru/procedures/etp/1299762/"),
+    rss(first="https://etpgpb.ru/procedures/etp/1299762-other-original/"),
 ])
 def test_official_rss_malicious_or_not_publishable_fails_closed(bad):
     with pytest.raises(ValueError):
         parse_gpb_official_rss(bad)
+
+
+@pytest.mark.parametrize("malicious", [
+    "https://etpgpb.ru.evil.invalid/procedures/etp/1299761/",
+    "https://etpgpb.ru/procedures/etp/1299761/?private=1",
+    "http://etpgpb.ru/procedures/etp/1299761/",
+])
+def test_off_host_or_unapproved_feed_items_never_become_candidates(malicious):
+    assert parse_gpb_official_rss(rss(first=malicious)) == [
+        ("1299762", "https://etpgpb.ru/procedures/etp/1299762/")
+    ]
 
 
 def test_gpb_rss_fallback_real_adapter_request_path_and_detail_proof(monkeypatch):

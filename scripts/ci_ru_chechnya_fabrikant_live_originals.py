@@ -47,6 +47,14 @@ def main() -> int:
     except Exception as exc:
         print("RU_CHECHNYA_FABRIKANT_REAL=BLOCKED")
         print("FAILURE_CLASS=" + type(exc).__name__[:70])
+        # Only fixed transport classifications. Never reveal upstream raw
+        # errors, request URLs, cookies, tokens, supplier names or IPs.
+        if type(exc).__name__ == "ConnectorTransportError":
+            reason = getattr(exc, "reason", "")
+            known = {"network", "public_ip", "tls_certificate", "http_status",
+                     "http_transient", "response_size", "policy"}
+            print("TRANSPORT_REASON=" + (reason if reason in known else "unclassified"))
+            print("TRANSPORT_RETRYABLE=" + str(getattr(exc, "retryable", False) is True))
         print("PRODUCTION_CHANGED=NO")
         return 2
     print("RU_CHECHNYA_FABRIKANT_FIRSTPARTY=" + json.dumps(result, sort_keys=True))

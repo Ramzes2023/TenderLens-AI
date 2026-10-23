@@ -232,7 +232,15 @@ def main() -> int:
             from app.sources.snapshots import fresh_ingushetia_worker_catalog
             opportunities = OpportunityRepository(database)
             opportunities.initialize()
-            source_catalog = fresh_ingushetia_worker_catalog(source_catalog, opportunities)
+            try:
+                source_catalog = fresh_ingushetia_worker_catalog(source_catalog, opportunities)
+            except ValueError:
+                # Convert only the scoped regional Worker-SQL routing error to
+                # a controlled config refusal. Unrelated legacy errors must
+                # retain their existing behavior rather than be swallowed.
+                raise MonitoringConfigurationError(
+                    "Invalid Ingushetia Worker-SQL source routing"
+                ) from None
         eis_registration = (
             source_catalog.registry.get(
                 "eis"
@@ -291,7 +299,6 @@ def main() -> int:
         MonitoringConfigurationError,
         MonitoringRepositoryError,
         SourceRegistryError,
-        ValueError,  # Source-owned Worker-SQL catalog rejects unapproved routing.
     ):
         logger.warning(
             "Monitoring configuration unavailable; check source/MONITOR settings and database."

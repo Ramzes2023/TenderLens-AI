@@ -70,3 +70,11 @@ WORKSPACE_WORKBENCH_HTML = """
   <p data-ui-en="Shortcuts are disabled while typing in fields. This is page navigation only." data-ui-ru="Горячие клавиши не мешают вводу текста и управляют только интерфейсом.">Shortcuts are disabled while typing in fields. This is page navigation only.</p>
 </dialog>
 """
+
+
+# The utility row is global, while the workbench is Overview-only.
+# Splitting at the declared static element keeps the markup in one source.
+WORKSPACE_HOME_HTML, _utility_tail = WORKSPACE_WORKBENCH_HTML.split(
+    '\n<div id="vqUtilityBar"', 1
+)
+WORKSPACE_UTILITIES_HTML = '<div id="vqUtilityBar"' + _utility_tail

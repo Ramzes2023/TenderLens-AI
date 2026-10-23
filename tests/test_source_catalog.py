@@ -447,3 +447,44 @@ def test_catalog_unified_fetch_uses_multisource_and_profile_eis():
     assert titles["ted"] == (
         "ted:pump,valve"
     )
+
+
+def test_ingushetia_source_failures_never_expose_raw_vendor_urls_or_tokens():
+    """Offline: public status must be safe, without masking failed source state."""
+    from dataclasses import replace
+    import json
+
+    class FailingVendor:
+        async def fetch(self, limit=20):
+            raise RuntimeError(
+                "https://44.fabrikant.ru/private?token=SECRET_FOR_TEST; "
+                "proxy user:password; upstream unavailable"
+            )
+
+    config = MonitoringSettings(
+        enabled=False, interval_seconds=600, max_items=20,
+        max_notifications_per_cycle=5, request_timeout=20,
+        eis_rss_urls=(), ca_bundle_file=None,
+        ru_ingushetia_eis44_enabled=True,
+        ru_ingushetia_fabrikant44_enabled=True,
+    )
+    catalog = build_source_catalog(config)
+    for key in ("ru_ingushetia_eis44", "ru_ingushetia_fabrikant44"):
+        registration = catalog.registry.get(key)
+        registry = SourceRegistry((replace(registration, source=FailingVendor()),))
+        result = asyncio.run(MultiSourceFetcher(registry).fetch(source_keys=(key,)))
+        assert result.attempted_sources == (key,)
+        assert result.successful_sources == ()
+        assert result.total_failure
+        assert result.failures[0].error_type == "RuntimeError"
+        assert result.failures[0].message == (
+            "Regional source unavailable; inspect restricted diagnostics."
+        )
+        assert result.statuses[0].message == result.failures[0].message
+        serialized = json.dumps({
+            "failures": [item.__dict__ for item in result.failures],
+            "states": [item.__dict__ for item in result.statuses],
+        })
+        assert "SECRET_FOR_TEST" not in serialized
+        assert "user:password" not in serialized
+        assert "/private" not in serialized

@@ -138,7 +138,9 @@
       status(t('Select a shared organization and activate a company in Team / Companies.',
         'Выберите общую организацию и активируйте компанию в разделах «Команда» / «Компании».'),
         'Выберите общую организацию и активируйте компанию в разделах «Команда» / «Компании».');
-      loaded=true;return;
+      loaded=true;
+      render();
+      return;
     }
     if(busy)return;
     const id=scope();
@@ -234,30 +236,38 @@
     const root=$('vqPlannerBoard');
     root.replaceChildren();
     const items=current();
-    if(!records.length || (!items.length&&loaded)){
+    if(!items.length){
       const empty=make('section','vq-planner-empty');
-      empty.append(make('span','vq-planner-empty-icon','◇'));
-      empty.append(make('h3','',records.length?
-        t('No saved notices match your filters','По фильтрам закупок нет'):
+      empty.append(make('span','vq-planner-empty-icon',loadError?'!':'◇'));
+      const unconfigured=!enabled();
+      const filtered=records.length>0;
+      empty.append(make('h3','',loadError?
+        t('Saved opportunities could not be loaded','Не удалось загрузить сохранённые закупки'):
+        unconfigured?t('Set up your company workspace first','Настройте рабочее пространство компании'):
+        filtered?t('No saved notices match your filters','По фильтрам закупок нет'):
         t('Your tender pipeline starts with a real saved opportunity',
           'Ваша доска начнётся с настоящей сохранённой закупки')));
-      empty.append(make('p','',records.length?
-        t('Try a different title, notice number, or deadline filter.',
+      empty.append(make('p','',loadError?
+        t('The data service did not respond successfully. No sample cards are being displayed.',
+          'Сервис данных не ответил успешно. Демонстрационные карточки не подставляются.'):
+        unconfigured?t('Choose a shared organization and activate a company before reviewing its tenders.',
+          'Выберите общую организацию и активируйте компанию, чтобы работать с её тендерами.'):
+        filtered?t('Try a different title, notice number, or deadline filter.',
           'Измените название, номер извещения или фильтр сроков.'):
-        t('Find a tender in Discovery and save it for your active company. It will appear here with its internal team stage and verified date fields.',
-          'Найдите закупку в поиске и сохраните её для активной компании. Здесь появятся её внутренний этап и доступные сведения о сроке.')));
-      if(records.length){
+        t('Save a real tender from Discovery. This board will show its team stage and known deadlines.',
+          'Сохраните настоящий тендер из поиска. Здесь появятся его внутренний этап и известные сроки.')));
+      if(loadError){
+        const retry=make('button','',t('Retry loading','Повторить загрузку'));
+        retry.type='button';retry.addEventListener('click',load);empty.append(retry);
+      }else if(filtered){
         const reset=make('button','',t('Clear filters','Сбросить фильтры'));
-        reset.type='button';
-        reset.addEventListener('click',()=>{
-          $('vqPlannerQuery').value='';
-          $('vqPlannerUrgency').value='all';
-          render();
-        });
-        empty.append(reset);
+        reset.type='button';reset.addEventListener('click',()=>{
+          $('vqPlannerQuery').value='';$('vqPlannerUrgency').value='all';render();
+        });empty.append(reset);
       }else{
-        const link=make('a','',t('Open Discovery →','Открыть поиск →'));
-        link.href='#discover';empty.append(link);
+        const link=make('a','',unconfigured?t('Open Team setup →','Открыть настройку команды →'):
+          t('Open Discovery →','Открыть поиск →'));
+        link.href=unconfigured?'#team':'#discover';empty.append(link);
       }
       root.append(empty);
       return;
@@ -381,7 +391,7 @@
     return delta>=0&&delta<=7*86400000;
   };
   function renderStats(){
-    if(!loaded||loadError)return;
+    if(!loaded||loadError||!enabled())return;
     const all=records;
     $('vqPlannerTotal').textContent=String(all.length);
     $('vqPlannerSoon').textContent=String(all.filter(r=>maybeSoon(r.date)).length);
@@ -399,7 +409,7 @@
     $('vqPlannerShown').textContent=n?t('Showing '+showing+' of '+n+' saved tenders',
       'Показано '+showing+' из '+n+' сохранённых закупок'):'';
     $('vqPlannerMore').hidden=showing>=n||showing>=MAX_ITEMS;
-    $('vqPlannerCalendarExport').disabled=!loaded||!records.some(r=>r.date);
+    $('vqPlannerCalendarExport').disabled=!enabled()||!loaded||loadError||!records.some(r=>r.date);
     if(view==='board')renderBoard();
     else renderCalendar();
     if(n>MAX_ITEMS)status('Large shortlist: planner loads at most 300 items. Use Saved for the complete list.',

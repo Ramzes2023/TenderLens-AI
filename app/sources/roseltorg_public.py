@@ -51,15 +51,30 @@ def _canonical(raw):
 
 
 class _Listing(HTMLParser):
+    """Visible publisher links only; scripts/templates are not real offers."""
+
+    HIDDEN = frozenset({"head", "script", "style", "template", "noscript",
+                         "svg", "iframe", "object"})
+
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.links = []
+        self.hidden = []
 
     def handle_starttag(self, tag, attrs):
+        if tag in self.HIDDEN:
+            self.hidden.append(tag)
+            return
+        if self.hidden:
+            return
         if tag == "a":
             href = dict(attrs).get("href")
             if href:
                 self.links.append(href)
+
+    def handle_endtag(self, tag):
+        if self.hidden and tag == self.hidden[-1]:
+            self.hidden.pop()
 
 
 class _Detail(HTMLParser):
@@ -72,7 +87,7 @@ class _Detail(HTMLParser):
         self.hidden = 0
 
     def handle_starttag(self, tag, attrs):
-        if tag in {"script", "style", "template", "noscript", "svg"}:
+        if tag in {"head", "script", "style", "template", "noscript", "svg"}:
             self.hidden += 1
         if not self.hidden and tag == "h1" and self.current_heading is None:
             self.current_heading = []
@@ -87,7 +102,7 @@ class _Detail(HTMLParser):
         if tag == "h1" and self.current_heading is not None:
             self.headings.append(" ".join(" ".join(self.current_heading).split()))
             self.current_heading = None
-        if tag in {"script", "style", "template", "noscript", "svg"} and self.hidden:
+        if tag in {"head", "script", "style", "template", "noscript", "svg"} and self.hidden:
             self.hidden -= 1
 
 

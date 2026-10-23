@@ -46,6 +46,13 @@ def _public_title(value):
 def _public_preview(notice):
     """Construct the response from an explicit public field allowlist."""
     title = _public_title(notice.get("title"))
+    # A connector may embed the buyer's full name directly in a free-text
+    # headline. Remove explicit buyer identity from the published title too.
+    buyer = notice.get("customer")
+    if isinstance(buyer, str):
+        buyer = " ".join(buyer.split())
+        if len(buyer) >= 6:
+            title = re.sub(re.escape(buyer), "[hidden]", title, flags=re.I)
     if not title:
         return None
     price = notice.get("initial_price")
@@ -91,12 +98,13 @@ def search_persisted_notices(database, query: str, *, limit: int = MAX_PREVIEWS)
             continue
         # Only the visible title is searchable in guest mode. Searching hidden
         # buyer/URL/source/summary fields creates an information-disclosure oracle.
-        haystack = str(notice.get("title") or "").casefold()
+        public = _public_preview(notice)
+        if public is None:
+            continue
+        haystack = public["title"].casefold()
         if any(keyword not in haystack for keyword in keywords):
             continue
-        public = _public_preview(notice)
-        if public is not None:
-            results.append(public)
+        results.append(public)
         if len(results) >= limit:
             break
 

@@ -411,5 +411,7 @@
   "Ask the AI about VALYQON AI": "Спросите ИИ о VALYQON AI",
   "For example: how does tender search work?": "Например: как работает поиск тендеров?",
   "Ask AI ↗": "Спросить ИИ ↗",
-  "AI answers are available only when the provider is configured. Do not share private information.": "Ответы ИИ доступны только при настроенном провайдере. Не сообщайте личные данные."
+  "AI answers are available only when the provider is configured. Do not share private information.": "Ответы ИИ доступны только при настроенном провайдере. Не сообщайте личные данные.",
+  "Sign in to write to Support →": "Войти, чтобы написать в поддержку →",
+  "Public AI requires activation and a configured provider. Do not share private information.": "Гостевой ИИ должен быть включён и настроен. Не сообщайте личные данные."
 }

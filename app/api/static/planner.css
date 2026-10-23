@@ -69,3 +69,8 @@ body.saas .vq-planner-pagination button[hidden]{display:none}
 @media(max-width:830px){body.saas .vq-planner-stats{grid-template-columns:repeat(2,minmax(0,1fr))}body.saas .vq-month-cell{min-height:100px;padding:5px}body.saas .vq-month-tender{font-size:9px;padding:4px}}
 @media(max-width:580px){body.saas .vq-planner-hero{padding:22px}body.saas .vq-planner-stats{gap:8px}body.saas .vq-planner-stats article{padding:12px}body.saas .vq-planner-stats strong{font-size:23px}body.saas .vq-planner-toolbar{align-items:stretch;flex-direction:column}body.saas .vq-planner-tabs button{padding:10px 12px}body.saas .vq-planner-toolbar-right{justify-content:space-between}body.saas #vqPlannerQuery{width:65%}body.saas .vq-month-cell{min-height:74px}body.saas .vq-month-tender{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}body.saas .vq-planner-month{padding:10px}}
 @media(prefers-reduced-motion:reduce){body.saas .vq-planner-card{transition:none}body.saas .vq-planner-card:hover{transform:none}}
+
+/* A drag affordance complements, never replaces, the keyboard stage selector. */
+body.saas .vq-planner-card[draggable=true]{cursor:grab}
+body.saas .vq-planner-card.is-dragging{opacity:.56;cursor:grabbing}
+body.saas .vq-planner-column.is-drop-target{border-color:#5688ee;box-shadow:0 0 0 3px #5989f337;background:#eaf1ff}

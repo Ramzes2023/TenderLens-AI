@@ -13,6 +13,8 @@ services:
       API_PORT: 8000
       API_RELOAD: "false"
       # Fail-closed before merchant-backed subscription verification exists.
+      # Public graphs are explicitly illustrative until independently validated live observations.
+      VALYQON_PUBLIC_ANALYTICS_MODE: "demo"
       VALYQON_RESTRICT_PAID_SOURCE_DETAILS: "true"
       TENDERLENS_TRUSTED_PROXY_IPS: 172.30.19.2
       DATABASE_URL: sqlite:////app/data/tenderlens.db

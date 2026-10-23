@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import mimetypes
+import os
 
 from app import __version__
 
@@ -35,6 +36,7 @@ from .organization_activity_routes import router as organization_activity_router
 from .routes import router
 from .runtime import ApiRuntime, build_runtime
 from .security import LoginRateLimiter, AuthRateLimiter, AuthRatePolicy
+from .paid_content_gate import block_paid_details_before_billing
 
 
 def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None = None) -> FastAPI:
@@ -67,6 +69,11 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
     from app.observability import RequestDiagnostics, telemetry
     app.state.telemetry = telemetry
     app.add_middleware(RequestDiagnostics)
+    # Public marketing launch must not leak source details via older authenticated
+    # endpoints before a verified merchant/subscription ledger is operational.
+    # Opt-in to avoid altering local private preview or existing test workflows.
+    if os.environ.get("VALYQON_RESTRICT_PAID_SOURCE_DETAILS", "").strip().lower() in {"1", "true"}:
+        app.middleware("http")(block_paid_details_before_billing)
     # Windows may otherwise serve GeoJSON as application/octet-stream.
     mimetypes.add_type("application/geo+json", ".geojson")
     app.mount("/assets", StaticFiles(directory=Path(__file__).parent / "static"), name="assets")

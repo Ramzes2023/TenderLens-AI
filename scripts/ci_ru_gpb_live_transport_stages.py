@@ -8,7 +8,8 @@ import asyncio
 import httpx
 
 from app.sources.gpb_etp_public import (
-    HOST, LIST_URL, MAX_BYTES, parse_gpb_public_links, parse_gpb_verified_detail,
+    HOST, LIST_URL, MAX_BYTES, parse_gpb_public_links,
+    parse_gpb_official_rss, parse_gpb_verified_detail,
 )
 from app.sources.http import (
     ConnectorTransportError, FetchPolicy, bounded_fetch, source_client,
@@ -48,16 +49,29 @@ def _cause_category(error):
 async def probe():
     stage = "LIST_GET"
     try:
-        with bounded_fetch(FetchPolicy(frozenset({HOST}), 4, max_bytes=MAX_BYTES)):
+        with bounded_fetch(FetchPolicy(frozenset({HOST}), 5, max_bytes=MAX_BYTES)):
             async with source_client(
                 timeout=25, follow_redirects=False, trust_env=False,
                 headers={"Accept": "text/html", "User-Agent": "Mozilla/5.0"},
             ) as client:
-                response = await client.get(LIST_URL)
-                if "html" not in response.headers.get("content-type", "").lower():
-                    print("GPB_STAGE=LIST_NON_HTML")
-                    return 2
-                found = parse_gpb_public_links(response.content, limit=3)
+                try:
+                    response = await client.get(LIST_URL)
+                    response.raise_for_status()
+                    if "html" not in response.headers.get("content-type", "").lower():
+                        raise ValueError("GPB list not HTML")
+                    found = parse_gpb_public_links(response.content, limit=3)
+                    print("GPB_DISCOVERY=PUBLIC_HTML")
+                except (ConnectorTransportError, httpx.HTTPStatusError,
+                        httpx.TransportError, ValueError, TimeoutError, OSError):
+                    stage = "OFFICIAL_RSS_GET"
+                    feed = await client.get(f"https://{HOST}/procedures.rss",
+                                            headers={"Accept": "application/rss+xml, application/xml"})
+                    feed.raise_for_status()
+                    if not any(x in feed.headers.get("content-type", "").lower()
+                               for x in ("rss", "xml")):
+                        raise ValueError("Official GPB RSS not XML")
+                    found = parse_gpb_official_rss(feed.content, limit=3)
+                    print("GPB_DISCOVERY=OFFICIAL_RSS")
                 print("GPB_LIST_FIRSTPARTY_LINKS=" + str(len(found)))
                 stage = "DETAIL_GET"
                 stale = 0

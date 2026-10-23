@@ -23,6 +23,7 @@ from .austender_rss import AusTenderRssSource
 from .b2b_center import B2BCenterSource
 from .tektorg_public_html import TekTorgPublicSource
 from .gpb_etp_public import GpbEtpPublicSource
+from .roseltorg_public import RoseltorgPublicSource
 from .lenobl_small_public import LenoblSmallPublicSource
 from .nmck_native_public import NmckNativePublicSource
 from .stan_commercial_public import StanCommercialPublicSource
@@ -858,6 +859,19 @@ def build_source_catalog(
             official=False,
             enabled=True,
             capabilities=SourceCapabilities(),
+        ))
+
+    # Roseltorg remains disabled by default. Every public card requires
+    # independent same-host publisher detail proof before user exposure.
+    if settings.roseltorg_public_enabled:
+        registry.register(SourceRegistration(
+            key="roseltorg_public",
+            display_name="Росэлторг — публичные закупки (независимо проверенные)",
+            source=RoseltorgPublicSource(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",), languages=("ru",),
+            homepage_url="https://www.roseltorg.ru/procedures/search",
+            official=False, enabled=True, capabilities=SourceCapabilities(),
         ))
 
     if settings.gpb_etp_public_enabled:

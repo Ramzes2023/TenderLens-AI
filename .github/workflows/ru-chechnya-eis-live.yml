@@ -251,6 +251,11 @@ jobs:
           echo "EIS_HOSTED_NETWORK_CANARY_IS_NOT_PRODUCTION_ACCEPTANCE=YES"
 
   chechnya-real-live-worker:
+    # Default-branch callback installed by safely merged infrastructure PR #262
+    # automatically re-runs the strict PR release-proof check AFTER this full
+    # first-party push workflow successfully completes on approved RU-01.
+    # That callback does not relax the EIS/Worker/SQLite/Telegram release gate.
+    # The physical runner outage remains tracked in blocker issue #259.
     # workflow_dispatch is only discoverable once the workflow reaches the
     # default branch; until then, trusted feature-branch push is the live gate.
     # pull_request never reaches self-hosted machines.

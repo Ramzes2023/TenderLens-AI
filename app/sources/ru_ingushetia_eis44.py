@@ -13,11 +13,16 @@ import re
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 from .eis_rss import EIS_EXTENDED_RSS_URL, EisRssSource, SourceError
+from .eis_pinned_ca import verify_root
 from .models import TenderNotice
 from .opportunities import validate_notice
 
 SOURCE_ID = "ru_ingushetia_eis44"
 REGION = "Республика Ингушетия"
+# The known public official Russian root is already bundled in the app.
+# Only this first-party EIS regional adapter can use it automatically;
+# never install roots system-wide or trust certificates from HTTP responses.
+BUNDLED_EIS_ROOT = Path(__file__).resolve().parents[2] / "russian_trusted_root_ca_pem.crt"
 # EIS ignores the guessed regions=06 argument and returns national records.
 # Use its public text search; publisher-owned buyer/region metadata below is
 # still mandatory. This conservative query can miss buyers without the region
@@ -87,6 +92,14 @@ class IngushetiaEis44Source:
 
     def __post_init__(self):
         validate_ingushetia_rss_url(self.rss_url)
+        if not self.system_trust and self.ca_bundle_file is None:
+            try:
+                # Fingerprint-verify the bundled public root before using it.
+                # Do not rely on ambient trust or certificate downloads.
+                verify_root(BUNDLED_EIS_ROOT.read_bytes())
+            except (OSError, ValueError):
+                raise SourceError("Verified scoped EIS root is unavailable") from None
+            object.__setattr__(self, "ca_bundle_file", BUNDLED_EIS_ROOT)
 
     async def fetch(self, limit: int = 20) -> list[TenderNotice]:
         if self.name != SOURCE_ID or type(limit) is not int or not 1 <= limit <= 100:

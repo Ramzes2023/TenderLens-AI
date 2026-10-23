@@ -96,12 +96,64 @@ function updateWorkspaceControls(){
 }
 
 async function loadWorkspaceData(){
-  await Promise.all([
-    loadCompanies(),
+  // The company list is the essential workspace context. Monitoring and
+  // historical PDF tender data are optional capabilities: if unavailable,
+  // keep the verified organization and companies usable, but report the
+  // degraded capability accurately instead of claiming the entire account
+  // and connection are down.
+  await loadCompanies();
+  const [monitoring, tenders] = await Promise.allSettled([
     loadMonitoring(),
     loadTenders()
   ]);
 
+  const notice = document.getElementById('appNotice');
+  const unavailable = [];
+
+  if (monitoring.status === 'rejected') {
+    unavailable.push('monitoring');
+    state.hasActiveCompany = Number.isInteger(state.activeCompanyId);
+    for (const id of [
+      'monitorCompany', 'monitoringCompany', 'monitoringMode',
+      'monitoringFeeds', 'monitoringBackground',
+      'monitoringNotifications', 'monitoringAccess',
+      'monitoringExplanation'
+    ]) {
+      const node = document.getElementById(id);
+      if (node) node.textContent = 'Monitoring status unavailable';
+    }
+  }
+
+  if (tenders.status === 'rejected') {
+    unavailable.push('PDF tender history');
+    const root = document.getElementById('tenders');
+    if (root) {
+      root.replaceChildren();
+      const note = document.createElement('p');
+      note.className = 'empty';
+      note.textContent = 'Tender history unavailable. Retry after checking the source service.';
+      root.append(note);
+    }
+  }
+
+  if (notice) {
+    if (unavailable.length) {
+      notice.dataset.uiEn =
+        'Some workspace services could not be loaded: ' +
+        unavailable.join(', ') +
+        '. Your account and organization are still available. Open Account → Refresh workspace to retry.';
+      notice.dataset.uiRu =
+        'Некоторые службы рабочей области недоступны: ' +
+        unavailable.map(name => name === 'monitoring' ? 'мониторинг' : 'история PDF-закупок').join(', ') +
+        '. Аккаунт и организация доступны. Откройте «Аккаунт» → «Обновить рабочую область».';
+      notice.textContent =
+        window.MainLocale?.locale === 'ru' ? notice.dataset.uiRu : notice.dataset.uiEn;
+    } else {
+      notice.textContent = '';
+      delete notice.dataset.uiEn;
+      delete notice.dataset.uiRu;
+    }
+  }
   updateWorkspaceControls();
 }
 

@@ -16,7 +16,7 @@ PLANNER_HTML = """
   <p id="vqPlannerStatus" class="vq-planner-status" role="status" aria-live="polite" data-ui-en="Open this section to load saved tenders." data-ui-ru="Откройте этот раздел, чтобы загрузить сохранённые закупки.">Open this section to load saved tenders.</p>
   <div class="vq-planner-stats">
     <article><span data-ui-en="Saved in view" data-ui-ru="Сохранено в выборке">Saved in view</span><strong id="vqPlannerTotal">—</strong></article>
-    <article><span data-ui-en="Next 7 days" data-ui-ru="Ближайшие 7 дней">Next 7 days</span><strong id="vqPlannerSoon">—</strong></article>
+    <article><span data-ui-en="Next 7 calendar days" data-ui-ru="Ближайшие 7 календарных дней">Next 7 calendar days</span><strong id="vqPlannerSoon">—</strong></article>
     <article><span data-ui-en="Past deadlines" data-ui-ru="Истекшие сроки">Past deadlines</span><strong id="vqPlannerLate">—</strong></article>
     <article><span data-ui-en="Without exact time" data-ui-ru="Без точного времени">Without exact time</span><strong id="vqPlannerDateOnly">—</strong></article>
   </div>
@@ -26,6 +26,14 @@ PLANNER_HTML = """
       <button id="vqPlannerMonthTab" type="button" aria-pressed="false" data-ui-en="▣ Deadline calendar" data-ui-ru="▣ Календарь сроков">▣ Deadline calendar</button>
     </div>
     <div class="vq-planner-toolbar-right">
+      <label for="vqPlannerUrgency" data-ui-en="Deadline" data-ui-ru="Срок подачи">Deadline</label>
+      <select id="vqPlannerUrgency" aria-label="Filter by deadline">
+        <option value="all" data-ui-en="All deadlines" data-ui-ru="Все сроки">All deadlines</option>
+        <option value="week" data-ui-en="Next 7 days" data-ui-ru="Ближайшие 7 дней">Next 7 days</option>
+        <option value="late" data-ui-en="Past dates" data-ui-ru="Прошедшие даты">Past dates</option>
+        <option value="date-only" data-ui-en="Date only" data-ui-ru="Только дата">Date only</option>
+        <option value="unknown" data-ui-en="Unknown" data-ui-ru="Не указано">Unknown</option>
+      </select>
       <label for="vqPlannerQuery" data-ui-en="Filter saved" data-ui-ru="Фильтр закупок">Filter saved</label>
       <input id="vqPlannerQuery" type="search" maxlength="120" autocomplete="off" placeholder="Title or tender number" data-ui-en-placeholder="Title or tender number" data-ui-ru-placeholder="Название или номер закупки">
     </div>

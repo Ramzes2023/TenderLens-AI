@@ -79,3 +79,21 @@ body.saas #vqShortcutDialog>p{margin-top:15px;color:#7a8ca9;font-size:11px;line-
 /* Circular setup visualization is derived strictly from the same three
    verified steps as the accessible bar (no fabricated activity figures). */
 body.saas .vq-panel-title-row>strong#vqProgressCount{--vq-progress-angle:0deg;width:59px;height:59px;min-width:59px;border-radius:50%;background:radial-gradient(closest-side,#fff 71%,transparent 72% 100%),conic-gradient(#486fed var(--vq-progress-angle),#e8edfa 0);display:grid;place-items:center;color:#3b55a9;font-size:13px;font-weight:900;padding:0;border:0;font-variant-numeric:tabular-nums}
+
+
+/* In-session source response is an actual Discovery result and explicitly
+   not a verification badge for a permanently running connector. */
+body.saas .vq-source-check{position:relative;border-top:1px solid #afc2ff3b;margin-top:23px;padding-top:18px}
+body.saas .vq-source-check[hidden]{display:none!important}
+body.saas .vq-source-check-head{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-bottom:15px}
+body.saas .vq-source-check-head strong{font-size:11px;color:#f0f3ff}
+body.saas .vq-source-check-head>span{font-size:8px;color:#a8bdf2;font-weight:900;letter-spacing:.09em}
+body.saas .vq-source-check-bars{display:grid;gap:11px}
+body.saas .vq-source-check-row{display:grid;grid-template-columns:79px minmax(0,1fr) 30px;align-items:center;gap:8px}
+body.saas .vq-source-check-row span{color:#becdf4;font-size:10px}
+body.saas .vq-source-check-row strong{font-size:11px;color:#fff;text-align:right;font-variant-numeric:tabular-nums}
+body.saas .vq-source-check-track{height:8px;background:#53618e80;border-radius:9px;overflow:hidden}
+body.saas .vq-source-check-fill{height:100%;background:#91b1ff;border-radius:9px}
+body.saas .vq-source-check-fill.responding{background:#62dbb1}
+body.saas .vq-source-check-fill.unavailable{background:#ffc28b}
+body.saas .vq-source-check>p{font-size:9px;color:#adbfdf;line-height:1.6;margin:15px 0 0}

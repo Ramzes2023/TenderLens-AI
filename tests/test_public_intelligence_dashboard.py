@@ -50,7 +50,7 @@ def test_real_observations_create_all_distributions_and_no_secret_leak(tmp_path)
           initial_price=4_500_000, currency="RUB", deadline="2026-12-04")
     _save(db, "c", "2026-10-09T09:00:00Z",
           initial_price=650, currency="USD", deadline="2026-10-16")
-    _save(db, "d", "2026-10-17T09:00:00Z",
+    _save(db, "d", "2026-10-16T09:00:00Z",
           initial_price=0, currency="RUB", deadline="bad-date")
     _save(db, "e", "2026-10-20T09:00:00Z", currency="EUR")
     data = market_intelligence_snapshot(db, today=date(2026,10,23))

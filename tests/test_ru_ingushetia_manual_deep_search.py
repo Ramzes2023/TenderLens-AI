@@ -149,7 +149,7 @@ def test_manual_regional_pool_does_not_starve_other_enabled_sources():
     catalog = Catalog()
     service = Service()
     matches, report = asyncio.run(_manual_regional_worker_sql_search(service, catalog, 101))
-    assert service.calls == [((EIS,), 100), (("kavkaz_rf_firstparty",), None)]
+    assert service.calls == [((EIS,), 1000), (("kavkaz_rf_firstparty",), None)]
     assert [m.notice.source for m in matches[:3]] == [
         EIS, "kavkaz_rf_firstparty", EIS,
     ]

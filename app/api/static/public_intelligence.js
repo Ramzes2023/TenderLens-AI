@@ -197,7 +197,7 @@
       put('vqxDailyCaption',t('Only first-observed notices in the selected UTC window.','Только впервые сохранённые извещения за выбранный период UTC.'));
     };
     drawRange();
-    if(dropdown) dropdown.addEventListener('change',drawRange);
+    if(dropdown) dropdown.onchange=drawRange;
     drawPriceBand(data.rub_price_bands);
     drawWeeks(data.week_comparison);
     const dl=data.deadline_bands;
@@ -214,18 +214,86 @@
       ?t('Figures loaded from stored connector observations.','Показатели загружены из сохранённых извещений.')
       :t('No connector notices in this database yet. No demo values are displayed.','В этой базе пока нет извещений. Демонстрационные значения не подставляются.'));
   }
+
+  // Only the operator's separate review container may show illustrative graph
+  // datasets. This is a user-activated DESIGN MODE, never guest API output.
+  // The actual tender search still reads the real database and stays empty.
+  function makeIllustrativeChartData() {
+    const today=new Date();
+    const counts=[4,9,6,12,8,15,11,14,18,10,17,22,16,25];
+    const daily=counts.map((count,i)=>{
+      const date=new Date(Date.UTC(today.getUTCFullYear(),today.getUTCMonth(),
+        today.getUTCDate()-13+i)).toISOString().slice(0,10);
+      return {date,count,priced:Math.max(0,Math.floor(count*.66))};
+    });
+    return {
+      scope:'bounded_persisted_source_observations', // renderer shape only
+      scanned_recent_rows:186,valid_records_in_sample:186,
+      new_notices_14d:counts.reduce((a,b)=>a+b,0),
+      priced_notices:144,priced_rub_notices:127,daily,
+      week_comparison:{
+        previous_7d:counts.slice(0,7).reduce((a,b)=>a+b,0),
+        latest_7d:counts.slice(7).reduce((a,b)=>a+b,0)
+      },
+      rub_price_bands:{under_1m:28,'1_to_5m':39,'5_to_10m':22,'10_to_50m':31,'50m_plus':7},
+      deadline_bands:{overdue:18,within_7d:46,'8_to_30d':65,over_30d:41,unspecified:16},
+      currency_counts:{RUB:127,EUR:17,USD:14,KZT:9,AZN:6,OTHER:13},
+      field_coverage:{title:186,price:144,currency:181,deadline:170}
+    };
+  }
+  function setupReview(realReport) {
+    if(document.body.dataset.reviewCharts!=='true')return;
+    const panel=el('vqxReviewTools'),button=el('vqxToggleDemo'),
+          disclosure=el('vqxReviewDisclosure');
+    if(!panel||!button||!disclosure)return;
+    panel.hidden=false;
+    let sample=false;
+    const paint=()=>{
+      document.body.dataset.chartPreview=sample?'illustrative':'real';
+      button.setAttribute('aria-pressed',String(sample));
+      button.textContent=sample?t('Return to real database view','Вернуться к настоящим данным'):
+        t('Show illustrative chart layout','Показать учебные графики');
+      disclosure.textContent=sample
+        ?t('ILLUSTRATIVE DESIGN DATA ONLY. All numbers and lines in these charts are invented for layout preview. No tenders are fabricated in guest search.',
+           'ТОЛЬКО УЧЕБНЫЕ ДАННЫЕ ДИЗАЙНА. Все числа и линии этих графиков придуманы для просмотра оформления. Гостевой поиск не подменяется.')
+        :t('This isolated local preview contains no source data. Turn on illustrative charts only to review the layout.',
+           'В этой изолированной копии нет закупок. Для оценки дизайна можно отдельно включить учебные графики.');
+      if(sample){
+        render(makeIllustrativeChartData());
+        put('vqxIntelligenceStatus',t('ILLUSTRATIVE GRAPHICS · NO REAL PROCUREMENT STATISTICS',
+          'УЧЕБНЫЕ ГРАФИКИ · НЕ РЕАЛЬНАЯ СТАТИСТИКА ЗАКУПОК'));
+      } else if(realReport) render(realReport);
+      else{
+        for(const id of ['vqxHeroTotal','vqxHeroFresh','vqxHeroPriced','vqxStatObserved','vqxStatNew','vqxStatPriced','vqxStatDeadline'])put(id,'—');
+        ['vqxHeroLine','vqxDailyChart','vqxPriceLegend','vqxPriceHistogram','vqxWeeksBars','vqxDeadlineBars','vqxCurrencyBars','vqxCoverageBars'].forEach(id=>{
+          const elem=el(id);if(elem)elem.replaceChildren();
+        });
+        const donut=el('vqxPriceDonut');
+        if(donut)donut.style.background='conic-gradient(#e3eaf7 0% 100%)';
+        put('vqxDonutTotal','—');
+        put('vqxIntelligenceStatus',t('Database unavailable; no real statistics shown.',
+          'База недоступна; реальные показатели не отображаются.'));
+      }
+    };
+    button.addEventListener('click',()=>{sample=!sample;paint();});
+    paint();
+  }
+
   const getReport=async()=>{
     try {
       const response=await fetch('/api/v1/public/market-intelligence',{credentials:'omit',
         cache:'no-store',headers:{'Accept':'application/json'}});
       if(!response.ok)throw new Error('Unavailable');
-      render(await response.json());
+      const report=await response.json();
+      render(report);
+      setupReview(report);
     } catch(_) {
       put('vqxIntelligenceStatus',t('Analytics temporarily unavailable. No estimated values are shown.',
         'Аналитика временно недоступна. Примерные значения не показываются.'));
       const line=el('vqxHeroLine'),chart=el('vqxDailyChart');
       if(line)line.replaceChildren();
       if(chart)chart.replaceChildren();
+      setupReview(null);
     }
   };
   getReport();

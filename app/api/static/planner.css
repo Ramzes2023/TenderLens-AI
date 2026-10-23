@@ -74,3 +74,9 @@ body.saas .vq-planner-pagination button[hidden]{display:none}
 body.saas .vq-planner-card[draggable=true]{cursor:grab}
 body.saas .vq-planner-card.is-dragging{opacity:.56;cursor:grabbing}
 body.saas .vq-planner-column.is-drop-target{border-color:#5688ee;box-shadow:0 0 0 3px #5989f337;background:#eaf1ff}
+
+
+body.saas .vq-planner-toolbar-right{flex-wrap:wrap}
+body.saas #vqPlannerUrgency{background:#fff;border:1px solid #d9e3f4;color:#466193;border-radius:9px;padding:9px 11px;min-height:42px;font:700 11px system-ui;max-width:200px}
+body.saas #vqPlannerUrgency:focus-visible,body.saas .vq-planner-stage-select:focus-visible,body.saas .vq-planner-tabs button:focus-visible{outline:2px solid #5b85f8;outline-offset:2px}
+@media(max-width:580px){body.saas .vq-planner-toolbar-right{justify-content:flex-start}body.saas #vqPlannerQuery{width:min(100%,300px)}body.saas #vqPlannerUrgency{max-width:100%}}

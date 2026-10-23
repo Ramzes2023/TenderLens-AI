@@ -13,6 +13,7 @@ let records=[];
 let serial=0;
 let context='';
 let pendingPlannerId=null;
+let pendingPlannerScope=null;
 
 const identity=()=>`${state.organizationId}:${state.activeCompanyId??''}:${state.uiEpoch||0}`;
 const currentPage=()=>location.hash.slice(1)||'overview';
@@ -732,6 +733,7 @@ async function loadSaved(){
   if(pendingPlannerId!==null&&currentPage()==='saved'){
    const index=records.findIndex(record=>Number(record.id)===pendingPlannerId);
    pendingPlannerId=null;
+   pendingPlannerScope=null;
    if(index>=0)openDetail(index);
    else $('savedMessage').textContent='That tender is not in the active company shortlist.';
   }
@@ -869,6 +871,7 @@ window.addEventListener('valyqon-open-saved',event=>{
     item.organizationId!==state.organizationId||
     item.companyId!==state.activeCompanyId)return;
  pendingPlannerId=item.id;
+ pendingPlannerScope=identity();
  if(currentPage()==='saved')loadSaved();
 });
 window.addEventListener(
@@ -878,7 +881,10 @@ window.addEventListener(
 
   if(context!==next){
    context=next;
-   pendingPlannerId=null;
+   if(pendingPlannerScope!==next){
+    pendingPlannerId=null;
+    pendingPlannerScope=null;
+   }
    serial++;
    clearResults('Open Saved to load the active company shortlist.');
    workflowSerial++;

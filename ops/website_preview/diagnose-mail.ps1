@@ -32,12 +32,24 @@ try {
 
     $appEnvProbe = @'
 import os
+from app.auth.email_delivery import load_email_sender_from_env, SMTPEmailSender
 mode = os.getenv("VALYQON_EMAIL_MODE", "disabled")
 host = os.getenv("VALYQON_SMTP_HOST", "")
 base = os.getenv("VALYQON_PUBLIC_BASE_URL", "")
 print("REVIEW_EMAIL_MODE=" + mode)
 print("REVIEW_SMTP_POINTS_TO_LOCAL_MAILPIT=" + ("YES" if host == "mailpit" else "NO"))
 print("REVIEW_RESET_LINK_BASE_OK=" + ("YES" if base == "http://127.0.0.1:18865" else "NO"))
+try:
+    sender = load_email_sender_from_env()
+    sender_ok = (isinstance(sender, SMTPEmailSender)
+                 and sender.host == "mailpit" and sender.port == 1025
+                 and not sender.starttls and not sender.ssl_enabled
+                 and sender.public_base_url == "http://127.0.0.1:18865")
+except Exception:
+    sender_ok = False
+print("REVIEW_ACTUAL_EMAIL_SENDER_READY=" + ("YES" if sender_ok else "NO"))
+if not sender_ok:
+    raise SystemExit(4)
 if mode != "smtp" or host != "mailpit" or base != "http://127.0.0.1:18865":
     raise SystemExit(3)
 '@

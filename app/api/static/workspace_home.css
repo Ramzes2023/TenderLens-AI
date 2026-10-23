@@ -1,0 +1,76 @@
+/* VALYQON Operations Center: enterprise-density, not invented market KPIs. */
+body.saas .vq-utility-bar{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:9px 15px;margin:-5px 0 21px;background:#fff;border:1px solid #e0e7f4;border-radius:13px;box-shadow:0 5px 20px #1a3b7209;min-height:51px}
+body.saas .vq-utility-breadcrumb{display:flex;align-items:center;gap:11px;color:#7183a3;font-size:12px;min-width:0}
+body.saas .vq-utility-breadcrumb>span:first-child{color:#5a78d5;font-size:17px}
+body.saas .vq-utility-breadcrumb strong{color:#253c68;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.saas .vq-utility-actions{display:flex;align-items:center;gap:7px}
+body.saas .vq-utility-actions button{display:inline-flex;align-items:center;gap:7px;background:#f4f7ff;border:1px solid #e0e8fb;color:#506ba8;border-radius:9px;min-height:34px;padding:7px 12px;font-weight:750;font-size:11px;cursor:pointer}
+body.saas .vq-utility-actions button:hover{background:#e7eeff;color:#3554bc}
+body.saas .vq-utility-actions button[aria-pressed=true]{background:#e9e5ff;border-color:#b8b0fc;color:#644ac6}
+body.saas .vq-workbench{margin:0 0 25px;min-width:0}
+body.saas .vq-workbench-heading{display:flex;align-items:end;justify-content:space-between;gap:18px;margin:3px 0 17px}
+body.saas .vq-workbench-eyebrow,.vq-panel-kicker{font-size:10px;letter-spacing:.115em;font-weight:850;color:#6383d5}
+body.saas .vq-workbench-heading h2{font-size:clamp(23px,2.5vw,34px);color:#1e3057;line-height:1.18;letter-spacing:-.045em;margin:8px 0}
+body.saas .vq-workbench-heading p{color:#7483a0;font-size:12px;line-height:1.6;margin:0}
+body.saas .vq-workbench-state{display:flex;align-items:center;gap:7px;background:#edf4ff;border:1px solid #dce7f6;border-radius:999px;color:#4466a2;padding:9px 13px;font-size:10px;font-weight:800;white-space:nowrap;flex-shrink:0}
+body.saas .vq-workbench-state>span:first-child{color:#758baa}
+body.saas .vq-workbench-state[data-mode=ready]{background:#e8f8f2;border-color:#bdebd6;color:#267d65}
+body.saas .vq-workbench-state[data-mode=ready]>span:first-child{color:#229468}
+body.saas .vq-workbench-state[data-mode=missing]{background:#fff5e9;border-color:#f0d9b0;color:#a6772d}
+body.saas .vq-workbench-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin-bottom:14px}
+body.saas .vq-workbench-kpis article{min-width:0;padding:18px;border:1px solid #e0e9f8;background:linear-gradient(135deg,#fff,#f9fbff);border-radius:15px;box-shadow:0 9px 24px #1d40720c;display:grid;grid-template-columns:37px minmax(0,1fr);column-gap:10px;align-items:center;transition:transform .17s,border-color .17s}
+body.saas .vq-workbench-kpis article:hover{transform:translateY(-2px);border-color:#c0d0fc}
+body.saas .vq-workbench-symbol{width:37px;height:37px;grid-row:span 2;display:grid;place-items:center;border-radius:11px;font-size:21px}
+body.saas .vq-workbench-symbol.blue{background:#e4edff;color:#3d6cef}
+body.saas .vq-workbench-symbol.purple{background:#f0ebff;color:#8462e4}
+body.saas .vq-workbench-symbol.teal{background:#e3faf8;color:#2caaa8}
+body.saas .vq-workbench-symbol.gold{background:#fff5e4;color:#c88a27}
+body.saas .vq-workbench-kpis small{color:#7584a0;font-size:10px;font-weight:800}
+body.saas .vq-workbench-kpis strong{grid-column:2;display:block;color:#24365e;font-size:clamp(15px,1.8vw,23px);font-weight:850;letter-spacing:-.03em;min-width:0;overflow-wrap:anywhere;margin:5px 0}
+body.saas .vq-workbench-kpis p{grid-column:1/-1;margin:12px 0 0;color:#8c9ab0;font-size:10px;line-height:1.4}
+body.saas .vq-workbench-content{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr) minmax(0,1fr);gap:14px}
+body.saas .vq-workbench-content>article{min-width:0;border-radius:18px;box-shadow:0 11px 28px #183e8610}
+body.saas .vq-progress-panel,body.saas .vq-nav-workbench{padding:22px 19px;background:#fff;border:1px solid #e2e9f6}
+body.saas .vq-panel-title-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+body.saas .vq-panel-title-row h3,body.saas .vq-next-panel h3{font-size:17px;line-height:1.25;letter-spacing:-.03em;color:#20365f;margin:8px 0 10px}
+body.saas .vq-panel-title-row>strong{background:#edf2ff;border-radius:999px;color:#4d68b9;padding:7px 10px;font-size:11px;font-variant-numeric:tabular-nums;white-space:nowrap}
+body.saas .vq-progress-track{height:7px;background:#edf0f8;border-radius:99px;overflow:hidden;margin:14px 0 20px}
+body.saas .vq-progress-track>div{height:100%;width:0;background:linear-gradient(90deg,#396deb,#8666ec);border-radius:99px;transition:width .24s}
+body.saas .vq-progress-steps{display:grid;gap:9px}
+body.saas .vq-progress-steps a{display:flex;align-items:center;gap:11px;min-height:66px;background:#f8faff;border:1px solid #eef2fb;border-radius:11px;color:#283f70;padding:11px;text-decoration:none;transition:background .16s,border-color .16s}
+body.saas .vq-progress-steps a:hover{background:#eff4ff;border-color:#cbd9f5}
+body.saas .vq-step-status{height:29px;width:29px;flex-shrink:0;display:grid;place-items:center;background:#e8edfa;border-radius:9px;font-size:15px;color:#91a0bc}
+body.saas .vq-progress-steps a.is-done .vq-step-status{background:#dff5eb;color:#278461}
+body.saas .vq-progress-steps a>span:nth-child(2){flex:1;display:grid;gap:3px;min-width:0}
+body.saas .vq-progress-steps strong{font-size:11px;color:#253b67}
+body.saas .vq-progress-steps small{color:#8998b2;font-size:9px;line-height:1.45}
+body.saas .vq-progress-steps a>span:last-child{color:#8e9bb7;font-size:13px}
+body.saas .vq-next-panel{position:relative;overflow:hidden;border:1px solid #394f9f;padding:23px;color:white;background:radial-gradient(ellipse at 100% 0%,#4a50bd 0,transparent 51%),linear-gradient(135deg,#152d68,#19234c)}
+body.saas .vq-next-panel::after{content:"";position:absolute;right:-75px;bottom:-110px;width:240px;height:240px;border:1px solid #c1c6ff2f;border-radius:50%;pointer-events:none}
+body.saas .vq-next-panel .vq-panel-kicker{color:#a9c0ff}
+body.saas .vq-next-graphic{position:absolute;top:17px;right:22px;color:#a4baff99;font-size:37px}
+body.saas .vq-next-panel h3{color:#fff;font-size:clamp(21px,2vw,28px);margin:44px 0 12px;max-width:280px}
+body.saas .vq-next-panel>p{color:#cad9fa;font-size:12px;line-height:1.7;margin:0;min-height:75px;max-width:360px}
+body.saas .vq-next-panel>a{display:inline-flex;align-items:center;justify-content:center;margin-top:19px;padding:11px 16px;background:#4e6ef8;border:1px solid #93a8fc;border-radius:10px;color:white;font-weight:850;text-decoration:none;font-size:12px;min-height:41px}
+body.saas .vq-next-panel>a:hover{background:#6988ff}
+body.saas .vq-next-disclaimer{position:relative;border-top:1px solid #9da8e52e;padding-top:13px;margin-top:22px;color:#9cb4e0;font-size:10px;line-height:1.5}
+body.saas .vq-small-icon{font-size:20px;color:#7a8fc2}
+body.saas .vq-pinned-pages,body.saas .vq-recent-pages{display:flex;flex-wrap:wrap;gap:8px;margin:11px 0}
+body.saas .vq-pinned-pages a,body.saas .vq-recent-pages a{display:inline-flex;align-items:center;gap:5px;border:1px solid #dce6fa;background:#f1f5ff;border-radius:8px;padding:9px 11px;color:#4663a4;font-size:11px;font-weight:750;text-decoration:none}
+body.saas .vq-recent-pages a{border-color:#e7eaf3;background:#f8faff;color:#6f7d9d}
+body.saas .vq-pinned-pages a:hover,body.saas .vq-recent-pages a:hover{border-color:#91b1fc;color:#2f54ca}
+body.saas .vq-workbench-divider{height:1px;background:#ecf0fa;margin:22px 0 14px}
+body.saas .vq-workbench-local{font-size:10px;color:#91a0bb;line-height:1.6;margin:14px 0 0}
+body.saas .vq-empty-links{color:#8b99b1;font-size:11px;line-height:1.6}
+body.saas #vqShortcutDialog{max-width:min(470px,calc(100vw - 24px));min-width:min(410px,calc(100vw - 24px));padding:25px;color:#26365e;background:#fff;border:1px solid #dce4fa;border-radius:19px;box-shadow:0 27px 75px #0b173954}
+body.saas .vq-dialog-head{display:flex;align-items:start;justify-content:space-between;gap:10px;margin-bottom:16px}
+body.saas .vq-dialog-head h2{font-size:23px;color:#223861;margin:6px 0}
+body.saas .vq-dialog-head button{background:#f0f3fa;color:#6a7ea2;border:0;border-radius:9px;min-height:36px}
+body.saas .vq-shortcut-pair{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid #edf0fa;padding:14px 0;font-size:12px;color:#4f6082}
+body.saas .vq-shortcut-pair kbd{background:#edf1fd;border:1px solid #cfdaf0;color:#3659a4;border-radius:7px;padding:7px 9px;font:800 11px system-ui}
+body.saas #vqShortcutDialog>p{margin-top:15px;color:#7a8ca9;font-size:11px;line-height:1.65}
+@media(max-width:1330px){body.saas .vq-workbench-content{grid-template-columns:repeat(2,minmax(0,1fr))}body.saas .vq-nav-workbench{grid-column:span 2}}
+@media(max-width:1000px){body.saas .vq-workbench-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}body.saas .vq-workbench-content{grid-template-columns:1fr}body.saas .vq-nav-workbench{grid-column:auto}}
+@media(max-width:700px){body.saas .vq-workbench-heading{flex-direction:column;align-items:flex-start}body.saas .vq-workbench-kpis{gap:9px}body.saas .vq-workbench-kpis article{padding:13px}body.saas .vq-workbench-kpis strong{font-size:16px}body.saas .vq-utility-bar{flex-wrap:wrap;margin-top:0}body.saas .vq-utility-actions{width:100%;justify-content:flex-end}body.saas .vq-progress-panel,body.saas .vq-next-panel,body.saas .vq-nav-workbench{padding:18px}body.saas .vq-next-panel h3{margin-top:30px}}
+@media(max-width:400px){body.saas .vq-workbench-kpis{grid-template-columns:1fr}body.saas .vq-utility-breadcrumb{font-size:11px}}
+@media(prefers-reduced-motion:reduce){body.saas .vq-progress-track>div,body.saas .vq-workbench-kpis article{transition:none}body.saas .vq-workbench-kpis article:hover{transform:none}}

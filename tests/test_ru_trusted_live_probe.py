@@ -105,16 +105,17 @@ class ProbeSafetyTests(unittest.TestCase):
             self.assertEqual(url.scheme, "https")
             self.assertFalse(url.username or url.password or url.query or url.fragment)
 
-    def test_four_operator_only_official_gpb_targets_do_not_expand_batch(self):
+    def test_five_operator_only_official_gpb_and_eis_targets_do_not_expand_batch(self):
         self.assertEqual(len(TARGETS), 37)
         self.assertEqual(ON_DEMAND_TARGETS, {
             "gpb_public_html": Target("etpgpb.ru", "/procedures/"),
             "gpb_new_public_html": Target("new.etpgpb.ru", "/procedures/"),
             "gpb_new_rss": Target("new.etpgpb.ru", "/procedures.rss", "rss"),
             "gpb_gos44_html": Target("gos.etpgpb.ru", "/44/catalog/procedure"),
+            "eis_official_home": Target("zakupki.gov.ru", "/"),
         })
         self.assertFalse(set(TARGETS).intersection(ON_DEMAND_TARGETS))
-        self.assertEqual(len({(z.host, z.path) for z in ON_DEMAND_TARGETS.values()}), 4)
+        self.assertEqual(len({(z.host, z.path) for z in ON_DEMAND_TARGETS.values()}), 5)
 
     def test_gpb_official_only_choice_does_not_use_user_supplied_urls(self):
         from contextlib import redirect_stdout
@@ -167,6 +168,59 @@ class ProbeSafetyTests(unittest.TestCase):
             self.assertIn(marker, raw)
         self.assertNotIn("curl -k", raw)
         self.assertNotIn("verify=False", raw)
+
+
+
+    def test_five_current_blocked_publishers_are_fixed_observation_not_source_acceptance(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from scripts.ru_trusted_live_probe import RECOVERY_FIVE
+        self.assertEqual(set(RECOVERY_FIVE), {
+            "ingushetia", "chechnya", "roseltorg", "gpb", "tektorg"
+        })
+        self.assertEqual(RECOVERY_FIVE["gpb"], TARGETS["gpb_rss"])
+        self.assertEqual(RECOVERY_FIVE["ingushetia"], TARGETS["fabrikant_44_mirror"])
+        self.assertEqual(RECOVERY_FIVE["chechnya"], ON_DEMAND_TARGETS["eis_official_home"])
+        self.assertEqual(len({(v.host, v.path) for v in RECOVERY_FIVE.values()}), 5)
+
+        def official_response(target):
+            if target.mode == "rss":
+                return "application/rss+xml", b"<rss><channel><item/></channel></rss>"
+            return "text/html", b"<html><body>Official list</body></html>"
+
+        with patch("scripts.ru_trusted_live_probe.read_public", side_effect=official_response) as call:
+            output = StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(main("priority_five_network"), 0)
+            self.assertEqual(call.call_count, 5)
+        for marker in (
+            "RU_FIVE_FIRSTPARTY_HTTPS_VISIBLE=5/5",
+            "RU_FIVE_ORIGINAL_DETAIL_VERIFIED=NO",
+            "RU_FIVE_WORKER_SQL_ACCEPTED=NO",
+            "RU_FIVE_REAL_TELEGRAM_ACK=NO",
+            "PRODUCTION_CHANGED=NO",
+        ):
+            self.assertIn(marker, output.getvalue())
+        self.assertNotIn("tender_count", output.getvalue().lower())
+
+        def failed_source(target):
+            if target == TARGETS["roseltorg"]:
+                raise TimeoutError("External publisher unavailable")
+            return official_response(target)
+        with patch("scripts.ru_trusted_live_probe.read_public", side_effect=failed_source):
+            with redirect_stdout(StringIO()):
+                self.assertEqual(main("priority_five_network"), 2)
+
+    def test_main_only_trusted_runner_exposes_fixed_five_source_choice(self):
+        from pathlib import Path
+        raw = (Path(__file__).resolve().parents[1] /
+               ".github/workflows/ru-trusted-operator-only.yml").read_text(encoding="utf-8")
+        self.assertIn("          - priority_five_network\n", raw)
+        self.assertIn("          - eis_official_home\n", raw)
+        self.assertIn("if: github.ref == 'refs/heads/main'", raw)
+        self.assertIn("VALYQON-RU-01", raw)
+        self.assertIn("persist-credentials: false", raw)
+        self.assertNotIn("pull_request:", raw)
 
 
 if __name__ == "__main__":

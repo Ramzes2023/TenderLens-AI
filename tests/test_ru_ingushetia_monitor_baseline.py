@@ -132,3 +132,93 @@ def test_subscribe_cannot_fall_back_to_live_network_catalog(tmp_path):
     asyncio.run(monitor_on_handler(msg, service, live))
     assert "Не удалось включить мониторинг" in msg.edits[0]
     assert repository.get_subscription(101) is None
+
+
+def test_partial_live_ingushetia_baseline_rejected_before_any_seen_claim(tmp_path):
+    """A failed first poll may not silently baseline only one of two mirrors.
+
+    Offline only: existing active subscribers are separately tested to receive
+    healthy-source notices during partial upstream outages.
+    """
+    from app.monitoring.service import MonitorMatch
+    from types import SimpleNamespace
+
+    cfg = settings(ru_ingushetia_worker_sql_alerts_enabled=False,
+                   ru_ingushetia_fabrikant44_enabled=True)
+    catalog = build_source_catalog(cfg)
+    repo = MonitoringRepository(tmp_path / "partial-monitor.sqlite")
+    repo.initialize()
+    service = TenderMonitorService(cfg, None, repo, None)
+    source_keys = (SOURCE, "ru_ingushetia_fabrikant44")
+    saved = []
+
+    async def get_partial(cat, owner, *, source_keys):
+        assert cat is catalog and owner == 101
+        return [MonitorMatch(notice(100), ())], SimpleNamespace(
+            attempted_sources=source_keys,
+            successful_sources=(SOURCE,),
+            failures=(SimpleNamespace(source="ru_ingushetia_fabrikant44"),),
+            total_failure=False,
+        )
+
+    async def no_claim(owner, matches):
+        saved.extend(matches)
+        return matches
+
+    service.fetch_matches_from_catalog = get_partial
+    service.claim_new = no_claim
+    msg = Message()
+    asyncio.run(monitor_on_handler(msg, service, catalog))
+    assert len(msg.edits) == 1
+    assert "Не удалось включить мониторинг" in msg.edits[0]
+    assert saved == []
+    assert repo.get_subscription(101) is None
+
+    # The same profile can start monitoring after BOTH registered regional
+    # sources have been genuinely fetched; the baseline then claims once.
+    async def get_complete(cat, owner, *, source_keys):
+        return [MonitorMatch(notice(100), ())], SimpleNamespace(
+            attempted_sources=source_keys,
+            successful_sources=source_keys,
+            failures=(),
+            total_failure=False,
+        )
+    service.fetch_matches_from_catalog = get_complete
+    msg = Message()
+    asyncio.run(monitor_on_handler(msg, service, catalog))
+    assert len(saved) == 1
+    assert "включён" in msg.edits[0]
+    assert repo.get_subscription(101).enabled is True
+
+
+def test_other_regions_baseline_keeps_legacy_partial_source_behavior(tmp_path):
+    """No change to non-Ingushetia monitoring subscriptions."""
+    from app.monitoring.service import MonitorMatch
+    from types import SimpleNamespace
+
+    cfg = settings(ru_ingushetia_worker_sql_alerts_enabled=False,
+                   ru_ingushetia_eis44_enabled=False,
+                   ru_ingushetia_fabrikant44_enabled=False,
+                   eis_rss_urls=("https://zakupki.gov.ru/epz/order/extendedsearch/rss.html",))
+    repo = MonitoringRepository(tmp_path / "unrelated.sqlite")
+    repo.initialize()
+    service = TenderMonitorService(cfg, None, repo, None)
+
+    async def simulated(cat, owner, *, source_keys):
+        return [MonitorMatch(notice(101), ())], SimpleNamespace(
+            attempted_sources=("eis", "b2b_center"),
+            successful_sources=("eis",),
+            failures=(SimpleNamespace(source="b2b_center"),),
+            total_failure=False,
+        )
+
+    claimed = []
+    async def claim(owner, matches):
+        claimed.extend(matches)
+        return matches
+    service.fetch_matches_from_catalog = simulated
+    service.claim_new = claim
+    count, _ = asyncio.run(service.baseline_from_catalog(
+        object(), 101, source_keys=("eis", "b2b_center")
+    ))
+    assert count == 1 and len(claimed) == 1

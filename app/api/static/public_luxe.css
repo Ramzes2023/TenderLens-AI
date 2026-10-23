@@ -202,3 +202,5 @@ body.landing.premium{--lx-navy:#0a1b42;--lx-blue:#315ff5;--lx-violet:#7553f7;--l
    no synthetic numbers may look like live procurement statistics. */
 .landing.premium[data-chart-preview=illustrative] .vqx-product::after{content:"ILLUSTRATIVE CHART DATA · NOT REAL";position:absolute;right:16px;top:42px;z-index:5;font-size:9px;font-weight:900;letter-spacing:.09em;color:#6e3909;background:#fff3cc;border:1px solid #e0b756;padding:7px 10px;border-radius:7px;box-shadow:0 5px 14px #172b5c22}
 .landing.premium[data-chart-preview=illustrative] .vqx-hero-kpis{outline:2px dashed #e9b84e;border-radius:10px;outline-offset:2px}
+
+html[lang=ru] .landing.premium[data-chart-preview=illustrative] .vqx-product::after{content:"УЧЕБНЫЕ ГРАФИКИ · НЕ РЕАЛЬНЫЕ ДАННЫЕ"}

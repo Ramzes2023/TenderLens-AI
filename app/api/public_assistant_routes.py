@@ -7,6 +7,7 @@ Do not promise uptime: missing provider and provider failure return 503.
 from __future__ import annotations
 
 import asyncio
+import os
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -70,6 +71,10 @@ async def guest_help_answer(payload: GuestHelpQuestion, request: Request):
     if retry is not None:
         raise HTTPException(429, "Too many requests. Please try later.",
                             headers={"Retry-After": str(retry), **PUBLIC_HEADERS})
+    # Public LLM usage has a cost. A provider being configured for signed-in
+    # users must not automatically expose a paid endpoint to anonymous traffic.
+    if os.environ.get("VALYQON_PUBLIC_AI_ENABLED", "false").lower() not in {"1", "true"}:
+        raise HTTPException(503, "Public AI help is not enabled.", headers=PUBLIC_HEADERS)
     provider = getattr(request.app.state.runtime, "provider", None)
     if provider is None:
         raise HTTPException(503, "Public AI help is not configured.", headers=PUBLIC_HEADERS)

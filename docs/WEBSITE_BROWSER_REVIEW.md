@@ -52,6 +52,37 @@ Do not delete the review volume or run Docker prune; this would erase
 local test accounts. These reset links apply only to the separate preview
 database, not production/AWS accounts.
 
+### Mailpit is empty after requesting a reset?
+
+The app intentionally responds generically for unknown or inactive accounts
+and for requests within the 60-second cooldown. An accepted response is not
+proof that a reset email has been sent.
+
+Update the local review worktree and run the latest start.ps1, then run:
+
+```powershell
+& "$HOME\VALYQON-WEB-REVIEW\ops\website_preview\diagnose-mail.ps1" -SendProbe
+```
+
+The diagnostic confirms the API and local Mailpit are running, verifies the
+application's actual SMTP environment, checks HTTP reachability, and sends
+one synthetic test email to Mailpit only. At the prompt, enter the TEST
+account's email used at http://127.0.0.1:18865 (not a password). It checks
+local storage read-only and displays account existence, active and
+verification flags without printing the address.
+
+- REVIEW_SMTP_TO_MAILPIT=VERIFIED: test email transport works.
+- ACCOUNT_IN_18865_DATABASE=NO: create a new synthetic account at
+  http://127.0.0.1:18865/register, then verify via local Mailpit. Accounts
+  from the separate AWS private preview on port 18765 are not present.
+- ACCOUNT_IN_18865_DATABASE=YES: request reset only once via
+  http://127.0.0.1:18865/forgot-password and reload
+  http://127.0.0.1:18866/. Wait at least 60 seconds before repeating.
+- REVIEW_EMAIL_CONFIG=OLD_OR_INCORRECT or MAILPIT_HTTP=UNAVAILABLE:
+  rerun the UPDATED start.ps1 and check the Docker Desktop engine/ports.
+
+The diagnostic does not change passwords, cookies, database rows or any
+other VALYQON deployment. Do not copy reset links or tokens into chat.
 ### Browser acceptance
 
 - Confirm homepage header, gradient, interactive three-step demo and hover/focus.

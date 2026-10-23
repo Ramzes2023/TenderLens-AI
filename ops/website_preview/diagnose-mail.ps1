@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $compose = Join-Path $PSScriptRoot "compose.yaml"
 $envFile = Join-Path $PSScriptRoot "review.env"
-$args = @("--env-file", $envFile, "-p", "valyqon-website-review", "-f", $compose)
+$composeArgs = @("--env-file", $envFile, "-p", "valyqon-website-review", "-f", $compose)
 $inbox = "http://127.0.0.1:18866/"
 $reset = "http://127.0.0.1:18865/forgot-password"
 
@@ -19,8 +19,8 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
 
 Push-Location $root
 try {
-    $apiId = (& docker compose @args ps -q api | Out-String).Trim()
-    $mailId = (& docker compose @args ps -q mailpit | Out-String).Trim()
+    $apiId = (& docker compose @composeArgs ps -q api | Out-String).Trim()
+    $mailId = (& docker compose @composeArgs ps -q mailpit | Out-String).Trim()
     if (-not $apiId) {
         throw "REVIEW_API=NOT_RUNNING. Run ops\website_preview\start.ps1 from the UPDATED review worktree."
     }
@@ -41,7 +41,7 @@ print("REVIEW_RESET_LINK_BASE_OK=" + ("YES" if base == "http://127.0.0.1:18865" 
 if mode != "smtp" or host != "mailpit" or base != "http://127.0.0.1:18865":
     raise SystemExit(3)
 '@
-    & docker compose @args exec -T api python -c $appEnvProbe
+    & docker compose @composeArgs exec -T api python -c $appEnvProbe
     if ($LASTEXITCODE -ne 0) {
         throw "REVIEW_EMAIL_CONFIG=OLD_OR_INCORRECT. Rebuild via updated start.ps1."
     }
@@ -78,7 +78,7 @@ with smtplib.SMTP("mailpit", 1025, timeout=8) as sender:
     sender.send_message(message)
 print("REVIEW_SMTP_PROBE_SUBMITTED=YES")
 '@
-        & docker compose @args exec -T api python -c $smtpProbe
+        & docker compose @composeArgs exec -T api python -c $smtpProbe
         if ($LASTEXITCODE -ne 0) { throw "REVIEW_SMTP_PROBE=FAILED. Local Mailpit SMTP may be unreachable." }
         $seen = $false
         foreach ($attempt in 1..8) {
@@ -125,7 +125,7 @@ except sqlite3.Error:
     print("ACCOUNT_DB_CHECK=UNAVAILABLE")
     raise SystemExit(3)
 '@
-            $accountEmail | & docker compose @args exec -T api python -c $accountProbe
+            $accountEmail | & docker compose @composeArgs exec -T api python -c $accountProbe
             if ($LASTEXITCODE -ne 0) {
                 Write-Warning "Could not check account existence read-only. The local database may not be initialized."
             }

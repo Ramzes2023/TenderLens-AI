@@ -65,23 +65,39 @@ class _PublicListing(HTMLParser):
 
 
 class _DetailHeading(HTMLParser):
+    """Independently verify visible official detail, not script/header metadata."""
+
+    _HIDDEN = frozenset({"head", "script", "style", "noscript",
+                         "template", "svg", "iframe", "object"})
+
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.active = False
         self.parts = []
         self.headings = []
+        self.visible = []
+        self.hidden = 0
 
     def handle_starttag(self, tag, attrs):
-        if tag == "h1" and not self.active:
+        if tag in self._HIDDEN:
+            self.hidden += 1
+            return
+        if tag == "h1" and not self.hidden and not self.active:
             self.active = True
             self.parts = []
 
     def handle_data(self, data):
+        if self.hidden:
+            return
+        self.visible.append(data)
         if self.active:
             self.parts.append(data)
 
     def handle_endtag(self, tag):
-        if tag == "h1" and self.active:
+        if tag in self._HIDDEN:
+            self.hidden = max(0, self.hidden - 1)
+            return
+        if tag == "h1" and self.active and not self.hidden:
             self.headings.append(_text(self.parts))
             self.active = False
 
@@ -126,7 +142,11 @@ def validate_public_detail(payload, *, identity, title):
     if (type(identity) is not str or not _PATH.fullmatch(f"/223-fz/procedures/{identity}")
             or type(title) is not str or not title):
         raise ValueError("Invalid TEK-Torg detail request")
-    if identity not in body or title not in reader.headings:
+    # A whole original native number must appear in visible publisher HTML,
+    # never merely as a substring of a longer number or hidden script/title.
+    visible = " ".join(reader.visible)
+    identity_pattern = r"(?<![0-9])" + re.escape(identity) + r"(?![0-9])"
+    if not re.search(identity_pattern, visible) or title not in reader.headings:
         raise ValueError("TEK-Torg detail title/identity mismatch")
 
 

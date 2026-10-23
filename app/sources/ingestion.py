@@ -163,7 +163,8 @@ class ConnectorSyncHandler:
         # At most five listing/feed requests; AusTender adds one detail per notice.
         request_limit = (4 if source_id in {'ted', 'uk_fts', 'world_bank'}
                          else 2 if source_id in {'am_armeps', 'uz_uzex'}
-                         else 1 + min(self.max_records, 5) if source_id in {'md_achizitii', 'az_azeristilik'}
+                         else 2 + min(self.max_records, 5) if source_id == 'az_azeristilik'
+                         else 1 + min(self.max_records, 5) if source_id == 'md_achizitii'
                           else 11 if source_id == 'md_elicitatie'
                          else self.max_records + 1 if source_id == 'austender'
                          else 5 if source_id in {'eis', 'eis_223', 'india_cppp', 'kz_goszakup'}
@@ -187,6 +188,11 @@ class ConnectorSyncHandler:
                 HOSTS[source_id], request_limit,
                 max_bytes=(2 * 1024 * 1024 if source_id == 'b2b_center' else
                            1_800_000 if source_id in {'nmck_native_public', 'stan_commercial_public', 'south_ural_public', 'kavkaz_rf_firstparty'} else 25 * 1024 * 1024),
+                # Inspect 403/404/410 only on Azəristiliktəchizat's own
+                # individual detail cards. They are excluded by the adapter;
+                # 401, 429, 5xx and all other sources stay fail-closed.
+                allowed_http_errors=(frozenset({403, 404, 410})
+                                     if source_id == 'az_azeristilik' else frozenset()),
             )):
                 return await asyncio.wait_for(source.fetch(self.max_records), timeout=180)
         try:

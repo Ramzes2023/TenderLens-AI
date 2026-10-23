@@ -122,7 +122,7 @@ def fetch(url, opener):
         or p.username or p.password or p.query or p.fragment):
         raise ValueError("invalid official HTTPS URL")
     req = Request(url, headers={"Accept": "text/html", "User-Agent": "VALYQON-public-tender-audit/1.0"})
-    with opener.open(req, timeout=9) as resp:
+    with opener.open(req, timeout=12) as resp:
         if resp.status != 200 or "html" not in resp.headers.get("content-type", "").lower():
             raise ValueError("not verified HTML")
         if resp.url != url:
@@ -131,6 +131,47 @@ def fetch(url, opener):
         if len(body) > MAX_BYTES:
             raise ValueError("oversized HTML")
         return body
+
+
+def check_linked_details(links, opener):
+    """Probe at most four original cards independently and fail closed per card.
+
+    A failed individual request or malformed card cannot become evidence.
+    Log only categories/counts, never tender data, URLs or response bodies.
+    """
+    result = {"checked_details": 0, "complete_details": 0,
+              "rejected_details": 0, "blocking_detail_errors": 0,
+              "detail_http_errors": {}, "detail_network_errors": {}}
+    for url in links[:4]:
+        result["checked_details"] += 1
+        try:
+            fields = detail_fields(fetch(url, opener))
+            if fields["verified"]:
+                result["complete_details"] += 1
+            else:
+                result["rejected_details"] += 1
+        except HTTPError as exc:
+            key = str(exc.code) if exc.code in (401, 403, 404, 410, 429, 500, 502, 503, 504) else "other"
+            result["detail_http_errors"][key] = result["detail_http_errors"].get(key, 0) + 1
+            if exc.code not in (403, 404, 410):
+                result["blocking_detail_errors"] += 1
+        except URLError as exc:
+            key = type(exc.reason).__name__
+            if key not in {"ConnectionResetError", "TimeoutError", "ConnectionRefusedError",
+                           "SSLCertVerificationError", "SSLError"}:
+                key = "OtherNetworkError"
+            result["detail_network_errors"][key] = result["detail_network_errors"].get(key, 0) + 1
+            if isinstance(exc.reason, ssl.SSLError):
+                result["blocking_detail_errors"] += 1
+        except (TimeoutError, OSError, ValueError, ssl.SSLError) as exc:
+            key = type(exc).__name__ if type(exc).__name__ in {
+                "TimeoutError", "ConnectionResetError", "ValueError", "SSLError",
+                "SSLCertVerificationError",
+            } else "OtherError"
+            result["detail_network_errors"][key] = result["detail_network_errors"].get(key, 0) + 1
+            if isinstance(exc, ssl.SSLError):
+                result["blocking_detail_errors"] += 1
+    return result
 
 
 def run():
@@ -143,9 +184,13 @@ def run():
             links = extract_index(fetch(index_url, opener))
             item["discovered_posts"] = len(links)
             item["index_verified"] = len(links) >= 2
-            checked = [detail_fields(fetch(link, opener)) for link in links[:3]]
-            item["complete_details"] = sum(x["verified"] for x in checked)
-            item["verified"] = item["index_verified"] and item["complete_details"] >= 1
+            item.update(check_linked_details(links, opener))
+            # A source is verified only if the listing is official AND at
+            # least one independently fetched original has mandatory buyer,
+            # publication and deadline. Failed cards never contribute.
+            item["verified"] = (item["index_verified"]
+                                and item["complete_details"] >= 1
+                                and item["blocking_detail_errors"] == 0)
         except HTTPError as exc:
             item.update(error="HTTPError", http_status=exc.code)
         except URLError as exc:

@@ -2,8 +2,8 @@
 
 **Status:** a real local app preview (not a screenshot/mockup). It uses the
 actual landing Python route, CSS, JavaScript and guest REST endpoints from
-PR #264. No production data, SMTP/Telegram delivery, payments or source
-workers are attached. Guest result list is empty until legitimate notices are
+PR #264. No production data, external email delivery, Telegram, payments or source
+workers are attached. Local Mailpit captures only test verification/reset email. Guest result list is empty until legitimate notices are
 ingested into this isolated database, and no fake tenders are substituted.
 
 ## Launch without touching main or existing Docker volumes
@@ -26,8 +26,31 @@ the default browser at:
 
 It does **not** use the existing AWS private-preview ports 18765/18766,
 modify the original checkout or use production databases. It does not start
-the Telegram bot or background ingestion. The only local endpoint published
-is 127.0.0.1:18865; it is not a public HTTPS domain.
+the Telegram bot or background ingestion. The only published listeners are 127.0.0.1:18865 (site) and 127.0.0.1:18866
+(local Mailpit inbox); neither is a public HTTPS domain.
+
+### If you forgot the local preview password
+
+The isolated website preview now includes a local-only Mailpit test inbox.
+No test email is sent to Gmail or other external providers.
+
+1. Start/restart the preview with the updated code; it retains the existing
+   website_review_data volume and original test accounts.
+2. Open http://127.0.0.1:18865/forgot-password and enter the email address
+   of **your existing local preview account**.
+3. Open http://127.0.0.1:18866/ to view the test message titled
+   **Reset your VALYQON AI password**.
+4. Open the reset link in that local message, set a new password
+   (at least 12 characters) and sign in at http://127.0.0.1:18865/login.
+
+For a *new* local user, use http://127.0.0.1:18865/register; the verification
+message also appears at http://127.0.0.1:18866/. The inbox is local and
+unprotected beyond its localhost bind: never use personal secrets or
+production emails for a demo account.
+
+Do not delete the review volume or run Docker prune; this would erase
+local test accounts. These reset links apply only to the separate preview
+database, not production/AWS accounts.
 
 ### Browser acceptance
 

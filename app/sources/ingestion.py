@@ -171,7 +171,7 @@ class ConnectorSyncHandler:
                          else 2 if source_id in {'jp_jetro_national', 'jp_jetro_local'}
                          else min(self.max_records, 5) + 1 if source_id == 'tektorg'
                          else 4 if source_id == 'gpb_etp_public'
-                         else 1 + min(9, 3 * min(self.max_records, 3)) if source_id == 'roseltorg_public'
+                         else 2 + min(9, 3 * min(self.max_records, 3)) if source_id == 'roseltorg_public'
                          else 4 if source_id == 'lenobl_small_public'
                          else min(self.max_records, 2) + 1 if source_id == 'nmck_native_public'
                          else min(self.max_records, 2) + 1 if source_id == 'stan_commercial_public'

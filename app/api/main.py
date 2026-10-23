@@ -18,6 +18,7 @@ from .operator_routes import router as operator_router
 from .billing_routes import router as billing_router
 from .guest_search_routes import router as guest_search_router
 from .public_market_routes import router as public_market_router
+from .public_intelligence_routes import router as public_intelligence_router
 from .public_assistant_routes import router as public_assistant_router
 from .operator_support_routes import router as operator_support_router
 from .public_status_routes import router as public_status_router
@@ -90,6 +91,7 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
     app.include_router(billing_router)
     app.include_router(guest_search_router)
     app.include_router(public_market_router)
+    app.include_router(public_intelligence_router)
     app.include_router(public_assistant_router)
     app.include_router(operator_support_router)
     app.include_router(public_status_router)

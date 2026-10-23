@@ -11,6 +11,7 @@ import argparse
 from datetime import datetime, timezone
 import json
 import os
+import re
 import signal
 import threading
 
@@ -49,8 +50,18 @@ def queue_if_new_hour(service, catalog, *, now, previous_window=None):
         raise ValueError("UTC-aware scheduling clock required")
     active = enabled_ingushetia_keys(catalog)
     window = sync_window(now)
-    if window == previous_window:
-        return window, {}
+    if previous_window is not None:
+        # UTC windows have a fixed zero-padded sortable shape. Refuse to
+        # re-enqueue a prior hour if host time is moved backwards, e.g. NTP
+        # correction or bad VM clock. Existing durable idempotency remains
+        # the authority across restarts and separate processes.
+        if (type(previous_window) is not str
+                or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}Z", previous_window)):
+            raise ValueError("Invalid previous UTC window")
+        if window < previous_window:
+            raise ValueError("UTC clock rollback; refusing historic source enqueue")
+        if window == previous_window:
+            return window, {}
     queued = {}
     for source in active:
         job = service.enqueue(source, now=now)

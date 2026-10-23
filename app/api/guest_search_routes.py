@@ -39,7 +39,7 @@ def _public_title(value):
     if not isinstance(value, str):
         return ""
     title = re.sub(r"https?://\S+|www\.\S+", "", value, flags=re.I)
-    title = " ".join(title.split())
+    title = re.sub(r"\\b[\\w.+-]+@[\\w.-]+\\.[A-Za-z]{2,}\\b", "", title)\n    title = " ".join(title.split())
     return title[:200]
 
 

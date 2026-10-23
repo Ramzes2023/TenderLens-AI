@@ -1,0 +1,40 @@
+name: RU SPb electronic shop independent small-purchase proof
+on:
+  push:
+    branches: [research/ru-spb-estore-official-small-public-20261018]
+    paths:
+      - scripts/research_ru_spb_estore_public.py
+      - tests/test_ru_spb_estore_public.py
+      - .github/workflows/ru-spb-estore-research.yml
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  spb-public-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Fail on copied EIS, fake registry rows and wrong external detail
+        run: python -m pytest -q tests/test_ru_spb_estore_public.py
+  spb-public-live-two-details:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real Saint Petersburg shop register to two original verified public details
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_spb_estore_public

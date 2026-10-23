@@ -27,7 +27,7 @@ jobs:
           set -uo pipefail
           ok=0
           blocked=0
-          for source in gpb_public_html gpb_new_public_html gpb_new_rss gpb_gos44_html; do
+          for source in gpb_rss gpb_public_html gpb_new_public_html gpb_new_rss gpb_gos44_html; do
             if python -B -m scripts.ru_trusted_live_probe "$source"; then
               ok=$((ok + 1))
             else

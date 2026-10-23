@@ -146,6 +146,34 @@ class ProbeSafetyTests(unittest.TestCase):
         self.assertIn('test "$ACTUAL_RUNNER_NAME" = "VALYQON-RU-01"', text)
         self.assertIn("persist-credentials: false", text)
 
+    def test_primary_official_gpb_rss_gets_bounded_hosted_observation(self):
+        # Publisher documents procedures.rss, not just /procedures/ HTML or
+        # new.* redirects. Treat RSS reachability as observation, never as a
+        # successful tender Worker or production source activation.
+        from pathlib import Path
+        self.assertEqual(TARGETS["gpb_rss"], Target("etpgpb.ru", "/procedures.rss", "rss"))
+        workflow = (Path(__file__).resolve().parents[1] /
+                    ".github/workflows/ru-gpb-alternative-hosts-observation.yml")
+        raw = workflow.read_text(encoding="utf-8")
+        self.assertIn(
+            "for source in gpb_rss gpb_public_html gpb_new_public_html gpb_new_rss gpb_gos44_html; do",
+            raw,
+        )
+        self.assertIn('python -B -m scripts.ru_trusted_live_probe "$source"', raw)
+        self.assertIn("RU_GPB_DETAIL_VERIFIED=NO", raw)
+        self.assertIn("RU_GPB_WORKER_SQL_ACCEPTED=NO", raw)
+        self.assertIn("RU_GPB_TENANT_NOTIFIED=NO", raw)
+        self.assertIn("PRODUCTION_CHANGED=NO", raw)
+        self.assertNotIn("self-hosted", raw)
+
+    def test_primary_gpb_rss_is_real_rss_not_login_html(self):
+        self.assertEqual(
+            describe("rss", b"<rss version='2.0'><channel><item/></channel></rss>"),
+            {"rss_items": 1, "atom_items": 0},
+        )
+        with self.assertRaises(ValueError):
+            describe("rss", b"<html><body>Login</body></html>")
+
     def test_hosted_gpb_alternative_routes_are_observation_not_source_acceptance(self):
         from pathlib import Path
         root = Path(__file__).resolve().parents[1]

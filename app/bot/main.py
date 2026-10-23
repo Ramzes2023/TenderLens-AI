@@ -202,6 +202,17 @@ def main() -> int:
         monitor_settings = load_monitoring_settings()
         source_catalog = build_source_catalog(monitor_settings)
         if monitor_settings.ru_ingushetia_worker_sql_alerts_enabled:
+            # A Worker-SQL alert switch without either approved regional
+            # source is an invalid configuration. Fail *before* creating
+            # opportunity tables, monitor subscriptions or a bot session.
+            # Never silently fall back to live HTTP or an unrelated EIS feed.
+            regional_source_keys = frozenset({
+                "ru_ingushetia_eis44", "ru_ingushetia_fabrikant44",
+            })
+            if not regional_source_keys.intersection(source_catalog.enabled_keys):
+                raise MonitoringConfigurationError(
+                    "Worker-SQL alerts require an explicitly enabled Ingushetia source"
+                )
             # Operator-only: connect notifications to the SAME durable Worker
             # SQL without re-querying fragile official regional endpoints for
             # each recipient. Never auto-start ingestion or send Telegram.
@@ -275,6 +286,7 @@ def main() -> int:
         MonitoringConfigurationError,
         MonitoringRepositoryError,
         SourceRegistryError,
+        ValueError,  # Source-owned Worker-SQL catalog rejects unapproved routing.
     ):
         logger.warning(
             "Monitoring ????????: ????????? source/MONITOR ????????? ? SQLite."

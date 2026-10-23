@@ -27,18 +27,24 @@ def test_normal_forgot_password_does_not_expose_local_test_mailbox(monkeypatch):
 
 def test_local_diagnostic_only_queries_preview_and_uses_disposable_probe():
     script = (REVIEW / "diagnose-mail.ps1").read_text(encoding="utf-8")
+    helper = (ROOT / "app/review_email_diagnostic.py").read_text(encoding="utf-8")
     assert "valyqon-website-review" in script
-    assert '127.0.0.1:18865/forgot-password' in script
-    assert '127.0.0.1:18866/' in script
-    assert "VALYQON_EMAIL_MODE" in script
-    assert "VALYQON_SMTP_HOST" in script
-    assert 'mode != "smtp" or host != "mailpit"' in script
-    assert "readline().strip().casefold()" in script
-    assert "mode=ro" in script
-    assert "ACCOUNT_IN_18865_DATABASE" in script
-    assert "REVIEW_SMTP_PROBE_SUBMITTED" in script
-    assert "review-probe@valyqon.example.test" in script
+    assert "127.0.0.1:18865/forgot-password" in script
+    assert "127.0.0.1:18866/" in script
+    assert "python -m app.review_email_diagnostic check" in script
+    assert "python -m app.review_email_diagnostic probe" in script
+    assert "python -m app.review_email_diagnostic account" in script
+    assert "python -c" not in script
+    assert 'VALYQON_EMAIL_MODE' in helper
+    assert 'VALYQON_SMTP_HOST' in helper
+    assert 'load_email_sender_from_env()' in helper
+    assert 'REVIEW_SMTP_PROBE_SUBMITTED' in helper
+    assert 'review-check@valyqon.example.test' in helper
+    assert 'REVIEW_DB.as_uri() + "?mode=ro"' in helper
+    assert 'ACCOUNT_IN_18865_DATABASE=YES' in helper
+    assert 'sys.stdin.readline()' in helper
     for forbidden in ("UPDATE auth_accounts", "INSERT INTO auth_accounts",
                       "DROP TABLE", "DELETE FROM", "reset --hard",
                       "docker system prune", "down -v", "PASSWORD="):
         assert forbidden not in script
+        assert forbidden not in helper

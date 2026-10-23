@@ -140,6 +140,8 @@
     setStatus('vqWbSaved',saved===null?'Not loaded':String(saved),
       saved===null?'Не загружено':String(saved));
     setStatus('vqProgressCount',completed+'/3',completed+'/3');
+    const ring=get('vqProgressCount');
+    if(ring)ring.style.setProperty('--vq-progress-angle',String(completed*120)+'deg');
     const track=document.querySelector('.vq-progress-track');
     if(track)track.setAttribute('aria-valuenow',String(completed));
     const fill=get('vqProgressFill');

@@ -10,6 +10,7 @@ import http.client
 import json
 from concurrent.futures import ThreadPoolExecutor
 import ipaddress
+from pathlib import Path
 import re
 import socket
 import ssl
@@ -85,10 +86,23 @@ ON_DEMAND_TARGETS = {
     "gpb_new_rss": Target("new.etpgpb.ru", "/procedures.rss", "rss"),
     # Accredited GPB state procurement registry; 44-FZ cross-posts with EIS.
     "gpb_gos44_html": Target("gos.etpgpb.ru", "/44/catalog/procedure"),
+    # Official EIS root is a transport/TLS observation only. It does not
+    # establish a valid regional RSS feed or any original procurement.
+    "eis_official_home": Target("zakupki.gov.ru", "/"),
 }
 
 class UnsafeAddress(RuntimeError):
     pass
+
+
+class Non200OfficialResponse(ValueError):
+    """Bounded public-source HTTP status, with no response body or URL."""
+
+    def __init__(self, status):
+        if type(status) is not int or not 100 <= status <= 599:
+            raise ValueError("Invalid official HTTP status")
+        super().__init__("Official publisher did not return HTTP 200")
+        self.status = status
 
 def checked_ips(host: str) -> list[str]:
     records = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM, proto=socket.IPPROTO_TCP)
@@ -101,9 +115,26 @@ def checked_ips(host: str) -> list[str]:
     # Prefer IPv4 to avoid relying on IPv6 availability on a WSL runner.
     return sorted(addresses, key=lambda ip: ipaddress.ip_address(ip).version)
 
+def publisher_tls_context(host: str) -> ssl.SSLContext:
+    """Normal verified TLS + one canonical pinned RU CA for official EIS only.
+
+    The checked-in trusted Russian Root is verified by its independent DER
+    SHA-256 fingerprint before it is added to this *one connection* context.
+    No system trust mutation, unsafe response, hostname bypass or custom CA
+    for Fabrikant, GPB, Roseltorg, TEK-Torg or any other publisher.
+    """
+    context = ssl.create_default_context()
+    if host == "zakupki.gov.ru":
+        from scripts.ru_eis_pinned_tls_probe import verify_root
+        path = Path(__file__).resolve().parents[1] / "russian_trusted_root_ca_pem.crt"
+        pinned_pem = verify_root(path.read_bytes())
+        context.load_verify_locations(cadata=pinned_pem)
+    return context
+
+
 class VerifiedIPHTTPSConnection(http.client.HTTPSConnection):
     def __init__(self, host: str, ip: str):
-        super().__init__(host, timeout=TIMEOUT_SECONDS, context=ssl.create_default_context())
+        super().__init__(host, timeout=TIMEOUT_SECONDS, context=publisher_tls_context(host))
         self.pinned_ip = ip
 
     def connect(self):
@@ -135,7 +166,7 @@ def read_public(target: Target) -> tuple[str, bytes]:
             response = conn.getresponse()
             if response.status != 200:
                 print("RU_PROBE_HTTP_STATUS=" + str(response.status))
-                raise ValueError("Non-200 official endpoint")
+                raise Non200OfficialResponse(response.status)
             mime = response.getheader("content-type", "").lower()
             if target.mode == "rss":
                 if not any(s in mime for s in ("xml", "rss")):
@@ -172,6 +203,56 @@ def describe(mode: str, payload: bytes) -> dict[str, int]:
         "procurement_number_tokens": len(set(re.findall(r"(?<!\d)\d{19}(?!\d)", raw))),
     }
 
+
+# Five independent sources requiring real procurement-release proof; labels
+# map only to published first-party transport targets. Ingushetia's registered
+# Fabrikant mirror is a 44-FZ EIS crosspost; Chechnya's EIS HOME confirms only
+# origin HTTPS, not a region-filtered feed, EIS card or downstream ingestion.
+RECOVERY_FIVE = {
+    "ingushetia": TARGETS["fabrikant_44_mirror"],
+    "chechnya": ON_DEMAND_TARGETS["eis_official_home"],
+    "roseltorg": TARGETS["roseltorg"],
+    "gpb": TARGETS["gpb_rss"],
+    "tektorg": TARGETS["tektorg"],
+}
+
+
+def priority_five_network() -> int:
+    """Bounded main-only trusted transport evidence, *not* source acceptance."""
+    if set(RECOVERY_FIVE) != {"ingushetia", "chechnya", "roseltorg", "gpb", "tektorg"}:
+        print("RU_FIVE=BLOCKED_ALLOWLIST")
+        return 2
+
+    def once(entry):
+        label, target = entry
+        try:
+            mime, body = read_public(target)
+            observed = describe(target.mode, body)
+            return {"source": label, "status": "HTTPS_VISIBLE_NOT_INGESTED",
+                    "bytes": len(body), "document_tokens": observed}
+        except Non200OfficialResponse as error:
+            return {"source": label, "status": "HTTP_REACHABLE_NON200",
+                    "http_status": error.status}
+        except (OSError, ValueError, UnsafeAddress, ET.ParseError, ssl.SSLError) as error:
+            return {"source": label, "status": "BLOCKED",
+                    "failure_class": type(error).__name__}
+
+    # Exactly 5 immutable first-party endpoints, <= 4 concurrent. Each pin
+    # checks ALL DNS IPs as public, retains hostname-verified TLS and refuses
+    # redirects. No PR code, user queries, credentials or subscriber messages.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(once, RECOVERY_FIVE.items()))
+    for item in results:
+        print("RU_FIVE_SOURCE=" + json.dumps(item, sort_keys=True))
+    visible = sum(v["status"] == "HTTPS_VISIBLE_NOT_INGESTED" for v in results)
+    print(f"RU_FIVE_FIRSTPARTY_HTTPS_VISIBLE={visible}/5")
+    print("RU_FIVE_ORIGINAL_DETAIL_VERIFIED=NO")
+    print("RU_FIVE_WORKER_SQL_ACCEPTED=NO")
+    print("RU_FIVE_REAL_TELEGRAM_ACK=NO")
+    print("PRODUCTION_CHANGED=NO")
+    return 0 if visible == len(RECOVERY_FIVE) else 2
+
+
 def batch_priority() -> int:
     # A bounded read-only operator survey, not 24 working procurement connectors.
     # Only immutable allowlisted labels are scheduled. No tenant or production data.
@@ -204,6 +285,8 @@ def batch_priority() -> int:
 
 
 def main(label: str) -> int:
+    if label == "priority_five_network":
+        return priority_five_network()
     if label == "batch_priority":
         return batch_priority()
     if label not in TARGETS and label not in ON_DEMAND_TARGETS:

@@ -102,6 +102,23 @@ async def optional_authorized_telegram_api_check(notice):
     return True
 
 
+def enforce_release_telegram_ack(external_ack: bool) -> None:
+    """Production-release evidence requires a real authorized Bot API receipt.
+
+    A local LocalCaptureBot receipt is NEVER sufficient. If an operator-run
+    GitHub job explicitly requires the external ACK, absent test credentials or
+    a missing/mismatched reply must FAIL the strict acceptance. No token,
+    chat identifier or response body is written into CI logs.
+    """
+    flag = os.environ.get("RU_CHECHNYA_REQUIRE_TEST_BOT_ACK", "").strip().lower()
+    if flag in ("", "false", "0"):
+        return
+    if flag not in ("true", "1"):
+        raise AssertionError("Invalid strict Telegram acknowledgement policy")
+    if external_ack is not True:
+        raise AssertionError("Authorized real Telegram Bot API acknowledgement required")
+
+
 def isolated_settings():
     # Read operator's actual endpoint and official TLS trust setting, while
     # making other sources and production delivery impossible in this proof.
@@ -234,6 +251,7 @@ def accept():
 
             local_alerts = asyncio.run(local_notification())
             external_ack = asyncio.run(optional_authorized_telegram_api_check(rows[0]))
+            enforce_release_telegram_ack(external_ack)
             return {
                 "official_live_eis_region_notices": len(rows),
                 # Public EIS registry numbers are safe to corroborate outside
@@ -266,7 +284,9 @@ def main():
         return 2
     print("RU_CHECHNYA_EIS_REAL_EVIDENCE=" +
           json.dumps(result, ensure_ascii=False, sort_keys=True))
-    print("RU_CHECHNYA_EIS_STRICT_LIVE=PASS_LOCAL_CAPTURE")
+    print("RU_CHECHNYA_EIS_STRICT_LIVE=" +
+          ("PASS_REAL_TEST_BOT_ACK" if result["real_telegram_api_delivery_verified"]
+           else "PASS_LOCAL_CAPTURE_ONLY"))
     print("REAL_TELEGRAM_API_ACK=" +
           ("VERIFIED_AUTHORIZED_TEST" if result["real_telegram_api_delivery_verified"]
            else "NOT_VERIFIED"))

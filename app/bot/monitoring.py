@@ -122,7 +122,7 @@ async def _manual_regional_worker_sql_search(service, source_catalog, owner_id):
     others = tuple(k for k in enabled if k not in _SHARED_INGUSHETIA_KEYS)
     profile = await service.profile_for_owner(owner_id)
     regional_matches, regional_report = await service.fetch_matches_from_catalog_for_profile(
-        source_catalog, profile, source_keys=regional, max_items=100,
+        source_catalog, profile, source_keys=regional, max_items=1000,
     )
     if not others:
         return regional_matches, regional_report
@@ -519,14 +519,15 @@ async def monitor_loop(bot: Bot, service: TenderMonitorService,
                                 if local_regional_sql:
                                     # Source is strictly read-only Worker SQL:
                                     # per-tenant local keyword prefilter can scan
-                                    # 1000 RECENT candidates before the 100-result
-                                    # cap. This has NO per-user upstream HTTP.
+                                    # 1000 RECENT candidates, including IDs
+                                    # beyond the first hundred already-seen
+                                    # matches. No per-user upstream HTTP.
                                     # In normal network mode preserve the single
                                     # shared real HTTP poll across all tenants.
                                     try:
                                         regional_matches, regional_report = await service.fetch_matches_from_catalog_for_profile(
                                             source_catalog, profile,
-                                            source_keys=regional_keys, max_items=100,
+                                            source_keys=regional_keys, max_items=1000,
                                         )
                                         matches = list(regional_matches)
                                     except Exception:

@@ -13,9 +13,10 @@ import math
 import re
 from urllib.parse import urljoin, urlsplit
 
+import asyncio
 import httpx
 
-from .http import FetchPolicy, bounded_fetch, _policy, source_client
+from .http import ConnectorTransportError, FetchPolicy, bounded_fetch, _policy, source_client
 from .models import TenderNotice
 from .opportunities import validate_notice
 
@@ -174,7 +175,7 @@ class RoseltorgPublicSource:
             raise ValueError("Invalid Roseltorg source limit")
         cap = min(limit, MAX_DETAILS)
         candidates = min(MAX_CANDIDATES, 3 * cap)
-        policy = (bounded_fetch(FetchPolicy(frozenset({HOST}), candidates + 1,
+        policy = (bounded_fetch(FetchPolicy(frozenset({HOST}), candidates + 2,
                                             max_bytes=MAX_BYTES))
                   if _policy.get() is None else nullcontext())
         with policy:
@@ -182,8 +183,17 @@ class RoseltorgPublicSource:
                 timeout=self.timeout, trust_env=False, follow_redirects=False,
                 headers={"Accept": "text/html", "User-Agent": "Mozilla/5.0"},
             ) as client:
-                listing = await client.get(LIST_URL)
-                listing.raise_for_status()
+                # One bounded retry for a transient original-host failure.
+                # Never retry certificate, non-public DNS or policy violations.
+                for attempt in range(2):
+                    try:
+                        listing = await client.get(LIST_URL)
+                        listing.raise_for_status()
+                        break
+                    except ConnectorTransportError as error:
+                        if attempt or not error.retryable:
+                            raise
+                        await asyncio.sleep(0.6)
                 if "html" not in listing.headers.get("content-type", "").lower():
                     raise ValueError("Roseltorg listing is not public HTML")
                 links = parse_roseltorg_links(listing.content, limit=candidates)

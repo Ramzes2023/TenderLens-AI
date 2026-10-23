@@ -4,6 +4,7 @@ from .command_center_ui import COMMAND_CENTER_HTML
 from .discovery_ui import DISCOVERY_HTML
 from .history_ui import HISTORY_HTML
 from .saved_ui import SAVED_HTML
+from .workspace_home_panels import WORKSPACE_HOME_HTML, WORKSPACE_UTILITIES_HTML
 from .source_health_ui import SOURCE_HEALTH_HTML
 from .support_ui import SUPPORT_HTML
 
@@ -211,6 +212,7 @@ def shell_html(html: str) -> str:
   <a href="#source-health"><span aria-hidden="true">▥</span><span data-ui-en="Sources" data-ui-ru="Источники">Sources</span></a>
   <a href="#team"><span aria-hidden="true">♧</span><span data-ui-en="Team" data-ui-ru="Команда">Team</span></a>
 </nav>
+{WORKSPACE_UTILITIES_HTML}
 <p id="shellLocaleScope" class="shell-locale-scope" hidden>Navigation and account controls only. Monitoring Center, Source Health, other page content and workspace forms remain in English.</p>
 '''
 
@@ -283,6 +285,7 @@ def shell_html(html: str) -> str:
   <a class="vq-action-card" href="#team"><span class="vq-action-glyph" aria-hidden="true">♧</span><strong data-ui-en="Coordinate with your team" data-ui-ru="Работать с командой">Coordinate with your team</strong><p data-ui-en="Open verified organizations, roles and invitations." data-ui-ru="Управляйте организацией, ролями и приглашениями.">Open verified organizations, roles and invitations.</p><small data-ui-en="Open team →" data-ui-ru="Открыть команду →">Open team →</small></a>
  </div>
 </section>
+{WORKSPACE_HOME_HTML}
 <section id="firstRunPreview" class="p" data-page="overview" hidden>
   <span class="eyebrow">YOUR FIRST MATCHING OPPORTUNITIES</span>
   <h2>Real tenders matched to your company</h2>
@@ -547,7 +550,7 @@ def shell_html(html: str) -> str:
         '<link rel="stylesheet" href="/assets/saas.css">'
         '<link rel="stylesheet" href="/assets/premium.css?v=phase24-visual-20261012&main_i18n=2">''<link rel="stylesheet" href="/assets/support.css?v=thread-dark-20261017">'
         '<link rel="stylesheet" href="/assets/rag.css?v=pilot1">'
-        '<link rel="stylesheet" href="/assets/workspace_luxe.css?v=20261023c">'
+        '<link rel="stylesheet" href="/assets/workspace_luxe.css?v=20261023c">''<link rel="stylesheet" href="/assets/workspace_home.css?v=20261023a">'
         '<link rel="stylesheet" href="/assets/responsive.css?v=phase24q">'
         "</head>",
     )
@@ -689,7 +692,7 @@ def shell_html(html: str) -> str:
         '<script src="/assets/workspace_ux.js?v=20261013"></script>'
         '<script src="/assets/geography_fallback.js?v=1"></script>'
         '<script src="/assets/geography.js?v=3"></script>'
-        '<script src="/assets/workspace_luxe.js?v=20261023b"></script>'
+        '<script src="/assets/workspace_luxe.js?v=20261023b"></script>''<script src="/assets/workspace_home.js?v=20261023a"></script>'
         "</body>",
     )
 

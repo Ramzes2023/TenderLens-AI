@@ -496,14 +496,14 @@ def test_operator_enabled_ingushetia_uses_only_fingerprint_pinned_root(tmp_path)
 
 
 
+
 def test_ingushetia_eis_uses_verified_bundled_root_without_system_trust():
-    """Default-off adapter alone gets the scoped official certificate."""
-    from app.sources import ru_ingushetia_eis44 as mod
-    from app.sources.eis_pinned_ca import verify_root
+    """Official root selected from local checkout or Docker, only for regional EIS."""
+    from app.sources.eis_pinned_ca import select_verified_eis_ca, verify_root
     from app.sources.eis_rss import eis_tls_verify
 
     source = IngushetiaEis44Source()
-    assert source.ca_bundle_file == mod.BUNDLED_EIS_ROOT
+    assert source.ca_bundle_file == select_verified_eis_ca()
     assert source.system_trust is False
     assert verify_root(source.ca_bundle_file.read_bytes()).startswith(
         "-----BEGIN CERTIFICATE-----"
@@ -511,26 +511,41 @@ def test_ingushetia_eis_uses_verified_bundled_root_without_system_trust():
     assert eis_tls_verify(
         direct=True, system_trust=False,
         ca_bundle_file=source.ca_bundle_file,
-    ) == str(mod.BUNDLED_EIS_ROOT)
+    ) == str(source.ca_bundle_file)
 
     cat = build_source_catalog(settings(ru_ingushetia_eis44_enabled=True))
-    assert cat.registry.get(SOURCE_ID).source.ca_bundle_file == mod.BUNDLED_EIS_ROOT
-    # Explicitly scoped only: the existing global EIS adapter does not
-    # inherit the Ingushetia root or change its system trust setting.
+    assert cat.registry.get(SOURCE_ID).source.ca_bundle_file == select_verified_eis_ca()
     assert cat.registry.get("eis").source.ca_bundle_file is None
 
 
-def test_ingushetia_eis_invalid_or_absent_bundled_root_fails_closed(monkeypatch, tmp_path):
-    from app.sources import ru_ingushetia_eis44 as mod
+def test_ingushetia_eis_local_and_docker_root_layouts_pin_same_cert(tmp_path):
+    from app.sources.eis_pinned_ca import ROOT_FILENAME, select_verified_eis_ca
 
-    fake = tmp_path / "wrong.pem"
+    actual = select_verified_eis_ca()
+    docker_certs = tmp_path / "certs"
+    docker_certs.mkdir()
+    (docker_certs / ROOT_FILENAME).write_bytes(actual.read_bytes())
+    assert select_verified_eis_ca(project_root=tmp_path) == docker_certs / ROOT_FILENAME
+    (docker_certs / ROOT_FILENAME).unlink()
+    (tmp_path / ROOT_FILENAME).write_bytes(actual.read_bytes())
+    assert select_verified_eis_ca(project_root=tmp_path) == tmp_path / ROOT_FILENAME
+
+
+def test_ingushetia_eis_invalid_or_absent_bundled_root_fails_closed(monkeypatch, tmp_path):
+    from functools import partial
+    from app.sources import ru_ingushetia_eis44 as mod
+    from app.sources.eis_pinned_ca import ROOT_FILENAME, select_verified_eis_ca
+
+    monkeypatch.setattr(mod, "select_verified_eis_ca",
+                        partial(select_verified_eis_ca, project_root=tmp_path))
+    with pytest.raises(SourceError, match="Verified scoped EIS root is unavailable"):
+        IngushetiaEis44Source()
+
+    fake = tmp_path / ROOT_FILENAME
     fake.write_text("untrusted certificate", encoding="ascii")
-    monkeypatch.setattr(mod, "BUNDLED_EIS_ROOT", fake)
     with pytest.raises(SourceError, match="Verified scoped EIS root is unavailable"):
         IngushetiaEis44Source()
-    fake.unlink()
-    with pytest.raises(SourceError, match="Verified scoped EIS root is unavailable"):
-        IngushetiaEis44Source()
+
 
 
 def test_operator_explicit_eis_ca_or_system_trust_not_silently_overridden(tmp_path):

@@ -139,3 +139,38 @@ def test_real_durable_worker_persists_verified_source_contract_without_external_
         assert store.upsert(rows[0], connector_version(EIS)) is False
     finally:
         db.close()
+
+
+def test_safe_live_failure_reports_queue_status_without_urls_or_secrets():
+    """Offline-only sanitized diagnostics; never count as live evidence."""
+    from types import SimpleNamespace
+    import json
+    from scripts.ci_ru_ingushetia_main_live import (
+        SafeWorkerFailure, safe_live_failure, SAFE_LIVE_ASSERTION_CODES,
+    )
+
+    pending = SafeWorkerFailure(SimpleNamespace(
+        state="failed", failure_code="handler_error",
+    ))
+    detail = safe_live_failure(pending)
+    assert detail == {
+        "error_class": "BLOCKED", "stage": "WORKER_FAILED",
+        "job_state": "failed", "job_failure_code": "handler_error",
+    }
+    unknown = SafeWorkerFailure(SimpleNamespace(
+        state="https://private.invalid/path",
+        failure_code="token=PRIVATE_BOT_TOKEN",
+    ))
+    output = json.dumps(safe_live_failure(unknown))
+    assert "PRIVATE_BOT_TOKEN" not in output
+    assert "private.invalid" not in output
+    assert '"UNKNOWN"' in output
+
+    for message, stage in SAFE_LIVE_ASSERTION_CODES.items():
+        assert safe_live_failure(AssertionError(message))["stage"] == stage
+    assert safe_live_failure(AssertionError("token=PRIVATE"))["stage"] == (
+        "UNCLASSIFIED_ASSERTION"
+    )
+    assert "PRIVATE" not in json.dumps(
+        safe_live_failure(AssertionError("token=PRIVATE"))
+    )

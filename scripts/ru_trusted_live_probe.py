@@ -94,6 +94,16 @@ ON_DEMAND_TARGETS = {
 class UnsafeAddress(RuntimeError):
     pass
 
+
+class Non200OfficialResponse(ValueError):
+    """Bounded public-source HTTP status, with no response body or URL."""
+
+    def __init__(self, status):
+        if type(status) is not int or not 100 <= status <= 599:
+            raise ValueError("Invalid official HTTP status")
+        super().__init__("Official publisher did not return HTTP 200")
+        self.status = status
+
 def checked_ips(host: str) -> list[str]:
     records = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM, proto=socket.IPPROTO_TCP)
     addresses = sorted({item[4][0] for item in records})
@@ -156,7 +166,7 @@ def read_public(target: Target) -> tuple[str, bytes]:
             response = conn.getresponse()
             if response.status != 200:
                 print("RU_PROBE_HTTP_STATUS=" + str(response.status))
-                raise ValueError("Non-200 official endpoint")
+                raise Non200OfficialResponse(response.status)
             mime = response.getheader("content-type", "").lower()
             if target.mode == "rss":
                 if not any(s in mime for s in ("xml", "rss")):
@@ -220,6 +230,9 @@ def priority_five_network() -> int:
             observed = describe(target.mode, body)
             return {"source": label, "status": "HTTPS_VISIBLE_NOT_INGESTED",
                     "bytes": len(body), "document_tokens": observed}
+        except Non200OfficialResponse as error:
+            return {"source": label, "status": "HTTP_REACHABLE_NON200",
+                    "http_status": error.status}
         except (OSError, ValueError, UnsafeAddress, ET.ParseError, ssl.SSLError) as error:
             return {"source": label, "status": "BLOCKED",
                     "failure_class": type(error).__name__}

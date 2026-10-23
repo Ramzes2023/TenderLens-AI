@@ -1,0 +1,40 @@
+name: RU OTC-Market genuine original regional small-purchase live proof
+on:
+  push:
+    branches: [research/ru-otc-market-native-regional-small-20261017]
+    paths:
+      - scripts/research_ru_otc_market.py
+      - tests/test_ru_otc_market.py
+      - .github/workflows/ru-otc-market-discovery.yml
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  otc-regional-strict-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Reject foreign hosts, stale IDs, EIS-mirrors and mismatched original detail
+        run: python -m pytest -q tests/test_ru_otc_market.py
+  otc-regional-two-real-details:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Two genuine public OTC regional native requests through independent official detail GET
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_otc_market

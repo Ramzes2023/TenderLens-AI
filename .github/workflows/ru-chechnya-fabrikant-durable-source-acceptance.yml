@@ -11,6 +11,7 @@ on:
       - app/sources/ru_cycle.py
       - scripts/ci_ru_chechnya_fabrikant_real_worker.py
       - scripts/ci_ru_chechnya_fabrikant_authenticated.py
+      - scripts/ci_ru_chechnya_fabrikant_telegram_query_delivery.py
       - tests/test_ru_chechnya_fabrikant44.py
       - tests/test_ru_approved_operator_cycle.py
       - .github/workflows/ru-chechnya-fabrikant-durable-source-acceptance.yml
@@ -62,3 +63,18 @@ jobs:
       - name: Require genuine independently matched originals to customer scoring, tenant denied
         timeout-minutes: 8
         run: python -B -m scripts.ci_ru_chechnya_fabrikant_authenticated
+
+  chechnya-fabrikant-real-keyword-to-local-telegram:
+    runs-on: windows-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require native first-party numbers and user keyword with local-only ACK retry, dedup, other-customer isolation
+        timeout-minutes: 9
+        run: python -B -m scripts.ci_ru_chechnya_fabrikant_telegram_query_delivery

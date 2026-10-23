@@ -216,6 +216,8 @@ def shell_html(html: str) -> str:
 <p id="shellLocaleScope" class="shell-locale-scope" hidden>Navigation and account controls only. Monitoring Center, Source Health, other page content and workspace forms remain in English.</p>
 '''
 
+    top = top.replace("{WORKSPACE_UTILITIES_HTML}", WORKSPACE_UTILITIES_HTML)
+
     start = html.index('<div class="top">')
     end = html.index(
         '<section class="grid">',
@@ -516,6 +518,7 @@ def shell_html(html: str) -> str:
   <p id="pdfPreviewNotice" role="status" hidden data-ui-en="Local preview on port 8765 disables /api. Uploads and workspace data are unavailable here; this does not verify production backend health." data-ui-ru="Локальное превью на порту 8765 отключает /api. Загрузка и данные рабочей области здесь недоступны; это не проверка состояния production backend.">Local preview on port 8765 disables /api. Uploads and workspace data are unavailable here; this does not verify production backend health.</p>
 </section>
 ''' + context
+    context = context.replace("{WORKSPACE_HOME_HTML}", WORKSPACE_HOME_HTML)
     context = '<section id="geographyWorkspace" class="geo-workspace" data-page="geography" hidden></section>\n' + context
     context = context.replace("<!-- COMMAND_CENTER -->", COMMAND_CENTER_HTML)
 

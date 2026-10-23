@@ -12,7 +12,7 @@ import json
 import ssl
 import xml.etree.ElementTree as ET
 
-from scripts.ru_trusted_live_probe import TARGETS, ON_DEMAND_TARGETS, Target, read_public, describe
+from scripts.ru_trusted_live_probe import TARGETS, ON_DEMAND_TARGETS, Target, UnsafeAddress, read_public, describe
 
 # Only immutable first-party publisher addresses. EIS availability must not
 # be counted as separate Chechnya and Ingushetia feeds; it is one publisher.
@@ -43,7 +43,7 @@ def audit_one(name: str) -> dict[str, str]:
             "rss_item_count": str(counts.get("rss_items", 0)
                                   + counts.get("atom_items", 0)),
         }
-    except (OSError, ssl.SSLError, ValueError, ET.ParseError) as error:
+    except (OSError, ssl.SSLError, UnsafeAddress, ValueError, ET.ParseError) as error:
         return {"state": "BLOCKED", "safe_failure_class": type(error).__name__}
 
 

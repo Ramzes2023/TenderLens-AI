@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS saved_tender_team_decision_events (
     action TEXT NOT NULL CHECK(action IN ('assign','request','approve','reject','withdraw')),
     previous_state TEXT NOT NULL,
     next_state TEXT NOT NULL,
+    previous_assignee_account_id INTEGER,
+    next_assignee_account_id INTEGER,
     changed_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_saved_tender_team_decision_events

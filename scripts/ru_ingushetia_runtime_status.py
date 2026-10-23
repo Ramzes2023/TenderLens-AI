@@ -59,13 +59,21 @@ def snapshot_health(settings, repository, *, now=None):
         sources[source] = state
 
     configured = bool(active) and all(flags.values())
-    current = configured and all(x == "RECENT_SQL_OBSERVED" for x in sources.values())
+    fresh = tuple(key for key, state in sources.items() if state == "RECENT_SQL_OBSERVED")
+    stale_or_failed = tuple(key for key in active if key not in fresh)
+    current = configured and len(fresh) == len(active)
+    # Keep the strict overall readiness gate. A healthy EIS snapshot cannot
+    # silently certify a disabled/failed Fabrikant mirror, and neither status
+    # certifies upstream availability or actual Telegram delivery.
     return {
         "observation": "INGUSHETIA_READ_ONLY_SNAPSHOT",
         "status": "SQL_SNAPSHOT_OBSERVED_ONLY" if current else "NOT_OPERATIONALLY_READY",
         "flags": flags,
         "source_states": sources,
         "source_enabled_count": len(active),
+        "fresh_sql_source_count": len(fresh),
+        "not_fresh_sql_source_count": len(stale_or_failed),
+        "partially_fresh_sql_observed": bool(configured and fresh and stale_or_failed),
         "telegram_bot_api_receipt_proven": False,
         "current_upstream_reachability_proven": False,
         "production_changed": False,

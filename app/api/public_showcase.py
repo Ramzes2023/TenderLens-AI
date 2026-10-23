@@ -61,7 +61,7 @@ PUBLIC_SUPPORT_HTML = """<section class="vq-support-strip" aria-labelledby="vqSu
   <button type="button" id="vqOpenHelp" class="vq-support-button" aria-expanded="false" aria-controls="vqHelpDrawer">Ask a question ↗</button>
 </section>
 <div id="vqHelpDrawer" class="vq-help-drawer" hidden role="region" aria-label="Product information assistant">
-  <div class="vq-help-header"><div><span class="vq-help-avatar" aria-hidden="true">✦</span><strong>VALYQON product guide</strong><small>Instant answers · Not a live AI conversation</small></div><button id="vqCloseHelp" type="button" aria-label="Close help">×</button></div>
+  <div class="vq-help-header"><div><span class="vq-help-avatar" aria-hidden="true">✦</span><strong>VALYQON product guide</strong><small>Quick answers · AI when configured</small></div><button id="vqCloseHelp" type="button" aria-label="Close help">×</button></div>
   <div id="vqHelpContent" class="vq-help-content" role="status" aria-live="polite">Choose a topic to see a reliable answer about VALYQON AI.</div>
   <div class="vq-help-topics" role="group" aria-label="Common questions">
     <button type="button" data-vq-help="search">How does guest search work?</button>
@@ -69,6 +69,12 @@ PUBLIC_SUPPORT_HTML = """<section class="vq-support-strip" aria-labelledby="vqSu
     <button type="button" data-vq-help="payment">How do subscriptions work?</button>
     <button type="button" data-vq-help="privacy">Is my company data public?</button>
   </div>
+  <form id="vqAskAIForm" class="vq-help-ai-form">
+    <label for="vqAIQuestion">Ask the AI about VALYQON AI</label>
+    <textarea id="vqAIQuestion" name="question" rows="2" minlength="3" maxlength="450" placeholder="For example: how does tender search work?" required></textarea>
+    <button type="submit" id="vqAISend">Ask AI ↗</button>
+    <p id="vqAIStatus" role="status" aria-live="polite">AI answers are available only when the provider is configured. Do not share private information.</p>
+  </form>
   <a class="vq-help-contact" href="/dashboard#support">Open Support Center to send a message →</a>
   <p>Sign-in is required to create a support request. The authenticated workspace includes AI support where configured.</p>
 </div>

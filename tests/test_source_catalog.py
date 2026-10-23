@@ -455,6 +455,9 @@ def test_ingushetia_source_failures_never_expose_raw_vendor_urls_or_tokens():
     import json
 
     class FailingVendor:
+        def __init__(self, name):
+            self.name = name
+
         async def fetch(self, limit=20):
             raise RuntimeError(
                 "https://44.fabrikant.ru/private?token=SECRET_FOR_TEST; "
@@ -471,7 +474,7 @@ def test_ingushetia_source_failures_never_expose_raw_vendor_urls_or_tokens():
     catalog = build_source_catalog(config)
     for key in ("ru_ingushetia_eis44", "ru_ingushetia_fabrikant44"):
         registration = catalog.registry.get(key)
-        registry = SourceRegistry((replace(registration, source=FailingVendor()),))
+        registry = SourceRegistry((replace(registration, source=FailingVendor(key)),))
         result = asyncio.run(MultiSourceFetcher(registry).fetch(source_keys=(key,)))
         assert result.attempted_sources == (key,)
         assert result.successful_sources == ()

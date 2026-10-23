@@ -159,4 +159,42 @@
       if (event.key === 'Escape' && !panel.hidden) setOpen(false);
     });
   }
+
+  const aiForm = el('vqAskAIForm'), aiInput = el('vqAIQuestion'),
+        aiStatus = el('vqAIStatus'), aiSend = el('vqAISend');
+  if (aiForm && aiInput && aiStatus && aiSend && content) {
+    aiForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      const question = aiInput.value.trim();
+      if (question.length < 3) return;
+      aiSend.disabled = true;
+      aiStatus.textContent = t('Contacting the configured AI provider…',
+        'Отправляем вопрос настроенному ИИ-провайдеру…');
+      try {
+        const response = await fetch('/api/v1/public/help/ask', {
+          method: 'POST', credentials: 'omit', cache: 'no-store',
+          headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+          body: JSON.stringify({question})
+        });
+        if (!response.ok) {
+          throw new Error(response.status === 429
+            ? t('Question limit reached. Please try later.', 'Лимит вопросов исчерпан. Повторите позже.')
+            : response.status === 503
+            ? t('Public AI help is currently unavailable.', 'Гостевой ИИ-помощник сейчас недоступен.')
+            : t('Could not process the question.', 'Не удалось обработать вопрос.'));
+        }
+        const data = await response.json();
+        if (data.scope !== 'public_product_only' || typeof data.answer !== 'string') {
+          throw new Error(t('Unexpected AI response.', 'Неожиданный ответ ИИ.'));
+        }
+        content.textContent = data.answer;
+        aiStatus.textContent = t('AI answer generated; verify any important facts.',
+          'Ответ ИИ получен. Важные сведения необходимо проверить.');
+      } catch (error) {
+        aiStatus.textContent = error.message || t('AI service unavailable.', 'ИИ-сервис недоступен.');
+      } finally {
+        aiSend.disabled = false;
+      }
+    });
+  }
 })();

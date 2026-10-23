@@ -10,6 +10,7 @@ import http.client
 import json
 from concurrent.futures import ThreadPoolExecutor
 import ipaddress
+from pathlib import Path
 import re
 import socket
 import ssl
@@ -104,9 +105,26 @@ def checked_ips(host: str) -> list[str]:
     # Prefer IPv4 to avoid relying on IPv6 availability on a WSL runner.
     return sorted(addresses, key=lambda ip: ipaddress.ip_address(ip).version)
 
+def publisher_tls_context(host: str) -> ssl.SSLContext:
+    """Normal verified TLS + one canonical pinned RU CA for official EIS only.
+
+    The checked-in trusted Russian Root is verified by its independent DER
+    SHA-256 fingerprint before it is added to this *one connection* context.
+    No system trust mutation, unsafe response, hostname bypass or custom CA
+    for Fabrikant, GPB, Roseltorg, TEK-Torg or any other publisher.
+    """
+    context = ssl.create_default_context()
+    if host == "zakupki.gov.ru":
+        from scripts.ru_eis_pinned_tls_probe import verify_root
+        path = Path(__file__).resolve().parents[1] / "russian_trusted_root_ca_pem.crt"
+        pinned_pem = verify_root(path.read_bytes())
+        context.load_verify_locations(cadata=pinned_pem)
+    return context
+
+
 class VerifiedIPHTTPSConnection(http.client.HTTPSConnection):
     def __init__(self, host: str, ip: str):
-        super().__init__(host, timeout=TIMEOUT_SECONDS, context=ssl.create_default_context())
+        super().__init__(host, timeout=TIMEOUT_SECONDS, context=publisher_tls_context(host))
         self.pinned_ip = ip
 
     def connect(self):

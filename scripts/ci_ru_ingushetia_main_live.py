@@ -121,7 +121,10 @@ def real_worker_proof(source_id):
 
 def main():
     failed = []
-    for source_id in (EIS, FAB):
+    # The accredited first-party list can be reachable while EIS is blocked
+    # from GitHub-hosted egress. It still must independently verify each
+    # original card; ordering cannot turn a blocked source into a success.
+    for source_id in (FAB, EIS):
         try:
             result = real_worker_proof(source_id)
         except Exception as exc:

@@ -74,3 +74,42 @@ async def workflow_events(organization_id: int, saved_id: int, request: Request)
     service, scope = await _scope(request, organization_id, saved_id)
     result = await _call(service.events, **scope)
     return JSONResponse(result, headers={"Cache-Control": "private, no-store"})
+
+
+# Actual organization/company-scoped assignees and internal two-person approvals.
+# They are not official procurement submissions or signed contracting decisions.
+from app.workspaces.team_decisions import TeamDecision
+
+
+class TeamAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: Literal["assign", "request", "approve", "reject", "withdraw"]
+    expected_revision: int = Field(ge=0, le=2147483646)
+    assignee_account_id: int | None = Field(default=None, gt=0)
+
+
+async def _team_scope(request, organization_id, saved_id):
+    _, scope = await _scope(request, organization_id, saved_id)
+    return TeamDecision(request.app.state.runtime.database), scope
+
+
+@router.get("/{saved_id}/team")
+async def get_team(organization_id: int, saved_id: int, request: Request):
+    service, scope = await _team_scope(request, organization_id, saved_id)
+    result = await _call(service.get, **scope)
+    return JSONResponse(result, headers={"Cache-Control": "private, no-store"})
+
+
+@router.patch("/{saved_id}/team")
+async def update_team(organization_id: int, saved_id: int, payload: TeamAction, request: Request):
+    require_same_origin_browser_request(request)
+    service, scope = await _team_scope(request, organization_id, saved_id)
+    result = await _call(service.change, **scope, **payload.model_dump())
+    return JSONResponse(result, headers={"Cache-Control": "private, no-store"})
+
+
+@router.get("/{saved_id}/team/events")
+async def team_events(organization_id: int, saved_id: int, request: Request):
+    service, scope = await _team_scope(request, organization_id, saved_id)
+    result = await _call(service.events, **scope)
+    return JSONResponse(result, headers={"Cache-Control": "private, no-store"})

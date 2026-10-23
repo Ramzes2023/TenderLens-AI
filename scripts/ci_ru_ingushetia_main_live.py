@@ -31,7 +31,7 @@ from app.sources.ru_ingushetia_fabrikant44 import SOURCE_ID as FAB
 from app.sources.ru_notice_identity import original_notice_key
 from app.sources.snapshots import snapshot_catalog
 from app.sources.eis_pinned_ca import select_verified_eis_ca
-from app.sources.eis_rss import EIS_USER_AGENT
+# Match the current main EIS RSS adapter user agent for EIS card transport.
 
 ROOT = Path(__file__).resolve().parents[1] / "russian_trusted_root_ca_pem.crt"
 
@@ -40,7 +40,7 @@ async def corroborate_eis_cards(rows):
     with bounded_fetch(FetchPolicy(frozenset({"zakupki.gov.ru"}), 2, max_bytes=1_800_000)):
         async with source_client(timeout=20, follow_redirects=False, trust_env=False,
                                  verify=ssl.create_default_context(cafile=str(select_verified_eis_ca(ROOT))),
-                                 headers={"Accept": "text/html", "User-Agent": EIS_USER_AGENT}) as client:
+                                 headers={"Accept": "text/html", "User-Agent": "TenderLensAI/0.9 (+RSS monitor)"}) as client:
             for notice in rows[:2]:
                 response = await client.get(notice.url)
                 response.raise_for_status()

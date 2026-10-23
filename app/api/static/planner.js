@@ -234,6 +234,34 @@
     const root=$('vqPlannerBoard');
     root.replaceChildren();
     const items=current();
+    if(!records.length || (!items.length&&loaded)){
+      const empty=make('section','vq-planner-empty');
+      empty.append(make('span','vq-planner-empty-icon','◇'));
+      empty.append(make('h3','',records.length?
+        t('No saved notices match your filters','По фильтрам закупок нет'):
+        t('Your tender pipeline starts with a real saved opportunity',
+          'Ваша доска начнётся с настоящей сохранённой закупки')));
+      empty.append(make('p','',records.length?
+        t('Try a different title, notice number, or deadline filter.',
+          'Измените название, номер извещения или фильтр сроков.'):
+        t('Find a tender in Discovery and save it for your active company. It will appear here with its internal team stage and verified date fields.',
+          'Найдите закупку в поиске и сохраните её для активной компании. Здесь появятся её внутренний этап и доступные сведения о сроке.')));
+      if(records.length){
+        const reset=make('button','',t('Clear filters','Сбросить фильтры'));
+        reset.type='button';
+        reset.addEventListener('click',()=>{
+          $('vqPlannerQuery').value='';
+          $('vqPlannerUrgency').value='all';
+          render();
+        });
+        empty.append(reset);
+      }else{
+        const link=make('a','',t('Open Discovery →','Открыть поиск →'));
+        link.href='#discover';empty.append(link);
+      }
+      root.append(empty);
+      return;
+    }
     for(const [key] of stages){
       const column=make('section','vq-planner-column');
       const matching=items.filter(r=>r.workflow?.stage===key);

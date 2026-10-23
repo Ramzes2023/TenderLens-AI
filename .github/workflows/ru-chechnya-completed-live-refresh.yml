@@ -32,7 +32,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Test exact-SHA and trusted RU-01 runner protections
-        run: python -m unittest tests.test_ru_chechnya_completed_live_refresh -v
+        run: python -m unittest discover -s tests -p test_ru_chechnya_completed_live_refresh.py -v
 
   refresh-after-trusted-ru-live:
     if: >-

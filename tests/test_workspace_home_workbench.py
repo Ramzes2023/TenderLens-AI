@@ -25,6 +25,7 @@ def test_workbench_renders_in_original_authenticated_dashboard():
         'id="vqPinCurrent"', 'id="vqCurrentSection"',
         'id="vqShortcutHelp"', 'id="vqShortcutDialog"',
         'id="vqShortcutClose"', 'id="vqUtilityBar"',
+        'id="vqSourceCheck"', 'id="vqSourceCheckRows"',
         '/assets/workspace_home.css', '/assets/workspace_home.js',
     ):
         assert element in html, element
@@ -87,6 +88,22 @@ def test_workbench_javascript_syntax_using_node_if_present(tmp_path):
     out.write_text('\n'.join(inline),encoding='utf-8')
     result=subprocess.run([node,'--check',str(out)],capture_output=True,text=True,timeout=15)
     assert result.returncode==0,result.stderr
+
+
+def test_source_reach_bars_use_only_last_actual_discovery_counts():
+    markup = dashboard_html()
+    assert 'id="vqSourceCheck" aria-labelledby="vqSourceCheckTitle" hidden' in markup
+    js = (ROOT / 'app/api/static/workspace_home.js').read_text(encoding='utf-8')
+    assert "window.addEventListener('discovery-report',event=>" in js
+    assert "lastSourceReport={" in js
+    assert "requested:report.attempted_sources.length" in js
+    assert "responding:report.successful_sources.length" in js
+    assert "unavailable:report.failed_sources.length" in js
+    assert "sourceReportScope!==scope()" in js
+    assert "rows.replaceChildren()" in js
+    assert "block.hidden=true" in js
+    assert "block.hidden=false" in js
+    assert "Retain aggregate counts only" in js
 
 
 def test_no_unprotected_extra_api_routes_or_new_authority():

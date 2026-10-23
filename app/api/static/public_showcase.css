@@ -89,3 +89,12 @@
 @media(max-width:800px){.landing.premium .vq-pulse-head{flex-direction:column;align-items:start;gap:5px}.landing.premium .vq-pulse-verified{margin:0}.landing.premium .vq-support-strip{flex-wrap:wrap}.landing.premium .vq-support-button{margin-left:0}}
 @media(max-width:600px){.landing.premium .vq-pulse-section{padding:20px 17px 50px}.landing.premium .vq-pulse-board{padding:15px}.landing.premium .vq-pulse-metric{min-width:130px;flex:1;padding:13px}.landing.premium .vq-pulse-chart{gap:4px;height:165px}.landing.premium .vq-pulse-column small{font-size:8px}.landing.premium .vq-support-strip{margin:0 16px 60px;padding:20px}.landing.premium .vq-support-strip h2{font-size:20px}.landing.premium .vq-stage{padding:11px}.landing.premium .vq-stage-main{grid-template-columns:80px 1fr;min-height:332px}.landing.premium .vq-stage-content{padding:13px}.landing.premium .vq-stage-doc{width:65px;height:60px}.landing.premium .vq-stage-doc-left{left:1%}.landing.premium .vq-stage-doc-right{right:1%}.landing.premium .vq-stage-footnote{font-size:9px}}
 @media(prefers-reduced-motion:reduce){.landing.premium .vq-stage-orb,.landing.premium .vq-stage-doc{animation:none}.landing.premium .vq-pulse-bar{transition:none}}
+
+
+.landing.premium .vq-help-ai-form{display:grid;gap:8px;border-top:1px solid #e8eef8;margin:14px 15px;padding-top:17px}
+.landing.premium .vq-help-ai-form label{font-size:12px;font-weight:800;color:#2b4371}
+.landing.premium .vq-help-ai-form textarea{resize:vertical;min-height:75px;max-height:170px;border:1px solid #c9d8f0;border-radius:10px;background:#fff;color:#172d55;padding:11px;font:13px/1.5 system-ui}
+.landing.premium .vq-help-ai-form textarea:focus-visible{outline:3px solid #a4c0ff;outline-offset:2px}
+.landing.premium .vq-help-ai-form button{border:0;border-radius:10px;padding:11px 15px;background:#2d60ed;color:#fff;font-weight:800;cursor:pointer}
+.landing.premium .vq-help-ai-form button:disabled{opacity:.55;cursor:progress}
+.landing.premium .vq-help-ai-form p{font-size:11px;line-height:1.5;color:#7383a1;padding:0;margin:0}

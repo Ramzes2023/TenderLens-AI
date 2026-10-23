@@ -570,6 +570,20 @@ class TenderMonitorService:
         )
         if not report.attempted_sources or report.total_failure:
             raise ValueError("No successfully fetched source for baseline.")
+        # A new regional subscription cannot claim a complete baseline if
+        # its first fetch missed one explicitly enabled Ingushetia source.
+        # Otherwise, when that source recovers on the next cycle, already
+        # published notices could be mislabelled as newly discovered and
+        # delivered in a burst. Existing active subscriptions still retain
+        # healthy-source partial-outage delivery behavior.
+        regional = frozenset({
+            "ru_ingushetia_eis44", "ru_ingushetia_fabrikant44",
+        }).intersection(source_keys or ())
+        if regional and (
+            not regional.issubset(report.successful_sources)
+            or any(failure.source in regional for failure in report.failures)
+        ):
+            raise ValueError("Incomplete Ingushetia regional subscription baseline.")
         return len(await self.claim_new(owner_user_id, matches)), report
 
     async def subscribe(self, owner_user_id: int, chat_id: int) -> Subscription:

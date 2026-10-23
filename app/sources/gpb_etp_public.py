@@ -152,9 +152,12 @@ def parse_gpb_official_rss(payload, *, limit=MAX_CANDIDATES):
     if type(payload) is not bytes or not 0 < len(payload) <= MAX_BYTES:
         raise ValueError("Invalid official GPB RSS size")
     upper = payload.upper()
-    if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper or b"\\x00" in payload:
+    if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper or bytes([0]) in payload:
         raise ValueError("Unsafe official GPB RSS XML")
-    root = ET.fromstring(payload)
+    try:
+        root = ET.fromstring(payload)
+    except ET.ParseError:
+        raise ValueError("Malformed official GPB RSS XML") from None
     if root.tag != "rss" or root.find("channel") is None:
         raise ValueError("Not an official GPB RSS channel")
     seen, entries = {}, []

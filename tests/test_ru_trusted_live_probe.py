@@ -147,6 +147,26 @@ class ProbeSafetyTests(unittest.TestCase):
         self.assertIn('test "$ACTUAL_RUNNER_NAME" = "VALYQON-RU-01"', text)
         self.assertIn("persist-credentials: false", text)
 
+    def test_primary_publisher_gpb_rss_read_only_hosted_observation(self):
+        from pathlib import Path
+        self.assertEqual(TARGETS["gpb_rss"], Target("etpgpb.ru", "/procedures.rss", "rss"))
+        path = Path(__file__).resolve().parents[1] / ".github/workflows/ru-gpb-alternative-hosts-observation.yml"
+        workflow = path.read_text(encoding="utf-8")
+        self.assertIn("for source in gpb_rss gpb_public_html gpb_new_public_html gpb_new_rss gpb_gos44_html; do", workflow)
+        self.assertIn('python -B -m scripts.ru_trusted_live_probe "$source"', workflow)
+        for item in ("RU_GPB_DETAIL_VERIFIED=NO", "RU_GPB_WORKER_SQL_ACCEPTED=NO",
+                     "RU_GPB_TENANT_NOTIFIED=NO", "PRODUCTION_CHANGED=NO"):
+            self.assertIn(item, workflow)
+        self.assertNotIn("self-hosted", workflow)
+
+    def test_gpb_primary_rss_is_actual_feed_not_any_xml_or_login_markup(self):
+        self.assertEqual(
+            describe("rss", b"<rss version='2.0'><channel><item/></channel></rss>"),
+            {"rss_items": 1, "atom_items": 0},
+        )
+        with self.assertRaises(ValueError):
+            describe("rss", b"<html><body>Login</body></html>")
+
     def test_hosted_gpb_alternative_routes_are_observation_not_source_acceptance(self):
         from pathlib import Path
         root = Path(__file__).resolve().parents[1]

@@ -46,7 +46,7 @@ def test_rendered_dashboard_inline_js_parses_when_node_is_available(tmp_path):
     if not node:
         return
     html = dashboard_html()
-    scripts = re.findall(r"<script(?:\\s[^>]*)?>([\\s\\S]*?)</script>", html)
+    scripts = re.findall(r"<script(?:\s[^>]*)?>([\s\S]*?)</script>", html)
     assert scripts, "Dashboard should include inline organization code"
     js = "\n".join(scripts)
     output = tmp_path / "dashboard-inline.js"

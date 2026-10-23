@@ -451,7 +451,7 @@ def test_catalog_unified_fetch_uses_multisource_and_profile_eis():
 
 def test_ingushetia_source_failures_never_expose_raw_vendor_urls_or_tokens():
     """Offline: public status must be safe, without masking failed source state."""
-    from dataclasses import replace
+    from dataclasses import asdict, replace
     import json
 
     class FailingVendor:
@@ -485,8 +485,8 @@ def test_ingushetia_source_failures_never_expose_raw_vendor_urls_or_tokens():
         )
         assert result.statuses[0].message == result.failures[0].message
         serialized = json.dumps({
-            "failures": [item.__dict__ for item in result.failures],
-            "states": [item.__dict__ for item in result.statuses],
+            "failures": [asdict(item) for item in result.failures],
+            "states": [asdict(item) for item in result.statuses],
         })
         assert "SECRET_FOR_TEST" not in serialized
         assert "user:password" not in serialized

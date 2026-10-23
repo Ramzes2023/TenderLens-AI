@@ -394,3 +394,36 @@ hourly idempotency: 75 minutes, allowing 15 minutes of processing and
 scheduling drift beyond a normal 60-minute cycle. If not updated by
 then, regional notifications fail closed rather than presenting historical
 saved searches as current observations.
+
+
+## 23 October 2026: hosted upstream outage and conservative partial SQL status
+
+On PR #226 head `36396d0` (22 October push), GitHub-hosted mandatory
+live acceptance [run 39843561110](https://github.com/Ramzes2023/TenderLens-AI/actions/runs/39843561110)
+failed both live routes after **three real queue retry attempts**.
+The safe diagnostic classified both EIS and accredited Fabrikant as
+`UPSTREAM_NETWORK_RETRIES_EXHAUSTED` with `connection_failure_unspecified`.
+The 285 strictly offline contract tests, approved queue contract, and
+observational diagnostics passed. There is no new evidence of certificate
+verification failure, and no parser patch can honestly turn these
+connection failures into newly fetched tenders. A previous genuine hosted
+Fabrikant full-chain PASS (20 October, run 39407402210) remains valid as
+historical evidence, **not** an uptime guarantee.
+
+Operator-only runtime status now reports
+`fresh_sql_source_count`, `not_fresh_sql_source_count` and
+`partially_fresh_sql_observed`, alongside per-source states. When only
+one of two explicitly enabled regional Worker SQL sources has recent
+verified source-keyed persistence, the other remains marked unavailable:
+the overall result stays `NOT_OPERATIONALLY_READY`, exit code remains 2,
+and `current_upstream_reachability_proven` /
+`telegram_bot_api_receipt_proven` stay false. This is strictly
+read-only; no queue, scheduler, bot, user notification or production
+change occurs. It avoids hiding a partial source recovery, while never
+turning an old SQL row into a live publisher acceptance.
+
+The unresolved operational requirements remain: source-reachable
+persistent and approved deployment, current hourly queue/Worker
+execution against shared SQL, and explicit isolated test Bot API
+acknowledgement plus recipient confirmation. Do not enable the shared
+offline runner, modify TLS trust or merge a red mandatory CI gate.

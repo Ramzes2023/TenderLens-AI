@@ -67,9 +67,21 @@
     if(content!==undefined)el.textContent=String(content);
     return el;
   };
-  const current=()=>records.slice(0,Math.min(visibleLimit,MAX_ITEMS))
-    .filter(x=>(title(x)+' '+String(x.opportunity?.tender_number||x.opportunity?.external_id||''))
-      .toLocaleLowerCase().includes($('vqPlannerQuery').value.trim().toLocaleLowerCase()));
+  const current=()=>{
+    const phrase=$('vqPlannerQuery').value.trim().toLocaleLowerCase();
+    const urgency=$('vqPlannerUrgency').value;
+    return records.slice(0,Math.min(visibleLimit,MAX_ITEMS))
+      .filter(x=>{
+        const hit=(title(x)+' '+String(x.opportunity?.tender_number||x.opportunity?.external_id||''))
+          .toLocaleLowerCase().includes(phrase);
+        if(!hit)return false;
+        if(urgency==='week')return maybeSoon(x.date);
+        if(urgency==='late')return x.date&&decorateDate(x.date)==='overdue';
+        if(urgency==='date-only')return x.date?.kind==='date';
+        if(urgency==='unknown')return !x.date;
+        return true;
+      }).sort((a,b)=>(a.date?.day.getTime()??Infinity)-(b.date?.day.getTime()??Infinity));
+  };
   const keyFor=record=>String(record.id);
   const workflowURL=id=>'/api/v1/organizations/'+encodeURIComponent(state.organizationId)+
     '/shortlist/'+encodeURIComponent(id)+'/workflow';
@@ -330,7 +342,13 @@
     }finally{if(ticket===epoch&&orgScope===scope())render();}
   }
   const maybeSoon=date=>{
-    if(!date||!date.instant)return false;
+    if(!date)return false;
+    if(date.kind==='date'){
+      const today=new Date();
+      const midnightUTC=d=>Date.UTC(d.getFullYear(),d.getMonth(),d.getDate());
+      const difference=(midnightUTC(date.day)-midnightUTC(today))/86400000;
+      return difference>=0&&difference<=7;
+    }
     const delta=date.instant.getTime()-Date.now();
     return delta>=0&&delta<=7*86400000;
   };
@@ -407,6 +425,7 @@
   });
   $('vqPlannerRefresh').addEventListener('click',load);
   $('vqPlannerQuery').addEventListener('input',render);
+  $('vqPlannerUrgency').addEventListener('change',render);
   $('vqPlannerBoardTab').addEventListener('click',()=>{view='board';render();});
   $('vqPlannerMonthTab').addEventListener('click',()=>{view='month';render();});
   $('vqMonthPrev').addEventListener('click',()=>{month=new Date(month.getFullYear(),month.getMonth()-1,1);renderCalendar();});

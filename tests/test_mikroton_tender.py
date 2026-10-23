@@ -53,6 +53,10 @@ def test_normalizes_official_api_item_no_fabricated_fields():
     ("portal_url", "https://tender.mt52.ru/tenders/1#foo"),
     ("start_price", float("inf")),
     ("start_price", -1),
+    pytest.param("start_price", 10**500, id="unbounded-native-json-amount"),
+    pytest.param("start_price", -(10**500), id="negative-unbounded-native-json-amount"),
+    ("start_price", 1e99),
+    ("start_price", True),
     ("created_at", "2026-06-01T12:00:00"),
     ("customer", "not-a-dict"),
 ])
@@ -119,3 +123,21 @@ def test_public_html_title_is_not_accepted_as_procurement_name():
     record["title"] = "<b>Закупка</b>"
     with pytest.raises(ValueError):
         parse_listing(envelope([record]))
+
+
+def test_native_price_integer_boundary_and_genuine_other_fields():
+    good = item()
+    good["start_price"] = 10**18
+    accepted = parse_listing(envelope([good]))[0]
+    assert accepted.initial_price == 10**18
+    assert accepted.currency == "RUB"
+    assert accepted.external_id == "1"
+    assert accepted.customer == 'ООО "МИКРОТОН"'
+    assert accepted.deadline == "2026-10-19T14:00:00+03:00"
+
+
+def test_giant_native_price_is_invalid_price_not_unhandled_overflow():
+    candidate = item()
+    candidate["start_price"] = 10**500
+    with pytest.raises(ValueError, match="Invalid price"):
+        parse_listing(envelope([candidate]))

@@ -115,9 +115,19 @@ def parse_listing(payload: bytes) -> list[TenderNotice]:
         customer = (_str(customer_obj.get("name"), max_length=2000)
                     if customer_obj else None)
         amount = row.get("start_price")
-        if amount is not None and (type(amount) not in (int, float)
-                or not math.isfinite(amount) or amount < 0 or amount > 1e18):
-            raise ValueError("Invalid price")
+        if amount is not None:
+            # JSON integer precision is unbounded. Validate an integer's
+            # original exact value *before* any float coercion: isfinite()
+            # tries to cast giant ints and can raise OverflowError, dropping
+            # otherwise genuine procurement rows from this API page.
+            if type(amount) is int:
+                if not 0 <= amount <= 1e18:
+                    raise ValueError("Invalid price")
+            elif type(amount) is float:
+                if not math.isfinite(amount) or not 0 <= amount <= 1e18:
+                    raise ValueError("Invalid price")
+            else:
+                raise ValueError("Invalid price")
         currency = (_str(row.get("currency"), max_length=3)
                     if amount is not None else None)
         if currency is not None and not re.fullmatch(r"[A-Z]{3}", currency):

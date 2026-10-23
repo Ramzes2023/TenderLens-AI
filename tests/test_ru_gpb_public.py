@@ -10,7 +10,7 @@ from app.monitoring.config import MonitoringSettings
 from app.sources.catalog import build_source_catalog
 from app.sources.gpb_etp_public import (
     GpbEtpPublicSource, HOST, LIST_URL, parse_gpb_public_links,
-    parse_gpb_verified_detail,
+    parse_gpb_verified_detail, parse_gpb_official_rss,
 )
 
 URL = "https://etpgpb.ru/procedures/etp/1299761-postavka-oborudovaniya/"
@@ -219,3 +219,95 @@ def test_original_id_must_be_visible_exact_body_number_not_header_or_substring(p
 def test_public_index_rejects_url_control_characters_before_urljoin(malicious):
     with pytest.raises(ValueError, match="No public GPB procedure URLs"):
         parse_gpb_public_links(listing(malicious))
+
+
+def rss(first=URL, second="https://etpgpb.ru/procedures/etp/1299762/"):
+    return (
+        "<rss version='2.0'><channel>"
+        f"<item><title>{TITLE}</title><link>{first}</link></item>"
+        f"<item><title>Оказание услуг перевозки грузов</title><link>{second}</link></item>"
+        "</channel></rss>"
+    ).encode("utf-8")
+
+
+def test_publisher_documented_rss_originals_have_native_immutable_id():
+    assert parse_gpb_official_rss(rss(), limit=2) == [
+        ("1299761", URL),
+        ("1299762", "https://etpgpb.ru/procedures/etp/1299762/"),
+    ]
+
+
+@pytest.mark.parametrize("bad", [
+    b"<html>Login required</html>",
+    b"<rss><channel/><channel/></rss>",
+    b"<!DOCTYPE rss [<!ENTITY x 'foo'>]><rss><channel/></rss>",
+    b"<rss><channel><item><title>Bad feed",
+    b"<rss><channel/></rss>",
+    rss(first="https://etpgpb.ru.evil.invalid/procedures/etp/1299761/"),
+    rss(first="https://etpgpb.ru/procedures/etp/1299761/?private=1"),
+    rss(first="http://etpgpb.ru/procedures/etp/1299761/"),
+    rss(first="https://etpgpb.ru/procedures/etp/1299762/"),
+])
+def test_official_rss_malicious_or_not_publishable_fails_closed(bad):
+    with pytest.raises(ValueError):
+        parse_gpb_official_rss(bad)
+
+
+def test_gpb_rss_fallback_real_adapter_request_path_and_detail_proof(monkeypatch):
+    import httpx
+    requests = []
+
+    class Reply:
+        def __init__(self, data, mime):
+            self.content = data
+            self.headers = {"content-type": mime}
+
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        async def get(self, url, **kwargs):
+            requests.append((url, kwargs))
+            if url == LIST_URL:
+                # Network failure on legacy HTML route, not any proof of RSS.
+                raise httpx.ConnectTimeout("first-party HTML temporarily down")
+            if url == "https://etpgpb.ru/procedures.rss":
+                assert kwargs["headers"]["Accept"] == "application/rss+xml, application/xml"
+                return Reply(rss(), "application/rss+xml")
+            if url == URL:
+                return Reply(detail(), "text/html")
+            raise AssertionError("Off-host or unbounded request")
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        assert kwargs["trust_env"] is False
+        assert kwargs["follow_redirects"] is False
+        yield Client()
+
+    import app.sources.gpb_etp_public as module
+    monkeypatch.setattr(module, "source_client", client)
+    result = asyncio.run(GpbEtpPublicSource(timeout=20).fetch(1))
+    assert [r.identity for r in result] == [("gpb_etp_public", "1299761")]
+    assert [url for url, _ in requests] == [
+        LIST_URL, "https://etpgpb.ru/procedures.rss", URL
+    ]
+
+
+def test_gpb_both_official_routes_down_never_returns_fabricated_tenders(monkeypatch):
+    import httpx
+    seen = []
+
+    class Client:
+        async def get(self, url, **kwargs):
+            seen.append(url)
+            raise httpx.ConnectTimeout("network not available")
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        yield Client()
+
+    import app.sources.gpb_etp_public as module
+    monkeypatch.setattr(module, "source_client", client)
+    with pytest.raises(httpx.ConnectTimeout):
+        asyncio.run(GpbEtpPublicSource().fetch(1))
+    assert seen == [LIST_URL, "https://etpgpb.ru/procedures.rss"]

@@ -21,7 +21,7 @@ from .models import TenderNotice
 from .opportunities import validate_notice
 
 SOURCE_ID = "ru_chechnya_fabrikant44"
-REGION = "Республика Чечня"
+REGION = "Чеченская Республика"
 ORGANIZER = "КОМИТЕТ ПРАВИТЕЛЬСТВА ЧЕЧЕНСКОЙ РЕСПУБЛИКИ ПО ГОСУДАРСТВЕННОМУ ЗАКАЗУ"
 INN = "2016014690"
 HOST = "44.fabrikant.ru"

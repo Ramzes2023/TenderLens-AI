@@ -362,9 +362,21 @@ class TenderMonitorService:
         shared, non-personalized fixed regional poll. Callers still apply
         their own result caps *after* tenant keyword/region filtering.
         """
-        if max_items is not None and (type(max_items) is not int or
-                                       not 1 <= max_items <= 100):
-            raise ValueError("Invalid bounded catalog candidate limit")
+        if max_items is not None:
+            if type(max_items) is not int or not 1 <= max_items <= 1000:
+                raise ValueError("Invalid bounded catalog candidate limit")
+            if max_items > 100:
+                # Never raise the ordinary per-user upstream network cap.
+                # Deep scans are permissible only for a separately enabled,
+                # time-bounded, read-only Worker-SQL adapter on Ingushetia.
+                from app.sources.snapshots import FreshIngushetiaWorkerSource
+                allowed = {"ru_ingushetia_eis44", "ru_ingushetia_fabrikant44"}
+                if (not source_keys or not set(source_keys).issubset(allowed)
+                        or any(not isinstance(
+                            catalog.registry.get(key).source,
+                            FreshIngushetiaWorkerSource,
+                        ) for key in source_keys)):
+                    raise ValueError("Deep regional scan requires fresh Worker SQL sources")
 
         search_terms = (
             tuple(profile.monitoring_keywords)

@@ -20,8 +20,9 @@ def listing(title="Поставка стали", link="/223-fz/procedures/200005
 
 
 def detail(title="Поставка стали", identity="20000521"):
-    return (f"<html><title>Извещение о процедуре {identity}</title>"
-            f"<h1><span>{title}</span></h1></html>").encode()
+    return (f"<html><head><title>Извещение о процедуре {identity}</title></head>"
+            f"<body><p>Номер процедуры {identity}</p>"
+            f"<h1><span>{title}</span></h1></body></html>").encode()
 
 
 def settings(**changes):
@@ -155,3 +156,34 @@ def test_all_stale_tektorg_details_fail_closed(monkeypatch):
     monkeypatch.setattr(module, "source_client", client)
     with pytest.raises(ValueError, match="No independently verified"):
         asyncio.run(TekTorgPublicSource(timeout=15).fetch(1))
+
+
+@pytest.mark.parametrize("payload", [
+    b"<html><head><title>20000521</title></head><body><h1>Real title</h1></body></html>",
+    b"<html><body><script>window.proc='20000521'</script><h1>Real title</h1></body></html>",
+    b"<html><body><style>.id:after{content:'20000521'}</style><h1>Real title</h1></body></html>",
+    b"<html><body><template>20000521</template><h1>Real title</h1></body></html>",
+    b"<html><body><p>200005219</p><h1>Real title</h1></body></html>",
+    b"<html><body><p>120000521</p><h1>Real title</h1></body></html>",
+])
+def test_hidden_or_embedded_native_detail_id_is_not_firstparty_identity(payload):
+    with pytest.raises(ValueError, match="title/identity mismatch"):
+        validate_public_detail(payload, identity="20000521", title="Real title")
+
+
+def test_valid_native_id_in_real_visible_detail_with_unrelated_head_number():
+    payload = (
+        b"<html><head><title>Different page metadata</title></head>"
+        b"<body><p>Official procurement number 20000521</p>"
+        b"<h1>Real title</h1></body></html>"
+    )
+    validate_public_detail(payload, identity="20000521", title="Real title")
+
+
+def test_hidden_markup_inside_heading_never_evidences_native_id():
+    payload = (
+        b"<html><head><title>20000521</title></head><body>"
+        b"<h1>Real title<script>20000521</script></h1></body></html>"
+    )
+    with pytest.raises(ValueError, match="title/identity mismatch"):
+        validate_public_detail(payload, identity="20000521", title="Real title")

@@ -106,7 +106,7 @@ async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, repository
             assert chat_id == fake_chat and kwargs.get("disable_web_page_preview") is True
             self.messages.append(text)
             stop.set()
-            return SimpleNamespace(message_id=len(self.messages))
+            return SimpleNamespace(message_id=len(self.messages), chat=SimpleNamespace(id=chat_id))
 
     sink = IsolatedAckSink()
     await asyncio.wait_for(

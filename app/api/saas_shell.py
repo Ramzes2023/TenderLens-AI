@@ -4,6 +4,7 @@ from .command_center_ui import COMMAND_CENTER_HTML
 from .discovery_ui import DISCOVERY_HTML
 from .history_ui import HISTORY_HTML
 from .saved_ui import SAVED_HTML
+from .planner_ui import PLANNER_HTML
 from .workspace_home_panels import WORKSPACE_HOME_HTML, WORKSPACE_UTILITIES_HTML
 from .source_health_ui import SOURCE_HEALTH_HTML
 from .support_ui import SUPPORT_HTML
@@ -15,6 +16,7 @@ PAGES = [
     "Search History",
     "Recommended",
     "Saved",
+    "Tender Planner",
     "Geography",
     "Monitoring",
     "Source Health",
@@ -37,6 +39,7 @@ def shell_html(html: str) -> str:
             "Search History",
             "Recommended",
             "Saved",
+            "Tender Planner",
         ],
         "Intelligence": [
             "Geography",
@@ -207,6 +210,7 @@ def shell_html(html: str) -> str:
 <nav class="vq-workspace-shortcuts" aria-label="Quick workspace destinations">
   <span class="vq-shortcut-caption">QUICK ACCESS</span>
   <a href="#discover"><span aria-hidden="true">⌕</span><span data-ui-en="Find tenders" data-ui-ru="Найти закупки">Find tenders</span></a>
+  <a href="#tender-planner"><span aria-hidden="true">▣</span><span data-ui-en="Planner" data-ui-ru="Планировщик">Planner</span></a>
   <a href="#saved"><span aria-hidden="true">◇</span><span data-ui-en="Saved" data-ui-ru="Сохранённые">Saved</span></a>
   <a href="#monitoring"><span aria-hidden="true">◉</span><span data-ui-en="Monitoring" data-ui-ru="Мониторинг">Monitoring</span></a>
   <a href="#source-health"><span aria-hidden="true">▥</span><span data-ui-en="Sources" data-ui-ru="Источники">Sources</span></a>
@@ -539,6 +543,7 @@ def shell_html(html: str) -> str:
         HISTORY_HTML
         + "\n"
         + SAVED_HTML
+        + PLANNER_HTML
         + "\n"
         + SOURCE_HEALTH_HTML.replace('<h2>', '<h2 data-ui-en="Source Health" data-ui-ru="Состояние источников">', 1)
         + "\n"
@@ -553,7 +558,7 @@ def shell_html(html: str) -> str:
         '<link rel="stylesheet" href="/assets/saas.css">'
         '<link rel="stylesheet" href="/assets/premium.css?v=phase24-visual-20261012&main_i18n=2">''<link rel="stylesheet" href="/assets/support.css?v=thread-dark-20261017">'
         '<link rel="stylesheet" href="/assets/rag.css?v=pilot1">'
-        '<link rel="stylesheet" href="/assets/workspace_luxe.css?v=20261023c">''<link rel="stylesheet" href="/assets/workspace_home.css?v=20261023a">'
+        '<link rel="stylesheet" href="/assets/workspace_luxe.css?v=20261023c">''<link rel="stylesheet" href="/assets/workspace_home.css?v=20261023a"><link rel="stylesheet" href="/assets/planner.css?v=20261023a">'
         '<link rel="stylesheet" href="/assets/responsive.css?v=phase24q">'
         "</head>",
     )
@@ -695,7 +700,7 @@ def shell_html(html: str) -> str:
         '<script src="/assets/workspace_ux.js?v=20261013"></script>'
         '<script src="/assets/geography_fallback.js?v=1"></script>'
         '<script src="/assets/geography.js?v=3"></script>'
-        '<script src="/assets/workspace_luxe.js?v=20261023b"></script>''<script src="/assets/workspace_home.js?v=20261023a"></script>'
+        '<script src="/assets/workspace_luxe.js?v=20261023b"></script>''<script src="/assets/workspace_home.js?v=20261023a"></script><script src="/assets/planner.js?v=20261023a"></script>'
         "</body>",
     )
 

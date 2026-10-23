@@ -213,6 +213,32 @@ class ProbeSafetyTests(unittest.TestCase):
             with redirect_stdout(StringIO()):
                 self.assertEqual(main("priority_five_network"), 2)
 
+    def test_non200_firstparty_status_distinguished_from_network_failures(self):
+        from scripts.ru_trusted_live_probe import Non200OfficialResponse
+        from contextlib import redirect_stdout
+        from io import StringIO
+        self.assertEqual(Non200OfficialResponse(301).status, 301)
+        self.assertEqual(Non200OfficialResponse(403).status, 403)
+        for bad in (True, -1, 99, 600, "403"):
+            with self.assertRaises(ValueError):
+                Non200OfficialResponse(bad)
+
+        def denied(target):
+            if target == TARGETS["roseltorg"]:
+                raise Non200OfficialResponse(403)
+            if target.mode == "rss":
+                return "application/rss+xml", b"<rss><channel/></rss>"
+            return "text/html", b"<html>listing page</html>"
+
+        with patch("scripts.ru_trusted_live_probe.read_public", side_effect=denied):
+            output = StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(main("priority_five_network"), 2)
+        self.assertIn('"source": "roseltorg", "status": "HTTP_REACHABLE_NON200"', output.getvalue())
+        self.assertIn('"http_status": 403', output.getvalue())
+        self.assertNotIn('"url":', output.getvalue())
+        self.assertIn("RU_FIVE_WORKER_SQL_ACCEPTED=NO", output.getvalue())
+
     def test_main_only_trusted_runner_exposes_fixed_five_source_choice(self):
         from pathlib import Path
         raw = (Path(__file__).resolve().parents[1] /

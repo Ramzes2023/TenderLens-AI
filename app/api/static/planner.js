@@ -17,6 +17,7 @@
   ];
   const PAGE_SIZE=30,MAX_ITEMS=300;
   let records=[], visibleLimit=PAGE_SIZE, epoch=0, activeScope='', view='board';
+  let draggingSavedId=null;
   let month=new Date(new Date().getFullYear(),new Date().getMonth(),1);
   let loaded=false, loadError=false, busy=false;
   const ru=()=>window.MainLocale?.locale==='ru'||document.documentElement.lang==='ru';
@@ -73,7 +74,7 @@
   const workflowURL=id=>'/api/v1/organizations/'+encodeURIComponent(state.organizationId)+
     '/shortlist/'+encodeURIComponent(id)+'/workflow';
   function reset(message){
-    epoch++;records=[];visibleLimit=PAGE_SIZE;loaded=false;loadError=false;busy=false;
+    epoch++;records=[];visibleLimit=PAGE_SIZE;loaded=false;loadError=false;busy=false;draggingSavedId=null;
     $('vqPlannerBoard').replaceChildren();
     $('vqMonthGrid').replaceChildren();
     for(const id of ['vqPlannerTotal','vqPlannerSoon','vqPlannerLate','vqPlannerDateOnly'])
@@ -208,11 +209,12 @@
       article.draggable=true;
       article.addEventListener('dragstart',event=>{
         if(!event.dataTransfer)return;
+        draggingSavedId=record.id;
         event.dataTransfer.effectAllowed='move';
         event.dataTransfer.setData('text/plain',String(record.id));
         article.classList.add('is-dragging');
       });
-      article.addEventListener('dragend',()=>article.classList.remove('is-dragging'));
+      article.addEventListener('dragend',()=>{draggingSavedId=null;article.classList.remove('is-dragging');});
     }
     return article;
   }
@@ -239,6 +241,8 @@
         column.addEventListener('drop',event=>{
           event.preventDefault();column.classList.remove('is-drop-target');
           const id=Number(event.dataTransfer?.getData('text/plain'));
+          if(draggingSavedId!==id)return;
+          draggingSavedId=null;
           const record=items.find(x=>x.id===id);
           const select=column.ownerDocument.querySelector('.vq-planner-card[data-saved-id="'+id+'"] select');
           if(!record?.workflow||!select)return;

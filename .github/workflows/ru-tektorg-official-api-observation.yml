@@ -1,0 +1,37 @@
+name: RU TEK-Torg documented public API read-only observation
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/ru_tektorg_official_api_probe.py
+      - tests/test_ru_tektorg_official_api_probe.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  tek-official-api-safety-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test exact immutable official host and path, strict TLS, and no fabricated tender acceptance
+        run: python -m unittest discover -s tests -p test_ru_tektorg_official_api_probe.py
+
+  tek-official-api-public-network-observation-only:
+    runs-on: windows-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Observe official API directory, public sections and WSDL, without any subscriber or source acceptance
+        timeout-minutes: 6
+        run: python -B -m scripts.ru_tektorg_official_api_probe

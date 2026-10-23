@@ -493,3 +493,51 @@ def test_operator_enabled_ingushetia_uses_only_fingerprint_pinned_root(tmp_path)
     # must not activate the new source or alter existing EIS settings.
     disabled = build_source_catalog(settings(ca_bundle_file=malicious))
     assert SOURCE_ID not in disabled.enabled_keys
+
+
+
+def test_ingushetia_eis_uses_verified_bundled_root_without_system_trust():
+    """Default-off adapter alone gets the scoped official certificate."""
+    from app.sources import ru_ingushetia_eis44 as mod
+    from app.sources.eis_pinned_ca import verify_root
+    from app.sources.eis_rss import eis_tls_verify
+
+    source = IngushetiaEis44Source()
+    assert source.ca_bundle_file == mod.BUNDLED_EIS_ROOT
+    assert source.system_trust is False
+    assert verify_root(source.ca_bundle_file.read_bytes()).startswith(
+        "-----BEGIN CERTIFICATE-----"
+    )
+    assert eis_tls_verify(
+        direct=True, system_trust=False,
+        ca_bundle_file=source.ca_bundle_file,
+    ) == str(mod.BUNDLED_EIS_ROOT)
+
+    cat = build_source_catalog(settings(ru_ingushetia_eis44_enabled=True))
+    assert cat.registry.get(SOURCE_ID).source.ca_bundle_file == mod.BUNDLED_EIS_ROOT
+    # Explicitly scoped only: the existing global EIS adapter does not
+    # inherit the Ingushetia root or change its system trust setting.
+    assert cat.registry.get("eis").source.ca_bundle_file is None
+
+
+def test_ingushetia_eis_invalid_or_absent_bundled_root_fails_closed(monkeypatch, tmp_path):
+    from app.sources import ru_ingushetia_eis44 as mod
+
+    fake = tmp_path / "wrong.pem"
+    fake.write_text("untrusted certificate", encoding="ascii")
+    monkeypatch.setattr(mod, "BUNDLED_EIS_ROOT", fake)
+    with pytest.raises(SourceError, match="Verified scoped EIS root is unavailable"):
+        IngushetiaEis44Source()
+    fake.unlink()
+    with pytest.raises(SourceError, match="Verified scoped EIS root is unavailable"):
+        IngushetiaEis44Source()
+
+
+def test_operator_explicit_eis_ca_or_system_trust_not_silently_overridden(tmp_path):
+    # Preserve explicit operator settings. System-trust mode must remain
+    # mutually exclusive with a CA file in eis_tls_verify().
+    source = IngushetiaEis44Source(system_trust=True)
+    assert source.ca_bundle_file is None and source.system_trust is True
+    operator_ca = tmp_path / "operator.pem"
+    source = IngushetiaEis44Source(ca_bundle_file=operator_ca)
+    assert source.ca_bundle_file == operator_ca and source.system_trust is False

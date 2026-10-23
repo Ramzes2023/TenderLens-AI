@@ -21,6 +21,8 @@ on:
           - rzd_eshop
           - tektorg
           - batch_priority
+          - priority_five_network
+          - eis_official_home
           - fabrikant_44_mirror
           - fabrikant_223_mirror
           - tatarstan_trading

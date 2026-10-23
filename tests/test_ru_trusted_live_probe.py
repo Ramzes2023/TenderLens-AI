@@ -157,8 +157,10 @@ class ProbeSafetyTests(unittest.TestCase):
         self.assertIn("    runs-on: ubuntu-latest", raw)
         self.assertNotIn("self-hosted", raw)
         self.assertIn("persist-credentials: false", raw)
-        for key in ON_DEMAND_TARGETS:
+        for key in (item for item in ON_DEMAND_TARGETS if item.startswith("gpb_")):
             self.assertIn(key, raw)
+        # Separate main-only EIS observation never leaks into hosted GPB tests.
+        self.assertNotIn("eis_official_home", raw)
         for marker in (
             "RU_GPB_DETAIL_VERIFIED=NO",
             "RU_GPB_WORKER_SQL_ACCEPTED=NO",

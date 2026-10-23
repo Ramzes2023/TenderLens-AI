@@ -172,8 +172,24 @@ class AzerbaijanHeatSource:
             raise SourceError("AZ official limit must be integer.")
         count = min(MAX_DETAILS, max(1, limit))
         notices = []
+        # The hardened Worker transport intentionally rejects non-2xx before
+        # returning the response to this source. Observe only the exact status
+        # of a requested, index-proven same-host detail via an HTTPX response
+        # hook, which runs before BoundedClient checks the HTTP status. This
+        # avoids changing security policy or request budgets of ANY source.
+        active_detail = [None]
+        detail_status = [None]
+
+        async def remember_detail_status(response):
+            if (active_detail[0] is not None
+                    and str(response.request.url) == active_detail[0]):
+                detail_status[0] = response.status_code
+
         try:
-            async with source_client(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
+            async with source_client(
+                timeout=self.timeout, trust_env=False, follow_redirects=False,
+                event_hooks={"response": [remember_detail_status]},
+            ) as client:
                 index = await client.get(INDEX_URL, headers={
                     "Accept": "text/html", "User-Agent": "VALYQON-public-tender-audit/1.0"})
                 index.raise_for_status()
@@ -181,11 +197,29 @@ class AzerbaijanHeatSource:
                     raise SourceError("AZ official list not HTML.")
                 cards = discover_official_posts(index.text)
                 for url, title in cards[:count]:
-                    detail = await client.get(url, headers={
-                        "Accept": "text/html", "User-Agent": "VALYQON-public-tender-audit/1.0"})
-                    detail.raise_for_status()
+                    active_detail[0], detail_status[0] = url, None
+                    try:
+                        detail = await client.get(url, headers={
+                            "Accept": "text/html", "User-Agent": "VALYQON-public-tender-audit/1.0"})
+                        detail.raise_for_status()
+                    except httpx.HTTPStatusError as error:
+                        if error.response.status_code in (403, 404, 410):
+                            # Individual inaccessible/deleted original is not
+                            # procurement evidence; another genuine card may
+                            # survive. Index, 401, 429, 5xx and redirect
+                            # failures still reject the entire source.
+                            continue
+                        raise
+                    except ConnectorTransportError as error:
+                        if (error.reason == "http_status"
+                                and detail_status[0] in (403, 404, 410)):
+                            continue
+                        raise
+                    finally:
+                        active_detail[0] = None
                     if "html" not in detail.headers.get("content-type", "").lower():
-                        raise SourceError("AZ official detail not HTML.")
+                        # An individual non-HTML page is never a tender.
+                        continue
                     try:
                         notices.append(parse_public_detail(detail.text, url=url, listed_title=title))
                     except SourceError:

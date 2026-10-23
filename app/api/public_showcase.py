@@ -30,7 +30,7 @@ HERO_SCENE_HTML = """<aside class="vq-stage" aria-label="Interactive product pre
       <div class="vq-stage-footer"><span><span aria-hidden="true">✓</span> Real connector data in search</span><span>Source details remain protected</span></div>
     </div>
   </div>
-  <div class="vq-stage-footnote">Illustrative interface. Search results are loaded separately from the real database below.</div>
+  <div class="vq-stage-footnote">No search has been run here. Illustrative interface only; search results are loaded separately from the real database below.</div>
 </aside>"""
 
 MARKET_PULSE_HTML = """<section class="vq-pulse-section" id="market-pulse" aria-labelledby="vqPulseHeading">

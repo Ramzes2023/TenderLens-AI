@@ -187,3 +187,75 @@ def test_hidden_markup_inside_heading_never_evidences_native_id():
     )
     with pytest.raises(ValueError, match="title/identity mismatch"):
         validate_public_detail(payload, identity="20000521", title="Real title")
+
+
+def test_publisher_native_zp_procurement_id_is_independently_visible_on_original_detail():
+    # Official TEK-Torg 223-FZ cards show /223-fz/procedures/<internal ID>
+    # and a *different* human-readable procurement number such as ZP409589.
+    # This is a synthetic reproduction of the publisher-visible structure,
+    # not a fresh network success claim.
+    actual = (
+        "<html><head><title>Сайт закупок</title></head><body>"
+        "<nav>223-ФЗ Извещение о процедуре ЗП409589</nav>"
+        "<section><p>Общие сведения</p><p>№ ЗП409589</p></section>"
+        "<h1>Поставка стали</h1></body></html>"
+    ).encode("utf-8")
+    result = validate_public_detail(actual, identity="20000521", title="Поставка стали")
+    assert result == "ЗП409589"
+
+
+@pytest.mark.parametrize("invalid", [
+    # Published ID occurs only in metadata or scripted text.
+    "<head><title>Извещение о процедуре ЗП409589</title></head><body>"
+    "<p>№ ЗП409589</p><h1>Поставка стали</h1></body>",
+    "<body><script>Извещение о процедуре ЗП409589</script>"
+    "<p>№ ЗП409589</p><h1>Поставка стали</h1></body>",
+    # Native IDs disagree across two independently visible official fields.
+    "<body><nav>Извещение о процедуре ЗП409589</nav>"
+    "<p>№ ЗП409588</p><h1>Поставка стали</h1></body>",
+    # Procedure ID exists only as a substring of a longer native number.
+    "<body><nav>Извещение о процедуре ЗП409589</nav>"
+    "<p>№ ЗП4095899</p><h1>Поставка стали</h1></body>",
+    # Browser HTML heading is not actually the first-party notice title.
+    "<body><nav>Извещение о процедуре ЗП409589</nav>"
+    "<p>№ ЗП409589</p><h1>Товары другого заказчика</h1></body>",
+])
+def test_publisher_native_number_requires_two_matching_visible_fields_and_title(invalid):
+    with pytest.raises(ValueError, match="title/identity mismatch"):
+        validate_public_detail(invalid.encode("utf-8"), identity="20000521",
+                               title="Поставка стали")
+
+
+def test_native_publisher_zp_number_persists_in_actual_fetch_result(monkeypatch):
+    from types import SimpleNamespace
+    from contextlib import asynccontextmanager
+    import asyncio
+    import app.sources.tektorg_public_html as module
+
+    actual = (
+        "<body><nav>Извещение о процедуре ЗП409589</nav>"
+        "<p>№ ЗП409589</p><h1>Поставка стали</h1></body>"
+    ).encode()
+    requests = []
+
+    class Client:
+        async def get(self, url):
+            requests.append(url)
+            return SimpleNamespace(
+                content=listing() if url == LIST_URL else actual,
+                headers={"content-type": "text/html"},
+                raise_for_status=lambda: None,
+            )
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        assert kwargs["trust_env"] is False
+        assert kwargs["follow_redirects"] is False
+        yield Client()
+
+    monkeypatch.setattr(module, "source_client", client)
+    result = asyncio.run(TekTorgPublicSource().fetch(1))
+    assert result[0].external_id == "20000521"
+    assert result[0].tender_number == "ЗП409589"
+    assert result[0].title == "Поставка стали"
+    assert requests == [LIST_URL, "https://www.tektorg.ru/223-fz/procedures/20000521"]

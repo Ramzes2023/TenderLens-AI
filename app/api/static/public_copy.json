@@ -501,5 +501,18 @@
   "Source directory ↗": "Каталог источников ↗",
   "Full access": "Полный доступ",
   "Sources": "Источники",
-  "INTERACTIVE DEMO · NO LIVE TENDERS IN THE ILLUSTRATION. No search has been run here. Metrics come from stored data unless the optional local illustrative-chart mode is visibly enabled.": "ИНТЕРАКТИВНЫЙ ПРИМЕР · На иллюстрации нет настоящих тендеров. Поиск здесь ещё не запускался. Показатели загружаются из базы, кроме явно включённого учебного режима графиков в локальной тестовой версии."
+  "INTERACTIVE DEMO · NO LIVE TENDERS IN THE ILLUSTRATION. No search has been run here. Metrics come from stored data unless the optional local illustrative-chart mode is visibly enabled.": "ИНТЕРАКТИВНЫЙ ПРИМЕР · На иллюстрации нет настоящих тендеров. Поиск здесь ещё не запускался. Показатели загружаются из базы, кроме явно включённого учебного режима графиков в локальной тестовой версии.",
+  "Visualized transparently.": "Прозрачная визуализация.",
+  "Explore the 14-day activity chart. Illustrative design values are clearly labelled until verified observations are available in the public dashboard.": "Посмотрите график активности за 14 дней. Учебные показатели имеют специальную маркировку до проверки настоящих данных.",
+  "Data mode labeled below": "Режим данных указан ниже",
+  "Loading visualization status…": "Подготавливаем визуализацию…",
+  "In demonstration mode, all figures are illustrative and do not describe actual tenders. Real mode uses only a bounded saved-record sample.": "В демонстрационном режиме все числа учебные и не отражают реальные закупки. Настоящий режим использует ограниченную выборку из сохранённой базы.",
+  "ILLUSTRATIVE DATA · EXAMPLE GRAPH · NOT REAL PROCUREMENT ACTIVITY": "УЧЕБНЫЕ ДАННЫЕ · ПРИМЕР ГРАФИКА · НЕ РЕАЛЬНАЯ СТАТИСТИКА ЗАКУПОК",
+  "DEMO OR VERIFIED SNAPSHOT": "ДЕМО ИЛИ ПРОВЕРЕННАЯ ВЫБОРКА",
+  "Explore the procurement intelligence interface. Demonstration figures are clearly labelled; real-data mode reads only persisted connector observations.": "Оцените интерфейс аналитики закупок. Демонстрационные цифры явно обозначены; режим настоящих данных использует только сохранённые извещения.",
+  "Public demonstration figures are illustrative, not actual market observations. Real-data mode uses a bounded aggregate sample, without customer identities or source links.": "В публичной демонстрации показаны учебные данные, а не настоящая статистика рынка. Реальный режим использует ограниченную выборку без раскрытия заказчиков и ссылок на площадки.",
+  "LOCAL DESIGN REVIEW ONLY": "ЛОКАЛЬНАЯ ДЕМОНСТРАЦИЯ ДИЗАЙНА",
+  "Illustrative charts can be enabled for layout inspection. They are not real procurement statistics, and guest search stays unchanged.": "Можно включить учебные графики для оценки дизайна. Это не настоящая статистика закупок; гостевой поиск не меняется.",
+  "Show illustrative chart layout": "Показать учебные графики",
+  "Return to real database view": "Вернуться к настоящим данным"
 }

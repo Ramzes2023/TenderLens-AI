@@ -547,8 +547,8 @@ def shell_html(html: str) -> str:
         '<link rel="stylesheet" href="/assets/saas.css">'
         '<link rel="stylesheet" href="/assets/premium.css?v=phase24-visual-20261012&main_i18n=2">''<link rel="stylesheet" href="/assets/support.css?v=thread-dark-20261017">'
         '<link rel="stylesheet" href="/assets/rag.css?v=pilot1">'
-        '<link rel="stylesheet" href="/assets/responsive.css?v=phase24q">'
         '<link rel="stylesheet" href="/assets/workspace_luxe.css?v=20261023b">'
+        '<link rel="stylesheet" href="/assets/responsive.css?v=phase24q">'
         "</head>",
     )
 

@@ -24,6 +24,9 @@ HOST = "www.roseltorg.ru"
 LIST_URL = f"https://{HOST}/procedures/search"
 MAX_BYTES = 1_800_000
 MAX_DETAILS = 3
+# A bounded surplus of same-host published candidates tolerates stale first pages.
+# Only separately corroborated original details become actual tender notices.
+MAX_CANDIDATES = 9
 DETAIL_PATH = re.compile(r"/procedure/([A-Z0-9]{8,24})/1/?")
 
 
@@ -107,7 +110,7 @@ class _Detail(HTMLParser):
 
 
 def parse_roseltorg_links(payload, *, limit=MAX_DETAILS):
-    if type(limit) is not int or not 1 <= limit <= MAX_DETAILS:
+    if type(limit) is not int or not 1 <= limit <= MAX_CANDIDATES:
         raise ValueError("Invalid Roseltorg listing bound")
     listing = _Listing()
     listing.feed(_html(payload))
@@ -170,7 +173,8 @@ class RoseltorgPublicSource:
         if type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError("Invalid Roseltorg source limit")
         cap = min(limit, MAX_DETAILS)
-        policy = (bounded_fetch(FetchPolicy(frozenset({HOST}), cap + 1,
+        candidates = min(MAX_CANDIDATES, 3 * cap)
+        policy = (bounded_fetch(FetchPolicy(frozenset({HOST}), candidates + 1,
                                             max_bytes=MAX_BYTES))
                   if _policy.get() is None else nullcontext())
         with policy:
@@ -182,7 +186,7 @@ class RoseltorgPublicSource:
                 listing.raise_for_status()
                 if "html" not in listing.headers.get("content-type", "").lower():
                     raise ValueError("Roseltorg listing is not public HTML")
-                links = parse_roseltorg_links(listing.content, limit=cap)
+                links = parse_roseltorg_links(listing.content, limit=candidates)
                 notices = []
                 for identity, url in links:
                     try:
@@ -191,6 +195,8 @@ class RoseltorgPublicSource:
                         if "html" not in res.headers.get("content-type", "").lower():
                             raise ValueError("Roseltorg detail is not public HTML")
                         notices.append(parse_roseltorg_detail(res.content, identity=identity, url=url))
+                        if len(notices) >= cap:
+                            break
                     except (ValueError, httpx.HTTPStatusError):
                         continue
                 if not notices:

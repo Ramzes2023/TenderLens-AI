@@ -266,8 +266,13 @@ jobs:
       EIS_SYSTEM_TRUST_ENABLED: "false"
       EIS_CA_BUNDLE_FILE: ${{ vars.VALYQON_RU_EIS_CA_BUNDLE_FILE }}
       MONITORING_ENABLED: "false"
-      RU_CHECHNYA_E2E_TEST_BOT_TOKEN: ""
-      RU_CHECHNYA_E2E_TEST_CHAT_ID: ""
+      # A REAL release-eligible acceptance must send exactly one verified
+      # public original to an explicitly authorized private test chat and
+      # verify the matching Telegram Bot API response. Never equate a local
+      # LocalCaptureBot receipt with external notification delivery.
+      RU_CHECHNYA_REQUIRE_TEST_BOT_ACK: "true"
+      RU_CHECHNYA_E2E_TEST_BOT_TOKEN: ${{ secrets.VALYQON_RU_CHECHNYA_E2E_TEST_BOT_TOKEN }}
+      RU_CHECHNYA_E2E_TEST_CHAT_ID: ${{ secrets.VALYQON_RU_CHECHNYA_E2E_TEST_CHAT_ID }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -292,7 +297,7 @@ jobs:
           export RU_CHECHNYA_EIS_RSS_URLS
           python -c 'import os; from app.sources.ru_chechnya_eis_rss import validate_chechnya_feed_urls; validate_chechnya_feed_urls((os.environ["RU_CHECHNYA_EIS_RSS_URLS"],))'
           echo "RU_CHECHNYA_EIS_RSS_URLS=${RU_CHECHNYA_EIS_RSS_URLS}" >> "$GITHUB_ENV"
-      - name: Official LIVE EIS -> real Worker -> SQLite -> query -> locally captured alert
+      - name: Official LIVE EIS -> Worker -> SQLite -> query -> local alert -> authorized real Bot API ACK
         timeout-minutes: 7
         run: python -B -m scripts.ci_ru_chechnya_eis_real_worker
       - name: Safe diagnosis on failed live EIS intake (never masks failure)

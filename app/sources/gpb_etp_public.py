@@ -231,7 +231,8 @@ class GpbEtpPublicSource:
                     # The publisher officially documents /procedures.rss as a
                     # separate list channel. Never follow a redirect or use an
                     # unapproved third-party mirror.
-                    feed = await client.get(f"https://{HOST}/procedures.rss")
+                    feed = await client.get(f"https://{HOST}/procedures.rss",
+                                            headers={"Accept": "application/rss+xml, application/xml"})
                     feed.raise_for_status()
                     if not any(x in feed.headers.get("content-type", "").lower()
                                for x in ("rss", "xml")):

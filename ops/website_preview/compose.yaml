@@ -28,6 +28,8 @@ services:
       EIS_PROFILE_FEEDS_ENABLED: "false"
       EIS_RSS_URLS: ""
       VALYQON_PUBLIC_AI_ENABLED: "false"
+      # Public graphs are explicitly illustrative until independently validated live observations.
+      VALYQON_PUBLIC_ANALYTICS_MODE: "demo"
       VALYQON_RESTRICT_PAID_SOURCE_DETAILS: "true"
       VALYQON_AI_FALLBACK_ENABLED: "false"
       GIGACHAT_CREDENTIALS: ""

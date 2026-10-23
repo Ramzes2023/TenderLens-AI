@@ -678,6 +678,29 @@ def test_operator_windows_safe_url_preflight_accepts_chechnya_candidate_and_reje
     assert main() == 2
 
 
+def test_chechnya_release_gate_refuses_local_capture_without_actual_test_chat_ack(monkeypatch):
+    """A release-eligible live run may never go green with LocalCaptureBot."""
+    from scripts import ci_ru_chechnya_eis_real_worker as harness
+
+    monkeypatch.delenv("RU_CHECHNYA_REQUIRE_TEST_BOT_ACK", raising=False)
+    harness.enforce_release_telegram_ack(False)  # Offline analysis only.
+
+    monkeypatch.setenv("RU_CHECHNYA_REQUIRE_TEST_BOT_ACK", "true")
+    with pytest.raises(AssertionError, match="Authorized real Telegram"):
+        harness.enforce_release_telegram_ack(False)
+    with pytest.raises(AssertionError, match="Authorized real Telegram"):
+        harness.enforce_release_telegram_ack(None)
+    harness.enforce_release_telegram_ack(True)
+
+    # Invalid policy cannot silently turn off release checks.
+    monkeypatch.setenv("RU_CHECHNYA_REQUIRE_TEST_BOT_ACK", "tru")
+    with pytest.raises(AssertionError, match="Invalid strict Telegram"):
+        harness.enforce_release_telegram_ack(True)
+
+    monkeypatch.setenv("RU_CHECHNYA_REQUIRE_TEST_BOT_ACK", "0")
+    harness.enforce_release_telegram_ack(False)
+
+
 def test_optional_authorized_telegram_api_check_never_sends_without_opt_in(monkeypatch):
     """Offline: missing test-chat credentials must not call Bot API."""
     from scripts import ci_ru_chechnya_eis_real_worker as harness

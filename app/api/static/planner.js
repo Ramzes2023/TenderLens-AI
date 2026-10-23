@@ -216,8 +216,13 @@
     const footer=make('div','vq-planner-card-foot');
     footer.append(stageSelect(record));
     const link=make('a','vq-planner-to-saved',t('Saved →','Сохранённое →'));
-    link.href='#saved';link.title=t('Open Saved and select this tender for full details',
-      'Откройте «Сохранённое» для полной карточки этой закупки');
+    link.href='#saved';link.title=t('Open the full saved tender detail',
+      'Открыть полную карточку сохранённой закупки');
+    link.addEventListener('click',()=>{
+      window.dispatchEvent(new CustomEvent('valyqon-open-saved',{
+        detail:{id:record.id,organizationId:state.organizationId,companyId:state.activeCompanyId}
+      }));
+    });
     footer.append(link);article.append(footer);
     if(canEdit()&&record.workflow){
       article.draggable=true;

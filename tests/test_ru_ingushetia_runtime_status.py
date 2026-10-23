@@ -63,6 +63,8 @@ def test_no_optin_or_missing_monitor_flags_are_not_ready():
         result = snapshot_health(settings(**opts), Fake())
         assert result["status"] == "NOT_OPERATIONALLY_READY"
         assert result["source_states"] == {EIS: "RECENT_SQL_OBSERVED"}
+        assert result["fresh_sql_source_count"] == 1
+        assert result["partially_fresh_sql_observed"] is False
         assert result["telegram_bot_api_receipt_proven"] is False
         assert result["current_upstream_reachability_proven"] is False
 
@@ -78,10 +80,16 @@ def test_real_disposable_sqlite_records_are_fresh_but_not_live_telegram(tmp_path
         assert result["source_states"][EIS] == "RECENT_SQL_OBSERVED"
         assert result["source_states"][FAB] == "SQL_ABSENT"
         assert result["status"] == "NOT_OPERATIONALLY_READY"
+        assert result["fresh_sql_source_count"] == 1
+        assert result["not_fresh_sql_source_count"] == 1
+        assert result["partially_fresh_sql_observed"] is True
 
         repo.upsert(notice(FAB), connector_version(FAB))
         healthy = snapshot_health(settings(eis=True, fab=True), repo)
         assert healthy["status"] == "SQL_SNAPSHOT_OBSERVED_ONLY"
+        assert healthy["fresh_sql_source_count"] == 2
+        assert healthy["not_fresh_sql_source_count"] == 0
+        assert healthy["partially_fresh_sql_observed"] is False
         assert healthy["source_states"] == {
             EIS: "RECENT_SQL_OBSERVED", FAB: "RECENT_SQL_OBSERVED",
         }
@@ -170,3 +178,25 @@ def test_current_sql_signal_requires_at_least_one_recent_row():
     report = snapshot_health(settings(), Empty(), now=now)
     assert report["status"] == "NOT_OPERATIONALLY_READY"
     assert report["source_states"][EIS] == "SQL_EMPTY"
+
+
+def test_partial_snapshot_does_not_claim_upstream_or_telegram_readiness():
+    now = datetime(2026, 10, 23, 8, tzinfo=timezone.utc)
+
+    class OnlyOneReachableSQL:
+        def latest_seen_utc(self, source):
+            return now if source == EIS else None
+
+        def read(self, source, limit, search_terms, *, not_before):
+            assert source == EIS
+            return [notice(EIS)]
+
+    result = snapshot_health(settings(eis=True, fab=True), OnlyOneReachableSQL(), now=now)
+    assert result["status"] == "NOT_OPERATIONALLY_READY"
+    assert result["source_states"] == {EIS: "RECENT_SQL_OBSERVED", FAB: "SQL_ABSENT"}
+    assert result["fresh_sql_source_count"] == 1
+    assert result["not_fresh_sql_source_count"] == 1
+    assert result["partially_fresh_sql_observed"] is True
+    assert result["current_upstream_reachability_proven"] is False
+    assert result["telegram_bot_api_receipt_proven"] is False
+    assert result["production_changed"] is False

@@ -282,6 +282,58 @@ async def tenders_handler(
         )
 
 
+
+async def _baseline_ingushetia_worker_sql(service, source_catalog, owner_id):
+    """Mark the complete bounded *fresh* regional SQL baseline, never send it.
+
+    Ordinary catalogue scans are capped at settings.max_items (often 20), so
+    marking only their first page as a subscription baseline incorrectly
+    re-alerts users about previously indexed regional procurement. This path
+    uses the approved in-memory profile filter over bounded source-owned SQL.
+    """
+    from app.sources.snapshots import FreshIngushetiaWorkerSource
+
+    if source_catalog is None:
+        raise ValueError("No configured Worker SQL catalogue")
+    enabled = enabled_ru_catalog_keys(source_catalog)
+    regional = tuple(k for k in enabled if k in _SHARED_INGUSHETIA_KEYS)
+    if not regional:
+        raise ValueError("No enabled regional Worker SQL source")
+
+    profile = await service.profile_for_owner(owner_id)
+    matches = []
+    for key in regional:
+        source = source_catalog.registry.get(key).source
+        if not isinstance(source, FreshIngushetiaWorkerSource):
+            raise ValueError("Regional subscription baseline requires Worker SQL")
+        # This limit is specific to *fresh regional SQL*, never an upstream
+        # network fetch or a widened limit on another tenant/source.
+        candidates = await source.fetch(limit=1000)
+        if len(candidates) >= 1000:
+            # Cannot prove a full baseline beyond the supported bound:
+            # fail rather than quietly classifying old entries as new.
+            raise ValueError("Regional baseline exceeds approved bounded SQL scan")
+        for notice in candidates:
+            match = prefilter_notice(notice, profile)
+            if match is not None:
+                matches.append(match)
+
+    others = tuple(k for k in enabled if k not in _SHARED_INGUSHETIA_KEYS)
+    if others:
+        other_matches, report = await service.fetch_matches_from_catalog(
+            source_catalog, owner_id, source_keys=others,
+        )
+        # Refuse an incomplete first baseline instead of quietly promising
+        # that unrelated previously-existing records will not be sent.
+        if report.failures or not report.successful_sources:
+            raise ValueError("Nonregional baseline sources unavailable")
+        matches.extend(other_matches)
+    # Production service keys EIS/Fabrikant by the canonical publisher
+    # identity, so a shared original gets exactly one per-owner claim.
+    return len(await service.claim_new(owner_id, matches))
+
+
+
 async def monitor_on_handler(message: Message, monitoring_service: TenderMonitorService | None = None,
                              source_catalog: SourceCatalog | None = None) -> None:
     service = await _service_or_message(message, monitoring_service)
@@ -299,9 +351,14 @@ async def monitor_on_handler(message: Message, monitoring_service: TenderMonitor
             keys = enabled_ru_catalog_keys(source_catalog)
             if not keys:
                 raise ValueError("No explicitly enabled Russian source.")
-            baseline_count, _ = await service.baseline_from_catalog(
-                source_catalog, message.from_user.id, source_keys=keys,
-            )
+            if getattr(service.settings, "ru_ingushetia_worker_sql_alerts_enabled", False):
+                baseline_count = await _baseline_ingushetia_worker_sql(
+                    service, source_catalog, message.from_user.id,
+                )
+            else:
+                baseline_count, _ = await service.baseline_from_catalog(
+                    source_catalog, message.from_user.id, source_keys=keys,
+                )
         else:
             baseline_count = await service.baseline(message.from_user.id)
         await service.subscribe(message.from_user.id, message.chat.id)

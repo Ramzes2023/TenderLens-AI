@@ -89,10 +89,9 @@ def search_persisted_notices(database, query: str, *, limit: int = MAX_PREVIEWS)
             continue
         if not isinstance(notice, dict) or not isinstance(notice.get("source"), str):
             continue
-        # Search real title/short description; never return the description,
-        # which can contain links, buyer identities or contact details.
-        haystack = (str(notice.get("title") or "") + " "
-                    + str(notice.get("summary") or "")).casefold()
+        # Only the visible title is searchable in guest mode. Searching hidden
+        # buyer/URL/source/summary fields creates an information-disclosure oracle.
+        haystack = str(notice.get("title") or "").casefold()
         if any(keyword not in haystack for keyword in keywords):
             continue
         public = _public_preview(notice)

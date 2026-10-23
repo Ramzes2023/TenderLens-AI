@@ -48,9 +48,8 @@ def successful_trusted_live_job(head_sha: str, runs: list[dict],
                     and job.get("conclusion") == "success"
                     and type(job.get("runner_id")) is int
                     and job["runner_id"] > 0
-                    and isinstance(job.get("runner_name"), str)
-                    and bool(job["runner_name"].strip())
-                    and {"self-hosted", "linux"}.issubset(labels)):
+                    and job.get("runner_name") == "VALYQON-RU-01"
+                    and {"self-hosted", "linux", "x64"}.issubset(labels)):
                 return True
     return False
 

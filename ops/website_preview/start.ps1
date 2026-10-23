@@ -1,0 +1,43 @@
+# Open the reviewed PR's REAL FastAPI landing page in your local browser.
+# The review stack uses its own named volume, port and Docker Compose project.
+[CmdletBinding()]
+param([switch]$NoBrowser)
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+$root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$compose = Join-Path $PSScriptRoot "compose.yaml"
+$envFile = Join-Path $PSScriptRoot "review.env"
+$website = "http://127.0.0.1:18865/"
+if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { throw "Docker CLI is missing. Install/start Docker Desktop." }
+Push-Location $root
+try {
+    $dockerInfo = & docker info --format '{{.ServerVersion}}' 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "Docker Desktop engine is not running." }
+    Write-Host "VALYQON_REVIEW_DOCKER=READY" -ForegroundColor Cyan
+    & docker compose --env-file $envFile -p valyqon-website-review -f $compose config --quiet
+    if ($LASTEXITCODE -ne 0) { throw "Preview Compose config failed." }
+    & docker compose --env-file $envFile -p valyqon-website-review -f $compose up -d --build --no-deps api
+    if ($LASTEXITCODE -ne 0) { throw "Preview Docker build/start failed." }
+    $ready = $false
+    for ($attempt = 0; $attempt -lt 60; $attempt++) {
+        try {
+            $res = Invoke-WebRequest -Uri $website -UseBasicParsing -TimeoutSec 3
+            if ($res.StatusCode -eq 200 -and $res.Content -match 'guestSearchForm' -and $res.Content -match 'vqPulseChart') {
+                $ready = $true
+                break
+            }
+        } catch { }
+        Start-Sleep -Seconds 2
+    }
+    if (-not $ready) {
+        & docker compose --env-file $envFile -p valyqon-website-review -f $compose ps
+        throw "Preview is not ready. Inspect review-only logs; production containers were not changed."
+    }
+    Write-Host "VALYQON_BROWSER_PREVIEW=READY" -ForegroundColor Green
+    Write-Host "LOCAL_PREVIEW_URL=$website" -ForegroundColor Green
+    Write-Host "GUEST_TENDERS=EMPTY_UNTIL_REAL_NOTICES_EXIST_IN_ISOLATED_DB"
+    Write-Host "PAID_DETAILS=LOCKED; PAYMENT=DISABLED; AI=DISABLED"
+    if (-not $NoBrowser) { Start-Process $website }
+} finally {
+    Pop-Location
+}

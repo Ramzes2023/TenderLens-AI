@@ -16,7 +16,7 @@ try {
     Write-Host "VALYQON_REVIEW_DOCKER=READY" -ForegroundColor Cyan
     & docker compose --env-file $envFile -p valyqon-website-review -f $compose config --quiet
     if ($LASTEXITCODE -ne 0) { throw "Preview Compose config failed." }
-    & docker compose --env-file $envFile -p valyqon-website-review -f $compose up -d --build --no-deps api
+    & docker compose --env-file $envFile -p valyqon-website-review -f $compose up -d --build api mailpit
     if ($LASTEXITCODE -ne 0) { throw "Preview Docker build/start failed." }
     $ready = $false
     for ($attempt = 0; $attempt -lt 60; $attempt++) {
@@ -35,6 +35,9 @@ try {
     }
     Write-Host "VALYQON_BROWSER_PREVIEW=READY" -ForegroundColor Green
     Write-Host "LOCAL_PREVIEW_URL=$website" -ForegroundColor Green
+    Write-Host "LOCAL_PASSWORD_RECOVERY=http://127.0.0.1:18865/forgot-password" -ForegroundColor Green
+    Write-Host "LOCAL_MAIL_INBOX=http://127.0.0.1:18866/" -ForegroundColor Green
+    Write-Host "EMAIL_DELIVERY=MAILPIT_ONLY_NO_EXTERNAL_EMAIL" -ForegroundColor Yellow
     Write-Host "GUEST_TENDERS=EMPTY_UNTIL_REAL_NOTICES_EXIST_IN_ISOLATED_DB"
     Write-Host "PAID_DETAILS=LOCKED; PAYMENT=DISABLED; AI=DISABLED"
     if (-not $NoBrowser) { Start-Process $website }

@@ -220,7 +220,7 @@
   // The actual tender search still reads the real database and stays empty.
   function makeIllustrativeChartData() {
     const today=new Date();
-    const counts=[4,9,6,12,8,15,11,14,18,10,17,22,16,25];
+    const counts=[4,9,6,12,8,15,11,14,18,10,17,22,16,24];
     const daily=counts.map((count,i)=>{
       const date=new Date(Date.UTC(today.getUTCFullYear(),today.getUTCMonth(),
         today.getUTCDate()-13+i)).toISOString().slice(0,10);
@@ -238,7 +238,7 @@
       rub_price_bands:{under_1m:28,'1_to_5m':39,'5_to_10m':22,'10_to_50m':31,'50m_plus':7},
       deadline_bands:{overdue:18,within_7d:46,'8_to_30d':65,over_30d:41,unspecified:16},
       currency_counts:{RUB:127,EUR:17,USD:14,KZT:9,AZN:6,OTHER:13},
-      field_coverage:{title:186,price:144,currency:181,deadline:170}
+      field_coverage:{title:186,price:144,currency:186,deadline:170}
     };
   }
   function setupReview(realReport) {

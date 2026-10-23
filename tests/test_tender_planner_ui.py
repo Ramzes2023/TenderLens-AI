@@ -25,7 +25,7 @@ def test_planner_visible_in_authenticated_navigation_with_real_controls():
         'id="vqPlannerQuery"', 'id="vqPlannerStatus"',
         'id="vqPlannerSoon"', 'id="vqPlannerLate"',
         '/assets/planner.css', '/assets/planner.js',
-        'Official', 'verify deadlines',
+        'Always verify deadlines', 'not evidence',
     ):
         assert needle in html, needle
     assert html.count('id="plannerWorkspace"') == 1

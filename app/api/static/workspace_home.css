@@ -74,3 +74,8 @@ body.saas #vqShortcutDialog>p{margin-top:15px;color:#7a8ca9;font-size:11px;line-
 @media(max-width:700px){body.saas .vq-workbench-heading{flex-direction:column;align-items:flex-start}body.saas .vq-workbench-kpis{gap:9px}body.saas .vq-workbench-kpis article{padding:13px}body.saas .vq-workbench-kpis strong{font-size:16px}body.saas .vq-utility-bar{flex-wrap:wrap;margin-top:0}body.saas .vq-utility-actions{width:100%;justify-content:flex-end}body.saas .vq-progress-panel,body.saas .vq-next-panel,body.saas .vq-nav-workbench{padding:18px}body.saas .vq-next-panel h3{margin-top:30px}}
 @media(max-width:400px){body.saas .vq-workbench-kpis{grid-template-columns:1fr}body.saas .vq-utility-breadcrumb{font-size:11px}}
 @media(prefers-reduced-motion:reduce){body.saas .vq-progress-track>div,body.saas .vq-workbench-kpis article{transition:none}body.saas .vq-workbench-kpis article:hover{transform:none}}
+
+
+/* Circular setup visualization is derived strictly from the same three
+   verified steps as the accessible bar (no fabricated activity figures). */
+body.saas .vq-panel-title-row>strong#vqProgressCount{--vq-progress-angle:0deg;width:59px;height:59px;min-width:59px;border-radius:50%;background:radial-gradient(closest-side,#fff 71%,transparent 72% 100%),conic-gradient(#486fed var(--vq-progress-angle),#e8edfa 0);display:grid;place-items:center;color:#3b55a9;font-size:13px;font-weight:900;padding:0;border:0;font-variant-numeric:tabular-nums}

@@ -1,0 +1,37 @@
+name: RU blocked publishers trusted read-only after verified main merge
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/ru_blocked_sources_trusted_observation.py
+      - .github/workflows/ru-blocked-sources-trusted-main.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ru-blocked-publishers-trusted
+  cancel-in-progress: false
+jobs:
+  ru-named-runner-main-only-readonly:
+    if: github.ref == 'refs/heads/main' && github.repository == 'Ramzes2023/TenderLens-AI'
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 8
+    steps:
+      # Refuse any incorrectly routed runner before checking out any code.
+      - name: Require exact Russian runner before checkout
+        env:
+          ACTUAL_RUNNER_NAME: ${{ runner.name }}
+        run: test "$ACTUAL_RUNNER_NAME" = "VALYQON-RU-01"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read only five official public endpoints, report redacted transport classes
+        timeout-minutes: 5
+        env:
+          RUNNER_NAME: ${{ runner.name }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -B -m scripts.ru_blocked_sources_trusted_observation

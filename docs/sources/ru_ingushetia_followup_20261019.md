@@ -427,3 +427,36 @@ persistent and approved deployment, current hourly queue/Worker
 execution against shared SQL, and explicit isolated test Bot API
 acknowledgement plus recipient confirmation. Do not enable the shared
 offline runner, modify TLS trust or merge a red mandatory CI gate.
+
+## 23 October 2026: subscription-first-scan completeness gate
+
+The source-reachable first-party marketplace route had genuine **PASS**
+on GitHub run 39407402210 (three current tender original cards, leased
+Worker, isolated SQL, search/filter and simulated monitor receipts).
+That is not a permanent network guarantee. The newest hosted run
+39932662660 returned **BLOCKED** for both EIS and Fabrikant after durable
+network retries; secure cause classifications were
+`UPSTREAM_NETWORK_RETRIES_EXHAUSTED` and no actual Telegram receipt was
+tested. Contract tests on that head were 291 green.
+
+A separate user-facing safety gap is now closed in
+`app/monitoring/service.py`: first-time, explicitly enabled regional
+catalogue subscription baseline rejects a PARTIAL initial poll if even
+one requested `ru_ingushetia_eis44` or
+`ru_ingushetia_fabrikant44` source did not successfully return.
+Without this rule, an incomplete baseline could cause historical notices
+to be sent as new when a missing region route later recovers. The service
+checks all required regional source successes **before** any seen-ID
+claim, and only then permits subscription. Existing subscribed chats
+still receive valid notices from healthy routes during partial upstream
+outages. Nonregional legacy baseline behavior is unchanged. A separate
+opt-in fresh Worker-SQL baseline already checks every regional source
+and its bounded candidate set before claiming.
+
+Regression tests include incomplete initial regional poll (no claims, no
+subscription), successful follow-up with complete results, and unchanged
+nonregional partial behavior. Commits `71dd619` and `c77079f`.
+This repair is independent of upstream routing and cannot make a hosted
+network outage pass. No production flags, bots, or active subscriptions
+were changed. Keep both sources default OFF and PR #226 unmerged while
+exact-head live results are red or in progress.

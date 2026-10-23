@@ -80,3 +80,10 @@ body.saas .vq-planner-toolbar-right{flex-wrap:wrap}
 body.saas #vqPlannerUrgency{background:#fff;border:1px solid #d9e3f4;color:#466193;border-radius:9px;padding:9px 11px;min-height:42px;font:700 11px system-ui;max-width:200px}
 body.saas #vqPlannerUrgency:focus-visible,body.saas .vq-planner-stage-select:focus-visible,body.saas .vq-planner-tabs button:focus-visible{outline:2px solid #5b85f8;outline-offset:2px}
 @media(max-width:580px){body.saas .vq-planner-toolbar-right{justify-content:flex-start}body.saas #vqPlannerQuery{width:min(100%,300px)}body.saas #vqPlannerUrgency{max-width:100%}}
+
+
+body.saas .vq-planner-empty{grid-column:1/-1;display:grid;justify-items:center;text-align:center;gap:9px;place-content:center;width:100%;min-height:350px;padding:33px;background:radial-gradient(ellipse at 50% 0,#ecf2ff,#fff 68%);border:1px dashed #bfcdf0;border-radius:19px;color:#314d89}
+body.saas .vq-planner-empty-icon{display:grid;place-items:center;background:#e8edff;border-radius:17px;color:#5674e4;font-size:37px;width:66px;height:66px}
+body.saas .vq-planner-empty h3{max-width:530px;font-size:clamp(20px,2.5vw,27px);letter-spacing:-.035em;color:#284272;margin:5px 0}
+body.saas .vq-planner-empty p{max-width:550px;line-height:1.7;font-size:12px;color:#8191ac;margin:0}
+body.saas .vq-planner-empty a,body.saas .vq-planner-empty button{display:inline-flex;align-items:center;justify-content:center;min-height:42px;border-radius:10px;background:#386af0;color:#fff;border:1px solid #6688ff;text-decoration:none;padding:10px 18px;font-size:12px;font-weight:850;cursor:pointer;margin-top:13px}

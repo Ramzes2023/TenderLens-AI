@@ -37,8 +37,8 @@ MARKET_PULSE_HTML = """<section class="vq-pulse-section" id="market-pulse" aria-
   <div class="vq-pulse-head">
     <div>
       <span class="vq-section-eyebrow">PUBLIC DATA INSIGHT</span>
-      <h2 id="vqPulseHeading">A clearer view of activity. <span>No invented statistics.</span></h2>
-      <p>See how many previously unseen source notices entered the VALYQON database over the last 14 UTC days. This is a limited stored-data sample, not the entire tender market.</p>
+      <h2 id="vqPulseHeading">A clearer view of activity. <span>Visualized transparently.</span></h2>
+      <p>Explore the 14-day activity chart. Illustrative design values are clearly labelled until verified observations are available in the public dashboard.</p>
     </div>
     <a class="vq-pulse-link" href="#guest-search">Try your own search ↗</a>
   </div>
@@ -46,12 +46,13 @@ MARKET_PULSE_HTML = """<section class="vq-pulse-section" id="market-pulse" aria-
     <div class="vq-pulse-topline">
       <div class="vq-pulse-metric"><span>New notices in sampled data · 14 days</span><strong id="vqPulseTotal">—</strong></div>
       <div class="vq-pulse-metric"><span>Saved rows checked</span><strong id="vqPulseSample">—</strong></div>
-      <span class="vq-pulse-verified">Database-backed, not illustrated</span>
+      <span class="vq-pulse-verified">Data mode labeled below</span>
     </div>
+    <div id="vqPulseDemoDisclosure" class="vq-pulse-demo-note" hidden>ILLUSTRATIVE DATA · EXAMPLE GRAPH · NOT REAL PROCUREMENT ACTIVITY</div>
     <div class="vq-pulse-chart-head"><h3>Daily first observations</h3><span id="vqPulseRange">Last 14 UTC days</span></div>
     <div id="vqPulseChart" class="vq-pulse-chart" role="img" aria-label="Daily newly stored notices; awaiting data"></div>
-    <p class="vq-pulse-status" id="vqPulseStatus" role="status" aria-live="polite">Loading actual database observations…</p>
-    <p class="vq-pulse-note">A graph of stored notices, not a forecast or proof that every procurement platform is operating. Connector outages and late collection can change these figures.</p>
+    <p class="vq-pulse-status" id="vqPulseStatus" role="status" aria-live="polite">Loading visualization status…</p>
+    <p class="vq-pulse-note">In demonstration mode, all figures are illustrative and do not describe actual tenders. Real mode uses only a bounded saved-record sample.</p>
   </div>
 </section>"""
 

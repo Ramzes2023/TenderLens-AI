@@ -162,7 +162,7 @@ class ConnectorSyncHandler:
             source = replace(source, max_pages=2)
         # At most five listing/feed requests; AusTender adds one detail per notice.
         request_limit = (4 if source_id in {'ted', 'uk_fts', 'world_bank'}
-                         else 2 if source_id in {'am_armeps', 'uz_uzex'}
+                         else 2 if source_id in {'am_armeps', 'uz_uzex', 'az_adif_small'}
                          else 1 + min(self.max_records, 5) if source_id in {'md_achizitii', 'az_azeristilik'}
                           else 11 if source_id == 'md_elicitatie'
                          else self.max_records + 1 if source_id == 'austender'

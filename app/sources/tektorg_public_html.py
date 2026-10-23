@@ -142,12 +142,29 @@ def validate_public_detail(payload, *, identity, title):
     if (type(identity) is not str or not _PATH.fullmatch(f"/223-fz/procedures/{identity}")
             or type(title) is not str or not title):
         raise ValueError("Invalid TEK-Torg detail request")
-    # A whole original native number must appear in visible publisher HTML,
-    # never merely as a substring of a longer number or hidden script/title.
-    visible = " ".join(reader.visible)
+    # The URL ends with an internal platform ID (e.g. 11993106), while the
+    # official visible notice can identify the actual procurement as
+    # "Извещение о процедуре ЗП409589" and separately "№ ЗП409589".
+    # Both must be first-party visible (not <head>, script, template, etc.).
+    # A second detail on the exact discovered URL still has to corroborate
+    # the independently observed listing H1; never invent an external ID.
+    visible = " ".join(" ".join(reader.visible).split())
     identity_pattern = r"(?<![0-9])" + re.escape(identity) + r"(?![0-9])"
-    if not re.search(identity_pattern, visible) or title not in reader.headings:
+    internal_visible = bool(re.search(identity_pattern, visible))
+    published = re.findall(
+        r"Извещение\s+о\s+процедуре\s+([А-ЯЁA-Z]{1,6}[0-9]{3,12})(?![А-ЯЁA-Z0-9])",
+        visible, flags=re.IGNORECASE,
+    )
+    native = published[0].upper() if len(set(x.upper() for x in published)) == 1 and published else None
+    # The official "Общие сведения: № <native>" must match the breadcrumb.
+    native_confirmed = (native is not None and bool(re.search(
+        r"(?<![А-ЯЁA-Z0-9])№\s*" + re.escape(native) + r"(?![А-ЯЁA-Z0-9])",
+        visible, flags=re.IGNORECASE,
+    )))
+    if (title not in reader.headings or len(reader.headings) != 1
+            or not (internal_visible or native_confirmed)):
         raise ValueError("TEK-Torg detail title/identity mismatch")
+    return native if native_confirmed else None
 
 
 @dataclass(frozen=True)
@@ -188,14 +205,14 @@ class TekTorgPublicSource:
                         detail.raise_for_status()
                         if "html" not in detail.headers.get("content-type", "").lower():
                             raise ValueError("TEK-Torg detail not HTML")
-                        validate_public_detail(detail.content, identity=identity, title=title)
+                        published_number = validate_public_detail(detail.content, identity=identity, title=title)
                     except (ValueError, httpx.HTTPStatusError):
                         # A changed/removed public card is not reliable tender data.
                         # Drop only that card; do not ingest it or bypass redirects.
                         continue
                     notice = TenderNotice(
                         source=SOURCE_ID, external_id=identity,
-                        title=title, url=url,
+                        tender_number=published_number, title=title, url=url,
                     )
                     validate_notice(notice, SOURCE_ID)
                     notices.append(notice)

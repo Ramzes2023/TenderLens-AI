@@ -96,3 +96,52 @@ def test_naive_schedule_clock_rejected_and_auth_missing_means_zero_db_access(
     monkeypatch.setenv("VALYQON_INGUSHETIA_QUEUE_APPROVED", APPROVAL)
     assert main(["--once"]) == 2
     assert "EXPLICIT_APPROVAL_REQUIRED=YES" in capsys.readouterr().out
+
+
+def test_utc_clock_rollback_cannot_requeue_historical_ingushetia_jobs():
+    """Offline: time rewind is rejected before service.enqueue touches the queue."""
+    cat = catalog(ru_ingushetia_eis44_enabled=True,
+                  ru_ingushetia_fabrikant44_enabled=True)
+
+    class NoEnqueue:
+        def enqueue(self, *args, **kwargs):
+            raise AssertionError("Clock rollback must not create a durable job")
+
+    worker = NoEnqueue()
+    with pytest.raises(ValueError, match="UTC clock rollback"):
+        queue_if_new_hour(
+            worker, cat,
+            now=datetime(2026, 10, 23, 8, 59, tzinfo=timezone.utc),
+            previous_window="2026-10-23T09Z",
+        )
+
+    with pytest.raises(ValueError, match="Invalid previous UTC window"):
+        queue_if_new_hour(
+            worker, cat,
+            now=datetime(2026, 10, 23, 9, 1, tzinfo=timezone.utc),
+            previous_window="2026-10-23T09Z;DROP",
+        )
+
+    window, queued = queue_if_new_hour(
+        worker, cat,
+        now=datetime(2026, 10, 23, 9, 30, tzinfo=timezone.utc),
+        previous_window="2026-10-23T09Z",
+    )
+    assert window == "2026-10-23T09Z"
+    assert queued == {}
+
+
+def test_utc_offset_hour_is_normalized_before_regional_clock_rollback_guard():
+    """A timezone-offset host timestamp cannot enqueue an older UTC hour."""
+    cat = catalog(ru_ingushetia_fabrikant44_enabled=True)
+    class NoEnqueue:
+        def enqueue(self, *args, **kwargs):
+            raise AssertionError("Old UTC window must be rejected")
+
+    with pytest.raises(ValueError, match="UTC clock rollback"):
+        queue_if_new_hour(
+            NoEnqueue(), cat,
+            now=datetime(2026, 10, 23, 11, 2,
+                         tzinfo=timezone(timedelta(hours=3))),
+            previous_window="2026-10-23T09Z",
+        )

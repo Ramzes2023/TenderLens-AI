@@ -89,6 +89,8 @@
     epoch++;records=[];visibleLimit=PAGE_SIZE;loaded=false;loadError=false;busy=false;draggingSavedId=null;
     $('vqPlannerBoard').replaceChildren();
     $('vqMonthGrid').replaceChildren();
+    $('vqBuyerChart').replaceChildren();
+    $('vqUniqueBuyers').textContent='—';
     for(const id of ['vqPlannerTotal','vqPlannerSoon','vqPlannerLate','vqPlannerDateOnly'])
       $(id).textContent='—';
     $('vqPlannerCalendarExport').disabled=true;
@@ -403,12 +405,49 @@
     $('vqPlannerLate').textContent=String(all.filter(r=>r.date&&decorateDate(r.date)==='overdue').length);
     $('vqPlannerDateOnly').textContent=String(all.filter(r=>r.date?.kind==='date').length);
   }
+  function renderBuyers(){
+    const root=$('vqBuyerChart');root.replaceChildren();
+    const total=$('vqUniqueBuyers');
+    if(!loaded||loadError||!enabled()){
+      total.textContent='—';return;
+    }
+    // Only actual saved source records for this authorized company. No inferred
+    // winner/competitor and no aggregation across distinct currencies.
+    const seen=new Map(),data=records.slice(0,MAX_ITEMS);
+    for(const record of data){
+      const name=record.opportunity?.customer;
+      if(typeof name!=='string'||!name.trim())continue;
+      const key=name.trim();
+      seen.set(key,(seen.get(key)||0)+1);
+    }
+    total.textContent=String(seen.size);
+    if(!seen.size){
+      root.append(make('p','vq-buyer-empty',t(
+        'No verified buyer names in this saved set. Missing metadata does not mean there are no buyers.',
+        'В этой выборке нет названий заказчиков. Отсутствие реквизитов не означает отсутствия заказчиков.')));
+      return;
+    }
+    const groups=[...seen].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0])).slice(0,12);
+    const max=Math.max(...groups.map(([,n])=>n));
+    for(const [name,count] of groups){
+      const row=make('div','vq-buyer-row');
+      const buyer=make('strong','vq-buyer-name',name);
+      const bar=make('div','vq-buyer-bar');
+      const fill=make('div','vq-buyer-fill');
+      fill.style.width=(100*count/max).toFixed(1)+'%';bar.append(fill);
+      const tally=make('span','vq-buyer-count',String(count));
+      row.append(buyer,bar,tally);root.append(row);
+    }
+  }
+
   function render(){
     if(loaded&&!loadError)renderStats();
     $('vqPlannerBoard').hidden=view!=='board';
     $('vqPlannerCalendar').hidden=view!=='month';
+    $('vqPlannerBuyers').hidden=view!=='buyers';
     $('vqPlannerBoardTab').setAttribute('aria-pressed',String(view==='board'));
     $('vqPlannerMonthTab').setAttribute('aria-pressed',String(view==='month'));
+    $('vqPlannerBuyersTab').setAttribute('aria-pressed',String(view==='buyers'));
     const n=records.length;
     const showing=Math.min(n,visibleLimit,MAX_ITEMS);
     $('vqPlannerShown').textContent=n?t('Showing '+showing+' of '+n+' saved tenders',
@@ -416,7 +455,8 @@
     $('vqPlannerMore').hidden=showing>=n||showing>=MAX_ITEMS;
     $('vqPlannerCalendarExport').disabled=!enabled()||!loaded||loadError||!records.some(r=>r.date);
     if(view==='board')renderBoard();
-    else renderCalendar();
+    else if(view==='month')renderCalendar();
+    else renderBuyers();
     if(n>MAX_ITEMS)status('Large shortlist: planner loads at most 300 items. Use Saved for the complete list.',
       'Большая выборка: планировщик загружает не более 300 записей. Полный список доступен в «Сохранённом».');
   }
@@ -471,6 +511,7 @@
   $('vqPlannerUrgency').addEventListener('change',render);
   $('vqPlannerBoardTab').addEventListener('click',()=>{view='board';render();});
   $('vqPlannerMonthTab').addEventListener('click',()=>{view='month';render();});
+  $('vqPlannerBuyersTab').addEventListener('click',()=>{view='buyers';render();});
   $('vqMonthPrev').addEventListener('click',()=>{month=new Date(month.getFullYear(),month.getMonth()-1,1);renderCalendar();});
   $('vqMonthNext').addEventListener('click',()=>{month=new Date(month.getFullYear(),month.getMonth()+1,1);renderCalendar();});
   $('vqPlannerMore').addEventListener('click',async()=>{

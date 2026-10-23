@@ -126,9 +126,9 @@
     }
     const report=lastSourceReport;
     const values=[
-      [tr('Requested','Запрошено'),report.attempted_sources.length,'requested'],
-      [tr('Responding','Ответили'),report.successful_sources.length,'responding'],
-      [tr('Unavailable','Недоступны'),report.failed_sources.length,'unavailable']
+      [tr('Requested','Запрошено'),report.requested,'requested'],
+      [tr('Responding','Ответили'),report.responding,'responding'],
+      [tr('Unavailable','Недоступны'),report.unavailable,'unavailable']
     ];
     const maximum=Math.max(1,...values.map(([,n])=>n));
     rows.replaceChildren();
@@ -260,7 +260,12 @@
     const report=event.detail;
     if(report && ['attempted_sources','successful_sources','failed_sources']
       .every(key=>Array.isArray(report[key]))){
-      lastSourceReport=report;
+      // Retain aggregate counts only: never copy buyer, tender, or source IDs.
+      lastSourceReport={
+        requested:report.attempted_sources.length,
+        responding:report.successful_sources.length,
+        unavailable:report.failed_sources.length
+      };
       sourceReportScope=scope();
     } else{
       lastSourceReport=null;

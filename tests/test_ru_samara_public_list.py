@@ -310,3 +310,46 @@ def test_native_price_boolean_and_nan_do_not_claim_ruble_value():
         payload["items"][0]["summa"] = invalid
         notice = mod.parse_public_list(payload, limit=1)[0]
         assert notice.initial_price is None and notice.currency is None
+
+
+def test_native_camelcase_deadline_from_official_sort_columns_is_preserved():
+    assert mod.SORT_COLUMNS["collecting_endDate"] == "Дата окончания подачи заявок"
+    original = original_rows()
+    for row in original["items"]:
+        row["collecting_endDate"] = row.pop("collecting_enddate")
+    results = mod.parse_public_list(original)
+    assert [notice.deadline for notice in results] == [
+        "22.10.2026", "25.10.2026",
+    ]
+    assert [notice.external_id for notice in results] == ["5611345", "5611196"]
+    assert all(n.url == mod.GRID for n in results)
+
+
+def test_disagreeing_publisher_deadline_keys_remain_absent_not_invented():
+    original = original_rows()
+    original["items"][0]["collecting_endDate"] = "23.10.2026"
+    notices = mod.parse_public_list(original)
+    assert notices[0].deadline is None
+    assert notices[1].deadline == "25.10.2026"
+    assert notices[0].tender_number == "ИМЗ-2026-100001"
+    assert notices[0].initial_price == 100000.0
+
+
+@pytest.mark.parametrize("original", [
+    {"collecting_endDate": "22.10.2026"},
+    {"collecting_enddate": "22.10.2026"},
+    {"collecting_endDate": "22.10.2026", "collecting_enddate": "22.10.2026"},
+])
+def test_native_deadline_equivalent_keys_are_accepted_without_guessing(original):
+    assert mod.public_deadline(original) == "22.10.2026"
+
+
+@pytest.mark.parametrize("original", [
+    {"collecting_endDate": "32.10.2026"},
+    {"collecting_endDate": "20.10.2026", "collecting_enddate": "21.10.2026"},
+    {"collecting_endDate": False},
+    {"collecting_endDate": None},
+    {},
+])
+def test_native_deadline_invalid_or_absent_never_gets_fabricated(original):
+    assert mod.public_deadline(original) is None

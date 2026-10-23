@@ -178,6 +178,22 @@ def public_grid_date(raw):
     # present in the public list, so do not inject an assumed timezone.
     return moment.isoformat(timespec="seconds") if value.count(":") == 2 else value
 
+def public_deadline(row):
+    """Accept either real native JSON field spelling, never a conflicting value.
+
+    The original grid advertises collecting_endDate; some publisher responses
+    and research exports use the lower-case 'collecting_enddate'.  Do not
+    manufacture missing or contradictory calendar deadlines.
+    """
+    if type(row) is not dict:
+        return None
+    first = row.get("collecting_endDate")
+    second = row.get("collecting_enddate")
+    if first is not None and second is not None and first != second:
+        return None
+    return public_grid_date(first if first is not None else second)
+
+
 def parse_public_list(data, *, limit=2):
     """Validate original Samara public-list rows; live worker demands two."""
     if type(limit) is not int or not 1 <= limit <= PAGE_SIZE:
@@ -208,7 +224,7 @@ def parse_public_list(data, *, limit=2):
         # table fields. Individual detail documents are STILL login-protected.
         price = public_amount(row.get("summa"))
         published = public_grid_date(row.get("pub_date"))
-        deadline = public_grid_date(row.get("collecting_enddate"))
+        deadline = public_deadline(row)
         # The native HTML grid labels "summa" as НМЦК (in rubles).
         # Keep unknown/zero/unsafe amounts absent, not synthetic.
         notice = TenderNotice(

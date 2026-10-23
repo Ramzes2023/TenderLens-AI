@@ -24,6 +24,7 @@ PLANNER_HTML = """
     <div class="vq-planner-tabs" role="group" aria-label="Planner presentation">
       <button id="vqPlannerBoardTab" type="button" aria-pressed="true" data-ui-en="▦ Kanban board" data-ui-ru="▦ Доска этапов">▦ Kanban board</button>
       <button id="vqPlannerMonthTab" type="button" aria-pressed="false" data-ui-en="▣ Deadline calendar" data-ui-ru="▣ Календарь сроков">▣ Deadline calendar</button>
+      <button id="vqPlannerBuyersTab" type="button" aria-pressed="false" data-ui-en="◈ Buyer insights" data-ui-ru="◈ Аналитика заказчиков">◈ Buyer insights</button>
     </div>
     <div class="vq-planner-toolbar-right">
       <label for="vqPlannerUrgency" data-ui-en="Deadline" data-ui-ru="Срок подачи">Deadline</label>
@@ -45,6 +46,11 @@ PLANNER_HTML = """
     <div id="vqMonthGrid" class="vq-month-grid" aria-label="Saved procurement deadline dates"></div>
     <p data-ui-en="Date-only notices have no verified submission time. Invalid or timezone-ambiguous timestamps are excluded from the calendar. Download is manual; alerts are not scheduled from this page." data-ui-ru="Для извещений только с датой точное время подачи неизвестно. Недостоверные или неоднозначные даты не показываются. Скачивание вручную; напоминания здесь не создаются.">Date-only notices have no verified submission time. Invalid or timezone-ambiguous timestamps are excluded from the calendar. Download is manual; alerts are not scheduled from this page.</p>
   </div>
+  <section id="vqPlannerBuyers" class="vq-planner-buyers" hidden aria-labelledby="vqBuyersHeading">
+    <div class="vq-buyer-intro"><div><span class="vq-planner-eyebrow" data-ui-en="VERIFIABLE COMPANY CONTEXT" data-ui-ru="ДАННЫЕ ВАШЕЙ КОМПАНИИ">VERIFIABLE COMPANY CONTEXT</span><h3 id="vqBuyersHeading" data-ui-en="Buyer intelligence · your saved tenders" data-ui-ru="Аналитика заказчиков · ваши сохранённые закупки">Buyer intelligence · your saved tenders</h3><p data-ui-en="Counts reflect only the first 300 saved notices loaded for the active company, grouped by exact buyer name. No market coverage or legal-entity identity resolution is claimed." data-ui-ru="Подсчёт только по первым 300 сохранённым закупкам активной компании, группировка по точному имени заказчика. Это не охват всего рынка и не проверка юридических лиц.">Counts reflect only the first 300 saved notices loaded for the active company, grouped by exact buyer name. No market coverage or legal-entity identity resolution is claimed.</p></div><strong id="vqUniqueBuyers">—</strong></div>
+    <div id="vqBuyerChart" class="vq-buyer-chart" aria-label="Observed buyer notice counts"></div>
+    <div class="vq-competitor-notice"><span aria-hidden="true">i</span><p data-ui-en="Competitor intelligence requires official award and protocol evidence. VALYQON does not infer competitors or winners from search results or saved tenders." data-ui-ru="Для аналитики конкурентов нужны официальные протоколы и результаты торгов. VALYQON не угадывает конкурентов или победителей по результатам поиска.">Competitor intelligence requires official award and protocol evidence. VALYQON does not infer competitors or winners from search results or saved tenders.</p></div>
+  </section>
   <div id="vqPlannerPagination" class="vq-planner-pagination"><span id="vqPlannerShown"></span><button id="vqPlannerMore" type="button" hidden data-ui-en="Load more saved notices" data-ui-ru="Загрузить ещё закупки">Load more saved notices</button></div>
 </section>
 """

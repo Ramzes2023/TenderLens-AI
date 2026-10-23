@@ -66,3 +66,43 @@ def test_real_workspace_has_navigation_without_synthetic_metrics():
     assert 'data-nav="support"' in html
     assert 'id="savedCount"' in html
     assert 'id="sourceHealthyCount"' in html
+
+
+def test_workspace_interactions_are_navigation_only_and_js_parses():
+    from pathlib import Path
+    import shutil
+    import subprocess
+    root = Path(__file__).resolve().parents[1]
+    js = root / "app/api/static/workspace_luxe.js"
+    text = js.read_text(encoding="utf-8")
+    for token in (
+        "nav-group-toggle", "nav-group-links", "aria-expanded",
+        "aria-current", "vqSidebarCompact", "vqActionCommand",
+        "localStorage", "addEventListener('hashchange'",
+    ):
+        assert token in text
+    for forbidden in ("fetch(", "innerHTML", "/api/v1/", "Math.random()"):
+        assert forbidden not in text
+    node = shutil.which("node")
+    if node:
+        for filename in ("workspace_luxe.js", "public_showcase.js", "public_intelligence.js"):
+            path = root / "app/api/static" / filename
+            result = subprocess.run([node, "--check", str(path)],
+                                    capture_output=True, text=True, timeout=15)
+            assert result.returncode == 0, result.stderr
+
+
+def test_both_pulse_and_dashboard_respond_to_explicit_demo_mode():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / "app/api/static"
+    charts = (root / "public_intelligence.js").read_text(encoding="utf-8")
+    pulse = (root / "public_showcase.js").read_text(encoding="utf-8")
+    assert "dataset.publicAnalyticsMode==='demo'" in charts
+    assert "dataset.publicAnalyticsMode==='demo'" in pulse
+    assert "valyqon-demo-chart-mode" in charts
+    assert "valyqon-demo-chart-mode" in pulse
+    assert "ILLUSTRATIVE FIGURES ONLY" in charts
+    assert "all numbers in this chart are invented" in pulse
+    # Neither script can write to the opportunity store or fabricate result cards.
+    assert "/api/v1/public/opportunities" not in charts
+    assert "/api/v1/public/opportunities" not in pulse

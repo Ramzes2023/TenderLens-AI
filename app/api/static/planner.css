@@ -87,3 +87,24 @@ body.saas .vq-planner-empty-icon{display:grid;place-items:center;background:#e8e
 body.saas .vq-planner-empty h3{max-width:530px;font-size:clamp(20px,2.5vw,27px);letter-spacing:-.035em;color:#284272;margin:5px 0}
 body.saas .vq-planner-empty p{max-width:550px;line-height:1.7;font-size:12px;color:#8191ac;margin:0}
 body.saas .vq-planner-empty a,body.saas .vq-planner-empty button{display:inline-flex;align-items:center;justify-content:center;min-height:42px;border-radius:10px;background:#386af0;color:#fff;border:1px solid #6688ff;text-decoration:none;padding:10px 18px;font-size:12px;font-weight:850;cursor:pointer;margin-top:13px}
+
+
+/* Buyer intelligence built from authenticated saved notices, not fictitious market totals. */
+body.saas .vq-planner-buyers{background:#fff;border:1px solid #e0e9f9;border-radius:18px;padding:24px;box-shadow:0 10px 30px #203f8011;margin-bottom:14px}
+body.saas .vq-planner-buyers[hidden]{display:none}
+body.saas .vq-buyer-intro{display:flex;justify-content:space-between;align-items:center;gap:18px;border-bottom:1px solid #ecf0f8;padding-bottom:20px}
+body.saas .vq-buyer-intro .vq-planner-eyebrow{color:#5b7fd0}
+body.saas .vq-buyer-intro h3{color:#1e3763;font-size:23px;letter-spacing:-.035em;margin:10px 0}
+body.saas .vq-buyer-intro p{font-size:11px;color:#7386a7;max-width:760px;line-height:1.6;margin:0}
+body.saas .vq-buyer-intro>strong{background:#edf2ff;border:1px solid #d8e2ff;border-radius:15px;color:#3f64c5;min-width:69px;text-align:center;font-size:31px;font-variant-numeric:tabular-nums;padding:14px}
+body.saas .vq-buyer-chart{display:grid;gap:11px;margin:24px 0}
+body.saas .vq-buyer-row{display:grid;grid-template-columns:minmax(125px,2fr) minmax(0,5fr) 37px;align-items:center;gap:14px}
+body.saas .vq-buyer-name{font-size:11px;font-weight:750;color:#425985;overflow-wrap:anywhere;line-height:1.4}
+body.saas .vq-buyer-bar{background:#eff2fc;height:13px;border-radius:999px;overflow:hidden}
+body.saas .vq-buyer-fill{background:linear-gradient(90deg,#376df3,#8067e5);height:100%;border-radius:999px}
+body.saas .vq-buyer-count{color:#435b9e;font-weight:800;font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+body.saas .vq-buyer-empty{color:#8c9bb3;font-size:12px;padding:19px;border:1px dashed #dce5f6;border-radius:13px}
+body.saas .vq-competitor-notice{display:flex;gap:11px;align-items:start;background:#f6f9ff;border:1px solid #dfe8f9;padding:16px;border-radius:13px}
+body.saas .vq-competitor-notice>span{width:25px;height:25px;min-width:25px;display:grid;place-items:center;border-radius:50%;background:#e3ebff;color:#4b6dbe;font-weight:850}
+body.saas .vq-competitor-notice p{margin:0;color:#7485a3;font-size:11px;line-height:1.65}
+@media(max-width:680px){body.saas .vq-buyer-row{grid-template-columns:1fr 2fr 30px;gap:8px}body.saas .vq-planner-buyers{padding:16px}body.saas .vq-buyer-intro{align-items:start}body.saas .vq-buyer-intro h3{font-size:19px}}

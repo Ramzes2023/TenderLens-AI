@@ -668,3 +668,92 @@ def test_dual_ingushetia_worker_sql_alert_deduplicates_eis_and_etp_after_bot_ack
         assert {match[0] for match in bot.calls} == {5001}
     finally:
         db.close()
+
+
+def test_regional_sql_101st_unseen_tender_delivered_after_first_100_acknowledged(tmp_path):
+    """Offline real SQLite/monitor chain: no permanent 100-result starvation.
+
+    A later unacknowledged original remains deliverable despite 100
+    *newer* original IDs that were previously confirmed by Telegram.
+    No network, production user or Bot API is accessed in this test.
+    """
+    from types import SimpleNamespace
+    from app.bot.monitoring import monitor_loop
+    from app.monitoring.repository import MonitoringRepository
+    from app.monitoring.service import TenderMonitorService
+    from app.scoring.models import CompanyProfile
+
+    db = Database(DatabaseSettings("ing-101st", tmp_path / "worker.sqlite"))
+    store = OpportunityRepository(db)
+    store.initialize()
+    receipts = MonitoringRepository(tmp_path / "seen.sqlite")
+    receipts.initialize()
+    receipts.set_subscription(101, 202, True)
+    cfg = settings(
+        ru_ingushetia_fabrikant44_enabled=False,
+        max_items=3, max_notifications_per_cycle=3,
+    )
+    profile = CompanyProfile(
+        profile_version="1", company_name="Water works",
+        search_keywords=["канализации"], allowed_regions=["Ингушетия"],
+    )
+    service = TenderMonitorService(
+        cfg, None, receipts, None,
+        profile_resolver=lambda owner: profile if owner == 101 else None,
+    )
+    stop = asyncio.Event()
+    active = service.active_subscriptions
+
+    async def one_cycle():
+        stop.set()
+        return await active()
+
+    service.active_subscriptions = one_cycle
+
+    class FakeBot:
+        def __init__(self):
+            self.sent = []
+
+        async def send_message(self, chat_id, text, **kwargs):
+            self.sent.append((chat_id, text))
+            return SimpleNamespace(
+                message_id=len(self.sent),
+                chat=SimpleNamespace(id=chat_id),
+            )
+
+    numbers = [f"011450000082600{2600 + index:04d}" for index in range(101)]
+    try:
+        # Insert the one unseen notice FIRST: it is the oldest SQL row and
+        # appears at position 101 when sorted by descending last_seen.
+        store.upsert(notice(numbers[0], title="Устройство ливневой канализации"),
+                     connector_version(EIS))
+        for number in numbers[1:]:
+            store.upsert(notice(number, title="Устройство ливневой канализации"),
+                         connector_version(EIS))
+            receipts.mark_seen(101, "eis_44", number)
+
+        catalog = fresh_ingushetia_worker_catalog(build_source_catalog(cfg), store)
+        bot = FakeBot()
+        asyncio.run(monitor_loop(bot, service, stop, source_catalog=catalog))
+
+        assert len(bot.sent) == 1
+        assert bot.sent[0][0] == 202 and numbers[0] in bot.sent[0][1]
+        assert receipts.seen(101, "eis_44", numbers[0])
+
+        stop.clear()
+        asyncio.run(monitor_loop(bot, service, stop, source_catalog=catalog))
+        assert len(bot.sent) == 1
+
+        # A normal non-regional HTTP catalog must retain its 100-result cap.
+        from app.sources.multi import MultiSourceFetcher
+        from app.sources.registry import SourceRegistry
+        source = build_source_catalog(cfg)
+        async def scan_limits():
+            with pytest.raises(ValueError, match="Deep regional scan requires"):
+                await service.fetch_matches_from_catalog_for_profile(
+                    source, profile, source_keys=(EIS,), max_items=1000,
+                )
+            assert isinstance(source.fetcher, MultiSourceFetcher)
+        asyncio.run(scan_limits())
+    finally:
+        db.close()

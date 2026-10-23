@@ -132,3 +132,32 @@ def test_title_containing_url_is_redacted_before_api_response(tmp_path):
         assert result["shown"] == 1
         assert "secret.example" not in json.dumps(result, ensure_ascii=False)
     db.close()
+
+def test_guest_search_does_not_allow_probing_redacted_url_words(tmp_path):
+    db = _database(tmp_path)
+    _store(db, title="Поставка химии https://classified.example/notice/verysecret",
+           external_id="secured")
+    with TestClient(create_app(runtime=ApiRuntime(database=db))) as client:
+        assert client.get("/api/v1/public/opportunities?q=verysecret").json()["results"] == []
+        assert client.get("/api/v1/public/opportunities?q=химии").json()["shown"] == 1
+    db.close()
+
+
+def test_guest_redacts_buyer_email_even_if_embedded_in_title(tmp_path):
+    db = _database(tmp_path)
+    _store(db, title="Закупка ПАО СЕКРЕТНАЯ КОМПАНИЯ team@private.example мебели",
+           external_id="secured")
+    with db.connect() as conn:
+        notice = json.loads(conn.execute("SELECT notice_json FROM source_opportunities").fetchone()[0])
+        notice["customer"] = "ПАО СЕКРЕТНАЯ КОМПАНИЯ"
+        conn.execute("UPDATE source_opportunities SET notice_json=?", (json.dumps(notice, ensure_ascii=False),))
+        conn.commit()
+    with TestClient(create_app(runtime=ApiRuntime(database=db))) as client:
+        data = client.get("/api/v1/public/opportunities?q=мебели").json()
+        assert data["shown"] == 1
+        payload = json.dumps(data, ensure_ascii=False)
+        assert "СЕКРЕТНАЯ КОМПАНИЯ" not in payload
+        assert "private.example" not in payload
+        assert client.get("/api/v1/public/opportunities?q=СЕКРЕТНАЯ").json()["results"] == []
+        assert client.get("/api/v1/public/opportunities?q=team").json()["results"] == []
+    db.close()

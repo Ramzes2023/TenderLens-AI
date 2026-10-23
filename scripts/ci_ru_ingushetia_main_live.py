@@ -36,6 +36,47 @@ from app.sources.eis_pinned_ca import select_verified_eis_ca
 ROOT = Path(__file__).resolve().parents[1] / "russian_trusted_root_ca_pem.crt"
 
 
+class SafeWorkerFailure(AssertionError):
+    """Expose only queue-owned enumerated status, never source error payloads."""
+
+    def __init__(self, job):
+        state = getattr(job, "state", None)
+        code = getattr(job, "failure_code", None)
+        self.job_state = state if state in {"queued", "running", "failed", "succeeded", "cancelled"} else "UNKNOWN"
+        self.job_failure_code = code if code in {
+            "handler_error", "permanent_failure", "retryable_failure",
+            "lease_expired", "invalid_result", "unknown_type",
+        } else "UNKNOWN"
+        super().__init__("Real source Worker failed")
+
+
+SAFE_LIVE_ASSERTION_CODES = {
+    "Leased Worker did not claim original-source job": "WORKER_NOT_CLAIMED",
+    "Real source Worker failed": "WORKER_FAILED",
+    "Fewer than two real original notices survived Worker SQL": "WORKER_SQL_ROWS_INSUFFICIENT",
+    "Noncanonical or duplicated EIS original identities": "ORIGINAL_IDENTITY_REJECTED",
+    "EIS first-party original card unavailable": "EIS_ORIGINAL_CARD_REJECTED",
+    "Verified Worker SQL original is not searchable": "SQL_SEARCH_MISSING_ORIGINAL",
+    "Previously stored EIS original duplicated on replay": "SQL_REPLAY_DUPLICATION",
+    "Live Worker SQL does not reach catalog monitor search": "MONITOR_SQL_SNAPSHOT_FAILED",
+}
+
+
+def safe_live_failure(exc):
+    """Print strictly whitelisted stage codes; never raw network exception strings."""
+    data = {"error_class": type(exc).__name__ if type(exc).__name__ in {
+        "AssertionError", "ConnectorTransportError",
+        "ValueError", "TimeoutError", "HTTPStatusError",
+    } else "BLOCKED"}
+    if isinstance(exc, SafeWorkerFailure):
+        data["stage"] = "WORKER_FAILED"
+        data["job_state"] = exc.job_state
+        data["job_failure_code"] = exc.job_failure_code
+    elif type(exc) is AssertionError:
+        data["stage"] = SAFE_LIVE_ASSERTION_CODES.get(str(exc), "UNCLASSIFIED_ASSERTION")
+    return data
+
+
 async def corroborate_eis_cards(rows):
     with bounded_fetch(FetchPolicy(frozenset({"zakupki.gov.ru"}), 2, max_bytes=1_800_000)):
         async with source_client(timeout=20, follow_redirects=False, trust_env=False,
@@ -78,7 +119,7 @@ def real_worker_proof(source_id):
                 if current and current.state == "succeeded":
                     break
                 if current is None or current.state != "queued" or idx == 2:
-                    raise AssertionError("Real source Worker failed")
+                    raise SafeWorkerFailure(current)
                 time.sleep(1.25 if idx == 0 else 2.25)
             rows = store.read(source_id, limit=5)
             if len(rows) < 2 or current is None or current.state != "succeeded":
@@ -129,11 +170,7 @@ def main():
             result = real_worker_proof(source_id)
         except Exception as exc:
             # No URL, token, environment, or raw vendor error text in logs.
-            failed.append({"source": source_id,
-                           "error_class": type(exc).__name__ if type(exc).__name__ in {
-                               "AssertionError", "ConnectorTransportError",
-                               "ValueError", "TimeoutError", "HTTPStatusError",
-                           } else "BLOCKED"})
+            failed.append({"source": source_id, **safe_live_failure(exc)})
             continue
         print("INGUSHETIA_MAINLINE_LIVE_PROOF=" + json.dumps(result, sort_keys=True))
         print("INGUSHETIA_MAINLINE_LIVE_ACCEPTANCE=PASS")

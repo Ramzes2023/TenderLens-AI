@@ -66,3 +66,44 @@ Otherwise create a different empty review folder.
 - Merchant payments, webhooks and subscription entitlements across every
   source-derived delivery channel (issue #266).
 - Independent browser E2E and production review before merge/deployment.
+
+
+## Refresh the existing review worktree for the redesigned version
+
+The initial review checkout (2026-10-23, f7012a6) does NOT automatically receive
+new commits. In Windows PowerShell:
+
+```powershell
+cd C:\Users\ramze\TenderLens-AI
+git fetch origin feat/real-guest-search-gated-20261023
+
+$review = Join-Path $HOME 'VALYQON-WEB-REVIEW'
+$pending = @(git -C $review status --porcelain)
+if ($LASTEXITCODE -ne 0) { throw 'Review worktree unavailable' }
+if ($pending.Count -gt 0) { throw 'Review has local edits; do not overwrite them.' }
+
+git -C $review switch --detach origin/feat/real-guest-search-gated-20261023
+if ($LASTEXITCODE -ne 0) { throw 'Review checkout update failed' }
+
+& (Join-Path $review 'ops\website_preview\start.ps1')
+```
+
+Open http://127.0.0.1:18865/ after the script confirms
+VALYQON_BROWSER_PREVIEW=READY. Docker may take some time rebuilding, but
+the commands do not touch the production compose project or original checkout.
+
+### Rich illustrative chart layout in the *local preview only*
+
+For a fresh isolated database, all REAL analytics values are zero and the
+guest search correctly returns no notices. The analytics section includes a
+visible "LOCAL DESIGN REVIEW ONLY" bar with a
+"Show illustrative chart layout" button. Clicking it paints clearly flagged
+*invented design values* in the visualization cards for style review. The
+yellow disclosure remains visible and repeats that these are NOT real
+procurement statistics. Click again to return to the honest DB view.
+
+The button is displayed only when the web process is launched with
+VALYQON_WEBSITE_REVIEW_ONLY=1, as it is in the isolated review compose.
+Real public deployments do not enable it. No fake tender records are inserted,
+the guest search still fetches only actual DB data, and the source/buyer/link
+redaction policy is unchanged.

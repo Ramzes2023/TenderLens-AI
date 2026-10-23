@@ -12,6 +12,7 @@ import math
 import re
 from urllib.parse import urljoin, urlsplit
 
+import asyncio
 import httpx
 
 from .http import FetchPolicy, _policy, bounded_fetch, source_client
@@ -208,7 +209,7 @@ class GpbEtpPublicSource:
         candidate_count = min(MAX_CANDIDATES, cap * 3)
         # Two independent official candidate routes, plus at most a bounded
         # number of independently fetched exact-host original detail pages.
-        policy = (bounded_fetch(FetchPolicy(frozenset({HOST}), candidate_count + 2, max_bytes=MAX_BYTES))
+        policy = (bounded_fetch(FetchPolicy(frozenset({HOST}), candidate_count + 3, max_bytes=MAX_BYTES))
                   if _policy.get() is None else nullcontext())
         with policy:
             async with source_client(
@@ -231,9 +232,19 @@ class GpbEtpPublicSource:
                     # The publisher officially documents /procedures.rss as a
                     # separate list channel. Never follow a redirect or use an
                     # unapproved third-party mirror.
-                    feed = await client.get(f"https://{HOST}/procedures.rss",
-                                            headers={"Accept": "application/rss+xml, application/xml"})
-                    feed.raise_for_status()
+                    # One strictly bounded retry is allowed for a transient
+                    # publisher transport failure on the same documented RSS.
+                    # Certificate/public-IP/policy rejections cannot be retried.
+                    for attempt in range(2):
+                        try:
+                            feed = await client.get(f"https://{HOST}/procedures.rss",
+                                                    headers={"Accept": "application/rss+xml, application/xml"})
+                            feed.raise_for_status()
+                            break
+                        except ConnectorTransportError as error:
+                            if attempt or not error.retryable:
+                                raise
+                            await asyncio.sleep(0.6)
                     if not any(x in feed.headers.get("content-type", "").lower()
                                for x in ("rss", "xml")):
                         raise ValueError("Official GPB RSS was not XML")

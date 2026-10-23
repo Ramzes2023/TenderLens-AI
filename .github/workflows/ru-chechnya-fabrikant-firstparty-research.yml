@@ -1,0 +1,40 @@
+name: RU Chechnya accredited Fabrikant 44-FZ true current original detail research
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/ru_chechnya_fabrikant44.py
+      - tests/test_ru_chechnya_fabrikant44.py
+      - scripts/ci_ru_chechnya_fabrikant_live_originals.py
+      - .github/workflows/ru-chechnya-fabrikant-firstparty-research.yml
+permissions:
+  contents: read
+jobs:
+  chechnya-fabrikant-exact-region-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Reject unrelated organizations and counterfeit first-party detail IDs
+        run: python -B -m pytest -q tests/test_ru_chechnya_fabrikant44.py
+
+  chechnya-fabrikant-real-firstparty-list-to-two-details:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require two current official committee list rows and independently fetched original cards with exact INN, not search snippet or fixtures
+        timeout-minutes: 6
+        run: python -B -m scripts.ci_ru_chechnya_fabrikant_live_originals

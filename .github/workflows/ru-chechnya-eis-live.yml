@@ -262,7 +262,7 @@ jobs:
     # Github-hosted contracts. Waiting for a busy ubuntu-latest queue would
     # otherwise prevent the trusted RU runner from proving source reachability.
     # Both jobs (and all required repository checks) must be green before merge.
-    runs-on: [self-hosted, Linux]
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 15
     env:
       RU_CHECHNYA_EIS_ENABLED: "true"
@@ -277,9 +277,16 @@ jobs:
       # verify the matching Telegram Bot API response. Never equate a local
       # LocalCaptureBot receipt with external notification delivery.
       RU_CHECHNYA_REQUIRE_TEST_BOT_ACK: "true"
-      RU_CHECHNYA_E2E_TEST_BOT_TOKEN: ${{ secrets.VALYQON_RU_CHECHNYA_E2E_TEST_BOT_TOKEN }}
-      RU_CHECHNYA_E2E_TEST_CHAT_ID: ${{ secrets.VALYQON_RU_CHECHNYA_E2E_TEST_CHAT_ID }}
     steps:
+      # Reject any other self-hosted Linux runner BEFORE executing repository
+      # code or exposing the authorized test-chat secrets.
+      - name: Require specifically trusted Russian VALYQON worker
+        env:
+          ACTUAL_RUNNER_NAME: ${{ runner.name }}
+        shell: bash
+        run: |
+          test "$ACTUAL_RUNNER_NAME" = "VALYQON-RU-01"
+          echo "RU_CHECHNYA_TRUSTED_RU_RUNNER=VERIFIED"
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -305,6 +312,10 @@ jobs:
           echo "RU_CHECHNYA_EIS_RSS_URLS=${RU_CHECHNYA_EIS_RSS_URLS}" >> "$GITHUB_ENV"
       - name: Official LIVE EIS -> Worker -> SQLite -> query -> local alert -> authorized real Bot API ACK
         timeout-minutes: 7
+        env:
+          # Test-only secrets live ONLY in this final verified-runner step.
+          RU_CHECHNYA_E2E_TEST_BOT_TOKEN: ${{ secrets.VALYQON_RU_CHECHNYA_E2E_TEST_BOT_TOKEN }}
+          RU_CHECHNYA_E2E_TEST_CHAT_ID: ${{ secrets.VALYQON_RU_CHECHNYA_E2E_TEST_CHAT_ID }}
         run: python -B -m scripts.ci_ru_chechnya_eis_real_worker
       - name: Safe diagnosis on failed live EIS intake (never masks failure)
         if: failure()

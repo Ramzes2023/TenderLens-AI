@@ -138,6 +138,56 @@ def parse_gpb_verified_detail(payload, identity, detail_url):
     return notice
 
 
+
+def parse_gpb_official_rss(payload, *, limit=MAX_CANDIDATES):
+    """Accept only exact-origin procurement originals in GPB's documented RSS.
+
+    An XML title/link is only a candidate; independently fetched HTML detail
+    must still corroborate the exact native procedure number and visible H1.
+    """
+    import xml.etree.ElementTree as ET
+
+    if type(limit) is not int or not 1 <= limit <= MAX_CANDIDATES:
+        raise ValueError("Invalid GPB RSS candidate bound")
+    if type(payload) is not bytes or not 0 < len(payload) <= MAX_BYTES:
+        raise ValueError("Invalid official GPB RSS size")
+    upper = payload.upper()
+    if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper or b"\\x00" in payload:
+        raise ValueError("Unsafe official GPB RSS XML")
+    root = ET.fromstring(payload)
+    if root.tag != "rss" or root.find("channel") is None:
+        raise ValueError("Not an official GPB RSS channel")
+    seen, entries = {}, []
+    for item in root.find("channel").findall("item"):
+        raw = (item.findtext("link") or "").strip()
+        title = " ".join((item.findtext("title") or "").split())
+        if not 8 <= len(title) <= 1000 or not raw or len(raw) > 1500:
+            continue
+        if chr(92) in raw or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in raw):
+            continue
+        try:
+            parsed = urlsplit(raw)
+        except ValueError:
+            continue
+        match = _PATH.fullmatch(parsed.path)
+        if (not match or parsed.scheme != "https" or parsed.netloc != HOST
+                or parsed.query or parsed.fragment or parsed.username
+                or parsed.password or parsed.port is not None):
+            continue
+        identity = match.group(1)
+        if identity in seen:
+            if seen[identity] != raw:
+                raise ValueError("Conflicting official GPB RSS original ID")
+            continue
+        seen[identity] = raw
+        entries.append((identity, raw))
+        if len(entries) >= limit:
+            break
+    if not entries:
+        raise ValueError("No original GPB procurement URLs in official RSS")
+    return entries
+
+
 @dataclass(frozen=True)
 class GpbEtpPublicSource:
     timeout: float = 20
@@ -153,7 +203,9 @@ class GpbEtpPublicSource:
             raise ValueError("Invalid GPB source limit")
         cap = min(limit, MAX_DETAILS)
         candidate_count = min(MAX_CANDIDATES, cap * 3)
-        policy = (bounded_fetch(FetchPolicy(frozenset({HOST}), candidate_count + 1, max_bytes=MAX_BYTES))
+        # Two independent official candidate routes, plus at most a bounded
+        # number of independently fetched exact-host original detail pages.
+        policy = (bounded_fetch(FetchPolicy(frozenset({HOST}), candidate_count + 2, max_bytes=MAX_BYTES))
                   if _policy.get() is None else nullcontext())
         with policy:
             async with source_client(
@@ -163,11 +215,25 @@ class GpbEtpPublicSource:
                 # Keep normal TLS verification, strict host policy and no redirects.
                 headers={"Accept": "text/html", "User-Agent": "Mozilla/5.0"},
             ) as client:
-                res = await client.get(LIST_URL)
-                res.raise_for_status()
-                if "html" not in res.headers.get("content-type", "").lower():
-                    raise ValueError("Public GPB listing is not HTML")
-                records = parse_gpb_public_links(res.content, limit=candidate_count)
+                from .http import ConnectorTransportError
+                records = None
+                try:
+                    res = await client.get(LIST_URL)
+                    res.raise_for_status()
+                    if "html" not in res.headers.get("content-type", "").lower():
+                        raise ValueError("Public GPB listing is not HTML")
+                    records = parse_gpb_public_links(res.content, limit=candidate_count)
+                except (ConnectorTransportError, httpx.HTTPStatusError, ValueError,
+                        httpx.TransportError, TimeoutError, OSError):
+                    # The publisher officially documents /procedures.rss as a
+                    # separate list channel. Never follow a redirect or use an
+                    # unapproved third-party mirror.
+                    feed = await client.get(f"https://{HOST}/procedures.rss")
+                    feed.raise_for_status()
+                    if not any(x in feed.headers.get("content-type", "").lower()
+                               for x in ("rss", "xml")):
+                        raise ValueError("Official GPB RSS was not XML")
+                    records = parse_gpb_official_rss(feed.content, limit=candidate_count)
                 verified = []
                 for identity, detail_url in records:
                     try:

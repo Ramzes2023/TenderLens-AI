@@ -112,7 +112,60 @@
         );
       }
     }
-    updateMarketPulse();
+
+    function demoPulse(days) {
+      const rows=Array.isArray(days) && days.length===14 ? days :
+        [4,9,6,12,8,15,11,14,18,10,17,22,16,24].map((count,i)=>{
+          const now=new Date();
+          const day=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),
+            now.getUTCDate()-13+i)).toISOString().slice(0,10);
+          return {date:day,count,priced:Math.floor(count*.66)};
+        });
+      const values=rows.map(x=>x.count);
+      const highest=Math.max(1,...values);
+      const format=new Intl.NumberFormat(ru()?'ru-RU':'en-US');
+      total.textContent=format.format(values.reduce((a,b)=>a+b,0));
+      sample.textContent='186';
+      chart.replaceChildren();
+      rows.forEach((day,i)=>{
+        const column=create('div','vq-pulse-column');
+        const bar=create('div','vq-pulse-bar');
+        bar.style.height=Math.max(3,Math.round(day.count/highest*154))+'px';
+        bar.title=day.date+' · '+format.format(day.count)+' · '+t('ILLUSTRATIVE','УЧЕБНЫЕ ДАННЫЕ');
+        column.append(bar,create('small','',i%2===0?day.date.slice(8):''));
+        chart.append(column);
+      });
+      chart.setAttribute('aria-label',t('Illustrative 14-day chart, not real procurement numbers.',
+        'Учебный график за 14 дней, не реальные показатели закупок.'));
+      range.textContent=t('ILLUSTRATIVE 14 DAYS','УЧЕБНЫЕ 14 ДНЕЙ');
+      status.textContent=t(
+        'DEMONSTRATION: all numbers in this chart are invented for design preview, not observed procurement data.',
+        'ДЕМОНСТРАЦИЯ: все цифры этого графика придуманы для оценки дизайна, а не получены из закупок.');
+      const note=el('vqPulseDemoDisclosure');
+      if(note){note.hidden=false;note.textContent=t(
+        'ILLUSTRATIVE DATA · EXAMPLE GRAPH · NOT REAL PROCUREMENT ACTIVITY',
+        'УЧЕБНЫЕ ДАННЫЕ · ПРИМЕР ГРАФИКА · НЕ РЕАЛЬНАЯ АКТИВНОСТЬ ЗАКУПОК');
+      }
+      const badge=document.querySelector('.vq-pulse-verified');
+      if(badge){badge.classList.add('is-demo');badge.textContent=t(
+        'DEMO DATA — NOT VERIFIED', 'УЧЕБНЫЕ ДАННЫЕ — НЕ РЕАЛЬНЫЕ');
+      }
+    }
+    function realPulse(){
+      const note=el('vqPulseDemoDisclosure');
+      if(note)note.hidden=true;
+      const badge=document.querySelector('.vq-pulse-verified');
+      if(badge){badge.classList.remove('is-demo');badge.textContent=t(
+        'Verified database snapshot','Показатели из сохранённой базы');
+      }
+      updateMarketPulse();
+    }
+    window.addEventListener('valyqon-demo-chart-mode', event=>{
+      if(event.detail?.demo)demoPulse(event.detail.daily);
+      else realPulse();
+    });
+    if(document.body.dataset.publicAnalyticsMode==='demo')demoPulse();
+    else realPulse();
   }
 
   const openButton = el('vqOpenHelp'), closeButton = el('vqCloseHelp'),

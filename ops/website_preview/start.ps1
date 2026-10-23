@@ -33,6 +33,23 @@ try {
         & docker compose --env-file $envFile -p valyqon-website-review -f $compose ps
         throw "Preview is not ready. Inspect review-only logs; production containers were not changed."
     }
+    # Do not announce password recovery as ready if Mailpit is unreachable.
+    $mailpitReady = $false
+    for ($mailAttempt = 0; $mailAttempt -lt 20; $mailAttempt++) {
+        try {
+            $mailResponse = Invoke-WebRequest -Uri "http://127.0.0.1:18866/api/v1/messages" -UseBasicParsing -TimeoutSec 3
+            if ($mailResponse.StatusCode -eq 200) {
+                $mailpitReady = $true
+                break
+            }
+        } catch { }
+        Start-Sleep -Seconds 1
+    }
+    if (-not $mailpitReady) {
+        & docker compose --env-file $envFile -p valyqon-website-review -f $compose ps
+        throw "MAILPIT_INBOX=UNAVAILABLE; cannot confirm password recovery. Check localhost:18866 and local review logs."
+    }
+    Write-Host "MAILPIT_INBOX=READY" -ForegroundColor Green
     Write-Host "VALYQON_BROWSER_PREVIEW=READY" -ForegroundColor Green
     Write-Host "LOCAL_PREVIEW_URL=$website" -ForegroundColor Green
     Write-Host "LOCAL_PASSWORD_RECOVERY=http://127.0.0.1:18865/forgot-password" -ForegroundColor Green

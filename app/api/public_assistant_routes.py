@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import os
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.llm.base import LLMError
@@ -89,4 +90,4 @@ async def guest_help_answer(payload: GuestHelpQuestion, request: Request):
     if not answer:
         raise HTTPException(503, "Public AI help is temporarily unavailable.",
                             headers=PUBLIC_HEADERS)
-    return {"answer": answer[:1500], "scope": "public_product_only"}
+    return JSONResponse({"answer": answer[:1500], "scope": "public_product_only"}, headers=PUBLIC_HEADERS)

@@ -52,4 +52,21 @@ RU_RESEARCH_TARGETS = (
     ("gazprom_gmt","Газпром — GMT активные тендеры","https://gmt.gazprom.ru/tenders/active/", False,"general","https://github.com/Ramzes2023/TenderLens-AI/pull/99"),
 )
 
-__all__ = ["RU_STAGED_ADAPTERS", "RU_RESEARCH_TARGETS"]
+
+# Evidence about one region, not an independently countable source card.
+RU_REGIONAL_PUBLISHER_FINDINGS = (
+    {
+        "region_code": "06",
+        "region": "Республика Ингушетия",
+        "federal_publication": "EIS 44-FZ",
+        "independent_regional_publisher": "not_verified",
+        "absence_proven": False,
+        "regional_tenders_exist": True,
+        "small_purchase_shops": "distributed_selection_documented_in_2022",
+        "production_ingestion_verified": False,
+        "evidence_url": "https://github.com/Ramzes2023/TenderLens-AI/pull/270",
+        "research_note": "EIS originals and accredited ETP mirror are one publication, not two independent regional registries.",
+    },
+)
+
+__all__ = ["RU_STAGED_ADAPTERS", "RU_RESEARCH_TARGETS", "RU_REGIONAL_PUBLISHER_FINDINGS"]

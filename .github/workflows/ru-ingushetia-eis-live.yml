@@ -7,6 +7,8 @@ on:
       - app/sources/ru_ingushetia_fabrikant44.py
       - app/sources/http_transport.py
       - app/sources/catalog.py
+      - app/sources/multi.py
+      - app/monitoring/service.py
       - app/sources/opportunities.py
       - app/sources/snapshots.py
       - app/bot/main.py

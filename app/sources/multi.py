@@ -165,7 +165,17 @@ class MultiSourceFetcher:
                     int((perf_counter() - started) * 1000),
                 )
 
-                message = str(error).strip() or "Source fetch failed."
+                # Regional live connectors can fail with third-party URLs
+                # or proxy credentials embedded inside nested exceptions.
+                # SourceRunStatus/SourceFailure are returned to consumer code,
+                # so do not expose the vendor exception text in those public
+                # records. Diagnostics live in separately redacted CI output.
+                if registration.key in {
+                    "ru_ingushetia_eis44", "ru_ingushetia_fabrikant44",
+                }:
+                    message = "Regional source unavailable; inspect restricted diagnostics."
+                else:
+                    message = str(error).strip() or "Source fetch failed."
 
                 failure = SourceFailure(
                     source=registration.key,

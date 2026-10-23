@@ -238,3 +238,82 @@ def test_all_unverified_stale_cards_never_claim_success(monkeypatch):
     with pytest.raises(ValueError, match="No independently verified"):
         asyncio.run(RoseltorgPublicSource().fetch(3))
     assert requests == [LIST_URL] + entries
+
+
+def test_real_publisher_transient_list_get_can_recover_with_exactly_one_retry(monkeypatch):
+    """Mock transport only; real first-party Worker CI is still mandatory."""
+    from app.sources.http import ConnectorTransportError
+    attempts = []
+
+    class Reply:
+        def __init__(self, html):
+            self.content = html
+            self.headers = {"content-type": "text/html"}
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        async def get(self, url):
+            attempts.append(url)
+            if url == LIST_URL and attempts.count(LIST_URL) == 1:
+                raise ConnectorTransportError(retryable=True, reason="network")
+            return Reply(listing() if url == LIST_URL else detail())
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        assert kwargs["trust_env"] is False
+        assert kwargs["follow_redirects"] is False
+        yield Client()
+
+    import app.sources.roseltorg_public as module
+    monkeypatch.setattr(module, "source_client", client)
+    async def no_wait(_):
+        return None
+    monkeypatch.setattr(module.asyncio, "sleep", no_wait)
+    notice = asyncio.run(RoseltorgPublicSource().fetch(1))
+    assert [x.external_id for x in notice] == [ID]
+    assert attempts == [LIST_URL, LIST_URL, URL]
+
+
+@pytest.mark.parametrize("reason", ["public_ip", "tls_certificate", "policy"])
+def test_security_failure_not_retried_even_once(monkeypatch, reason):
+    from app.sources.http import ConnectorTransportError
+    attempts = []
+
+    class Client:
+        async def get(self, url):
+            attempts.append(url)
+            raise ConnectorTransportError(retryable=False, reason=reason)
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        yield Client()
+
+    import app.sources.roseltorg_public as module
+    monkeypatch.setattr(module, "source_client", client)
+    with pytest.raises(ConnectorTransportError):
+        asyncio.run(RoseltorgPublicSource().fetch(1))
+    assert attempts == [LIST_URL]
+
+
+def test_transient_network_also_stops_after_exactly_one_retry(monkeypatch):
+    from app.sources.http import ConnectorTransportError
+    attempts = []
+
+    class Client:
+        async def get(self, url):
+            attempts.append(url)
+            raise ConnectorTransportError(retryable=True, reason="network")
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        yield Client()
+
+    import app.sources.roseltorg_public as module
+    monkeypatch.setattr(module, "source_client", client)
+    async def no_wait(_):
+        return None
+    monkeypatch.setattr(module.asyncio, "sleep", no_wait)
+    with pytest.raises(ConnectorTransportError):
+        asyncio.run(RoseltorgPublicSource().fetch(1))
+    assert attempts == [LIST_URL, LIST_URL]

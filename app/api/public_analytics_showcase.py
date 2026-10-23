@@ -34,9 +34,9 @@ HERO_DASHBOARD_HTML = """<aside class="vqx-product" aria-label="Live-data produc
 </aside>"""
 
 ANALYTICS_WALL_HTML = """<section class="vqx-analytics" id="market-analytics" aria-labelledby="vqxAnalyticsHeading">
- <div class="vqx-section-bar"><div><span class="vqx-eyebrow">PROCUREMENT DATA STUDIO <i></i> ACTUAL DATABASE SNAPSHOT</span>
+ <div class="vqx-section-bar"><div><span class="vqx-eyebrow">PROCUREMENT DATA STUDIO <i></i> DEMO OR VERIFIED SNAPSHOT</span>
   <h2 id="vqxAnalyticsHeading">Procurement intelligence, <span>clearly visualized.</span></h2>
-  <p>A rich view of the opportunities stored by VALYQON connectors. Every chart uses measured data from a bounded snapshot, never example numbers.</p></div>
+  <p>Explore the procurement intelligence interface. Demonstration figures are clearly labelled; real-data mode reads only persisted connector observations.</p></div>
   <a class="vqx-text-cta" href="#guest-search">Search opportunities <span aria-hidden="true">↗</span></a></div>
  <div class="vqx-review-toggle" id="vqxReviewTools" hidden><div><strong>LOCAL DESIGN REVIEW ONLY</strong><span id="vqxReviewDisclosure">Illustrative charts can be enabled for layout inspection. They are not real procurement statistics, and guest search stays unchanged.</span></div><button type="button" id="vqxToggleDemo" aria-pressed="false">Show illustrative chart layout</button></div>
  <div class="vqx-stats-row">
@@ -76,5 +76,5 @@ ANALYTICS_WALL_HTML = """<section class="vqx-analytics" id="market-analytics" ar
    <div class="vqx-chart-foot">These bars reflect field availability, not source reliability or procurement outcome probability.</div>
   </article>
  </div>
- <div class="vqx-source-notice"><span class="vqx-source-led">◉</span><div><strong id="vqxIntelligenceStatus" role="status" aria-live="polite">Connecting to saved procurement observations…</strong><p>All figures relate only to a capped recent shared-source database snapshot. No tenant records, platform identities, buyers or individual notice links are included.</p></div><a href="#coverage">Source directory ↗</a></div>
+ <div class="vqx-source-notice"><span class="vqx-source-led">◉</span><div><strong id="vqxIntelligenceStatus" role="status" aria-live="polite">Connecting to saved procurement observations…</strong><p>Public demonstration figures are illustrative, not actual market observations. Real-data mode uses a bounded aggregate sample, without customer identities or source links.</p></div><a href="#coverage">Source directory ↗</a></div>
 </section>"""

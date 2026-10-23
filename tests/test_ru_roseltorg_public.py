@@ -156,3 +156,85 @@ def test_exact_roseltorg_procedure_breadcrumb_only_in_html_title_is_not_proof():
     ).encode()
     with pytest.raises(ValueError, match="breadcrumb identity mismatch"):
         parse_roseltorg_detail(body, identity=ID, url=URL)
+
+
+def test_stale_first_official_cards_do_not_starve_later_verified_original(monkeypatch):
+    """Offline transport simulation only, NOT evidence of a reachable source."""
+    ids = [f"03183001208260005{x:02d}" for x in (50, 51, 52, 53)]
+    links = [f"https://{HOST}/procedure/{n}/1" for n in ids]
+    index = ("<html>" + "".join(
+        f"<a href='{url}'>Официальная закупка</a>" for url in links
+    ) + "</html>").encode("utf-8")
+    seen = []
+
+    class Reply:
+        def __init__(self, body):
+            self.content = body
+            self.headers = {"content-type": "text/html"}
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        async def get(self, url):
+            seen.append(url)
+            if url == LIST_URL:
+                return Reply(index)
+            if url in links[:2]:
+                # Removed entries are not independent real procurement details.
+                return Reply(b"<html><h1>Извещение удалено</h1></html>")
+            if url == links[2]:
+                return Reply(detail(number=ids[2]))
+            raise AssertionError("Exceeded bounded one-original verification")
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        assert kwargs["trust_env"] is False
+        assert kwargs["follow_redirects"] is False
+        yield Client()
+
+    import app.sources.roseltorg_public as module
+    monkeypatch.setattr(module, "source_client", client)
+    actual = asyncio.run(RoseltorgPublicSource().fetch(1))
+    assert [v.external_id for v in actual] == ids[2:3]
+    assert [v.url for v in actual] == links[2:3]
+    assert seen == [LIST_URL, links[0], links[1], links[2]]
+
+
+def test_roseltorg_stale_candidates_have_strict_maximum():
+    from app.sources.roseltorg_public import MAX_CANDIDATES, MAX_DETAILS
+    assert MAX_CANDIDATES == 9 and MAX_DETAILS == 3
+    with pytest.raises(ValueError, match="bound"):
+        parse_roseltorg_links(listing(), limit=10)
+    with pytest.raises(ValueError, match="bound"):
+        parse_roseltorg_links(listing(), limit=True)
+
+
+def test_all_unverified_stale_cards_never_claim_success(monkeypatch):
+    entries = [f"https://{HOST}/procedure/03183001208260005{x:02d}/1"
+               for x in range(9)]
+    index = ("<html>" + "".join(
+        f"<a href='{u}'>Опубликованная процедура</a>" for u in entries
+    ) + "</html>").encode()
+    requests = []
+
+    class Reply:
+        def __init__(self, body):
+            self.content = body
+            self.headers = {"content-type": "text/html"}
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        async def get(self, url):
+            requests.append(url)
+            return Reply(index if url == LIST_URL else b"<h1>Removed</h1>")
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        yield Client()
+
+    import app.sources.roseltorg_public as module
+    monkeypatch.setattr(module, "source_client", client)
+    with pytest.raises(ValueError, match="No independently verified"):
+        asyncio.run(RoseltorgPublicSource().fetch(3))
+    assert requests == [LIST_URL] + entries

@@ -39,6 +39,10 @@
         ?{instant:null,day,kind:'date'}:null;
     }
     if(!/^\d{4}-\d{2}-\d{2}T\d\d:\d\d(?::\d\d(?:\.\d{1,3})?)?(?:Z|[+-]\d\d:\d\d)$/i.test(value))return null;
+    // Reject impossible written civil dates before applying the supplied offset.
+    const yy=Number(value.slice(0,4)),mm=Number(value.slice(5,7)),dd=Number(value.slice(8,10));
+    const civil=new Date(Date.UTC(yy,mm-1,dd));
+    if(civil.getUTCFullYear()!==yy||civil.getUTCMonth()+1!==mm||civil.getUTCDate()!==dd)return null;
     const when=new Date(value);
     return Number.isNaN(when.getTime())||when.getUTCFullYear()<2000||when.getUTCFullYear()>2100
       ?null:{instant:when,day:when,kind:'instant'};
@@ -200,6 +204,16 @@
     link.href='#saved';link.title=t('Open Saved and select this tender for full details',
       'Откройте «Сохранённое» для полной карточки этой закупки');
     footer.append(link);article.append(footer);
+    if(canEdit()&&record.workflow){
+      article.draggable=true;
+      article.addEventListener('dragstart',event=>{
+        if(!event.dataTransfer)return;
+        event.dataTransfer.effectAllowed='move';
+        event.dataTransfer.setData('text/plain',String(record.id));
+        article.classList.add('is-dragging');
+      });
+      article.addEventListener('dragend',()=>article.classList.remove('is-dragging'));
+    }
     return article;
   }
   function renderBoard(){
@@ -213,6 +227,24 @@
       header.append(make('strong','',stageLabel(key)),
         make('span','vq-planner-col-count',String(matching.length)));
       column.append(header);
+      if(canEdit()){
+        column.addEventListener('dragover',event=>{
+          if(!event.dataTransfer||!Array.from(event.dataTransfer.types).includes('text/plain'))return;
+          event.preventDefault();column.classList.add('is-drop-target');
+          event.dataTransfer.dropEffect='move';
+        });
+        column.addEventListener('dragleave',event=>{
+          if(!column.contains(event.relatedTarget))column.classList.remove('is-drop-target');
+        });
+        column.addEventListener('drop',event=>{
+          event.preventDefault();column.classList.remove('is-drop-target');
+          const id=Number(event.dataTransfer?.getData('text/plain'));
+          const record=items.find(x=>x.id===id);
+          const select=column.ownerDocument.querySelector('.vq-planner-card[data-saved-id="'+id+'"] select');
+          if(!record?.workflow||!select)return;
+          updateStage(record,key,select);
+        });
+      }
       const list=make('div','vq-planner-column-list');
       matching.forEach(record=>list.append(card(record)));
       if(!matching.length)list.append(make('p','vq-planner-blank',
@@ -348,7 +380,18 @@
       lines.push('END:VEVENT');
     }
     lines.push('END:VCALENDAR','');
-    return lines.join('\r\n');
+    // Fold iCalendar content lines by UTF-8 octets (RFC 5545).
+    const encoder=new TextEncoder(),folded=[];
+    for(const line of lines){
+      let segment='',bytes=0;
+      for(const char of line){
+        const size=encoder.encode(char).length;
+        if(bytes+size>75&&segment){folded.push(segment);segment=' ';bytes=1;}
+        segment+=char;bytes+=size;
+      }
+      folded.push(segment);
+    }
+    return folded.join('\r\n');
   };
   $('vqPlannerCalendarExport').addEventListener('click',()=>{
     if(!enabled()||!loaded||!records.some(r=>r.date))return;

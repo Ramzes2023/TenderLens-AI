@@ -371,9 +371,11 @@ class TenderMonitorService:
                 # time-bounded, read-only Worker-SQL adapter on Ingushetia.
                 from app.sources.snapshots import FreshIngushetiaWorkerSource
                 allowed = {"ru_ingushetia_eis44", "ru_ingushetia_fabrikant44"}
+                registry = getattr(catalog, "registry", None)
                 if (not source_keys or not set(source_keys).issubset(allowed)
+                        or registry is None
                         or any(not isinstance(
-                            catalog.registry.get(key).source,
+                            registry.get(key).source,
                             FreshIngushetiaWorkerSource,
                         ) for key in source_keys)):
                     raise ValueError("Deep regional scan requires fresh Worker SQL sources")

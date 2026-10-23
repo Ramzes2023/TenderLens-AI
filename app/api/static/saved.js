@@ -322,6 +322,10 @@ function openDetail(index){
   $('savedDetail').showModal();
  }
  loadWorkflow(index);
+ window.dispatchEvent(new CustomEvent('valyqon-saved-detail-open',{
+  detail:{id:Number(record.id),organizationId:state.organizationId,
+    companyId:state.activeCompanyId}
+ }));
 }
 
 function opportunityKey(item){

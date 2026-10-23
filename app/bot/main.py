@@ -48,6 +48,27 @@ def create_dispatcher() -> Dispatcher:
     return dispatcher
 
 
+def require_ingushetia_worker_sql_settings(settings, catalog) -> None:
+    """Fail closed when a regional Worker-SQL alert mode cannot actually start.
+
+    This is purely static validation; no DB, network, bot or subscriptions.
+    Legacy and all other disabled modes retain existing behavior.
+    """
+    if not settings.ru_ingushetia_worker_sql_alerts_enabled:
+        return
+    from app.monitoring.config import MonitoringConfigurationError
+
+    keys = frozenset({"ru_ingushetia_eis44", "ru_ingushetia_fabrikant44"})
+    if not keys.intersection(catalog.enabled_keys):
+        raise MonitoringConfigurationError(
+            "Worker-SQL alerts require an explicitly enabled Ingushetia source"
+        )
+    if not (settings.ru_background_catalog_enabled and settings.enabled):
+        raise MonitoringConfigurationError(
+            "Ingushetia Worker SQL alerts require explicit background monitoring"
+        )
+
+
 async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: int = 20000,
                   company_profile=None, tender_repository=None, rag_service=None,
                   monitoring_service=None, company_service=None, auth_service=None,
@@ -197,32 +218,16 @@ def main() -> int:
     monitoring_service = None
     tender_discovery_service = None
     source_catalog = None
+    monitor_settings = None
 
     try:
         monitor_settings = load_monitoring_settings()
         source_catalog = build_source_catalog(monitor_settings)
+        # Validate BEFORE initializing regional opportunity/monitor tables.
+        require_ingushetia_worker_sql_settings(monitor_settings, source_catalog)
         if monitor_settings.ru_ingushetia_worker_sql_alerts_enabled:
-            # A Worker-SQL alert switch without either approved regional
-            # source is an invalid configuration. Fail *before* creating
-            # opportunity tables, monitor subscriptions or a bot session.
-            # Never silently fall back to live HTTP or an unrelated EIS feed.
-            regional_source_keys = frozenset({
-                "ru_ingushetia_eis44", "ru_ingushetia_fabrikant44",
-            })
-            if not regional_source_keys.intersection(source_catalog.enabled_keys):
-                raise MonitoringConfigurationError(
-                    "Worker-SQL alerts require an explicitly enabled Ingushetia source"
-                )
-            # Operator-only: connect notifications to the SAME durable Worker
-            # SQL without re-querying fragile official regional endpoints for
-            # each recipient. Never auto-start ingestion or send Telegram.
-            # If the Worker has not refreshed this source recently, the
-            # snapshot adapter fails closed and no alert is marked delivered.
-            if (not monitor_settings.ru_background_catalog_enabled
-                    or not monitor_settings.enabled):
-                raise MonitoringConfigurationError(
-                    "Ingushetia Worker SQL alerts require explicit background monitoring"
-                )
+            # Operator-only: read the SAME durable Worker SQL without
+            # re-querying fragile regional upstreams per Telegram recipient.
             from app.sources.opportunities import OpportunityRepository
             from app.sources.snapshots import fresh_ingushetia_worker_catalog
             opportunities = OpportunityRepository(database)
@@ -289,8 +294,15 @@ def main() -> int:
         ValueError,  # Source-owned Worker-SQL catalog rejects unapproved routing.
     ):
         logger.warning(
-            "Monitoring ????????: ????????? source/MONITOR ????????? ? SQLite."
+            "Monitoring configuration unavailable; check source/MONITOR settings and database."
         )
+        # For explicitly requested Ingushetia Worker-SQL alert mode, silently
+        # launching the bot with no monitoring would falsely suggest tenders
+        # were being delivered. Refuse startup without exposing credentials.
+        if monitor_settings is not None and monitor_settings.ru_ingushetia_worker_sql_alerts_enabled:
+            cache.close()
+            database.close()
+            return 2
 
     try:
         asyncio.run(run_bot(

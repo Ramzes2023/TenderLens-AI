@@ -1,0 +1,48 @@
+name: RU Chechnya real EIS Worker Telegram release proof
+
+# This is intentionally SEPARATE from green offline PR contracts.
+# A source cannot merge based on mocks, hosted-network diagnostics or a
+# skipped self-hosted job: a matching actual trusted RU live success is needed.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/ru-chechnya-release-gate.yml
+      - .github/workflows/ru-chechnya-eis-live.yml
+      - scripts/ru_chechnya_release_gate.py
+      - scripts/ci_ru_chechnya_eis_real_worker.py
+      - scripts/ru_chechnya_windows_live.ps1
+      - scripts/ru_chechnya_eis_transport_probe.py
+      - scripts/ru_chechnya_official_alternatives_probe.py
+      - app/sources/ru_chechnya_eis_rss.py
+      - app/sources/eis_rss.py
+      - app/sources/catalog.py
+      - app/sources/ingestion.py
+      - app/monitoring/config.py
+      - app/bot/monitoring.py
+      - tests/test_ru_chechnya_eis_rss.py
+      - tests/test_ru_chechnya_release_gate.py
+      - docs/sources/ru_chechnya_eis_rss.md
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  chechnya-trusted-live-release-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Release-proof evaluator denies fake, skipped and hosted jobs
+        run: python -B -m pytest -q tests/test_ru_chechnya_release_gate.py
+      - name: Block merge without exact-head trusted Linux live EIS Worker and Telegram ACK
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VALYQON_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python -B -m scripts.ru_chechnya_release_gate

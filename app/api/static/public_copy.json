@@ -500,5 +500,6 @@
   "All figures relate only to a capped recent shared-source database snapshot. No tenant records, platform identities, buyers or individual notice links are included.": "Все показатели относятся только к ограниченной выборке из общей базы. В ней нет данных клиентов, заказчиков, названий площадок или исходных ссылок.",
   "Source directory ↗": "Каталог источников ↗",
   "Full access": "Полный доступ",
-  "Sources": "Источники"
+  "Sources": "Источники",
+  "INTERACTIVE DEMO · NO LIVE TENDERS IN THE ILLUSTRATION. No search has been run here. Metrics come from stored data unless the optional local illustrative-chart mode is visibly enabled.": "ИНТЕРАКТИВНЫЙ ПРИМЕР · На иллюстрации нет настоящих тендеров. Поиск здесь ещё не запускался. Показатели загружаются из базы, кроме явно включённого учебного режима графиков в локальной тестовой версии."
 }

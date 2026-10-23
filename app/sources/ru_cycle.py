@@ -24,6 +24,8 @@ RU_APPROVED_SOURCES = (
     "ru_samara_public_list",
     # Official anonymous Dagestan list -> fenced Worker/SQL; deep details login-protected.
     "ru_dagestan_public_list",
+    # 44-FZ first-party originals verified; duplicate EIS registration number.
+    "ru_chechnya_fabrikant44",
 )
 
 

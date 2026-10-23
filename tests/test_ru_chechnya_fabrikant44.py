@@ -97,3 +97,39 @@ def test_bounded_official_only_live_adapter_contract_offline(monkeypatch):
     notices = asyncio.run(ChechnyaFabrikant44Source().fetch(limit=1))
     assert [n.tender_number for n in notices] == [NUMBER]
     assert seen == [LIST_URL, URL]
+
+
+def test_operator_disabled_default_and_real_firstparty_source_explicit_opt_in():
+    from dataclasses import replace
+    from app.sources.ru_cycle import approved_ru_keys
+    from app.sources.ingestion import HOSTS
+    from app.scoring.runs import validate_configuration, ScoringInputError
+    from app.monitoring.config import MonitoringSettings
+    from app.sources.catalog import build_source_catalog
+
+    base = MonitoringSettings(
+        enabled=False, interval_seconds=600, max_items=3,
+        max_notifications_per_cycle=2, request_timeout=25,
+        eis_rss_urls=(), ca_bundle_file=None, profile_feeds_enabled=False,
+    )
+    disabled = build_source_catalog(base)
+    assert SOURCE_ID not in disabled.enabled_keys
+    with pytest.raises(ValueError, match="No operator-approved"):
+        approved_ru_keys(disabled)
+
+    enabled = build_source_catalog(replace(base, ru_chechnya_fabrikant44_enabled=True))
+    assert SOURCE_ID in enabled.enabled_keys
+    assert approved_ru_keys(enabled) == (SOURCE_ID,)
+    assert HOSTS[SOURCE_ID] == frozenset({"44.fabrikant.ru", "soap4.fabrikant.ru"})
+    assert enabled.registry.get(SOURCE_ID).metadata.official is False
+    assert validate_configuration([SOURCE_ID], 3)["sources"] == [SOURCE_ID]
+
+
+def test_chechnya_eis_native_number_stays_same_and_not_a_unique_eis_publisher():
+    data = verified_fabrikant_notice(detail(), number=NUMBER, url=URL, title=TITLE)
+    assert len(data.external_id) == 19
+    assert data.tender_number == data.external_id
+    assert data.source == SOURCE_ID
+    assert data.customer == ORGANIZER
+    assert data.initial_price is None
+    assert data.region == REGION

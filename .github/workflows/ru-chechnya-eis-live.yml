@@ -8,6 +8,9 @@ on:
     branches: [feat/ru-chechnya-eis-rss-20261022]
     paths:
       - .github/workflows/ru-chechnya-eis-live.yml
+      - .github/workflows/ru-chechnya-release-gate.yml
+      - scripts/ru_chechnya_release_gate.py
+      - tests/test_ru_chechnya_release_gate.py
       - scripts/ci_ru_chechnya_eis_real_worker.py
       - scripts/ru_chechnya_eis_transport_probe.py
       - scripts/ru_chechnya_official_alternatives_probe.py
@@ -36,6 +39,9 @@ on:
       - scripts/ru_chechnya_eis_transport_probe.py
       - scripts/ru_chechnya_official_alternatives_probe.py
       - .github/workflows/ru-chechnya-eis-live.yml
+      - .github/workflows/ru-chechnya-release-gate.yml
+      - scripts/ru_chechnya_release_gate.py
+      - tests/test_ru_chechnya_release_gate.py
   workflow_dispatch:
     inputs:
       regional_rss_url:
@@ -70,7 +76,7 @@ jobs:
       - name: Compile new source and strict live acceptance
         run: python -m compileall -q app/sources/ru_chechnya_eis_rss.py scripts/ci_ru_chechnya_eis_real_worker.py scripts/ru_chechnya_eis_transport_probe.py scripts/ru_chechnya_validate_url.py scripts/ru_chechnya_official_alternatives_probe.py
       - name: Chechnya official URL, regional evidence, legal provenance, opt-in, Worker and dedup contracts
-        run: python -B -m pytest -q tests/test_ru_chechnya_eis_rss.py tests/test_ru_background_telegram_catalog.py tests/test_ru_telegram_original_dedup.py
+        run: python -B -m pytest -q tests/test_ru_chechnya_eis_rss.py tests/test_ru_background_telegram_catalog.py tests/test_ru_telegram_original_dedup.py tests/test_ru_chechnya_release_gate.py
       - name: Parse trusted Windows launcher and Python bootstrap (no remote calls)
         shell: pwsh
         run: |

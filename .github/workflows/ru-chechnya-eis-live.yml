@@ -206,6 +206,40 @@ jobs:
           RU_CHECHNYA_E2E_TEST_CHAT_ID: ""
         run: python -B -m scripts.ru_chechnya_official_alternatives_probe
 
+  chechnya-trusted-release-prerequisites:
+    # Trusted repository-owned branch PUSH only. Secrets are evaluated into
+    # boolean flags at the GitHub expression boundary and NEVER passed as
+    # token/chat values or echoed to a hosted diagnostic machine.
+    # This is a readiness signal, NOT real EIS ingestion or Telegram delivery.
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/feat/ru-chechnya-eis-rss-20261022'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    env:
+      HAS_TEST_BOT_TOKEN: ${{ secrets.VALYQON_RU_CHECHNYA_E2E_TEST_BOT_TOKEN != '' }}
+      HAS_TEST_CHAT_ID: ${{ secrets.VALYQON_RU_CHECHNYA_E2E_TEST_CHAT_ID != '' }}
+      HAS_OPERATOR_RSS_URL: ${{ vars.VALYQON_RU_CHECHNYA_EIS_RSS_URL != '' }}
+    steps:
+      - name: Report missing setup without revealing secret values
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$HAS_TEST_BOT_TOKEN" == "true" && "$HAS_TEST_CHAT_ID" == "true" ]]; then
+            echo "CHECHNYA_AUTHORIZED_TEST_CHAT_CREDENTIALS=CONFIGURED"
+          else
+            echo "CHECHNYA_AUTHORIZED_TEST_CHAT_CREDENTIALS=MISSING"
+          fi
+          if [[ "$HAS_OPERATOR_RSS_URL" == "true" ]]; then
+            echo "CHECHNYA_OPERATOR_OFFICIAL_RSS_URL=CONFIGURED_NOT_YET_LIVE_VERIFIED"
+          else
+            echo "CHECHNYA_OPERATOR_OFFICIAL_RSS_URL=NOT_CONFIGURED_UNVERIFIED_TEXT_CANDIDATE_ONLY"
+          fi
+          echo "CHECHNYA_PRODUCTION_ENABLED=NO"
+          echo "CHECHNYA_LIVE_EIS_AND_BOT_ACK_NOT_PROVEN=YES"
+
   chechnya-hosted-network-signal:
     # A read-only GitHub-hosted canary while the approved RU self-hosted Linux
     # runner is offline/unassigned. This is NEVER regional live acceptance:

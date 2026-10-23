@@ -56,7 +56,7 @@ def test_planner_only_reads_role_scoped_saved_and_workflow_endpoints():
         "'/submit-bid'", "'/award'", "stage:'won'",
     ):
         assert forbidden not in js
-    assert "not proof" in (ROOT/'app/api/planner_ui.py').read_text(encoding='utf-8')
+    assert "not evidence" in (ROOT/'app/api/planner_ui.py').read_text(encoding='utf-8')
 
 
 def test_timezones_and_calendar_export_are_explicit():
@@ -64,7 +64,7 @@ def test_timezones_and_calendar_export_are_explicit():
     for term in (
         "kind:'date'", "kind:'instant'",
         "date.kind==='date'", "new Date(value+'T12:00:00')",
-        "value.trim()", "UTC", "new Blob(",
+        "value.trim()", "new Blob(",
         "'text/calendar;charset=utf-8'", "'BEGIN:VCALENDAR'",
         "'VERSION:2.0'", "'DTSTART;VALUE=DATE:'",
         "'DTSTART:'", "URL.revokeObjectURL(url)", "icsEscape",

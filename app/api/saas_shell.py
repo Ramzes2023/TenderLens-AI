@@ -700,7 +700,7 @@ def shell_html(html: str) -> str:
         '<script src="/assets/workspace_ux.js?v=20261013"></script>'
         '<script src="/assets/geography_fallback.js?v=1"></script>'
         '<script src="/assets/geography.js?v=3"></script>'
-        '<script src="/assets/workspace_luxe.js?v=20261023b"></script>''<script src="/assets/workspace_home.js?v=20261023a"></script><script src="/assets/planner.js?v=20261023a"></script><script src="/assets/tender_team.js?v=20261023a"></script>'
+        '<script src="/assets/workspace_luxe.js?v=20261023b"></script>''<script src="/assets/workspace_home.js?v=20261023a"></script><script src="/assets/planner.js?v=20261023a"></script><script src="/assets/tender_team.js?v=20261023a"></script><script src="/assets/source_history.js?v=20261023a"></script>'
         "</body>",
     )
 

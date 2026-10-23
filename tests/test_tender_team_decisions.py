@@ -110,6 +110,6 @@ def test_scope_and_two_person_reviewer_invariants(tmp_path):
 def test_exposed_routes_are_auth_scoped_and_write_protected():
     from app.api.shortlist_workflow_routes import router
     routes=[(r.path,set(r.methods)) for r in router.routes]
-    assert any(path.endswith("/{saved_id}/team") and "GET" in methods for path,methods in routes.items())
-    assert any(path.endswith("/{saved_id}/team") and "PATCH" in methods for path,methods in routes.items())
-    assert any(path.endswith("/{saved_id}/team/events") for path in routes)
+    assert any(path.endswith("/{saved_id}/team") and "GET" in methods for path,methods in routes)
+    assert any(path.endswith("/{saved_id}/team") and "PATCH" in methods for path,methods in routes)
+    assert any(path.endswith("/{saved_id}/team/events") for path,methods in routes)

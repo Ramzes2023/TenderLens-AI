@@ -204,3 +204,17 @@ body.landing.premium{--lx-navy:#0a1b42;--lx-blue:#315ff5;--lx-violet:#7553f7;--l
 .landing.premium[data-chart-preview=illustrative] .vqx-hero-kpis{outline:2px dashed #e9b84e;border-radius:10px;outline-offset:2px}
 
 html[lang=ru] .landing.premium[data-chart-preview=illustrative] .vqx-product::after{content:"УЧЕБНЫЕ ГРАФИКИ · НЕ РЕАЛЬНЫЕ ДАННЫЕ"}
+
+
+/* Public marketing demo must never be mistaken for audited procurement totals. */
+.landing.premium .vqx-review-toggle.is-public-demo{background:linear-gradient(105deg,#edf1ff,#faf0ff);border:1px solid #9da4fa;color:#34317e;box-shadow:0 8px 22px #414aab0e}
+.landing.premium .vqx-review-toggle.is-public-demo>div strong{font-size:11px;color:#5240b0}
+.landing.premium .vqx-review-toggle.is-public-demo>div span{max-width:1000px;color:#545c83;line-height:1.65}
+.landing.premium .vqx-review-toggle.is-public-demo button[hidden]{display:none!important}
+.landing.premium .vq-pulse-demo-note{border:1px solid #c5bafb;background:#f2efff;color:#5441a3;border-radius:10px;padding:11px 15px;font:800 11px/1.5 system-ui;letter-spacing:.035em;margin:22px 0 4px}
+.landing.premium .vq-pulse-demo-note[hidden]{display:none}
+.landing.premium .vq-pulse-verified.is-demo{background:#ece8ff;color:#5944b0}
+.landing.premium[data-public-analytics-mode=demo] .vq-pulse-board{border-color:#bbb2f4}
+.landing.premium[data-public-analytics-mode=demo] .vq-pulse-metric{border-color:#d7d0ff;background:#f8f6ff}
+.landing.premium[data-public-analytics-mode=demo] .vqx-product::after{content:"DEMO · NOT REAL DATA";position:absolute;right:16px;top:42px;z-index:5;font-size:9px;font-weight:900;letter-spacing:.08em;color:#3d357e;background:#f5f1ff;border:1px solid #bab2f8;padding:7px 10px;border-radius:7px;box-shadow:0 5px 14px #172b5c22}
+html[lang=ru] .landing.premium[data-public-analytics-mode=demo] .vqx-product::after{content:"ДЕМО · УЧЕБНЫЕ ДАННЫЕ"}

@@ -558,7 +558,7 @@ def shell_html(html: str) -> str:
         '<link rel="stylesheet" href="/assets/saas.css">'
         '<link rel="stylesheet" href="/assets/premium.css?v=phase24-visual-20261012&main_i18n=2">''<link rel="stylesheet" href="/assets/support.css?v=thread-dark-20261017">'
         '<link rel="stylesheet" href="/assets/rag.css?v=pilot1">'
-        '<link rel="stylesheet" href="/assets/workspace_luxe.css?v=20261023c">''<link rel="stylesheet" href="/assets/workspace_home.css?v=20261023a"><link rel="stylesheet" href="/assets/planner.css?v=20261023a">'
+        '<link rel="stylesheet" href="/assets/workspace_luxe.css?v=20261023c">''<link rel="stylesheet" href="/assets/workspace_home.css?v=20261023a"><link rel="stylesheet" href="/assets/planner.css?v=20261023a"><link rel="stylesheet" href="/assets/tender_team.css?v=20261023a">'
         '<link rel="stylesheet" href="/assets/responsive.css?v=phase24q">'
         "</head>",
     )
@@ -700,7 +700,7 @@ def shell_html(html: str) -> str:
         '<script src="/assets/workspace_ux.js?v=20261013"></script>'
         '<script src="/assets/geography_fallback.js?v=1"></script>'
         '<script src="/assets/geography.js?v=3"></script>'
-        '<script src="/assets/workspace_luxe.js?v=20261023b"></script>''<script src="/assets/workspace_home.js?v=20261023a"></script><script src="/assets/planner.js?v=20261023a"></script>'
+        '<script src="/assets/workspace_luxe.js?v=20261023b"></script>''<script src="/assets/workspace_home.js?v=20261023a"></script><script src="/assets/planner.js?v=20261023a"></script><script src="/assets/tender_team.js?v=20261023a"></script>'
         "</body>",
     )
 

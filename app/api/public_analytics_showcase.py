@@ -38,6 +38,7 @@ ANALYTICS_WALL_HTML = """<section class="vqx-analytics" id="market-analytics" ar
   <h2 id="vqxAnalyticsHeading">Procurement intelligence, <span>clearly visualized.</span></h2>
   <p>A rich view of the opportunities stored by VALYQON connectors. Every chart uses measured data from a bounded snapshot, never example numbers.</p></div>
   <a class="vqx-text-cta" href="#guest-search">Search opportunities <span aria-hidden="true">↗</span></a></div>
+ <div class="vqx-review-toggle" id="vqxReviewTools" hidden><div><strong>LOCAL DESIGN REVIEW ONLY</strong><span id="vqxReviewDisclosure">Illustrative charts can be enabled for layout inspection. They are not real procurement statistics, and guest search stays unchanged.</span></div><button type="button" id="vqxToggleDemo" aria-pressed="false">Show illustrative chart layout</button></div>
  <div class="vqx-stats-row">
   <article class="vqx-stat"><div class="vqx-stat-top"><span class="vqx-stat-icon">▣</span><small>Records scanned</small></div><strong id="vqxStatObserved">—</strong><p>Recently stored connector notices</p></article>
   <article class="vqx-stat"><div class="vqx-stat-top"><span class="vqx-stat-icon purple">⌁</span><small>New · 14 days</small></div><strong id="vqxStatNew">—</strong><p>First seen in UTC window</p></article>

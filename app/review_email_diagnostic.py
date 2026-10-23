@@ -79,7 +79,7 @@ def _account():
         raise RuntimeError("INVALID_TEST_EMAIL")
     if not REVIEW_DB.is_file():
         raise RuntimeError("REVIEW_DATABASE_MISSING")
-    conn = sqlite3.connect("file:/app/data/website-review.sqlite?mode=ro", uri=True, timeout=5)
+    conn = sqlite3.connect(REVIEW_DB.as_uri() + "?mode=ro", uri=True, timeout=5)
     try:
         row = conn.execute(
             "SELECT is_active, email_verified FROM auth_accounts WHERE lower(email)=?",

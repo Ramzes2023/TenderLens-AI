@@ -129,6 +129,16 @@ SAVED_HTML = """
     <p id="savedWorkflowStatus" role="status">Not loaded.</p>
     <h4>Recent changes</h4><ol id="savedWorkflowEvents"></ol>
   </section>
+  <section id="savedSourceHistoryPanel" class="p vq-source-history-panel" hidden aria-label="Observed EIS notice revisions">
+    <div class="toolbar">
+      <div><span class="eyebrow" data-ui-en="OFFICIAL SOURCE EVIDENCE" data-ui-ru="ДАННЫЕ ОФИЦИАЛЬНОГО ИСТОЧНИКА">OFFICIAL SOURCE EVIDENCE</span>
+        <h3 data-ui-en="Notice change history" data-ui-ru="История изменений извещения">Notice change history</h3></div>
+      <button id="refreshSavedSourceHistory" type="button" data-ui-en="Refresh stored evidence" data-ui-ru="Обновить историю из базы">Refresh stored evidence</button>
+    </div>
+    <p class="fine" data-ui-en="Only recorded worker observations from EIS / 223-FZ. This view does not fetch the official site or compare PDFs. Missing records never mean the tender has not changed." data-ui-ru="Только сохранённые сборщиком версии ЕИС / 223-ФЗ. Экран не опрашивает официальный сайт и не сравнивает PDF. Отсутствие записей не означает, что изменений не было.">Only recorded worker observations from EIS / 223-FZ. This view does not fetch the official site or compare PDFs. Missing records never mean the tender has not changed.</p>
+    <p id="savedSourceHistoryStatus" role="status"></p>
+    <ol id="savedSourceHistoryEvents" class="vq-source-history-list"></ol>
+  </section>
   <section id="savedTenderTeamPanel" class="p vq-team-panel" hidden aria-label="Internal tender assignment and participation approval">
     <div class="vq-team-head"><div>
       <span class="eyebrow" data-ui-en="TEAM DECISION DESK" data-ui-ru="КОМАНДНОЕ СОГЛАСОВАНИЕ">TEAM DECISION DESK</span>

@@ -1,0 +1,24 @@
+name: RU blocked first-party trusted survey offline safety
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/ru_blocked_sources_trusted_observation.py
+      - tests/test_ru_blocked_sources_trusted_observation.py
+      - .github/workflows/ru-blocked-sources-trusted-main.yml
+      - .github/workflows/ru-blocked-sources-trusted-offline.yml
+permissions:
+  contents: read
+jobs:
+  ru-trusted-five-publishers-offline-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Strict fixed-host identity, no PR self-hosted execution, no false customer delivery
+        run: python -m unittest discover -s tests -p test_ru_blocked_sources_trusted_observation.py

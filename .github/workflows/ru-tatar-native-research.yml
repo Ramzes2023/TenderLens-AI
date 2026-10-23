@@ -1,0 +1,40 @@
+name: RU Tatarstan native DP procurement independent original-notice research
+on:
+  push:
+    branches: [research/ru-tatar-native-dp-etp-20261017]
+    paths:
+      - scripts/research_ru_tatar_native.py
+      - tests/test_ru_tatar_native.py
+      - .github/workflows/ru-tatar-native-research.yml
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  tatar-native-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Reject EIS syndicated 223-FZ, foreign origin, fake native DP detail
+        run: python -m pytest -q tests/test_ru_tatar_native.py
+  tatar-native-live-two-details:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real Tatarstan first-party commercial DP list to two independently verified notices
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_tatar_native

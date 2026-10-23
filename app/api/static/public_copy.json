@@ -499,5 +499,6 @@
   "Connecting to saved procurement observations…": "Получаем реальные данные о закупках…",
   "All figures relate only to a capped recent shared-source database snapshot. No tenant records, platform identities, buyers or individual notice links are included.": "Все показатели относятся только к ограниченной выборке из общей базы. В ней нет данных клиентов, заказчиков, названий площадок или исходных ссылок.",
   "Source directory ↗": "Каталог источников ↗",
-  "Full access": "Полный доступ"
+  "Full access": "Полный доступ",
+  "Sources": "Источники"
 }

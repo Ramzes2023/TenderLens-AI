@@ -29,7 +29,7 @@ def test_only_real_team_endpoints_and_no_unverified_approval():
         "data.requested_by_account_id!==currentId",
         "data.your_role", "state.activeCompanyId",
         "method:'PATCH'", "reload(epoch,scope)",
-        "item.organizationId!==state.organizationId" if False else "selection.organizationId===state.organizationId",
+        "selection.organizationId===state.organizationId",
         "'/events'", "state.accountId",
     ):
         assert token in js,token

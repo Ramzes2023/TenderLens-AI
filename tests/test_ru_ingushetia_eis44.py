@@ -270,3 +270,16 @@ def test_live_eis_acceptance_worker_only_downloads_rss_once(monkeypatch):
     assert result["isolated_staging_sink_dispatches"] == 2
     assert result["replay_duplicates"] == 0
     assert result["real_user_notifications_sent"] is False
+
+
+def test_scoped_eis_original_card_tls_never_disables_root_or_hostname():
+    """Official EIS root is fingerprint-verified for this source only."""
+    import ssl
+    from pathlib import Path
+    from scripts.ru_eis_pinned_tls_probe import pinned_ssl_context, verify_root
+
+    root = Path(__file__).resolve().parents[1] / "russian_trusted_root_ca_pem.crt"
+    assert "BEGIN CERTIFICATE" in verify_root(root.read_bytes())
+    context = pinned_ssl_context(root)
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is True

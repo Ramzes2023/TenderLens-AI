@@ -50,15 +50,25 @@ def _canonical(raw):
 
 
 class _Listing(HTMLParser):
+    # An official procurement candidate must be a visible list link, not a
+    # prototype anchor nested in head, scripts, styles, or HTML templates.
+    _HIDDEN = frozenset({"head", "script", "style", "svg", "iframe",
+                         "object", "template", "noscript"})
+
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.current = None
         self.links = []
+        self.hidden = []
 
     def handle_starttag(self, tag, attrs):
         if self.current is not None:
-            if tag in {"script", "style", "svg", "iframe", "object", "template"}:
+            if tag in self._HIDDEN:
                 raise ValueError("Active markup in Lenobl tender listing card")
+            return
+        if tag in self._HIDDEN:
+            self.hidden.append(tag)
+        if self.hidden:
             return
         if tag == "a":
             href = dict(attrs).get("href")
@@ -66,10 +76,14 @@ class _Listing(HTMLParser):
                 self.current = [href, []]
 
     def handle_data(self, data):
-        if self.current is not None:
+        if self.current is not None and not self.hidden:
             self.current[1].append(data)
 
     def handle_endtag(self, tag):
+        if self.hidden:
+            if self.hidden[-1] == tag:
+                self.hidden.pop()
+            return
         if tag == "a" and self.current is not None:
             href, words = self.current
             self.links.append((href, " ".join(" ".join(words).split())))
@@ -85,7 +99,7 @@ class _Detail(HTMLParser):
         self.visible = []
 
     def handle_starttag(self, tag, attrs):
-        if tag in {"script", "style", "template", "noscript", "svg"}:
+        if tag in {"head", "title", "script", "style", "template", "noscript", "svg"}:
             self.hidden += 1
         if not self.hidden and tag == "h1" and self.current_heading is None:
             self.current_heading = []
@@ -100,7 +114,7 @@ class _Detail(HTMLParser):
         if tag == "h1" and self.current_heading is not None:
             self.headings.append(" ".join(" ".join(self.current_heading).split()))
             self.current_heading = None
-        if tag in {"script", "style", "template", "noscript", "svg"} and self.hidden:
+        if tag in {"head", "title", "script", "style", "template", "noscript", "svg"} and self.hidden:
             self.hidden -= 1
 
 

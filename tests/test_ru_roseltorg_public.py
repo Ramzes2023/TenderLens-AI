@@ -134,3 +134,25 @@ def test_different_breadcrumb_lot_or_notice_id_rejected():
              f"<h1>{TITLE}</h1></html>").encode()
     with pytest.raises(ValueError):
         parse_roseltorg_detail(wrong, identity=ID, url=URL)
+
+
+@pytest.mark.parametrize("hidden", ["head", "template", "noscript", "svg", "script"])
+def test_hidden_roseltorg_original_link_is_not_public_discovery(hidden):
+    body = (f"<html><{hidden}><a href='{URL}'>Invisible prototype</a>"
+            f"</{hidden}><body>No public procedures here</body></html>").encode()
+    with pytest.raises(ValueError, match="No independently discoverable"):
+        parse_roseltorg_links(body)
+
+
+def test_hidden_prototype_does_not_override_visible_roseltorg_original():
+    mock = (f"<template><a href='{URL}'>Invisible ID</a></template>").encode()
+    assert parse_roseltorg_links(mock + listing()) == [(ID, URL)]
+
+
+def test_exact_roseltorg_procedure_breadcrumb_only_in_html_title_is_not_proof():
+    body = (
+        f"<html><head><title>Закупки {ID} Лот 1 {ID}</title></head>"
+        f"<body><h1>{TITLE}</h1></body></html>"
+    ).encode()
+    with pytest.raises(ValueError, match="breadcrumb identity mismatch"):
+        parse_roseltorg_detail(body, identity=ID, url=URL)

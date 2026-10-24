@@ -192,6 +192,35 @@ def parse_gpb_official_rss(payload, *, limit=MAX_CANDIDATES):
     return entries
 
 
+
+async def _official_rss_candidates(client, *, limit):
+    """Fetch only the publisher-documented same-origin RSS, never a mirror.
+
+    Retry one transient *transport* error; reject TLS, policy, status, format
+    and identity errors rather than masking them as tender verification.
+    """
+    from .http import ConnectorTransportError
+    for attempt in range(2):
+        try:
+            response = await client.get(
+                f"https://{HOST}/procedures.rss",
+                headers={"Accept": "application/rss+xml, application/xml"},
+            )
+            response.raise_for_status()
+            if not any(
+                kind in response.headers.get("content-type", "").lower()
+                for kind in ("rss", "xml")
+            ):
+                raise ValueError("Official GPB RSS was not XML")
+            return parse_gpb_official_rss(response.content, limit=limit)
+        except ConnectorTransportError as error:
+            if attempt or not error.retryable:
+                raise
+            await asyncio.sleep(0.6)
+    raise ValueError("No independently parsed official GPB RSS entries")
+
+
+
 @dataclass(frozen=True)
 class GpbEtpPublicSource:
     timeout: float = 20
@@ -209,7 +238,7 @@ class GpbEtpPublicSource:
         candidate_count = min(MAX_CANDIDATES, cap * 3)
         # Two independent official candidate routes, plus at most a bounded
         # number of independently fetched exact-host original detail pages.
-        policy = (bounded_fetch(FetchPolicy(frozenset({HOST}), candidate_count + 3, max_bytes=MAX_BYTES))
+        policy = (bounded_fetch(FetchPolicy(frozenset({HOST}), candidate_count + cap + 3, max_bytes=MAX_BYTES))
                   if _policy.get() is None else nullcontext())
         with policy:
             async with source_client(
@@ -221,36 +250,23 @@ class GpbEtpPublicSource:
             ) as client:
                 from .http import ConnectorTransportError
                 records = None
+                listing_from_html = False
                 try:
                     res = await client.get(LIST_URL)
                     res.raise_for_status()
                     if "html" not in res.headers.get("content-type", "").lower():
                         raise ValueError("Public GPB listing is not HTML")
                     records = parse_gpb_public_links(res.content, limit=candidate_count)
+                    listing_from_html = True
                 except (ConnectorTransportError, httpx.HTTPStatusError, ValueError,
                         httpx.TransportError, TimeoutError, OSError):
-                    # The publisher officially documents /procedures.rss as a
-                    # separate list channel. Never follow a redirect or use an
-                    # unapproved third-party mirror.
-                    # One strictly bounded retry is allowed for a transient
-                    # publisher transport failure on the same documented RSS.
-                    # Certificate/public-IP/policy rejections cannot be retried.
-                    for attempt in range(2):
-                        try:
-                            feed = await client.get(f"https://{HOST}/procedures.rss",
-                                                    headers={"Accept": "application/rss+xml, application/xml"})
-                            feed.raise_for_status()
-                            break
-                        except ConnectorTransportError as error:
-                            if attempt or not error.retryable:
-                                raise
-                            await asyncio.sleep(0.6)
-                    if not any(x in feed.headers.get("content-type", "").lower()
-                               for x in ("rss", "xml")):
-                        raise ValueError("Official GPB RSS was not XML")
-                    records = parse_gpb_official_rss(feed.content, limit=candidate_count)
+                    # Documented official RSS is a candidate channel only;
+                    # each result must still pass an independent detail GET.
+                    records = await _official_rss_candidates(client, limit=candidate_count)
                 verified = []
+                attempted_ids = set()
                 for identity, detail_url in records:
+                    attempted_ids.add(identity)
                     try:
                         item = await client.get(detail_url)
                         item.raise_for_status()
@@ -263,6 +279,34 @@ class GpbEtpPublicSource:
                         # Fail closed for stale individual notices; never store an
                         # unverified card or substitute a fabricated fallback.
                         continue
+
+                if not verified and listing_from_html:
+                    # Valid HTML with only stale/deleted originals must not
+                    # starve genuinely current originals in the officially
+                    # published RSS. Inspect at most 'cap' extra RSS details,
+                    # excluding IDs already rejected from the HTML list.
+                    fallback = await _official_rss_candidates(
+                        client, limit=candidate_count,
+                    )
+                    remaining = cap
+                    for identity, detail_url in fallback:
+                        if identity in attempted_ids:
+                            continue
+                        if remaining <= 0:
+                            break
+                        remaining -= 1
+                        try:
+                            item = await client.get(detail_url)
+                            item.raise_for_status()
+                            if "html" not in item.headers.get("content-type", "").lower():
+                                raise ValueError("Public GPB RSS detail is not HTML")
+                            verified.append(parse_gpb_verified_detail(
+                                item.content, identity, detail_url,
+                            ))
+                        except (ValueError, httpx.HTTPStatusError):
+                            continue
+                        if len(verified) >= cap:
+                            break
                 if not verified:
                     raise ValueError("No independently verified public GPB tenders")
                 return verified

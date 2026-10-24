@@ -107,7 +107,6 @@ def test_unloaded_counts_and_future_pages_do_not_fabricate_results():
     assert 'data-page="notifications"' in html
     assert 'id="vqDeliveryJournal"' in html
     assert 'id="vqDeliveryCount">—</strong>' in html
-    assert 'My recorded' not in html or 'delivery' in html.lower()
     assert "notifications:'The notifications inbox is not available yet" not in shell
     assert 'Use Discover to inspect preliminary company fit' in shell
     for forbidden in ('Upgrade now', 'Checkout', 'unreadCount', 'recommendation-card'):

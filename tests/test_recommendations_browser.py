@@ -79,6 +79,18 @@ def test_recommendation_scores_scoped_deduped_and_non_disclosing_in_chromium():
             page.click("#vqRecommendationsRefresh")
             page.wait_for_function("document.getElementById('vqRecommendedCount').textContent==='3'")
 
+            page.evaluate("""() => {
+                window.recommendLinks=[];
+                window.addEventListener('valyqon-open-discovery-history',
+                  event=>window.recommendLinks.push(event.detail));
+            }""")
+            page.locator(".vq-recommend-card").first.locator(".vq-recommend-open").click()
+            assert page.evaluate("window.recommendLinks")==[
+                dict(id=41,organizationId=7,companyId=12)]
+            assert page.evaluate("location.hash")=="#search-history"
+            page.evaluate("location.hash='#recommended'")
+            page.wait_for_function("document.getElementById('vqRecommendedCount').textContent==='3'")
+
             current_company[0]=55
             page.evaluate("""() => {
                 window.state.activeCompanyId=55;

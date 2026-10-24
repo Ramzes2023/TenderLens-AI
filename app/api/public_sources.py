@@ -5,7 +5,7 @@ No private credentials, probe claims, or inferred uptime numbers are exposed.
 from __future__ import annotations
 from urllib.parse import urlsplit
 
-from .ru_source_inventory import RU_STAGED_ADAPTERS, RU_RESEARCH_TARGETS
+from .ru_source_inventory import RU_STAGED_ADAPTERS, RU_RESEARCH_TARGETS, RU_REGIONAL_PUBLISHER_FINDINGS
 
 
 # Implemented in main but gated behind optional operator settings.
@@ -30,7 +30,8 @@ def source_directory(catalog):
     if registry is None:
         return {"sources": [], "source_count": 0, "enabled_count": 0,
                 "optional_sources": [], "optional_count": 0,
-                "scope": "current_runtime_registry", "live_health_verified": False}
+                "scope": "current_runtime_registry", "live_health_verified": False,
+                "regional_publisher_findings": list(RU_REGIONAL_PUBLISHER_FINDINGS)}
     sources = []
     for m in registry.metadata():
         url = m.homepage_url or ""
@@ -106,5 +107,6 @@ def source_directory(catalog):
         "enabled_count": sum(int(x["enabled"]) for x in sources),
         "scope": "runtime_registry_plus_separately_labeled_ru_inventory",
         "live_health_verified": False,
+        "regional_publisher_findings": list(RU_REGIONAL_PUBLISHER_FINDINGS),
         "note": "Registered, optional, staged, and research sources are different statuses. Only runtime-registered sources may operate. Neither status alone proves live delivery.",
     }

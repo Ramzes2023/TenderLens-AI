@@ -24,6 +24,9 @@ RU_APPROVED_SOURCES = (
     "ru_samara_public_list",
     # Official anonymous Dagestan list -> fenced Worker/SQL; deep details login-protected.
     "ru_dagestan_public_list",
+    # Individually opt-in; EIS and its accredited mirror share original IDs.
+    "ru_ingushetia_eis44",
+    "ru_ingushetia_fabrikant44",
 )
 
 

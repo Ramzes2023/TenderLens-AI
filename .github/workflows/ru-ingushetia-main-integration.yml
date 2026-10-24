@@ -25,7 +25,11 @@ jobs:
       - name: Verify strict regional source, original, queue and dedup contracts
         run: python -m pytest -q tests/test_ru_ingushetia_eis44.py tests/test_ru_ingushetia_fabrikant44.py tests/test_ru_approved_operator_cycle.py tests/test_ru_ingushetia_worker_sql_startup.py tests/test_ru_ingushetia_hourly_enqueue.py
   ingushetia-first-party-live:
-    runs-on: ubuntu-latest
+    # The older source branch obtained genuine first-party cards on GitHub
+    # hosted Windows (run 39407402210). Ubuntu transport intermittently
+    # timed out before any publisher HTTP response. This remains a mandatory
+    # full live original -> Worker -> SQL -> search -> isolated alert gate.
+    runs-on: windows-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4

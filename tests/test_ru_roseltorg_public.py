@@ -304,3 +304,90 @@ def test_nonretryable_detail_transport_failure_is_never_skipped(monkeypatch, rea
     with pytest.raises(ConnectorTransportError):
         asyncio.run(RoseltorgPublicSource().fetch(1))
     assert requested == [LIST_URL, URL]
+
+
+# The official Roseltorg public site also publishes standalone first-party
+# procedure pages at /procedure/RT22042500009 (not only /procedure/<ID>/1).
+# Synthetic HTML below is a strict shape contract, NOT proof of live ingestion.
+BARE_ID = "RT22042500009"
+BARE_URL = f"https://{HOST}/procedure/{BARE_ID}"
+BARE_TITLE = "Запрос информации о защищенном удаленном доступе"
+
+
+def bare_detail(number=BARE_ID, title=BARE_TITLE):
+    return (f"<html><head><title>Метаданные</title></head><body>"
+            f"<h1>Процедура: {number}</h1><dl>"
+            f"<dt>Наименование процедуры</dt><dd>{title}</dd>"
+            f"<dt>Организатор торгов</dt><dd>Публичная организация</dd>"
+            f"</dl></body></html>").encode("utf-8")
+
+
+def test_publisher_documented_standalone_rt_original_is_now_discoverable():
+    assert parse_roseltorg_links(listing(BARE_URL)) == [(BARE_ID, BARE_URL)]
+    notice = parse_roseltorg_detail(
+        bare_detail(), identity=BARE_ID, url=BARE_URL,
+    )
+    assert notice.identity == ("roseltorg_public", BARE_ID)
+    assert notice.title == BARE_TITLE
+    assert notice.url == BARE_URL
+    assert notice.deadline is None
+    assert notice.currency is None
+
+
+@pytest.mark.parametrize("body", [
+    bare_detail(number="RT22042500008"),
+    (f"<html><head><title>Процедура: {BARE_ID}</title></head>"
+     f"<h1>Процедура: RT22042500008</h1>"
+     f"<p>Наименование процедуры {BARE_TITLE} Организатор торгов</p></html>").encode(),
+    (f"<html><h1>Процедура: {BARE_ID}</h1>"
+     f"<script>Наименование процедуры {BARE_TITLE} Организатор торгов</script>"
+     "</html>").encode(),
+    (f"<html><h1>Процедура: {BARE_ID}</h1>"
+     f"<p>{BARE_TITLE}</p></html>").encode(),
+    (f"<html><h1>Процедура: {BARE_ID}</h1>"
+     "<p>Наименование процедуры X Организатор торгов</p></html>").encode(),
+])
+def test_standalone_firstparty_detail_requires_visible_h1_and_labeled_title(body):
+    with pytest.raises(ValueError, match="standalone"):
+        parse_roseltorg_detail(body, identity=BARE_ID, url=BARE_URL)
+
+
+@pytest.mark.parametrize("url", [
+    BARE_URL + "?session=abc",
+    BARE_URL + "#ref",
+    BARE_URL + "/2",
+    BARE_URL.replace(HOST, HOST + ".invalid"),
+    BARE_URL.replace("https://", "http://"),
+    f"https://{HOST}/procedure/{BARE_ID}%2f",
+])
+def test_new_standalone_route_does_not_expand_security_host_or_path(url):
+    with pytest.raises(ValueError):
+        parse_roseltorg_detail(bare_detail(), identity=BARE_ID, url=url)
+
+
+def test_real_adapter_uses_actual_second_publisher_page_for_standalone_original(monkeypatch):
+    """Offline transport stub only; never represents a live publisher ACK."""
+    fetched = []
+
+    class Fake:
+        async def get(self, url):
+            fetched.append(url)
+            return SimpleNamespace(
+                content=listing(BARE_URL) if url == LIST_URL else bare_detail(),
+                headers={"content-type": "text/html"},
+                raise_for_status=lambda: None,
+            )
+
+    @asynccontextmanager
+    async def patched(**kwargs):
+        assert kwargs["trust_env"] is False
+        assert kwargs["follow_redirects"] is False
+        yield Fake()
+
+    import app.sources.roseltorg_public as module
+    monkeypatch.setattr(module, "source_client", patched)
+    found = asyncio.run(RoseltorgPublicSource().fetch(1))
+    assert [(n.external_id, n.title, n.url) for n in found] == [
+        (BARE_ID, BARE_TITLE, BARE_URL),
+    ]
+    assert fetched == [LIST_URL, BARE_URL]

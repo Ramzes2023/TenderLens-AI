@@ -120,6 +120,8 @@ def test_real_dashboard_mounts_interactive_journal_without_fake_alerts():
         'id="vqDeliveryRefresh"', 'id="vqDeliveryStatus"',
         'id="vqDeliveryRows"', 'id="vqDeliveryCount"',
         '/assets/delivery_journal.js', '/assets/delivery_journal.css',
+        '/assets/delivery_preferences.js', 'id="vqDeliveryEmailOptIn"',
+        'id="vqDeliveryTelegramOptIn"', 'id="vqDeliverySavePrefs"',
         'not verify inbox delivery',
     ):
         assert expected in html,expected
@@ -131,5 +133,14 @@ def test_real_dashboard_mounts_interactive_journal_without_fake_alerts():
         "vqDeliveryRows", "window.addEventListener('workspace-context'",
     ):
         assert required in js, required
+    prefs=__import__("pathlib").Path("app/api/static/delivery_preferences.js").read_text(encoding="utf-8")
+    for required in (
+        "method:'PUT'", "email_enabled:email.checked", "telegram_enabled:telegram.checked",
+        "credentials:'same-origin'", "Number.isInteger(state.activeCompanyId)",
+        "No message was sent.", "loadedKey", "shell-locale-change",
+    ):
+        assert required in prefs,required
+    for forbidden in ("Math.random(", "innerHTML", "localStorage", "send_message(", "send_mail("):
+        assert forbidden not in prefs
     for fake in ("Math.random(", "innerHTML", "demoMessages", "fakeNotification", "localStorage"):
         assert fake not in js

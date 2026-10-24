@@ -84,9 +84,24 @@ def test_delivery_journal_chromium_real_api_refresh_and_outsider_denial():
                              activeCompanyId=company["id"]))
                     page.add_script_tag(content=Path(
                         "app/api/static/delivery_journal.js").read_text(encoding="utf-8"))
+                    page.add_script_tag(content=Path(
+                        "app/api/static/delivery_preferences.js").read_text(encoding="utf-8"))
 
                 open_as(customer.owner)
                 page.wait_for_function("document.getElementById('vqDeliveryCount').textContent==='2'")
+                page.wait_for_function("!document.getElementById('vqDeliveryEmailOptIn').disabled")
+                assert not page.locator("#vqDeliveryEmailOptIn").is_checked()
+                assert not page.locator("#vqDeliveryTelegramOptIn").is_checked()
+                page.check("#vqDeliveryEmailOptIn")
+                page.click("#vqDeliverySavePrefs")
+                page.wait_for_function(
+                    "document.getElementById('vqDeliveryPrefsStatus').textContent.includes('saved')")
+                with closing(db.connect()) as conn:
+                    preference=conn.execute(
+                        "SELECT email_enabled,telegram_enabled FROM deadline_alert_preferences "
+                        "WHERE account_id=? AND organization_id=? AND company_id=?",
+                        (customer.owner.id,org,company["id"])).fetchone()
+                    assert tuple(preference)==(1,0)
                 assert page.locator("#vqDeliverySent").inner_text()=="1"
                 assert page.locator("#vqDeliveryFailed").inner_text()=="1"
                 assert page.locator(".vq-delivery-row").count()==2
@@ -101,6 +116,7 @@ def test_delivery_journal_chromium_real_api_refresh_and_outsider_denial():
                 page.wait_for_function(
                     "document.getElementById('vqDeliveryStatus').textContent.includes('unavailable')")
                 assert page.locator("#vqDeliveryCount").inner_text()=="—"
+                assert page.locator("#vqDeliverySavePrefs").is_disabled()
                 assert page.locator(".vq-delivery-row").count()==0
                 assert errors==[]
             finally:

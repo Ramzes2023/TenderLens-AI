@@ -22,5 +22,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install project test dependencies for actual imported source modules
+        run: python -m pip install -r requirements-dev.txt
       - name: Strict URL/DNS allowance and no unreviewed PR checkout
         run: python -B -m unittest discover -s tests -p 'test_ru_trusted_live_probe.py'

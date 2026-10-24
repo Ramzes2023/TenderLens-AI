@@ -1,0 +1,44 @@
+name: RU Ingushetia isolated main gate
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "app/sources/**"
+      - "app/monitoring/config.py"
+      - "tests/test_ru_ingushetia_*.py"
+      - "scripts/ru_ingushetia_telegram_test.py"
+      - "tests/test_ru_approved_operator_cycle.py"
+      - ".github/workflows/ru-ingushetia-main-integration.yml"
+permissions:
+  contents: read
+jobs:
+  ingushetia-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Verify strict regional source, original, queue and dedup contracts
+        run: python -m pytest -q tests/test_ru_ingushetia_eis44.py tests/test_ru_ingushetia_fabrikant44.py tests/test_ru_approved_operator_cycle.py tests/test_ru_ingushetia_worker_sql_startup.py tests/test_ru_ingushetia_hourly_enqueue.py tests/test_ru_ingushetia_telegram_test.py
+  ingushetia-first-party-live:
+    # The older source branch obtained genuine first-party cards on GitHub
+    # hosted Windows (run 39407402210). Ubuntu transport intermittently
+    # timed out before any publisher HTTP response. This remains a mandatory
+    # full live original -> Worker -> SQL -> search -> isolated alert gate.
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real current first-party originals → leased Worker → disposable SQL → search → isolated notification
+        run: python -B -m scripts.ci_ru_ingushetia_live_worker

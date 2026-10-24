@@ -30,6 +30,9 @@ from .south_ural_public import SouthUralPublicSource
 from .ru_dagestan_public_list import DagestanPublicListSource, GRID as DAG_PUBLIC_GRID
 from .ru_samara_public_list import SamaraPublicListSource, GRID as SAMARA_PUBLIC_GRID
 from .kavkaz_rf_firstparty import KavkazRfFirstpartySource
+from .ru_ingushetia_eis44 import IngushetiaEis44Source, RSS_URL as ING_RSS_URL
+from .ru_ingushetia_fabrikant44 import IngushetiaFabrikant44Source, LIST_URL as ING_FAB_LIST
+from .eis_pinned_ca import select_verified_eis_ca
 from .canada_buys_dataset import CanadaBuysDatasetSource
 from .eis_rss import EisRssSource, SourceError
 from .eis_44_public_html import Eis44PublicHtmlSource
@@ -798,6 +801,32 @@ def build_source_catalog(
 
     # Samara first-party municipal list: anonymous original JSON rows are
     # observed; independent detail pages are not verified. No automatic enable.
+    # EIS 44-FZ and its accredited marketplace copy share original identity.
+    # Explicit operator opt-in is required for each source; both default OFF.
+    if settings.ru_ingushetia_eis44_enabled:
+        registry.register(SourceRegistration(
+            key="ru_ingushetia_eis44",
+            display_name="Ингушетия — ЕИС 44-ФЗ (регионально подтверждённые извещения)",
+            source=IngushetiaEis44Source(
+                timeout=min(timeout, 30),
+                ca_bundle_file=select_verified_eis_ca(settings.ca_bundle_file),
+                system_trust=False,
+                rss_url=settings.ru_ingushetia_eis44_rss_url or ING_RSS_URL,
+            ),
+            transport=SourceTransport.RSS,
+            jurisdictions=("RU",), languages=("ru",), homepage_url=ING_RSS_URL,
+            official=True, enabled=True, capabilities=SourceCapabilities(),
+        ))
+    if settings.ru_ingushetia_fabrikant44_enabled:
+        registry.register(SourceRegistration(
+            key="ru_ingushetia_fabrikant44",
+            display_name="Ингушетия — Фабрикант, зеркало ЕИС 44-ФЗ",
+            source=IngushetiaFabrikant44Source(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",), languages=("ru",), homepage_url=ING_FAB_LIST,
+            official=False, enabled=True, capabilities=SourceCapabilities(),
+        ))
+
     if settings.ru_samara_public_list_enabled:
         registry.register(SourceRegistration(
             key="ru_samara_public_list",

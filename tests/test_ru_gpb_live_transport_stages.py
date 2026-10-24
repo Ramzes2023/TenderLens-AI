@@ -40,8 +40,12 @@ def test_permanent_html_transport_stops_without_rss_fallback(monkeypatch, capsys
     async def fake_source(**kwargs):
         async with client_for(lambda url: (_ for _ in ()).throw(
             ConnectorTransportError(retryable=False, reason=reason)), **kwargs) as c:
-            yield c
-            calls.extend(c.calls)
+            try:
+                yield c
+            finally:
+                # asyncio context managers throw errors INTO generators;
+                # assertions must capture requests on both success and error.
+                calls.extend(c.calls)
 
     monkeypatch.setattr(diag, "source_client", fake_source)
     assert asyncio.run(diag.probe()) == 2
@@ -71,8 +75,12 @@ def test_http_error_page_with_true_id_and_heading_never_confirms_detail(
     @asynccontextmanager
     async def fake_source(**kwargs):
         async with client_for(handler, **kwargs) as c:
-            yield c
-            calls.extend(c.calls)
+            try:
+                yield c
+            finally:
+                # asyncio context managers throw errors INTO generators;
+                # assertions must capture requests on both success and error.
+                calls.extend(c.calls)
 
     monkeypatch.setattr(diag, "source_client", fake_source)
     assert asyncio.run(diag.probe()) == 2

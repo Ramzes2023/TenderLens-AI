@@ -76,7 +76,7 @@ def test_all_navigation_targets_and_palette_destinations_are_mapped():
     shell = (ROOT / 'app/api/static/shell.js').read_text(encoding='utf-8')
     # Existing articles assigned by the shell plus explicitly honest future pages.
     assigned = {'companies', 'documents', 'monitoring', 'team', 'settings'}
-    future = {'recommended', 'ai-analysis', 'notifications'}
+    future = {'ai-analysis', 'notifications'}
     assert nav == static | assigned | future
     for key in future - {'ai-analysis'}:
         assert re.search(r"(?:'" + key + r"'|" + key + r"):'.*?not available", shell)
@@ -102,7 +102,10 @@ def test_unloaded_counts_and_future_pages_do_not_fabricate_results():
     assert 'No commercial checkout is enabled' in html
     assert "billing:'" not in shell
     assert 'Configured personal Telegram alerts remain available' in shell
-    assert 'Use Discover to inspect preliminary company fit' in shell
+    assert 'id="vqRecommendations"' in html
+    assert 'data-page="recommended"' in html
+    assert '/assets/recommendations.js' in html
+    assert "recommended:'" not in shell
     for forbidden in ('Upgrade now', 'Checkout', 'unreadCount', 'recommendation-card'):
         assert forbidden not in html
     assert 'No search has been run here' in landing_html()

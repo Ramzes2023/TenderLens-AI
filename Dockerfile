@@ -32,6 +32,9 @@ COPY app /app/app
 COPY config /app/config
 COPY russian_trusted_root_ca_pem.crt /app/certs/russian_trusted_root_ca_pem.crt
 
+# Fail the image build if the EIS source-scoped trust anchor is missing or substituted.
+RUN python -c "from app.sources.eis_pinned_ca import select_verified_eis_ca; select_verified_eis_ca()"
+
 # Persist SQLite, local Qdrant and FastEmbed cache outside the image layer.
 RUN mkdir -p /app/data \
     && useradd --system --uid 10001 --create-home --home-dir /home/tenderlens tenderlens \

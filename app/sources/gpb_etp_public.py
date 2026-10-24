@@ -258,11 +258,23 @@ class GpbEtpPublicSource:
                         raise ValueError("Public GPB listing is not HTML")
                     records = parse_gpb_public_links(res.content, limit=candidate_count)
                     listing_from_html = True
-                except (ConnectorTransportError, httpx.HTTPStatusError, ValueError,
-                        httpx.TransportError, TimeoutError, OSError):
-                    # Documented official RSS is a candidate channel only;
-                    # each result must still pass an independent detail GET.
-                    records = await _official_rss_candidates(client, limit=candidate_count)
+                except ConnectorTransportError as error:
+                    # A blocked public-IP, TLS certificate or approved-host
+                    # transport policy is a *release stop*, not an excuse to
+                    # try another path. Retry only genuinely transient network
+                    # failures using the publisher's documented public RSS.
+                    if not error.retryable:
+                        raise
+                    records = await _official_rss_candidates(
+                        client, limit=candidate_count,
+                    )
+                except (httpx.HTTPStatusError, ValueError, httpx.TransportError,
+                        TimeoutError, OSError):
+                    # The RSS route is separately documented and each original
+                    # still needs an independent publisher HTML detail proof.
+                    records = await _official_rss_candidates(
+                        client, limit=candidate_count,
+                    )
                 verified = []
                 attempted_ids = set()
                 for identity, detail_url in records:

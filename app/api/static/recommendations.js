@@ -87,6 +87,14 @@
         t('Open previous Search History →','Открыть предыдущий поиск →'));
       a.href='#search-history';
       a.title=t('See recorded Discovery #','См. сохранённый поиск №')+entry.historyId;
+      a.addEventListener('click',()=>{
+        const active=current();
+        if(!active||key(active)!==loadedKey)return;
+        window.dispatchEvent(new CustomEvent('valyqon-open-discovery-history',{
+          detail:{id:entry.historyId,organizationId:active.organizationId,
+            companyId:active.companyId}
+        }));
+      });
       card.append(a);$('vqRecommendationsResults').append(card);
     }
     message(

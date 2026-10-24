@@ -151,6 +151,64 @@ def test_all_unreachable_details_remain_live_source_failure(monkeypatch):
         asyncio.run(AzerbaijanHeatSource().fetch(5))
 
 
+def test_official_second_locale_index_only_after_network_failure(monkeypatch):
+    import asyncio
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    import httpx
+    import app.sources.az_azeristilik as adapter
+    from app.sources.az_azeristilik import INDEX_FALLBACK_URL
+
+    seen = []
+
+    class Client:
+        async def get(self, url, **kwargs):
+            seen.append(url)
+            if url == INDEX_URL:
+                raise httpx.ConnectError("simulated first public locale down")
+            if url == INDEX_FALLBACK_URL:
+                return SimpleNamespace(
+                    text=listing(), headers={"content-type": "text/html"},
+                    raise_for_status=lambda: None)
+            if url == URL:
+                return SimpleNamespace(
+                    text=detail(), headers={"content-type": "text/html"},
+                    raise_for_status=lambda: None)
+            raise AssertionError("Unexpected or untrusted URL")
+
+    @asynccontextmanager
+    async def fake_client(**kwargs):
+        assert kwargs["trust_env"] is False
+        assert kwargs["follow_redirects"] is False
+        yield Client()
+
+    monkeypatch.setattr(adapter, "source_client", fake_client)
+    result = asyncio.run(AzerbaijanHeatSource().fetch(1))
+    assert len(result) == 1 and result[0].url == URL
+    assert seen == [INDEX_URL, INDEX_FALLBACK_URL, URL]
+
+
+def test_official_language_fallback_does_not_create_fake_success(monkeypatch):
+    import asyncio
+    from contextlib import asynccontextmanager
+    import httpx
+    import pytest
+    import app.sources.az_azeristilik as adapter
+    from app.sources.transport_errors import SourceTransportError
+
+    class Client:
+        async def get(self, url, **kwargs):
+            raise httpx.ReadTimeout("simulated full host outage")
+
+    @asynccontextmanager
+    async def fake_client(**kwargs):
+        yield Client()
+
+    monkeypatch.setattr(adapter, "source_client", fake_client)
+    with pytest.raises(SourceTransportError):
+        asyncio.run(AzerbaijanHeatSource().fetch(1))
+
+
 def test_worker_safe_stage_diagnostic_only_uses_hardcoded_error_codes():
     from app.jobs.worker import PermanentJobError, RetryableJobError
     from scripts.ci_cis_az_heat_live_acceptance import _safe_worker_source_stage

@@ -155,7 +155,7 @@ def parse_roseltorg_detail(payload, *, identity, url):
         if detail.headings != [expected_heading]:
             raise ValueError("Roseltorg standalone H1 identity mismatch")
         match = re.search(
-            r"(?:^|\\s)Наименование процедуры\\s+(.{5,1000}?)\\s+Организатор торгов(?:\\s|$)",
+            r"(?:^|\s)Наименование процедуры\s+(.{5,1000}?)\s+Организатор торгов(?:\s|$)",
             visible,
         )
         if not match:

@@ -86,5 +86,70 @@ class AZHeatContracts(unittest.TestCase):
         self.assertEqual(AzerbaijanHeatSource().name, SOURCE)
 
 
+
+def test_one_unreachable_post_does_not_discard_other_verified_official_notice(monkeypatch):
+    import asyncio
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    import httpx
+    import app.sources.az_azeristilik as adapter
+
+    other = "https://azeristilik.gov.az/post/diger-satinalinmasina-dair-tender-elani"
+    index = (
+        '<html><a href="' + URL + '">' + TITLE + '</a>'
+        '<a href="' + other + '">Digər satınalınmasına dair tender elanı</a></html>'
+    )
+    seen = []
+
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            seen.append(url)
+            if url == INDEX_URL:
+                return SimpleNamespace(
+                    text=index, headers={"content-type": "text/html"},
+                    raise_for_status=lambda: None)
+            if url == URL:
+                return SimpleNamespace(
+                    text=detail(), headers={"content-type": "text/html"},
+                    raise_for_status=lambda: None)
+            if url == other:
+                raise httpx.ReadTimeout("simulated single stale details")
+            raise AssertionError("Unexpected request")
+
+    @asynccontextmanager
+    async def fake_client(**kwargs):
+        assert kwargs["trust_env"] is False and kwargs["follow_redirects"] is False
+        yield FakeClient()
+
+    monkeypatch.setattr(adapter, "source_client", fake_client)
+    items = asyncio.run(AzerbaijanHeatSource().fetch(5))
+    assert len(items) == 1 and items[0].url == URL
+    assert seen == [INDEX_URL, URL, other]
+
+
+def test_all_unreachable_details_remain_live_source_failure(monkeypatch):
+    import asyncio
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    import httpx
+    import app.sources.az_azeristilik as adapter
+    from app.sources.transport_errors import SourceTransportError
+
+    class FakeClient:
+        async def get(self, url, **kwargs):
+            if url == INDEX_URL:
+                return SimpleNamespace(text=listing(), headers={"content-type": "text/html"},
+                                       raise_for_status=lambda: None)
+            raise httpx.ReadTimeout("simulated inaccessible detail")
+
+    @asynccontextmanager
+    async def fake_client(**kwargs):
+        yield FakeClient()
+
+    monkeypatch.setattr(adapter, "source_client", fake_client)
+    with __import__("pytest").raises(SourceTransportError):
+        asyncio.run(AzerbaijanHeatSource().fetch(5))
+
+
 if __name__ == "__main__":
     unittest.main()

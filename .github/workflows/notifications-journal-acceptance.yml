@@ -28,6 +28,7 @@ jobs:
         run: |
           python -m compileall -q app tests/test_delivery_journal.py
           node --check app/api/static/delivery_journal.js
+          node --check app/api/static/delivery_preferences.js
       - name: Validate real SQLite receipts, tenant isolation and HTTP route
         run: |
           python -m pytest -q tests/test_delivery_journal.py tests/test_deadline_alerts_database.py tests/test_deadline_alerts_launch.py

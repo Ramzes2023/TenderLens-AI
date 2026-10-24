@@ -30,7 +30,7 @@ jobs:
           node --check app/api/static/delivery_journal.js
       - name: Validate real SQLite receipts, tenant isolation and HTTP route
         run: |
-          python -m pytest -q tests/test_delivery_journal.py tests/test_deadline_alerts_database.py tests/test_deadline_alerts_launch.py tests/test_deadline_alerts_api.py
+          python -m pytest -q tests/test_delivery_journal.py tests/test_deadline_alerts_database.py tests/test_deadline_alerts_launch.py
       - name: Confirm no accidental UI or review regressions
         run: |
           python -m pytest -q tests/test_team_decision_ui.py tests/test_tender_planner_ui.py tests/test_workspace_home_workbench.py

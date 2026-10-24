@@ -10,10 +10,11 @@ foreach($value in @($BaseUrl,$MailpitUrl)) {
         throw 'SAFETY=REFUSED_NON_LOOPBACK: localhost preview only'
     }
 }
-$handler=New-Object System.Net.Http.HttpClientHandler
+Add-Type -AssemblyName System.Net.Http
+$handler=[System.Net.Http.HttpClientHandler]::new()
 $handler.AllowAutoRedirect=$false
 $handler.UseCookies=$false
-$client=New-Object System.Net.Http.HttpClient($handler)
+$client=[System.Net.Http.HttpClient]::new($handler)
 $client.Timeout=[TimeSpan]::FromSeconds(8)
 $results=New-Object 'System.Collections.Generic.List[object]'
 $failed=$false
@@ -72,5 +73,5 @@ $report=Join-Path ([IO.Path]::GetTempPath()) 'valyqon-review-functional-smoke.js
     checks=@($results.ToArray())
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $report -Encoding UTF8
 Write-Host "AUDIT_FILE=$report"
-if($failed){Write-Host 'VALYQON_FUNCTIONAL_SMOKE=FAIL';exit 1}
+if($failed){throw 'VALYQON_FUNCTIONAL_SMOKE=FAIL; see AUDIT_FILE for read-only check results.'}
 Write-Host 'VALYQON_FUNCTIONAL_SMOKE=PASS'

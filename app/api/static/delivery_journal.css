@@ -42,3 +42,17 @@ body.saas .vq-delivery-empty a{color:#416ddd;font-weight:800;text-decoration:non
 body.saas .vq-delivery-disclaimer{border-top:1px solid #e7ebf5;color:#8492ac;padding-top:14px;margin:23px 0;font-size:11px;line-height:1.65}
 @media(max-width:850px){body.saas .vq-delivery-summary{grid-template-columns:repeat(2,minmax(0,1fr))}body.saas .vq-delivery-hero{padding:21px}body.saas .vq-delivery-row{align-items:start}}
 @media(max-width:570px){body.saas .vq-delivery-row{flex-wrap:wrap}body.saas .vq-delivery-row-meta{width:100%;display:flex;align-items:center;justify-content:space-between}body.saas .vq-delivery-summary{gap:8px}body.saas .vq-delivery-summary article{padding:12px}body.saas .vq-delivery-summary strong{font-size:24px}}
+
+
+/* Authenticated opt-in controls backed by the existing preferences API. */
+body.saas .vq-delivery-prefs{margin-top:19px;padding:22px;background:#fff;border:1px solid #dbe5f7;border-radius:16px;box-shadow:0 8px 26px #2241790c;display:grid;gap:16px}
+body.saas .vq-delivery-prefs .vq-delivery-eyebrow{color:#607bc8}
+body.saas .vq-delivery-prefs h3{font-size:19px;color:#233d71;margin:8px 0;letter-spacing:-.025em}
+body.saas .vq-delivery-prefs p{font-size:11px;color:#7588a7;line-height:1.65;max-width:850px}
+body.saas .vq-delivery-prefs-controls{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+body.saas .vq-delivery-prefs-controls label{display:flex;align-items:center;gap:10px;border:1px solid #e1e7f5;padding:11px 13px;border-radius:11px;color:#3a578c;font-size:12px;font-weight:800}
+body.saas .vq-delivery-prefs-controls input{width:17px;height:17px;accent-color:#486bf0}
+body.saas .vq-delivery-prefs-controls button{background:#436beb;color:#fff;border:1px solid #7d98ed;border-radius:10px;font-size:11px;padding:11px 15px;min-height:43px;font-weight:850;cursor:pointer}
+body.saas .vq-delivery-prefs-controls button:disabled{cursor:not-allowed;opacity:.45}
+body.saas .vq-delivery-prefs-controls button:hover:not(:disabled){background:#5879ec}
+body.saas #vqDeliveryPrefsStatus{margin:0;color:#637dab;font-size:11px}

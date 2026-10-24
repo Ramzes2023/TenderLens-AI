@@ -84,6 +84,13 @@ class FreshIngushetiaWorkerSource(SnapshotSource):
             self.repository.read, self.name, 1000, (), not_before=lower,
             not_after=upper, _fresh_ingushetia_candidate_scan=True,
         )
+        # The storage layer returns at most 1000 fresh candidates. At that
+        # boundary there may be additional rows beyond the cap; silently
+        # applying tenant keywords to only a truncated prefix can lose a
+        # real notification. Do not report a healthy empty result when the
+        # full source-owned candidate pool cannot be proven complete.
+        if len(records) >= 1000:
+            raise ValueError("Ingushetia Worker SQL candidate scan truncated")
         if not self.terms:
             return records[:limit]
         from app.monitoring.service import _term_match

@@ -1,0 +1,44 @@
+name: RU GPB documented RSS original procurement source verification
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/research_ru_gpb_current_rss.py
+      - tests/test_ru_gpb_current_rss.py
+      - .github/workflows/ru-gpb-documented-rss-live.yml
+  push:
+    branches: [research/ru-gpb-documented-rss-20261018]
+    paths:
+      - scripts/research_ru_gpb_current_rss.py
+      - tests/test_ru_gpb_current_rss.py
+      - .github/workflows/ru-gpb-documented-rss-live.yml
+permissions:
+  contents: read
+jobs:
+  gpb-documented-rss-offline-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Distinct official RSS link IDs, strict hosts and hostile XML
+        run: python -m pytest -q tests/test_ru_gpb_current_rss.py
+  gpb-documented-rss-official-real-originals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Actual vendor RSS and two independently fetched canonical procedure details
+        timeout-minutes: 5
+        run: python -B -m scripts.research_ru_gpb_current_rss

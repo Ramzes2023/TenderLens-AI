@@ -172,6 +172,7 @@ class AzerbaijanHeatSource:
             raise SourceError("AZ official limit must be integer.")
         count = min(MAX_DETAILS, max(1, limit))
         notices = []
+        detail_transport_errors = 0
         try:
             async with source_client(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
                 index = await client.get(INDEX_URL, headers={
@@ -181,21 +182,37 @@ class AzerbaijanHeatSource:
                     raise SourceError("AZ official list not HTML.")
                 cards = discover_official_posts(index.text)
                 for url, title in cards[:count]:
-                    detail = await client.get(url, headers={
-                        "Accept": "text/html", "User-Agent": "VALYQON-public-tender-audit/1.0"})
-                    detail.raise_for_status()
-                    if "html" not in detail.headers.get("content-type", "").lower():
-                        raise SourceError("AZ official detail not HTML.")
                     try:
-                        notices.append(parse_public_detail(detail.text, url=url, listed_title=title))
-                    except SourceError:
-                        # Incomplete individual notices never enter the store.
-                        # Fail the batch if no complete notice remains.
+                        detail = await client.get(url, headers={
+                            "Accept": "text/html", "User-Agent": "VALYQON-public-tender-audit/1.0"})
+                        detail.raise_for_status()
+                        if "html" not in detail.headers.get("content-type", "").lower():
+                            raise SourceError("AZ official detail not HTML.")
+                        notice = parse_public_detail(detail.text, url=url, listed_title=title)
+                    except (httpx.HTTPError, ConnectorTransportError, OSError) as exc:
+                        # One original detail may be stale or inaccessible even
+                        # while the current official index and other verified
+                        # details are available. Never admit that failed card.
+                        # All failed details still leave a red live gate below.
+                        detail_transport_errors += 1
+                        if not transient_transport(exc):
+                            # HTTP 404 / nontransient card failures are local
+                            # to that original; other first-party cards remain.
+                            continue
                         continue
+                    except SourceError:
+                        # An invalid buyer, title or date is NOT a notice.
+                        # Another independently checked original may still pass.
+                        continue
+                    notices.append(notice)
         except (httpx.HTTPError, ConnectorTransportError, OSError) as exc:
             if transient_transport(exc):
                 raise SourceTransportError("AZ official tenders temporarily unavailable.") from None
             raise SourceError("AZ verified official HTTPS retrieval failed.") from None
-        if not notices or len({x.identity for x in notices}) != len(notices):
-            raise SourceError("AZ official complete notice batch empty or duplicated.")
+        if not notices:
+            if detail_transport_errors:
+                raise SourceTransportError("AZ official detail verification temporarily unavailable.")
+            raise SourceError("AZ official complete notice batch empty.")
+        if len({x.identity for x in notices}) != len(notices):
+            raise SourceError("AZ official complete notice batch duplicated.")
         return notices

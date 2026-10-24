@@ -33,7 +33,7 @@ def test_only_nine_explicitly_verified_operator_sources_and_no_side_effects(tmp_
         "b2b_center", "lenobl_small_public", "nmck_native_public",
         "mikroton_tender", "south_ural_public", "stan_commercial_public",
         "kavkaz_rf_firstparty", "ru_samara_public_list",
-        "ru_dagestan_public_list",
+        "ru_dagestan_public_list", "ru_chechnya_fabrikant44",
     )
     cat = catalog()
     with pytest.raises(ValueError, match="No operator-approved"):

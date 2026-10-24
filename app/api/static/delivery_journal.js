@@ -14,7 +14,9 @@
   };
   const key=o=>o?o.accountId+':'+o.organizationId+':'+o.companyId:null;
   let cache=null,loadedKey=null,serial=0,busy=false;
-  const setStatus=(en,rus)=>{$('vqDeliveryStatus').textContent=t(en,rus);};
+  let statusCopy=['Open this section to load your recorded delivery attempts.',
+    'Откройте этот раздел для загрузки журнала отправки.'];
+  const setStatus=(en,rus)=>{statusCopy=[en,rus];$('vqDeliveryStatus').textContent=t(en,rus);};
   const formatTime=raw=>{
     if(typeof raw!=='string'||!raw)return t('No timestamp','Время неизвестно');
     const d=new Date(raw);
@@ -138,6 +140,6 @@
   $('vqDeliveryRefresh').addEventListener('click',()=>load(true));
   window.addEventListener('hashchange',()=>load());
   window.addEventListener('workspace-context',()=>{if(key(scope())!==loadedKey)invalidate();load();});
-  window.addEventListener('shell-locale-change',()=>{if(cache)render();});
+  window.addEventListener('shell-locale-change',()=>{setStatus(...statusCopy);if(cache)render();});
   load();
 })();

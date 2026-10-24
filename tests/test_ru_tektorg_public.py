@@ -259,3 +259,71 @@ def test_native_publisher_zp_number_persists_in_actual_fetch_result(monkeypatch)
     assert result[0].tender_number == "ЗП409589"
     assert result[0].title == "Поставка стали"
     assert requests == [LIST_URL, "https://www.tektorg.ru/223-fz/procedures/20000521"]
+
+
+def test_transient_first_tektorg_detail_get_does_not_block_next_original(monkeypatch):
+    from app.sources.http import ConnectorTransportError
+    first = f"https://{HOST}/223-fz/procedures/20000521"
+    second = f"https://{HOST}/223-fz/procedures/20000522"
+    source_index = listing() + listing(
+        title="Поставка кабелей", link="/223-fz/procedures/20000522",
+    )
+    calls = []
+
+    class Reply:
+        def __init__(self, content):
+            self.content, self.headers = content, {"content-type": "text/html"}
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        async def get(self, url):
+            calls.append(url)
+            if url == LIST_URL:
+                return Reply(source_index)
+            if url == first:
+                raise ConnectorTransportError(retryable=True, reason="network")
+            if url == second:
+                return Reply(detail(title="Поставка кабелей", identity="20000522"))
+            raise AssertionError("Unexpected external or unbounded GET")
+
+    @asynccontextmanager
+    async def client(**kw):
+        assert kw["trust_env"] is False
+        assert kw["follow_redirects"] is False
+        yield Client()
+
+    import app.sources.tektorg_public_html as module
+    monkeypatch.setattr(module, "source_client", client)
+    rows = asyncio.run(TekTorgPublicSource().fetch(2))
+    assert [x.external_id for x in rows] == ["20000522"]
+    assert calls == [LIST_URL, first, second]
+
+
+@pytest.mark.parametrize("reason", ["tls_certificate", "public_ip", "policy"])
+def test_tektorg_disallowed_transport_exception_never_hidden(monkeypatch, reason):
+    from app.sources.http import ConnectorTransportError
+    first = f"https://{HOST}/223-fz/procedures/20000521"
+    seen = []
+
+    class Reply:
+        content, headers = listing(), {"content-type": "text/html"}
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        async def get(self, url):
+            seen.append(url)
+            if url == LIST_URL:
+                return Reply()
+            raise ConnectorTransportError(retryable=False, reason=reason)
+
+    @asynccontextmanager
+    async def client(**kw):
+        yield Client()
+
+    import app.sources.tektorg_public_html as module
+    monkeypatch.setattr(module, "source_client", client)
+    with pytest.raises(ConnectorTransportError):
+        asyncio.run(TekTorgPublicSource().fetch(1))
+    assert seen == [LIST_URL, first]

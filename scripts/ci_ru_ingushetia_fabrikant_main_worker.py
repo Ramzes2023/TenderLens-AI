@@ -1,4 +1,4 @@
-"""Public Leningrad Oblast -> real leased/fenced worker -> disposable searchable DB.
+"""Live accredited Ingushetia 44-FZ mirror -> leased Worker -> temporary SQL.
 
 Only independently checked official live notices qualify; no fixture substitution,
 no production credentials, deployment, proxy or TLS bypass.
@@ -44,9 +44,22 @@ def acceptance():
             claim = ConnectorSyncService(jobs, catalog).enqueue(SOURCE)
             handlers = HandlerRegistry()
             handlers.register(JOB_TYPE, ConnectorSyncHandler(catalog, store, max_records=3))
-            if not Worker(jobs, handlers, job_types=(JOB_TYPE,)).run_once():
-                raise AssertionError("Public Ingushetia Fabrikant job was not claimed")
-            completed = jobs.get(claim.id, scope=JobScope())
+            # Follow the real durable repository retry schedule for transient
+            # official publisher outages. Never seed notices or force a failed
+            # job to succeed: the same actual Worker must claim each attempt.
+            worker = Worker(jobs, handlers, job_types=(JOB_TYPE,))
+            completed = None
+            for attempt in range(3):
+                if not worker.run_once():
+                    raise AssertionError("Real Ingushetia Fabrikant Worker was not claimed")
+                completed = jobs.get(claim.id, scope=JobScope())
+                if completed is not None and completed.state == "succeeded":
+                    break
+                if completed is None or completed.state != "queued":
+                    break
+                if attempt < 2:
+                    import time
+                    time.sleep((1.25, 2.25)[attempt])
             if completed is None or completed.state != "succeeded":
                 raise AssertionError("Ingushetia Fabrikant real leased worker did not succeed: "
                                      + str(completed.failure_code if completed else "missing"))

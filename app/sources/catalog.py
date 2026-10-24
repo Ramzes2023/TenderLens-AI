@@ -28,6 +28,7 @@ from .nmck_native_public import NmckNativePublicSource
 from .stan_commercial_public import StanCommercialPublicSource
 from .south_ural_public import SouthUralPublicSource
 from .ru_dagestan_public_list import DagestanPublicListSource, GRID as DAG_PUBLIC_GRID
+from .ru_chechnya_fabrikant44 import ChechnyaFabrikant44Source, LIST_URL as CHECHNYA_FABRIKANT44_LIST_URL
 from .ru_samara_public_list import SamaraPublicListSource, GRID as SAMARA_PUBLIC_GRID
 from .kavkaz_rf_firstparty import KavkazRfFirstpartySource
 from .canada_buys_dataset import CanadaBuysDatasetSource
@@ -772,6 +773,24 @@ def build_source_catalog(
             official=False,
             enabled=True,
             capabilities=SourceCapabilities(),
+        ))
+
+    # The original 44-FZ Fabrikant committee list and each detail must carry the
+    # exact Chechen Republic organizer and INN; this is an EIS marketplace
+    # mirror, not a second independent procurement publisher.
+    if settings.ru_chechnya_fabrikant44_enabled:
+        registry.register(SourceRegistration(
+            key="ru_chechnya_fabrikant44",
+            display_name="Чечня — Фабрикант 44-ФЗ, проверенные закупки комитета",
+            source=ChechnyaFabrikant44Source(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",), languages=("ru",),
+            homepage_url=CHECHNYA_FABRIKANT44_LIST_URL,
+            official=False, enabled=True,
+            capabilities=SourceCapabilities(
+                pagination=False, documents=False,
+                authentication_required=False,
+            ),
         ))
 
     # Public official regional listing only: no anonymous deep detail access.

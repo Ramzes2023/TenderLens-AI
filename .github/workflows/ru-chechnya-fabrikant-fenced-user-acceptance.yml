@@ -1,0 +1,56 @@
+name: RU Chechnya Fabrikant current originals to tenant live acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/ru_chechnya_fabrikant44.py
+      - scripts/ci_ru_chechnya_fabrikant_real_worker.py
+      - scripts/ci_ru_chechnya_fabrikant_authenticated.py
+      - tests/test_ru_chechnya_fabrikant44.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  chechnya-fabrikant-operator-source-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Check hard source isolation, identity, regional INN, opt-in and SQL routing
+        run: python -m pytest -q tests/test_ru_chechnya_fabrikant44.py tests/test_ru_approved_operator_cycle.py
+
+  chechnya-fabrikant-genuine-leased-worker-sql:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require current official committee list -> individually verified original cards -> real fenced Worker -> SQLite -> id search
+        timeout-minutes: 7
+        run: python -B -m scripts.ci_ru_chechnya_fabrikant_real_worker
+
+  chechnya-fabrikant-genuine-authenticated-tenant-scoring:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require real first-party Chechnya originals to tenant-scoped search, scoring and cross-tenant denial
+        timeout-minutes: 8
+        run: python -B -m scripts.ci_ru_chechnya_fabrikant_authenticated

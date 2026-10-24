@@ -43,6 +43,8 @@ class MonitoringSettings:
     stan_commercial_public_enabled: bool = False
     south_ural_public_enabled: bool = False
     ru_dagestan_public_list_enabled: bool = False
+    ru_chechnya_eis_enabled: bool = False
+    ru_chechnya_eis_rss_urls: tuple[str, ...] = ()
     ru_samara_public_list_enabled: bool = False
     kavkaz_rf_firstparty_enabled: bool = False
     ru_background_catalog_enabled: bool = False
@@ -106,6 +108,10 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         raise MonitoringConfigurationError("EIS_PROFILE_FEED_LIMIT должен быть от 1 до 20.")
 
     urls = _urls(os.environ.get("EIS_RSS_URLS", ""))
+    chechnya_urls = _urls(os.environ.get("RU_CHECHNYA_EIS_RSS_URLS", ""))
+    chechnya_enabled = _bool("RU_CHECHNYA_EIS_ENABLED", False)
+    if chechnya_enabled and not chechnya_urls:
+        raise MonitoringConfigurationError("RU_CHECHNYA_EIS_ENABLED requires regional RU_CHECHNYA_EIS_RSS_URLS.")
     ca_raw = (os.environ.get("EIS_CA_BUNDLE_FILE") or os.environ.get("GIGACHAT_CA_BUNDLE_FILE") or "").strip()
     ca_path = Path(ca_raw).expanduser() if ca_raw else None
     if ca_path and not ca_path.is_file():
@@ -132,6 +138,8 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         stan_commercial_public_enabled=_bool("STAN_COMMERCIAL_PUBLIC_ENABLED", False),
         south_ural_public_enabled=_bool("SOUTH_URAL_PUBLIC_ENABLED", False),
         ru_dagestan_public_list_enabled=_bool("RU_DAGESTAN_PUBLIC_LIST_ENABLED", False),
+        ru_chechnya_eis_enabled=chechnya_enabled,
+        ru_chechnya_eis_rss_urls=chechnya_urls,
         ru_samara_public_list_enabled=_bool("RU_SAMARA_PUBLIC_LIST_ENABLED", False),
         kavkaz_rf_firstparty_enabled=_bool("KAVKAZ_RF_FIRSTPARTY_ENABLED", False),
         ru_background_catalog_enabled=_bool("VALYQON_RU_BACKGROUND_CATALOG_ENABLED", False),

@@ -10,7 +10,6 @@ import re
 from urllib.parse import urlsplit
 
 from app.database.backend import database_for
-from app.api.schemas import TenderDiscoveryItem
 
 MAX_SAVED_PER_SCOPE = 200
 MAX_REMINDERS_PER_CYCLE = 100
@@ -217,6 +216,10 @@ class DeadlineAlerts:
                 )
 
     def run_once(self, *, send_email=None, send_telegram=None, now=None):
+        # Avoid the import cycle: app.api.__init__ loads main, which imports
+        # deadline_alert_routes and this worker module. Read schema only when
+        # actually running a notification cycle.
+        from app.api.schemas import TenderDiscoveryItem
         now = now or datetime.now(timezone.utc)
         examined = delivered = failed = 0
         for row in self.candidates():

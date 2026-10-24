@@ -128,12 +128,58 @@ class OpportunityRepository:
             raise RuntimeError('Invalid fenced connector write callback.')
         return persisted[0]
 
-    def read(self, source_id, limit=20, search_terms=()):
-        limit = max(1, min(int(limit), 100))
+    def latest_seen_utc(self, source_id):
+        """Read-only Worker freshness signal, not tender publication time.
+
+        Empty source snapshots have no proven successful live acquisition and
+        must fail closed when used for Telegram delivery. No tenant data enters
+        this query.
+        """
+        if type(source_id) is not str or not re.fullmatch(
+                r'[a-z0-9][a-z0-9_-]{0,63}', source_id):
+            raise ValueError('Invalid source identity')
+        with closing(self.database.connect()) as conn:
+            row = conn.execute(
+                'SELECT MAX(last_seen) FROM source_opportunities WHERE source_id=?',
+                (source_id,),
+            ).fetchone()
+        if not row or row[0] is None:
+            return None
+        instant = datetime.fromisoformat(row[0])
+        if instant.tzinfo is None:
+            raise ValueError('Stored last_seen is not timezone aware')
+        return instant.astimezone(timezone.utc)
+
+    def read(self, source_id, limit=20, search_terms=(), *, not_before=None,
+             _fresh_ingushetia_candidate_scan=False):
+        # Most callers may return at most 100 rows. The opt-in source-owned
+        # Ingushetia Worker SQL adapter alone may inspect a bounded 1000-row
+        # *fresh* candidate pool before applying tenant keyword matching.
+        # This cannot trigger upstream HTTP or expose unrelated sources.
+        if _fresh_ingushetia_candidate_scan:
+            if (source_id not in {'ru_ingushetia_eis44', 'ru_ingushetia_fabrikant44'}
+                    or not_before is None or search_terms):
+                raise ValueError('Only fresh regional Worker SQL candidate scans are supported')
+        limit = max(1, min(int(limit), 1000 if _fresh_ingushetia_candidate_scan else 100))
+        # Optional durable Worker freshness cutoff. Legacy callers continue
+        # to read historical snapshots unchanged; opt-in notifications must
+        # never send arbitrarily old records simply because ONE row was fresh.
+        if not_before is not None:
+            if (not isinstance(not_before, datetime)
+                    or not_before.tzinfo is None
+                    or not_before.utcoffset() != timezone.utc.utcoffset(None)):
+                raise ValueError('UTC-aware snapshot cutoff required')
+            not_before = not_before.astimezone(timezone.utc).isoformat()
         # Bounded local snapshot candidate pool; filtering does not send profile data upstream.
         with closing(self.database.connect()) as conn:
-            rows = conn.execute('''SELECT notice_json FROM source_opportunities WHERE source_id=?
-                ORDER BY last_seen DESC,external_id LIMIT 1000''', (source_id,)).fetchall()
+            if not_before is None:
+                rows = conn.execute('''SELECT notice_json FROM source_opportunities WHERE source_id=?
+                    ORDER BY last_seen DESC,external_id LIMIT 1000''', (source_id,)).fetchall()
+            else:
+                rows = conn.execute('''SELECT notice_json FROM source_opportunities
+                    WHERE source_id=? AND last_seen>=?
+                    ORDER BY last_seen DESC,external_id LIMIT 1000''',
+                    (source_id, not_before)).fetchall()
         result = []
         terms = tuple(str(term).casefold() for term in search_terms if str(term).strip())[:20]
         for row in rows:

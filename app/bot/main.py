@@ -233,7 +233,9 @@ def main() -> int:
             opportunities = OpportunityRepository(database)
             opportunities.initialize()
             try:
-                source_catalog = fresh_ingushetia_worker_catalog(source_catalog, opportunities)
+                source_catalog = fresh_ingushetia_worker_catalog(
+                    source_catalog, opportunities, require_completed_job=True,
+                )
             except ValueError:
                 # Convert only the scoped regional Worker-SQL routing error to
                 # a controlled config refusal. Unrelated legacy errors must

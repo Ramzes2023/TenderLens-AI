@@ -31,6 +31,8 @@ RUN python -m pip install --upgrade pip \
 COPY app /app/app
 COPY config /app/config
 COPY russian_trusted_root_ca_pem.crt /app/certs/russian_trusted_root_ca_pem.crt
+# Fail the image build if the application-scoped official EIS root changes.
+RUN python -c "from app.sources.eis_pinned_ca import select_verified_eis_ca; select_verified_eis_ca()"
 
 # Persist SQLite, local Qdrant and FastEmbed cache outside the image layer.
 RUN mkdir -p /app/data \

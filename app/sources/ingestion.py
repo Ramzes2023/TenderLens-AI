@@ -42,6 +42,8 @@ HOSTS = {
     'nmck_native_public': frozenset({'xn--j1adc1b.xn--p1ai'}),
     'stan_commercial_public': frozenset({'stantorgi.ru'}),
     'kavkaz_rf_firstparty': frozenset({'xn--80aafvlc.xn--p1ai'}),
+    'ru_ingushetia_eis44': frozenset({'zakupki.gov.ru'}),
+    'ru_ingushetia_fabrikant44': frozenset({'44.fabrikant.ru', 'soap4.fabrikant.ru'}),
     'south_ural_public': frozenset({'www.vendorportal.ru'}),
     'ru_dagestan_public_list': frozenset({'goszakaz.e-dag.ru'}),
     'ru_samara_public_list': frozenset({'webtorgi.samregion.ru'}),
@@ -174,6 +176,8 @@ class ConnectorSyncHandler:
                          else min(self.max_records, 2) + 1 if source_id == 'nmck_native_public'
                          else min(self.max_records, 2) + 1 if source_id == 'stan_commercial_public'
                          else min(self.max_records, 2) + 1 if source_id == 'kavkaz_rf_firstparty'
+                         else 1 if source_id == 'ru_ingushetia_eis44'
+                         else 12 if source_id == 'ru_ingushetia_fabrikant44'
                          else min(self.max_records, 10) + 1 if source_id == 'south_ural_public'
                          else 1 + min(3, (self.max_records + 9) // 10) if source_id == 'ru_samara_public_list'
                          else 2 if source_id == 'ru_dagestan_public_list'

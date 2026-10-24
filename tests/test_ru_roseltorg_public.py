@@ -238,3 +238,69 @@ def test_all_unverified_stale_cards_never_claim_success(monkeypatch):
     with pytest.raises(ValueError, match="No independently verified"):
         asyncio.run(RoseltorgPublicSource().fetch(3))
     assert requests == [LIST_URL] + entries
+
+
+def test_transient_official_detail_transport_does_not_starve_next_valid_original(monkeypatch):
+    from app.sources.http import ConnectorTransportError
+    second = "0318300120826000551"
+    second_url = f"https://{HOST}/procedure/{second}/1"
+    pairs = (listing().replace(b"</body>", b"") +
+             f"<a href='{second_url}'>Вторая реальная закупка</a></body></html>".encode())
+    requested = []
+
+    class Reply:
+        def __init__(self, body):
+            self.content, self.headers = body, {"content-type": "text/html"}
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        async def get(self, url):
+            requested.append(url)
+            if url == LIST_URL:
+                return Reply(pairs)
+            if url == URL:
+                raise ConnectorTransportError(retryable=True, reason="network")
+            if url == second_url:
+                return Reply(detail(number=second, title="Ремонт офисных помещений"))
+            raise AssertionError("Unexpected publisher request")
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        assert kwargs["trust_env"] is False
+        assert kwargs["follow_redirects"] is False
+        yield Client()
+
+    import app.sources.roseltorg_public as mod
+    monkeypatch.setattr(mod, "source_client", client)
+    actual = asyncio.run(RoseltorgPublicSource().fetch(1))
+    assert [(n.external_id, n.url) for n in actual] == [(second, second_url)]
+    assert requested == [LIST_URL, URL, second_url]
+
+
+@pytest.mark.parametrize("reason", ["tls_certificate", "public_ip", "policy"])
+def test_nonretryable_detail_transport_failure_is_never_skipped(monkeypatch, reason):
+    from app.sources.http import ConnectorTransportError
+    requested = []
+
+    class Reply:
+        content, headers = listing(), {"content-type": "text/html"}
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        async def get(self, url):
+            requested.append(url)
+            if url == LIST_URL:
+                return Reply()
+            raise ConnectorTransportError(retryable=False, reason=reason)
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        yield Client()
+
+    import app.sources.roseltorg_public as mod
+    monkeypatch.setattr(mod, "source_client", client)
+    with pytest.raises(ConnectorTransportError):
+        asyncio.run(RoseltorgPublicSource().fetch(1))
+    assert requested == [LIST_URL, URL]

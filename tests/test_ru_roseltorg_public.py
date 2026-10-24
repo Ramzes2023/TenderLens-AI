@@ -181,7 +181,7 @@ def test_stale_first_official_cards_do_not_starve_later_verified_original(monkey
                 return Reply(index)
             if url in links[:2]:
                 # Removed entries are not independent real procurement details.
-                return Reply(b"<html><h1>Извещение удалено</h1></html>")
+                return Reply("<html><h1>Извещение удалено</h1></html>".encode("utf-8"))
             if url == links[2]:
                 return Reply(detail(number=ids[2]))
             raise AssertionError("Exceeded bounded one-original verification")

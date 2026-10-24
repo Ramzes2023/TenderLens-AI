@@ -48,3 +48,21 @@ def test_archived_history_only_and_no_sensitive_data_leak_from_cards():
         check=subprocess.run([node,"--check",str(ROOT/'app/api/static/recommendations.js')],
                              capture_output=True,text=True,timeout=10)
         assert check.returncode==0,check.stderr
+
+
+def test_exact_saved_history_deep_link_respects_active_company():
+    recommended=(ROOT/'app/api/static/recommendations.js').read_text(encoding="utf-8")
+    history=(ROOT/'app/api/static/history.js').read_text(encoding="utf-8")
+    for needle in ("valyqon-open-discovery-history",
+                   "id:entry.historyId",
+                   "organizationId:active.organizationId",
+                   "companyId:active.companyId",
+                   "key(active)!==loadedKey"):
+        assert needle in recommended,needle
+    for needle in ("window.addEventListener('valyqon-open-discovery-history'",
+                   "selection.organizationId!==state.organizationId",
+                   "selection.companyId!==state.activeCompanyId",
+                   "pendingRecommendation.scope===identity()",
+                   "records.some(record=>record.id===target)",
+                   "openHistory(target)"):
+        assert needle in history,needle

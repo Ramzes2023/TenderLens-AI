@@ -5,7 +5,7 @@ from app.monitoring.config import MonitoringSettings
 from app.sources.catalog import build_source_catalog
 from app.sources.eis_rss import SourceError
 from app.sources.ingestion import HOSTS
-from app.sources.uz_uzex import DETAIL_PREFIX, parse_uzex_tradelist
+from app.sources.uz_uzex import DETAIL_PREFIX, parse_uzex_tradelist, parse_uzex_current_batch, _uzex_public_rows
 
 
 FIRST = {
@@ -59,6 +59,37 @@ class OfficialUzexContracts(unittest.TestCase):
             parse_uzex_tradelist([], type_id=1)
         with self.assertRaises(SourceError):
             parse_uzex_tradelist([{"id": 510591}], type_id=1)
+
+    def test_live_batch_keeps_only_independently_complete_official_rows(self):
+        valid2 = dict(FIRST, id=510592, display_no="26111006510592")
+        invalid = dict(FIRST, id=510593, cost=float("nan"))
+        invalid_date = dict(FIRST, id=510594, end_date="n/a")
+        accepted = parse_uzex_current_batch(
+            [FIRST, invalid, invalid_date, valid2], type_id=1)
+        self.assertEqual([n.external_id for n in accepted], [
+            "1-510591", "1-510592"])
+        self.assertTrue(all(n.url.startswith(DETAIL_PREFIX) for n in accepted))
+        with self.assertRaises(SourceError):
+            parse_uzex_current_batch([invalid, invalid_date], type_id=1)
+        with self.assertRaises(SourceError):
+            parse_uzex_current_batch([FIRST, FIRST], type_id=1)
+        with self.assertRaises(SourceError):
+            parse_uzex_current_batch([{"id": 510591}], type_id=1)
+        with self.assertRaises(SourceError):
+            parse_uzex_current_batch([], type_id=1)
+
+    def test_official_list_envelopes_never_bypass_row_validation(self):
+        for body in ([FIRST], {"data": [FIRST]}, {"items": [FIRST]}):
+            self.assertEqual(
+                [n.external_id for n in parse_uzex_current_batch(_uzex_public_rows(body), type_id=1)],
+                ["1-510591"],
+            )
+        for bad in ({"ok": False, "data": [FIRST]}, {"success": False, "items": [FIRST]},
+                    {"data": {"id": FIRST["id"]}}, {"error": "blocked"}, {"items": "text"}):
+            with self.subTest(bad=bad), self.assertRaises(SourceError):
+                _uzex_public_rows(bad)
+        with self.assertRaises(SourceError):
+            parse_uzex_current_batch(_uzex_public_rows({"data": [{"id": FIRST["id"]}]}), type_id=1)
 
     def test_catalog_staged_and_worker_host_pinned(self):
         config = MonitoringSettings(False, 600, 20, 5, 12, (), None)

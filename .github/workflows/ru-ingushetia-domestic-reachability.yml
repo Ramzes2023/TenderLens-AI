@@ -37,9 +37,9 @@ jobs:
           count=0
           for target in eis_ingush_rss fabrikant_current_catalog fabrikant_committee_inn; do
             case "$target" in
-              eis_ingush_rss) url='https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&regions=06&pageNumber=1';;
+              eis_ingush_rss) url='https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&searchString=%D0%98%D0%BD%D0%B3%D1%83%D1%88%D0%B5%D1%82%D0%B8%D1%8F&morphology=on&pageNumber=1';;
               fabrikant_current_catalog) url='https://44.fabrikant.ru/44/catalog/procedure/published?dir=desc&order=publication_datetime';;
-              fabrikant_committee_inn) url='https://44.fabrikant.ru/44/catalog/procedure?q=0608058533';;
+              fabrikant_committee_inn) url='https://44.fabrikant.ru/44/catalog/procedure/published?placer_search_str=0608058533&order=publication_datetime&dir=desc';;
               *) exit 8;;
             esac
             out="$t/$target"

@@ -43,7 +43,7 @@ HOSTS = {
     'stan_commercial_public': frozenset({'stantorgi.ru'}),
     'kavkaz_rf_firstparty': frozenset({'xn--80aafvlc.xn--p1ai'}),
     'ru_ingushetia_eis44': frozenset({'zakupki.gov.ru'}),
-    'ru_ingushetia_fabrikant44': frozenset({'44.fabrikant.ru'}),
+    'ru_ingushetia_fabrikant44': frozenset({'44.fabrikant.ru', 'soap4.fabrikant.ru'}),
     'south_ural_public': frozenset({'www.vendorportal.ru'}),
     'ru_dagestan_public_list': frozenset({'goszakaz.e-dag.ru'}),
     'eis_223': frozenset({'zakupki.gov.ru'}),
@@ -145,10 +145,19 @@ class ConnectorSyncService:
 
 
 class ConnectorSyncHandler:
-    def __init__(self, catalog, opportunities, *, max_records=20):
+    def __init__(self, catalog, opportunities, *, max_records=20,
+                 ingushetia_eis_max_records=None):
         if type(max_records) is not int or not 1 <= max_records <= 100:
             raise ValueError('Invalid connector record bound.')
+        if (ingushetia_eis_max_records is not None and (
+            type(ingushetia_eis_max_records) is not int
+            or not 1 <= ingushetia_eis_max_records <= 100
+        )):
+            raise ValueError('Invalid opt-in Ingushetia EIS record bound.')
         self.catalog, self.opportunities, self.max_records = catalog, opportunities, max_records
+        # Only explicit regional Worker-SQL alert operation may request a
+        # larger scan. All unrelated connectors keep the global bound.
+        self.ingushetia_eis_max_records = ingushetia_eis_max_records
 
     @observe("connector.sync")
     def __call__(self, context, payload):
@@ -157,6 +166,12 @@ class ConnectorSyncHandler:
         registration = validate_payload(payload, self.catalog.registry)
         source_id = registration.key
         source = registration.source
+        effective_max_records = (
+            self.ingushetia_eis_max_records
+            if source_id == 'ru_ingushetia_eis44'
+            and self.ingushetia_eis_max_records is not None
+            else self.max_records
+        )
         if source_id == 'austender' and hasattr(source, 'max_concurrency'):
             source = replace(source, max_concurrency=1)
         if source_id == 'am_armeps':
@@ -164,7 +179,8 @@ class ConnectorSyncHandler:
         # At most five listing/feed requests; AusTender adds one detail per notice.
         request_limit = (4 if source_id in {'ted', 'uk_fts', 'world_bank'}
                          else 2 if source_id in {'am_armeps', 'uz_uzex'}
-                         else 1 + min(self.max_records, 5) if source_id in {'md_achizitii', 'az_azeristilik'}
+                         else 2 + min(self.max_records, 5) if source_id == 'az_azeristilik'
+                         else 1 + min(self.max_records, 5) if source_id == 'md_achizitii'
                           else 11 if source_id == 'md_elicitatie'
                          else self.max_records + 1 if source_id == 'austender'
                          else 5 if source_id in {'eis', 'eis_223', 'india_cppp', 'kz_goszakup'}
@@ -176,7 +192,7 @@ class ConnectorSyncHandler:
                          else min(self.max_records, 2) + 1 if source_id == 'stan_commercial_public'
                          else min(self.max_records, 2) + 1 if source_id == 'kavkaz_rf_firstparty'
                          else 1 if source_id == 'ru_ingushetia_eis44'
-                         else 1 + min(self.max_records, 5) if source_id == 'ru_ingushetia_fabrikant44'
+                         else 12 if source_id == 'ru_ingushetia_fabrikant44'  # 2 list attempts + 5 original cards * two same-publisher hosts
                          else min(self.max_records, 10) + 1 if source_id == 'south_ural_public'
                          else 2 if source_id == 'ru_dagestan_public_list'
                          else 2 if source_id == 'mikroton_tender'
@@ -187,7 +203,7 @@ class ConnectorSyncHandler:
                 max_bytes=(2 * 1024 * 1024 if source_id == 'b2b_center' else
                            1_800_000 if source_id in {'nmck_native_public', 'stan_commercial_public', 'south_ural_public', 'kavkaz_rf_firstparty'} else 25 * 1024 * 1024),
             )):
-                return await asyncio.wait_for(source.fetch(self.max_records), timeout=180)
+                return await asyncio.wait_for(source.fetch(effective_max_records), timeout=180)
         try:
             notices = asyncio.run(fetch())
         except ConnectorTransportError as error:
@@ -206,7 +222,7 @@ class ConnectorSyncHandler:
             if source_id in {'ted', 'uk_fts', 'world_bank'} and getattr(error, 'retryable', False):
                 raise RetryableJobError('International connector temporarily unavailable.') from None
             raise PermanentJobError('Connector schema/configuration failed.') from None
-        if type(notices) is not list or len(notices) > self.max_records:
+        if type(notices) is not list or len(notices) > effective_max_records:
             raise PermanentJobError('Connector exceeded result contract.')
         result = {'schema': 1, 'source_id': source_id, 'sync_window': payload['sync_window'],
                   'fetched_count': len(notices), 'accepted_count': 0, 'skipped_count': 0,

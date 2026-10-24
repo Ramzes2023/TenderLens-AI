@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 from app.database.backend import Database
 from app.database.config import DatabaseSettings
 from app.jobs import HandlerRegistry, JobRepository, JobService
-from app.jobs.worker import Worker
+from app.jobs.worker import Worker, PermanentJobError, RetryableJobError
 from app.monitoring.config import MonitoringSettings
 from app.sources.catalog import SourceCatalog, build_source_catalog
 from app.sources.eis_rss import SourceError
@@ -28,6 +28,24 @@ from app.sources.multi import MultiSourceFetcher
 from app.sources.opportunities import OpportunityRepository
 from app.sources.registry import SourceRegistry
 from app.sources.snapshots import snapshot_catalog
+
+
+def _safe_worker_source_stage(error):
+    # Only exact strings authored inside the trusted connector; never print
+    # raw vendor exceptions, request URLs, identities, tokens, or SQL data.
+    allowed = {
+        "Connector schema/configuration failed.": "SOURCE_SCHEMA_OR_CONFIG_FAILED",
+        "Connector fetch failed.": "OFFICIAL_HTTP_FAILURE",
+        "Connector unavailable.": "OFFICIAL_TRANSPORT_UNAVAILABLE",
+        "Connector exceeded result contract.": "RESULT_COUNT_INVALID",
+        "Invalid connector storage data.": "SQL_INTEGRITY_REJECTED",
+        "Connector storage unavailable.": "SQL_STORAGE_UNAVAILABLE",
+        "Connector lease lost.": "SQL_LEASE_LOST",
+        "Connector interrupted.": "WORKER_INTERRUPTED",
+    }
+    if not isinstance(error, (PermanentJobError, RetryableJobError)):
+        return "UNKNOWN"
+    return allowed.get(str(error), "UNKNOWN")
 
 
 def verify(source_id):
@@ -53,7 +71,20 @@ def verify(source_id):
             service = ConnectorSyncService(JobService(jobs), catalog)
             claimable = service.enqueue(source_id)
             handlers = HandlerRegistry()
-            handlers.register(JOB_TYPE, ConnectorSyncHandler(catalog, notices, max_records=20))
+            real_handler = ConnectorSyncHandler(catalog, notices, max_records=20)
+            safe_failure_stages = []
+
+            def instrument_real_worker(context, payload):
+                try:
+                    return real_handler(context, payload)
+                except (PermanentJobError, RetryableJobError) as error:
+                    # This is the unchanged real handler, real Worker and
+                    # fresh SQL database. Recording a constant stage is
+                    # observational only; any failure still fails CI.
+                    safe_failure_stages.append(_safe_worker_source_stage(error))
+                    raise
+
+            handlers.register(JOB_TYPE, instrument_real_worker)
             # Respect the durable queue's *existing* bounded three-attempt
             # retry policy. Transient official HTTPS failures may recover a few
             # seconds later; do not fabricate or accept any missing records.
@@ -75,6 +106,7 @@ def verify(source_id):
 
             if final is None or final.state != "succeeded" or not isinstance(final.result, dict):
                 diagnostics = {"source": source_id, "passed": False,
+                               "safe_worker_failure_stages": safe_failure_stages,
                                "failed_at": "lease_or_live_acquisition",
                                "job_state": final.state if final else "missing",
                                "attempts": final.attempt_count if final else 0,
@@ -90,6 +122,27 @@ def verify(source_id):
                         diagnostics["source_probe_safe_reason"] = str(exc)[:120]
                 else:
                     diagnostics["source_probe_rows"] = len(probe_rows)
+                # A single valid post may succeed when a larger live batch
+                # fails due to a different upstream detail or altered list.
+                # These observational probes never seed Worker SQL or create
+                # a success status. Only hardcoded allowlisted stage labels
+                # enter CI logs; vendor payload/URL/error text is forbidden.
+                try:
+                    full_rows = asyncio.run(registration.source.fetch(5))
+                except SourceError as exc:
+                    failure_codes = {
+                        "AZ official tender listing contains no valid posts.": "NO_TRUSTED_INDEX_POSTS",
+                        "AZ official complete notice batch empty.": "NO_COMPLETE_ORIGINALS",
+                        "AZ official complete notice batch duplicated.": "DUPLICATED_ORIGINALS",
+                        "AZ official list not HTML.": "INDEX_NOT_HTML",
+                        "AZ verified official HTTPS retrieval failed.": "NONTRANSIENT_HTTPS_FAILURE",
+                    }
+                    diagnostics["full_batch_probe_safe_stage"] = failure_codes.get(
+                        str(exc), "SOURCE_CONTRACT_FAILURE")
+                except Exception as exc:
+                    diagnostics["full_batch_probe_error_class"] = type(exc).__name__
+                else:
+                    diagnostics["full_batch_probe_verified_rows"] = len(full_rows)
                 return diagnostics
 
             stored = notices.read(source_id, limit=100)

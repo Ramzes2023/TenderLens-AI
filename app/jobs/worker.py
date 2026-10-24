@@ -219,10 +219,23 @@ def main(argv=()):
             from app.sources.catalog import build_source_catalog
             from app.sources.ingestion import JOB_TYPE as CONNECTOR_JOB_TYPE, ConnectorSyncHandler, load_max_records
             from app.sources.opportunities import OpportunityRepository
-            catalog = build_source_catalog(load_monitoring_settings())
+            monitor_settings = load_monitoring_settings()
+            catalog = build_source_catalog(monitor_settings)
             opportunities = OpportunityRepository(database)
             opportunities.initialize()
-            registry.register(CONNECTOR_JOB_TYPE, ConnectorSyncHandler(catalog, opportunities, max_records=load_max_records()))
+            # Operator-enrolled shared regional Worker-SQL alerts must ingest
+            # the complete bounded 100-item EIS candidate batch before
+            # per-recipient keyword caps are applied. Without BOTH explicit
+            # flags the legacy connector max_records applies unchanged.
+            regional_deep_scan = (
+                100 if monitor_settings.ru_ingushetia_worker_sql_alerts_enabled
+                and monitor_settings.ru_ingushetia_eis44_enabled
+                else None
+            )
+            registry.register(CONNECTOR_JOB_TYPE, ConnectorSyncHandler(
+                catalog, opportunities, max_records=load_max_records(),
+                ingushetia_eis_max_records=regional_deep_scan,
+            ))
         pool = WorkerPool(repository, registry)
         shutdown = threading.Event()
         def request_shutdown(signum, frame):

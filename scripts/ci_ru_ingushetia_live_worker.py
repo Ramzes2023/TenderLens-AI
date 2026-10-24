@@ -11,6 +11,7 @@ import asyncio
 import json
 import os
 import tempfile
+import time
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -26,15 +27,38 @@ from app.monitoring.service import TenderMonitorService, prefilter_notice
 from app.bot.monitoring import monitor_loop
 from app.sources.catalog import build_source_catalog
 from app.sources.http import source_client
+from app.sources.eis_rss import EIS_USER_AGENT
 from app.sources.ingestion import JOB_TYPE, ConnectorSyncHandler, ConnectorSyncService, connector_version
 from app.sources.http import FetchPolicy, bounded_fetch
-from scripts.ru_eis_pinned_tls_probe import verify_root
+from scripts.ru_eis_pinned_tls_probe import verify_root, pinned_ssl_context
+from scripts.ru_transport_diagnostics import transport_failure
 from app.sources.opportunities import OpportunityRepository
+from scripts.ci_ru_ingushetia_safe_handler_diagnostics import (
+    DiagnosticConnectorHandler, safe_handler_failure_classes,
+    safe_handler_failure_categories, sanitize_failure_categories,
+    classify_failed_live_worker,
+)
 from app.sources.ru_ingushetia_eis44 import SOURCE_ID, RSS_URL, normalize_ingushetia_notice
-from app.sources.snapshots import snapshot_catalog
+from app.sources.snapshots import snapshot_catalog, fresh_ingushetia_worker_catalog
 
 
 ROOT = Path(__file__).resolve().parents[1] / 'russian_trusted_root_ca_pem.crt'
+
+
+class IngushetiaEisWorkerFailure(AssertionError):
+    """Only allowlisted durable EIS job status; never expose upstream URLs/tokens."""
+
+    def __init__(self, job, handler_failure_classes=(), handler_failure_categories=()):
+        state = getattr(job, "state", None)
+        code = getattr(job, "failure_code", None)
+        self.job_state = state if state in {"queued", "running", "failed", "succeeded", "cancelled"} else "UNKNOWN"
+        self.job_failure_code = code if code in {
+            "handler_error", "permanent_failure", "lease_expired",
+            "invalid_result", "unknown_type",
+        } else "UNKNOWN"
+        self.handler_failure_classes = tuple(handler_failure_classes)[-3:]
+        self.handler_failure_categories = sanitize_failure_categories(handler_failure_categories)
+        super().__init__("Real EIS leased Worker failed")
 
 
 def _catalog_settings():
@@ -60,8 +84,8 @@ def _catalog():
 async def _check_original_links(notices):
     with bounded_fetch(FetchPolicy(frozenset({'zakupki.gov.ru'}), len(notices), max_bytes=1_800_000)):
       async with source_client(
-        timeout=20, follow_redirects=False, trust_env=False, verify=str(ROOT),
-        headers={"Accept": "text/html"},
+        timeout=20, follow_redirects=False, trust_env=False, verify=pinned_ssl_context(ROOT),
+        headers={"Accept": "text/html", "User-Agent": EIS_USER_AGENT},
       ) as client:
           for notice in notices:
               original = await client.get(notice.url)
@@ -73,7 +97,7 @@ async def _check_original_links(notices):
                   raise AssertionError("Official original card does not corroborate EIS number")
 
 
-async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, source_id=SOURCE_ID):
+async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, repository, source_id=SOURCE_ID, monitor_catalog=None):
     """Real stored notices -> real monitor dedup -> Telegram-format fake sink.
 
     Intentionally uses no bot credentials, chat API, network send, or user data.
@@ -84,17 +108,16 @@ async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, source_id=
     fake_owner, fake_chat = 101, 202
     monitor_repo.set_subscription(fake_owner, fake_chat, True)
 
-    class PersistedNoticeMonitor(TenderMonitorService):
-        async def fetch_matches_from_catalog(self, selected_catalog, owner_user_id=None,
-                                             *, source_keys=None):
-            assert selected_catalog is catalog
-            assert source_id in source_keys
-            matches = [prefilter_notice(n, None) for n in notices]
-            return [m for m in matches if m is not None], SimpleNamespace(
-                attempted_sources=(source_id,), total_failure=False,
-            )
-
-    service = PersistedNoticeMonitor(cfg, None, monitor_repo, None)
+    # Read the actual Worker database through the production snapshot and
+    # monitoring service. Do not override catalog fetching with in-memory rows.
+    persisted_catalog = monitor_catalog if monitor_catalog is not None else snapshot_catalog(catalog, repository)
+    service = TenderMonitorService(cfg, None, monitor_repo, None)
+    stored_matches, report = await service.fetch_matches_from_catalog(
+        persisted_catalog, fake_owner, source_keys=(source_id,),
+    )
+    if report.failures or not stored_matches:
+        raise AssertionError("Worker SQL snapshot unavailable to notification service")
+    expected_rows = [m.notice for m in stored_matches[:cfg.max_notifications_per_cycle]]
     stop = asyncio.Event()
 
     class IsolatedAckSink:
@@ -105,25 +128,28 @@ async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, source_id=
             assert chat_id == fake_chat and kwargs.get("disable_web_page_preview") is True
             self.messages.append(text)
             stop.set()
-            return SimpleNamespace(message_id=len(self.messages))
+            return SimpleNamespace(message_id=len(self.messages), chat=SimpleNamespace(id=chat_id))
 
     sink = IsolatedAckSink()
-    await monitor_loop(sink, service, stop, source_catalog=catalog)
-    expected = min(len(notices), cfg.max_notifications_per_cycle)
+    await asyncio.wait_for(
+        monitor_loop(sink, service, stop, source_catalog=persisted_catalog), timeout=30,
+    )
+    expected = len(expected_rows)
     if len(sink.messages) != expected:
         raise AssertionError("Staging monitor did not dispatch every allowed first batch notice")
-    for row, text in zip(notices[:expected], sink.messages):
+    for row, text in zip(expected_rows, sink.messages):
         if row.tender_number not in text or row.title not in text or "НОВАЯ ЗАКУПКА" not in text:
             raise AssertionError("Staging dispatch lost original procurement identity")
         if not monitor_repo.seen(fake_owner, "eis_44", row.tender_number):
             raise AssertionError("Simulated Telegram acknowledgement was not persisted")
     if await service.unseen_matches(fake_owner, [
-        prefilter_notice(row, None) for row in notices[:expected]
+        prefilter_notice(row, None) for row in expected_rows
     ]):
         raise AssertionError("Simulated delivered Ingushetia original would alert again")
     # A per-cycle cap cannot mark unnotified later rows as delivered.
     remaining = await service.unseen_matches(fake_owner, [
-        prefilter_notice(row, None) for row in notices[expected:]
+        prefilter_notice(row, None) for row in notices
+        if row.identity not in {n.identity for n in expected_rows}
     ])
     if len(remaining) != len(notices) - expected:
         raise AssertionError("Undelivered notices must remain eligible for the next cycle")
@@ -133,15 +159,10 @@ async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, source_id=
 def proof():
     catalog = _catalog()
     assert SOURCE_ID in catalog.enabled_keys
-    # LIVE network to real official RSS first, never fixtures.
-    source = catalog.registry.get(SOURCE_ID).source
-    first = asyncio.run(source.fetch(limit=5))
-    if len(first) < 2:
-        raise AssertionError(
-            f"Only {len(first)} independently region-confirmed real EIS notices; minimum 2"
-        )
-    assert all(normalize_ingushetia_notice(item) is not None for item in first)
-    asyncio.run(_check_original_links(first[:2]))
+    # No redundant prefetch: the real leased Worker downloads the live
+    # first-party RSS and persists only region-verified official records.
+    # The independent original-card GET runs on the exact persisted IDs
+    # from that same Worker acquisition, never on cached or synthetic rows.
     with tempfile.TemporaryDirectory(prefix="valyqon-ru-ingushetia-") as tmp:
         db = Database(DatabaseSettings("ru-ingushetia-live", Path(tmp) / "proof.sqlite"))
         try:
@@ -151,21 +172,57 @@ def proof():
             store.initialize()
             job = ConnectorSyncService(jobs, catalog).enqueue(SOURCE_ID)
             handlers = HandlerRegistry()
-            handlers.register(JOB_TYPE, ConnectorSyncHandler(catalog, store, max_records=10))
-            assert Worker(jobs, handlers, job_types=(JOB_TYPE,)).run_once()
-            completed = jobs.get(job.id, scope=JobScope())
+            diagnostic_handler = DiagnosticConnectorHandler(ConnectorSyncHandler(catalog, store, max_records=10))
+            handlers.register(JOB_TYPE, diagnostic_handler)
+            worker = Worker(jobs, handlers, job_types=(JOB_TYPE,))
+            # The durable repository permits exactly three attempts with
+            # deterministic backoff (1s, 2s). Do not fail acceptance while
+            # a retryable first/second transport error is still legitimately
+            # queued, and do not bypass the real Worker or advance the clock.
+            completed = None
+            for attempt in range(3):
+                claimed = worker.run_once()
+                if not claimed:
+                    raise AssertionError(
+                        "Real EIS Worker not claimed" if attempt == 0
+                        else "Real EIS Worker retry not claimed"
+                    )
+                completed = jobs.get(job.id, scope=JobScope())
+                if completed is not None and completed.state == "succeeded":
+                    break
+                if completed is None or completed.state != "queued":
+                    raise IngushetiaEisWorkerFailure(
+                    completed, safe_handler_failure_classes(diagnostic_handler),
+                    safe_handler_failure_categories(diagnostic_handler),
+                )
+                if attempt == 2:
+                    break
+                # Allow the genuine repository available_at deadline to pass.
+                # Never retry unboundedly or manufacture a successful job.
+                time.sleep((1.25, 2.25)[attempt])
             if completed is None or completed.state != "succeeded":
-                raise AssertionError("Real fenced worker did not succeed")
+                raise IngushetiaEisWorkerFailure(
+                    completed, safe_handler_failure_classes(diagnostic_handler),
+                    safe_handler_failure_categories(diagnostic_handler),
+                )
             rows = store.read(SOURCE_ID, limit=10)
             if len(rows) < 2:
                 raise AssertionError("Insufficient real Ingushetia notices persisted")
-            # Never accept two verified upstream details AND unrelated SQL rows
-            # as a complete ingestion chain; the same originals must survive.
-            original_verified_ids = {n.tender_number for n in first[:2]}
-            persisted_ids = {n.tender_number for n in rows}
-            if not original_verified_ids <= persisted_ids:
-                raise AssertionError("Original EIS detail IDs did not survive real leased Worker SQL")
-            snap = snapshot_catalog(catalog, store)
+            if (completed.result is None
+                    or completed.result["fetched_count"] != len(rows)
+                    or completed.result["accepted_count"] != len(rows)
+                    or completed.result["inserted_count"] != len(rows)
+                    or completed.result["skipped_count"] != 0):
+                raise AssertionError("Real EIS Worker SQL counts do not match verified originals")
+            if (len({n.tender_number for n in rows}) != len(rows)
+                    or any(n.source != SOURCE_ID
+                           or n.external_id != n.tender_number
+                           or normalize_ingushetia_notice(n) is None for n in rows)):
+                raise AssertionError("Real EIS Worker persisted noncanonical regional original")
+            # Independently GET the two actual first-party original cards,
+            # identified by the Worker rows rather than a second RSS fetch.
+            asyncio.run(_check_original_links(rows[:2]))
+            snap = fresh_ingushetia_worker_catalog(catalog, store)
             for n in rows:
                 assert normalize_ingushetia_notice(n) is not None
                 report = asyncio.run(snap.fetch(
@@ -186,9 +243,14 @@ def proof():
                     raise AssertionError('Real Ingushetia notice not searchable by title')
                 if store.upsert(n, connector_version(SOURCE_ID)):
                     raise AssertionError("Replay inserted duplicate regional notice")
-            staged = asyncio.run(_check_isolated_dispatch(catalog, _catalog_settings(), rows, Path(tmp) / "notifications.sqlite"))
+            staged = asyncio.run(_check_isolated_dispatch(
+                catalog, _catalog_settings(), rows, Path(tmp) / "notifications.sqlite",
+                repository=store, monitor_catalog=snap,
+            ))
             return {
                 "official_rss_origin": "zakupki.gov.ru",
+                "verified_notices": [{"number": n.tender_number, "title": n.title,
+                                      "url": n.url, "customer": n.customer} for n in rows[:2]],
                 "isolated_staging_sink_dispatches": staged,
                 "original_cards_corresponding_to_list": 2,
                 "leased_worker_state": completed.state,
@@ -199,6 +261,31 @@ def proof():
             }
         finally:
             db.close()
+
+
+
+def _safe_ingushetia_vendor_failure(exc):
+    """Expose only constant contract names, never upstream pages or URL/token text."""
+    if not isinstance(exc, (ValueError, AssertionError)):
+        return None
+    whitelist = {
+        "Insufficient current independently verified Ingushetia originals from Worker SQL": "INSUFFICIENT_REAL_WORKER_ROWS",
+        "Noncanonical duplicated 44-FZ publisher identities in Worker SQL": "ORIGINAL_IDENTITY_MISMATCH",
+        "Worker verified originals / SQL insert counts diverged": "WORKER_SQL_COUNT_MISMATCH",
+        "Official first-party mirrored notices Worker not claimed": "WORKER_NOT_CLAIMED",
+        "Real original-card leased Worker failed": "WORKER_FAILED",
+        "Official first-party Ingushetia tender not found in tenant search": "SQL_TENANT_SEARCH_FAILED",
+        "Original-number replay created duplicate": "SQL_REPLAY_DUPLICATED",
+        "User keyword/region profile lost a matching SQL tender": "USER_FILTER_POSITIVE_FAILED",
+        "Excluded user keyword still produced an alert": "USER_FILTER_EXCLUSION_FAILED",
+        "Unrelated user query returned regional tenders": "USER_FILTER_NEGATIVE_FAILED",
+        "Isolated monitor failed to acknowledge verified rows": "ISOLATED_NOTIFICATION_ACK_FAILED",
+        "No source-owned Ingushetia committee tenders in live Fabrikant list": "REGIONAL_ROWS_ABSENT",
+        "No independently verified regional original cards": "ORIGINAL_CARDS_NOT_VERIFIED",
+        "First-party regional listing was not HTML": "LISTING_NOT_HTML",
+        "Untrusted Fabrikant regional listing": "LISTING_UNTRUSTED",
+    }
+    return whitelist.get(str(exc))
 
 
 def main():
@@ -216,21 +303,49 @@ def main():
         try:
             result = acceptance()
         except Exception as exc:
-            failure = type(exc).__name__
-            cause_names = []
-            cause = getattr(exc, "__cause__", None)
-            while cause is not None and len(cause_names) < 3:
-                cause_names.append(type(cause).__name__)
-                cause = getattr(cause, "__cause__", None)
-            failures.append({
-                "route": upstream,
-                "failure_class": failure,
-                "cause_types": cause_names,
-                "retryable": bool(getattr(exc, "retryable", False)),
-            })
+            diagnostic = {"route": upstream, **transport_failure(exc)}
+            if upstream == "official_eis_rss":
+                eis_failure_codes = {
+                    "Real EIS Worker not claimed": "EIS_WORKER_NOT_CLAIMED",
+                    "Real EIS Worker retry not claimed": "EIS_WORKER_RETRY_NOT_CLAIMED",
+                    "Real EIS leased Worker failed": "EIS_WORKER_FAILED",
+                    "Insufficient real Ingushetia notices persisted": "EIS_SQL_ROWS_INSUFFICIENT",
+                    "Real EIS Worker SQL counts do not match verified originals": "EIS_WORKER_SQL_COUNT_MISMATCH",
+                    "Real EIS Worker persisted noncanonical regional original": "EIS_NONCANONICAL_SQL_ORIGINAL",
+                    "Official EIS original card is not HTML": "EIS_ORIGINAL_NOT_HTML",
+                    "Official original card does not corroborate EIS number": "EIS_ORIGINAL_ID_MISMATCH",
+                }
+                diagnostic["safe_contract_failure"] = (
+                    eis_failure_codes.get(str(exc))
+                    if isinstance(exc, AssertionError) else None
+                )
+                if type(exc) is IngushetiaEisWorkerFailure:
+                    diagnostic["worker_job_state"] = exc.job_state
+                    diagnostic["worker_failure_code"] = exc.job_failure_code
+                    diagnostic["safe_handler_exception_classes"] = list(exc.handler_failure_classes)
+                    diagnostic["safe_handler_failure_categories"] = list(exc.handler_failure_categories)
+                    diagnostic["safe_failure_stage"] = classify_failed_live_worker(
+                        exc.handler_failure_classes, exc.handler_failure_categories,
+                    )
+            if upstream == "accredited_44fz_etp_mirror":
+                diagnostic["safe_contract_failure"] = _safe_ingushetia_vendor_failure(exc)
+                if type(exc).__name__ == "IngushetiaWorkerProofFailure":
+                    # Only enum-like fields built by the local durable queue;
+                    # never serialize a raw exception, payload or source URL.
+                    diagnostic["worker_job_state"] = getattr(exc, "job_state", "UNKNOWN")
+                    diagnostic["worker_failure_code"] = getattr(exc, "job_failure_code", "UNKNOWN")
+                    diagnostic["safe_handler_exception_classes"] = list(getattr(exc, "handler_failure_classes", ()))
+                    diagnostic["safe_handler_failure_categories"] = list(getattr(exc, "handler_failure_categories", ()))
+                    diagnostic["safe_failure_stage"] = classify_failed_live_worker(
+                        getattr(exc, "handler_failure_classes", ()),
+                        getattr(exc, "handler_failure_categories", ()),
+                    )
+            failures.append(diagnostic)
             continue
+        print("FAILURE_ROUTE_SUMMARY=" + json.dumps(failures, sort_keys=True))
         print("RU_INGUSHETIA_LIVE_UPSTREAM=" + upstream)
-        print("RU_INGUSHETIA_PROOF=" + json.dumps(result, ensure_ascii=False, sort_keys=True))
+        # Keep machine-readable evidence printable on legacy Windows consoles.
+        print("RU_INGUSHETIA_PROOF=" + json.dumps(result, ensure_ascii=True, sort_keys=True))
         print("RU_INGUSHETIA_LIVE_ACCEPTANCE=PASS")
         print("REAL_USER_TELEGRAM_RECEIPT=NOT_TESTED")
         print("PRODUCTION_CHANGED=NO")

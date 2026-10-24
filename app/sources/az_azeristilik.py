@@ -25,6 +25,8 @@ from .transport_errors import SourceTransportError, transient_transport
 SOURCE = "az_azeristilik"
 HOST = "azeristilik.gov.az"
 INDEX_URL = "https://azeristilik.gov.az/az/imkanlar/tender-elanlari"
+# Official public locale mirror, same first-party site and announcement links.
+INDEX_FALLBACK_URL = "https://azeristilik.gov.az/ru/imkanlar/tender-elanlari"
 MAX_BODY = 768 * 1024
 MAX_DETAILS = 5
 POST = re.compile(r"^/(?:(?:az|en|ru)/)?post/([a-z0-9-]{12,200})$")
@@ -163,7 +165,7 @@ class AzerbaijanHeatSource:
 
     async def fetch(self, limit=5):
         if _policy.get() is None:
-            with bounded_fetch(FetchPolicy(frozenset({HOST}), 1+MAX_DETAILS, max_bytes=MAX_BODY)):
+            with bounded_fetch(FetchPolicy(frozenset({HOST}), 2+MAX_DETAILS, max_bytes=MAX_BODY)):
                 return await self._fetch(limit)
         return await self._fetch(limit)
 
@@ -172,30 +174,58 @@ class AzerbaijanHeatSource:
             raise SourceError("AZ official limit must be integer.")
         count = min(MAX_DETAILS, max(1, limit))
         notices = []
+        detail_transport_errors = 0
         try:
             async with source_client(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
-                index = await client.get(INDEX_URL, headers={
-                    "Accept": "text/html", "User-Agent": "VALYQON-public-tender-audit/1.0"})
-                index.raise_for_status()
+                # On a connection/HTTP failure only, try the SAME agency's
+                # public Russian-language index once. Neither path permits
+                # untrusted hosts, redirects, credentials or unverified
+                # details. Invalid HTML/schema remains a hard failure.
+                for index_url in (INDEX_URL, INDEX_FALLBACK_URL):
+                    try:
+                        index = await client.get(index_url, headers={
+                            "Accept": "text/html", "User-Agent": "VALYQON-public-tender-audit/1.0"})
+                        index.raise_for_status()
+                    except (httpx.HTTPError, ConnectorTransportError, OSError):
+                        if index_url == INDEX_URL:
+                            continue
+                        raise
+                    break
                 if "html" not in index.headers.get("content-type", "").lower():
                     raise SourceError("AZ official list not HTML.")
                 cards = discover_official_posts(index.text)
                 for url, title in cards[:count]:
-                    detail = await client.get(url, headers={
-                        "Accept": "text/html", "User-Agent": "VALYQON-public-tender-audit/1.0"})
-                    detail.raise_for_status()
-                    if "html" not in detail.headers.get("content-type", "").lower():
-                        raise SourceError("AZ official detail not HTML.")
                     try:
-                        notices.append(parse_public_detail(detail.text, url=url, listed_title=title))
-                    except SourceError:
-                        # Incomplete individual notices never enter the store.
-                        # Fail the batch if no complete notice remains.
+                        detail = await client.get(url, headers={
+                            "Accept": "text/html", "User-Agent": "VALYQON-public-tender-audit/1.0"})
+                        detail.raise_for_status()
+                        if "html" not in detail.headers.get("content-type", "").lower():
+                            raise SourceError("AZ official detail not HTML.")
+                        notice = parse_public_detail(detail.text, url=url, listed_title=title)
+                    except (httpx.HTTPError, ConnectorTransportError, OSError) as exc:
+                        # One original detail may be stale or inaccessible even
+                        # while the current official index and other verified
+                        # details are available. Never admit that failed card.
+                        # All failed details still leave a red live gate below.
+                        detail_transport_errors += 1
+                        if not transient_transport(exc):
+                            # HTTP 404 / nontransient card failures are local
+                            # to that original; other first-party cards remain.
+                            continue
                         continue
+                    except SourceError:
+                        # An invalid buyer, title or date is NOT a notice.
+                        # Another independently checked original may still pass.
+                        continue
+                    notices.append(notice)
         except (httpx.HTTPError, ConnectorTransportError, OSError) as exc:
             if transient_transport(exc):
                 raise SourceTransportError("AZ official tenders temporarily unavailable.") from None
             raise SourceError("AZ verified official HTTPS retrieval failed.") from None
-        if not notices or len({x.identity for x in notices}) != len(notices):
-            raise SourceError("AZ official complete notice batch empty or duplicated.")
+        if not notices:
+            if detail_transport_errors:
+                raise SourceTransportError("AZ official detail verification temporarily unavailable.")
+            raise SourceError("AZ official complete notice batch empty.")
+        if len({x.identity for x in notices}) != len(notices):
+            raise SourceError("AZ official complete notice batch duplicated.")
         return notices

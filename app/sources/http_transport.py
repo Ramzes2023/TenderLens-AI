@@ -143,12 +143,22 @@ class PublicIPBackend(AsyncNetworkBackend):
                 addresses = list(dict.fromkeys(_public_address(item) for item in raw))
                 options = tuple(socket_options) if socket_options is not None else None
                 last_error = None
-                for address in addresses:
+                for index, address in enumerate(addresses):
                     remaining = anyio.current_effective_deadline() - anyio.current_time()
+                    # A blackholed first A/AAAA address must not exhaust the
+                    # shared connection deadline before other independently
+                    # DNS-validated public addresses are even attempted.
+                    # Preserve the original total deadline (including DNS),
+                    # peer-IP checking, original TLS SNI and fail-closed policy.
+                    candidates_left = len(addresses) - index
+                    dial_timeout = None if timeout is None else max(
+                        0.0, remaining if candidates_left == 1
+                        else min(6.0, remaining / candidates_left)
+                    )
                     try:
                         stream = await self._tcp_backend.connect_tcp(
                             str(address), port,
-                            timeout=None if timeout is None else max(0.0, remaining),
+                            timeout=dial_timeout,
                             local_address=local_address, socket_options=options,
                         )
                     except PublicIPError:

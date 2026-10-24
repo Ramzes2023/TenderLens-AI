@@ -46,6 +46,7 @@ class MonitoringSettings:
     kavkaz_rf_firstparty_enabled: bool = False
     ru_ingushetia_eis44_enabled: bool = False
     ru_ingushetia_fabrikant44_enabled: bool = False
+    ru_ingushetia_worker_sql_alerts_enabled: bool = False
     ru_ingushetia_eis44_rss_url: str | None = None
     ru_background_catalog_enabled: bool = False
     eis_direct_enabled: bool = False
@@ -137,6 +138,7 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         kavkaz_rf_firstparty_enabled=_bool("KAVKAZ_RF_FIRSTPARTY_ENABLED", False),
         ru_ingushetia_eis44_enabled=_bool("RU_INGUSHETIA_EIS44_ENABLED", False),
         ru_ingushetia_fabrikant44_enabled=_bool("RU_INGUSHETIA_FABRIKANT44_ENABLED", False),
+        ru_ingushetia_worker_sql_alerts_enabled=_bool("VALYQON_RU_INGUSHETIA_WORKER_SQL_ALERTS_ENABLED", False),
         ru_ingushetia_eis44_rss_url=os.environ.get("RU_INGUSHETIA_EIS44_RSS_URL", "").strip() or None,
         ru_background_catalog_enabled=_bool("VALYQON_RU_BACKGROUND_CATALOG_ENABLED", False),
         eis_direct_enabled=_bool("EIS_DIRECT_ENABLED", False),

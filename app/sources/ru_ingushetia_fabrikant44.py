@@ -7,14 +7,16 @@ The targeted query is unverified until a real live CI worker proves results.
 """
 from __future__ import annotations
 
+import asyncio
 from contextlib import nullcontext
 from dataclasses import dataclass
 from html.parser import HTMLParser
 import math
 import re
+import httpx
 from urllib.parse import urljoin, urlsplit
 
-from .http import FetchPolicy, _policy, bounded_fetch, source_client
+from .http import ConnectorTransportError, FetchPolicy, _policy, bounded_fetch, source_client
 from .models import TenderNotice
 from .opportunities import validate_notice
 
@@ -23,9 +25,11 @@ REGION = "Республика Ингушетия"
 ORGANIZER = "КОМИТЕТ ГОСУДАРСТВЕННОГО ЗАКАЗА РЕСПУБЛИКИ ИНГУШЕТИЯ"
 INN = "0608058533"
 HOST = "44.fabrikant.ru"
-# This q filter exists in the indexed first-party search UI, but whether it
-# filters organizer by INN MUST be established on the live first-party server.
-LIST_URL = "https://44.fabrikant.ru/44/catalog/procedure?q=" + INN
+DETAIL_MIRROR_HOST = "soap4.fabrikant.ru"
+# Public GET form: q searches the procurement, placer_search_str searches
+# organizer name/INN. Sort newest first so each poll discovers new notices.
+LIST_URL = ("https://44.fabrikant.ru/44/catalog/procedure/published"
+            "?placer_search_str=" + INN + "&order=publication_datetime&dir=desc")
 _DETAIL = re.compile(r"/44/procedure/([a-z0-9-]{2,18})/([0-9]{19})\Z")
 MAX_BYTES = 1_800_000
 MAX_DETAILS = 5
@@ -56,23 +60,31 @@ class _TableRows(HTMLParser):
         self.rows = []
         self.row = None
         self.cell = None
+        self.anchor = None
 
     def handle_starttag(self, tag, attrs):
         if tag == "tr":
-            self.row = {"cells": [], "links": []}
+            self.row = {"cells": [], "links": [], "titles": []}
         elif self.row is not None and tag == "td":
             self.cell = []
         elif self.row is not None and tag == "a":
             href = dict(attrs).get("href")
             if href:
                 self.row["links"].append(href)
+                if len(self.row["cells"]) == 2 and self.cell is not None:
+                    self.anchor = []
 
     def handle_data(self, value):
         if self.cell is not None:
             self.cell.append(value)
+        if self.anchor is not None:
+            self.anchor.append(value)
 
     def handle_endtag(self, tag):
-        if tag == "td" and self.row is not None and self.cell is not None:
+        if tag == "a" and self.anchor is not None and self.row is not None:
+            self.row["titles"].append(_text(self.anchor))
+            self.anchor = None
+        elif tag == "td" and self.row is not None and self.cell is not None:
             self.row["cells"].append(_text(self.cell))
             self.cell = None
         elif tag == "tr" and self.row is not None:
@@ -98,7 +110,9 @@ def extract_regional_listing(payload):
         organizer = cells[4].upper()
         if ORGANIZER not in organizer:
             continue
-        title = cells[2]
+        # The title cell also contains preference badges (СМП/СОНО, 1875).
+        # Those are not part of the procurement title on the original card.
+        title = row["titles"][0] if len(row["titles"]) == 1 else cells[2]
         if not 5 <= len(title) <= 1000:
             continue
         identities = []
@@ -111,8 +125,14 @@ def extract_regional_listing(payload):
                 continue
             try:
                 p = urlsplit(urljoin(LIST_URL, raw))
-                if p.query and not p.query.removeprefix("&").startswith("backurl="):
-                    continue
+                if p.query:
+                    nav = p.query.removeprefix("&")
+                    # A backurl is UI navigation, never a trusted discovery
+                    # input. Additional query pairs (including secret-bearing
+                    # ones) must fail closed rather than be silently stripped.
+                    if (len(nav) > 500 or not nav.startswith("backurl=")
+                            or "&" in nav or not nav[len("backurl="):]):
+                        continue
                 if (p.scheme != "https" or p.netloc != HOST or p.fragment
                         or p.username or p.password or p.port is not None):
                     continue
@@ -202,7 +222,7 @@ class IngushetiaFabrikant44Source:
         if type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError("Invalid Ingushetia Fabrikant limit")
         cap = min(MAX_DETAILS, limit)
-        policy = (bounded_fetch(FetchPolicy(frozenset({HOST}), MAX_DETAILS + 1,
+        policy = (bounded_fetch(FetchPolicy(frozenset({HOST, DETAIL_MIRROR_HOST}), 2 + 2 * MAX_DETAILS,
                                          max_bytes=MAX_BYTES))
                   if _policy.get() is None else nullcontext())
         with policy:
@@ -210,20 +230,50 @@ class IngushetiaFabrikant44Source:
                 timeout=self.timeout, follow_redirects=False, trust_env=False,
                 headers={"Accept": "text/html", "User-Agent": "Mozilla/5.0"},
             ) as client:
-                listing = await client.get(LIST_URL)
-                listing.raise_for_status()
+                # Retry at most once when the official listing fails due to
+                # transient transport loss. Never relax TLS or URL policy.
+                for attempt in range(2):
+                    try:
+                        listing = await client.get(LIST_URL)
+                        listing.raise_for_status()
+                        break
+                    except ConnectorTransportError as error:
+                        if attempt or not error.retryable:
+                            raise
+                        await asyncio.sleep(0.75)
                 if "html" not in listing.headers.get("content-type", "").lower():
                     raise ValueError("First-party regional listing was not HTML")
                 candidates = extract_regional_listing(listing.content)
                 valid = []
                 for number, url, title in candidates:
-                    card = await client.get(url)
-                    card.raise_for_status()
-                    if "html" not in card.headers.get("content-type", "").lower():
-                        raise ValueError("First-party original card was not HTML")
-                    valid.append(verified_fabrikant_notice(
-                        card.content, number=number, url=url, title=title,
-                    ))
+                    try:
+                        try:
+                            card = await client.get(url)
+                            card.raise_for_status()
+                        except ConnectorTransportError as error:
+                            if not error.retryable:
+                                raise
+                            # soap4.fabrikant.ru is the same official
+                            # marketplace's independently verified detail
+                            # host, never a discovery/listing substitute.
+                            # Derive the exact same canonical procedure/ID
+                            # from the publisher-owned *live* listing row.
+                            mirror_url = "https://" + DETAIL_MIRROR_HOST + urlsplit(url).path
+                            card = await client.get(mirror_url)
+                            card.raise_for_status()
+                        if "html" not in card.headers.get("content-type", "").lower():
+                            raise ValueError("First-party original card was not HTML")
+                        notice = verified_fabrikant_notice(
+                            card.content, number=number, url=url, title=title,
+                        )
+                    except (ConnectorTransportError, httpx.HTTPStatusError, ValueError):
+                        # An unreachable/stale individual card must never be
+                        # ingested, but must not discard other independently
+                        # corroborated first-party notices from this poll.
+                        # An entirely unreachable listing or zero valid detail
+                        # cards remains a hard failure.
+                        continue
+                    valid.append(notice)
                     if len(valid) >= cap:
                         break
                 if not valid:

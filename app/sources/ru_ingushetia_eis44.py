@@ -10,16 +10,22 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from pathlib import Path
 import re
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 from .eis_rss import EIS_EXTENDED_RSS_URL, EisRssSource, SourceError
+from .eis_pinned_ca import select_verified_eis_ca
 from .models import TenderNotice
 from .opportunities import validate_notice
 
 SOURCE_ID = "ru_ingushetia_eis44"
 REGION = "Республика Ингушетия"
-# This filter must be verified against the genuine live EIS response by CI.
-RSS_URL = EIS_EXTENDED_RSS_URL + "?fz44=on&regions=06&pageNumber=1"
+# EIS ignores the guessed regions=06 argument and returns national records.
+# Use its public text search; publisher-owned buyer/region metadata below is
+# still mandatory. This conservative query can miss buyers without the region
+# in their indexed text and is not a claim of complete regional coverage.
+RSS_URL = EIS_EXTENDED_RSS_URL + "?" + urlencode({
+    "fz44": "on", "searchString": "Ингушетия", "morphology": "on", "pageNumber": "1",
+})
 _NUMBER = re.compile(r"[0-9]{19}\Z")
 _REGION = re.compile(r"\bингушети(?:я|и|ю|ей)\b", re.I)
 
@@ -82,16 +88,33 @@ class IngushetiaEis44Source:
 
     def __post_init__(self):
         validate_ingushetia_rss_url(self.rss_url)
+        if not self.system_trust and self.ca_bundle_file is None:
+            try:
+                # Reuse the app's fingerprint-verified selector: local
+                # checkout root OR Docker /app/certs, never an HTTP download.
+                # No system-wide trust change or TLS verification bypass.
+                bundled = select_verified_eis_ca()
+            except (OSError, ValueError):
+                raise SourceError("Verified scoped EIS root is unavailable") from None
+            object.__setattr__(self, "ca_bundle_file", bundled)
 
     async def fetch(self, limit: int = 20) -> list[TenderNotice]:
         if self.name != SOURCE_ID or type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError("Invalid Ingushetia source settings")
         # Fetch up to 100 official 44-FZ entries so strict scope checks
         # do not silently accept the first unrelated national results.
+        ca_file = self.ca_bundle_file
+        if not self.system_trust:
+            # Region-only trust: use the already reviewed official root in
+            # normal opt-in operation, not only in the standalone CI script.
+            # Even an operator-supplied CA override must match the same
+            # published canonical-DER fingerprint. Never install it globally.
+            from .eis_pinned_ca import select_verified_eis_ca
+            ca_file = select_verified_eis_ca(ca_file)
         upstream = EisRssSource(
             urls=(self.rss_url,), timeout=self.timeout, name=SOURCE_ID,
             direct=True, system_trust=self.system_trust,
-            ca_bundle_file=self.ca_bundle_file,
+            ca_bundle_file=ca_file,
         )
         items = await upstream.fetch(limit=100)
         verified: list[TenderNotice] = []

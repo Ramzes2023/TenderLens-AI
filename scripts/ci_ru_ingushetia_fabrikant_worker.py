@@ -25,11 +25,7 @@ from app.scoring.models import CompanyProfile
 from app.sources.catalog import build_source_catalog
 from app.sources.ingestion import JOB_TYPE, ConnectorSyncHandler, ConnectorSyncService, connector_version
 from app.sources.opportunities import OpportunityRepository
-from scripts.ci_ru_ingushetia_safe_handler_diagnostics import (
-    DiagnosticConnectorHandler, safe_handler_failure_classes,
-    safe_handler_failure_categories, sanitize_failure_categories,
-)
-from app.sources.snapshots import fresh_ingushetia_worker_catalog
+from app.sources.snapshots import snapshot_catalog
 from app.sources.ru_ingushetia_fabrikant44 import SOURCE_ID
 from app.sources.ru_notice_identity import original_notice_key
 from scripts.ci_ru_ingushetia_live_worker import _check_isolated_dispatch
@@ -39,7 +35,7 @@ from scripts.ci_ru_ingushetia_live_worker import _check_isolated_dispatch
 class IngushetiaWorkerProofFailure(AssertionError):
     """Strictly redacted durable job outcome, never a raw upstream error."""
 
-    def __init__(self, job, handler_failure_classes=(), handler_failure_categories=()):
+    def __init__(self, job):
         state = getattr(job, "state", None)
         code = getattr(job, "failure_code", None)
         self.job_state = state if state in {"queued", "running", "failed", "succeeded", "cancelled"} else "UNKNOWN"
@@ -47,8 +43,6 @@ class IngushetiaWorkerProofFailure(AssertionError):
             "retryable_failure", "permanent_failure", "handler_error",
             "invalid_result", "lease_expired", "unknown_type",
         } else "UNKNOWN"
-        self.handler_failure_classes = tuple(handler_failure_classes)[-3:]
-        self.handler_failure_categories = sanitize_failure_categories(handler_failure_categories)
         super().__init__("Real original-card leased Worker failed")
 
 
@@ -78,8 +72,7 @@ def proof():
             store.initialize()
             job = ConnectorSyncService(jobs, catalog).enqueue(SOURCE_ID)
             handlers = HandlerRegistry()
-            diagnostic_handler = DiagnosticConnectorHandler(ConnectorSyncHandler(catalog, store, max_records=3))
-            handlers.register(JOB_TYPE, diagnostic_handler)
+            handlers.register(JOB_TYPE, ConnectorSyncHandler(catalog, store, max_records=3))
             worker = Worker(jobs, handlers, job_types=(JOB_TYPE,))
             # The actual production queue retries a retryable connector
             # network failure under a bounded durable lease/backoff policy.
@@ -94,16 +87,10 @@ def proof():
                 if completed is not None and completed.state == "succeeded":
                     break
                 if completed is None or completed.state != "queued" or attempt == 2:
-                    raise IngushetiaWorkerProofFailure(
-                    completed, safe_handler_failure_classes(diagnostic_handler),
-                    safe_handler_failure_categories(diagnostic_handler),
-                )
+                    raise IngushetiaWorkerProofFailure(completed)
                 time.sleep((1.25, 2.25)[attempt])
             if completed is None or completed.state != "succeeded":
-                raise IngushetiaWorkerProofFailure(
-                    completed, safe_handler_failure_classes(diagnostic_handler),
-                    safe_handler_failure_categories(diagnostic_handler),
-                )
+                raise IngushetiaWorkerProofFailure(completed)
             rows = store.read(SOURCE_ID, limit=3)
             if len(rows) < 2:
                 raise AssertionError("Insufficient current independently verified Ingushetia originals from Worker SQL")
@@ -120,7 +107,7 @@ def proof():
                     or stats["inserted_count"] != len(rows)
                     or stats["skipped_count"] != 0):
                 raise AssertionError("Worker verified originals / SQL insert counts diverged")
-            search = fresh_ingushetia_worker_catalog(catalog, store)
+            search = snapshot_catalog(catalog, store)
             for n in rows:
                 for keyword in (n.tender_number, n.title):
                     report = asyncio.run(search.fetch(
@@ -153,8 +140,7 @@ def proof():
             if negative.failures or negative.notices:
                 raise AssertionError("Unrelated user query returned regional tenders")
             acknowledged = asyncio.run(_check_isolated_dispatch(
-                catalog, cfg, rows, Path(d) / "monitor.sqlite", repository=store,
-                source_id=SOURCE_ID, monitor_catalog=search,
+                catalog, cfg, rows, Path(d) / "monitor.sqlite", repository=store, source_id=SOURCE_ID,
             ))
             if acknowledged != min(len(rows), cfg.max_notifications_per_cycle):
                 raise AssertionError("Isolated monitor failed to acknowledge verified rows")

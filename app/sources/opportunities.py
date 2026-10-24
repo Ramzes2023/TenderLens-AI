@@ -150,8 +150,48 @@ class OpportunityRepository:
             raise ValueError('Stored last_seen is not timezone aware')
         return instant.astimezone(timezone.utc)
 
+    def last_succeeded_ingushetia_sync_utc(self, source_id):
+        """Read-only durable successful-Worker cutoff for opt-in bot notifications.
+
+        A fenced write can persist some notices before a later job failure.
+        A row's last_seen alone cannot certify that the whole lease finished.
+        Strict bot delivery must never surface writes newer than the last
+        successful job for the same regional source. No network or mutation.
+        """
+        allowed = {'ru_ingushetia_eis44', 'ru_ingushetia_fabrikant44'}
+        if source_id not in allowed or type(source_id) is not str:
+            raise ValueError('Only verified regional Worker sources supported')
+        # Some environments process many other source jobs. Cap the
+        # independent scan to avoid unbounded application-side JSON parsing.
+        # If the regional source falls outside this horizon, fail closed.
+        with closing(self.database.connect()) as conn:
+            rows = conn.execute("""SELECT payload_json,result_json,finished_at
+                FROM durable_jobs WHERE job_type='connector.sync.v1'
+                AND state='succeeded' AND finished_at IS NOT NULL
+                AND account_id IS NULL AND organization_id IS NULL AND company_id IS NULL
+                ORDER BY finished_at DESC LIMIT 1000""").fetchall()
+        for row in rows:
+            try:
+                payload, result = json.loads(row[0]), json.loads(row[1])
+                stamp = row[2]
+                if (type(payload) is dict and payload.get('source_id') == source_id
+                        and type(result) is dict and result.get('source_id') == source_id
+                        and type(result.get('accepted_count')) is int
+                        and result['accepted_count'] > 0
+                        and type(result.get('inserted_count')) is int
+                        and type(result.get('updated_count')) is int
+                        and result['inserted_count'] + result['updated_count'] == result['accepted_count']
+                        and type(stamp) is int and stamp > 0):
+                    seconds, microseconds = divmod(stamp, 1_000_000)
+                    return datetime.fromtimestamp(seconds, timezone.utc).replace(
+                        microsecond=microseconds
+                    )
+            except (TypeError, ValueError, OverflowError, KeyError, OSError):
+                continue
+        return None
+
     def read(self, source_id, limit=20, search_terms=(), *, not_before=None,
-             _fresh_ingushetia_candidate_scan=False):
+             not_after=None, _fresh_ingushetia_candidate_scan=False):
         # Most callers may return at most 100 rows. The opt-in source-owned
         # Ingushetia Worker SQL adapter alone may inspect a bounded 1000-row
         # *fresh* candidate pool before applying tenant keyword matching.
@@ -170,16 +210,30 @@ class OpportunityRepository:
                     or not_before.utcoffset() != timezone.utc.utcoffset(None)):
                 raise ValueError('UTC-aware snapshot cutoff required')
             not_before = not_before.astimezone(timezone.utc).isoformat()
+        # The strict opt-in bot path can also cap rows to the most recent
+        # *completed* durable Worker job. Later partial failed-job writes
+        # remain saved for audit, but are not eligible for notifications.
+        if not_after is not None:
+            if (source_id not in {'ru_ingushetia_eis44', 'ru_ingushetia_fabrikant44'}
+                    or not isinstance(not_after, datetime)
+                    or not_after.tzinfo or not_after.utcoffset() != timezone.utc.utcoffset(None)):
+                raise ValueError('Only UTC regional Worker snapshot upper cutoffs are allowed')
+            not_after = not_after.astimezone(timezone.utc).isoformat()
+        if not_before is not None and not_after is not None and not_before > not_after:
+            return []
         # Bounded local snapshot candidate pool; filtering does not send profile data upstream.
+        clause = ' WHERE source_id=?'
+        params = [source_id]
+        if not_before is not None:
+            clause += ' AND last_seen>=?'
+            params.append(not_before)
+        if not_after is not None:
+            clause += ' AND last_seen<=?'
+            params.append(not_after)
         with closing(self.database.connect()) as conn:
-            if not_before is None:
-                rows = conn.execute('''SELECT notice_json FROM source_opportunities WHERE source_id=?
-                    ORDER BY last_seen DESC,external_id LIMIT 1000''', (source_id,)).fetchall()
-            else:
-                rows = conn.execute('''SELECT notice_json FROM source_opportunities
-                    WHERE source_id=? AND last_seen>=?
-                    ORDER BY last_seen DESC,external_id LIMIT 1000''',
-                    (source_id, not_before)).fetchall()
+            rows = conn.execute('SELECT notice_json FROM source_opportunities' + clause +
+                                ' ORDER BY last_seen DESC,external_id LIMIT 1000',
+                                tuple(params)).fetchall()
         result = []
         terms = tuple(str(term).casefold() for term in search_terms if str(term).strip())[:20]
         for row in rows:

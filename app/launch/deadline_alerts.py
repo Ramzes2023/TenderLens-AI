@@ -121,6 +121,51 @@ class DeadlineAlerts:
             account_id=account_id, organization_id=organization_id, company_id=company_id,
         )
 
+    def delivery_history(self, *, account_id: int, organization_id: int, company_id: int,
+                         limit: int = 50):
+        """Read only this active member's recorded deadline-delivery attempts.
+
+        A 'sent' receipt means the configured sender returned successfully,
+        not proof of recipient delivery/read. Tender identity and email/chat
+        destination stay on the server; the saved record link is only an
+        internal tenant-scoped identifier.
+        """
+        if type(limit) is not int or not 1 <= limit <= 50:
+            raise ValueError("Invalid delivery history limit.")
+        with closing(self.database.connect()) as conn:
+            member = conn.execute(
+                "SELECT 1 FROM organization_members WHERE account_id=? AND organization_id=?",
+                (account_id, organization_id),
+            ).fetchone()
+            if member is None:
+                raise PermissionError("Organization membership required.")
+            rows = conn.execute(
+                "SELECT r.channel,r.state,r.lead_hours,r.claimed_at,r.sent_at,"
+                "s.id AS saved_id "
+                "FROM deadline_alert_receipts r "
+                "LEFT JOIN saved_opportunities s ON s.organization_id=r.organization_id "
+                "AND s.company_id=r.company_id AND s.source=r.source "
+                "AND s.external_id=r.external_id "
+                "WHERE r.account_id=? AND r.organization_id=? AND r.company_id=? "
+                "ORDER BY r.claimed_at DESC,r.source,r.external_id LIMIT ?",
+                (account_id, organization_id, company_id, limit),
+            ).fetchall()
+        return {
+            "organization_id": organization_id,
+            "company_id": company_id,
+            "scope": "my_recorded_deadline_delivery_attempts",
+            "limit": limit,
+            "records": [{
+                "channel": row["channel"],
+                "state": row["state"],
+                "lead_hours": int(row["lead_hours"]),
+                "claimed_at": row["claimed_at"],
+                "sent_at": row["sent_at"],
+                "saved_id": int(row["saved_id"]) if row["saved_id"] is not None else None,
+            } for row in rows],
+            "delivery_confirmation": "sender_return_only",
+        }
+
     def candidates(self, *, limit: int = MAX_REMINDERS_PER_CYCLE):
         # Preferences + active organization membership + verified email; no unsolicited send.
         with closing(self.database.connect()) as conn:

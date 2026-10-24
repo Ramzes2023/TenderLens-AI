@@ -527,3 +527,67 @@ def test_gpb_unsafe_original_detail_transport_never_skipped(monkeypatch, reason)
     with pytest.raises(ConnectorTransportError):
         asyncio.run(GpbEtpPublicSource().fetch(1))
     assert seen == [LIST_URL, URL]
+
+
+@pytest.mark.parametrize("reason", ["tls_certificate", "public_ip", "policy"])
+def test_nonretryable_official_html_transport_must_not_attempt_rss_fallback(
+    monkeypatch, reason,
+):
+    """A security-policy failure must stop before contacting any other route."""
+    from app.sources.http import ConnectorTransportError
+
+    attempted = []
+
+    class Client:
+        async def get(self, url, **kwargs):
+            attempted.append(url)
+            raise ConnectorTransportError(retryable=False, reason=reason)
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        assert kwargs["trust_env"] is False
+        assert kwargs["follow_redirects"] is False
+        yield Client()
+
+    import app.sources.gpb_etp_public as module
+    monkeypatch.setattr(module, "source_client", client)
+
+    with pytest.raises(ConnectorTransportError) as failure:
+        asyncio.run(GpbEtpPublicSource().fetch(1))
+    assert failure.value.reason == reason
+    assert attempted == [LIST_URL]
+
+
+def test_retryable_official_html_transport_can_use_only_documented_rss(monkeypatch):
+    from app.sources.http import ConnectorTransportError
+    calls = []
+
+    class Reply:
+        def __init__(self, content, mime):
+            self.content = content
+            self.headers = {"content-type": mime}
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        async def get(self, url, **kwargs):
+            calls.append(url)
+            if url == LIST_URL:
+                raise ConnectorTransportError(retryable=True, reason="network")
+            if url == f"https://{HOST}/procedures.rss":
+                return Reply(rss(), "application/rss+xml")
+            if url == URL:
+                return Reply(detail(), "text/html")
+            raise AssertionError("Unapproved original or route was requested")
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        assert kwargs["trust_env"] is False
+        assert kwargs["follow_redirects"] is False
+        yield Client()
+
+    import app.sources.gpb_etp_public as module
+    monkeypatch.setattr(module, "source_client", client)
+    notices = asyncio.run(GpbEtpPublicSource().fetch(1))
+    assert [n.external_id for n in notices] == ["1299761"]
+    assert calls == [LIST_URL, f"https://{HOST}/procedures.rss", URL]

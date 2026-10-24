@@ -402,7 +402,7 @@ def test_gpb_valid_but_entirely_stale_html_index_recovers_current_official_rss(m
             if url == LIST_URL:
                 return Reply(listing(), "text/html")
             if url == URL:
-                return Reply(b"<html><h1>Удалённая карточка</h1></html>", "text/html")
+                return Reply("<html><h1>Удалённая карточка</h1></html>".encode("utf-8"), "text/html")
             if url == f"https://{HOST}/procedures.rss":
                 return Reply(rss(), "application/rss+xml")
             if url == rss_new:
@@ -436,11 +436,8 @@ def test_gpb_all_stale_html_and_rss_cannot_fabricate_original(monkeypatch):
             if url == LIST_URL:
                 return Reply(listing(), "text/html")
             if url == f"https://{HOST}/procedures.rss":
-                return Reply(rss(first=URL, second=URL).replace(
-                    b"<link>" + URL.encode() + b"</link></item><item>",
-                    b"<link>" + URL.encode() + b"</link></item><item>"
-                ), "application/rss+xml")
-            return Reply(b"<html><h1>Недоступный оригинал</h1></html>", "text/html")
+                return Reply(rss(first=URL, second=URL), "application/rss+xml")
+            return Reply("<html><h1>Недоступный оригинал</h1></html>".encode("utf-8"), "text/html")
 
     @asynccontextmanager
     async def client(**kw):

@@ -15,7 +15,7 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 
-from .http import FetchPolicy, bounded_fetch, _policy, source_client
+from .http import ConnectorTransportError, FetchPolicy, bounded_fetch, _policy, source_client
 from .models import TenderNotice
 from .opportunities import validate_notice
 
@@ -198,6 +198,13 @@ class RoseltorgPublicSource:
                         if len(notices) >= cap:
                             break
                     except (ValueError, httpx.HTTPStatusError):
+                        continue
+                    except ConnectorTransportError as error:
+                        # One transient public DETAIL transport error must not
+                        # starve other current originals. Never treat rejected
+                        # TLS, DNS/private-IP or transport policy as a stale ID.
+                        if not error.retryable:
+                            raise
                         continue
                 if not notices:
                     raise ValueError("No independently verified Roseltorg public notices")

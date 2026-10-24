@@ -34,6 +34,7 @@ def test_calendar_opens_exact_saved_record_and_scope(tmp_path):
             rows = [{"id": number, "opportunity": {
                 "title": f"OFFLINE_FIXTURE tender {number}", "deadline": date.today().isoformat()
             }} for number in (41, 42)]
+            rows[0]['opportunity']['deadline'] += 'T22:30:00+03:00'
             page.route("**/api/v1/organizations/17/shortlist", lambda route: route.fulfill(
                 content_type="application/json", body=json.dumps(rows)))
             page.route("**/workflow", lambda route: route.fulfill(
@@ -48,6 +49,7 @@ def test_calendar_opens_exact_saved_record_and_scope(tmp_path):
             assert calendar.startswith(b'BEGIN:VCALENDAR\r\nVERSION:2.0\r\n')
             assert calendar.count(b'BEGIN:VEVENT') == 2
             assert b'DTSTART;VALUE=DATE:' + date.today().strftime('%Y%m%d').encode() in calendar
+            assert b'DTSTART:' + date.today().strftime('%Y%m%d').encode() + b'T193000Z' in calendar
             assert all(len(line) <= 75 for line in calendar.split(b'\r\n'))
             assert b'UID:42-17@valyqon.local' in calendar
             page.click("#vqPlannerMonthTab")

@@ -53,6 +53,26 @@ def main():
             page.wait_for_url(lambda url: urlsplit(url).path == '/dashboard')
             page.reload()
             page.wait_for_function("typeof state !== 'undefined' && state.accountId !== null")
+            page.evaluate("location.hash='team'")
+            page.fill('#newOrganizationName', 'OFFLINE_FIXTURE QA organization')
+            page.click('#createOrganizationButton')
+            page.wait_for_function('usingSharedOrganization() && canWriteWorkspace()')
+            organization_id = page.evaluate('state.organizationId')
+            page.evaluate("location.hash='companies'")
+            page.click('#addCompanyButton')
+            page.fill('#companyName', 'OFFLINE_FIXTURE QA company')
+            page.fill('#keywords', 'paper')
+            page.fill('#searchKeywords', 'paper')
+            page.fill('#currencies', 'EUR')
+            with page.expect_response(lambda response: response.request.method == 'POST'
+                                      and response.url.endswith('/companies')) as created:
+                page.click('#createCompanyButton')
+            assert created.value.status == 201
+            page.wait_for_function('Number.isInteger(state.activeCompanyId)')
+            company_id = page.evaluate('state.activeCompanyId')
+            page.reload()
+            page.wait_for_function('(id) => state.activeCompanyId === id', arg=company_id)
+            assert page.evaluate('state.organizationId') == organization_id
             for route in ['overview', 'recommended', 'saved', 'tender-planner', 'monitoring',
                           'source-health', 'ai-analysis', 'notifications', 'billing', 'settings']:
                 page.evaluate('(route) => {location.hash=route}', route)
@@ -83,10 +103,11 @@ def main():
             assert not errors, errors
             evidence = dict(level='LOCAL_DOCKER_BROWSER_MAILPIT',
                             synthetic_tenders_inserted=0, page_errors=errors,
+                            company_create_activate_refresh=True,
                             mailpit_verification_and_reset=True, responses=responses)
             Path('artifacts/audit-pr264-docker-browser.json').write_text(
                 json.dumps(evidence, indent=2), encoding='utf-8')
-            print('PASS: Docker Chromium registration, Mailpit verification/reset, login, refresh, navigation, mobile menu; no JS exceptions')
+            print('PASS: Docker Chromium registration, Mailpit verification/reset, login, company creation/activation/persistence, navigation, mobile menu; no JS exceptions')
         finally:
             browser.close()
 

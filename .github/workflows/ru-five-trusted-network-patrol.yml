@@ -1,0 +1,42 @@
+name: RU five blocked publishers trusted main-only network patrol
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/ru-five-trusted-network-patrol.yml
+  schedule:
+    - cron: '17 3,11,19 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ru-five-trusted-main-only-network-patrol
+  cancel-in-progress: false
+
+jobs:
+  ru-five-trusted-main-only-network-patrol:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 6
+    steps:
+      - name: Refuse any runner other than approved RU publisher network runner
+        env:
+          ACTUAL_RUNNER_NAME: ${{ runner.name }}
+        shell: bash
+        run: |
+          test "$ACTUAL_RUNNER_NAME" = "VALYQON-RU-01"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Five fixed official HTTPS origins only, no ingestion or alert
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        timeout-minutes: 4
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -B -m scripts.ru_trusted_live_probe priority_five_network

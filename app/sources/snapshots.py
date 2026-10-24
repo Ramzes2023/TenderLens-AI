@@ -43,13 +43,17 @@ INGUSHETIA_WORKER_MAX_AGE_SECONDS = 75 * 60
 class FreshIngushetiaWorkerSource(SnapshotSource):
     """Never fall back to the network or notify from stale Worker storage."""
 
-    def __init__(self, repository, name, terms=()):
+    def __init__(self, repository, name, terms=(), *, require_completed_job=False):
         if name not in _INGUSHETIA_WORKER_KEYS:
             raise ValueError("Unapproved regional snapshot source")
         super().__init__(repository, name, terms)
+        self.require_completed_job = require_completed_job
 
     def for_search_terms(self, terms, *, max_feeds=5):
-        return FreshIngushetiaWorkerSource(self.repository, self.name, tuple(terms)[:20])
+        return FreshIngushetiaWorkerSource(
+            self.repository, self.name, tuple(terms)[:20],
+            require_completed_job=self.require_completed_job,
+        )
 
     async def fetch(self, limit=20):
         seen = await asyncio.to_thread(self.repository.latest_seen_utc, self.name)
@@ -66,9 +70,19 @@ class FreshIngushetiaWorkerSource(SnapshotSource):
         # match a profile keyword "оборудования" without querying upstream.
         # Filter terms locally using the same tokenizer *before* applying
         # the notification limit, to avoid undercounting legitimate matches.
+        upper = None
+        if self.require_completed_job:
+            # The real bot must not notify from partially persisted writes
+            # belonging to a failed or interrupted Worker lease. Accept only
+            # rows persisted BEFORE the most recent successful durable job.
+            upper = await asyncio.to_thread(
+                self.repository.last_succeeded_ingushetia_sync_utc, self.name
+            )
+            if upper is None or upper < lower or upper > now + timedelta(seconds=120):
+                raise ValueError("No recent successful regional Worker job")
         records = await asyncio.to_thread(
             self.repository.read, self.name, 1000, (), not_before=lower,
-            _fresh_ingushetia_candidate_scan=True,
+            not_after=upper, _fresh_ingushetia_candidate_scan=True,
         )
         if not self.terms:
             return records[:limit]
@@ -86,7 +100,7 @@ class FreshIngushetiaWorkerSource(SnapshotSource):
         return [notice for notice in records if match(notice)][:limit]
 
 
-def fresh_ingushetia_worker_catalog(catalog, repository):
+def fresh_ingushetia_worker_catalog(catalog, repository, *, require_completed_job=False):
     """Wrap only operator-enabled regional sources with verified fresh SQL.
 
     This does not enqueue or run a Worker, schedule polls, or send Telegram.
@@ -96,7 +110,9 @@ def fresh_ingushetia_worker_catalog(catalog, repository):
     if not active:
         raise ValueError("No operator-enabled Ingushetia sources for Worker SQL")
     registry = SourceRegistry(
-        replace(item, source=FreshIngushetiaWorkerSource(repository, item.key))
+        replace(item, source=FreshIngushetiaWorkerSource(
+            repository, item.key, require_completed_job=require_completed_job,
+        ))
         if item.key in active else item
         for item in catalog.registry.registrations()
     )

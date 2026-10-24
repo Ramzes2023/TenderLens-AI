@@ -12,7 +12,7 @@ import httpx
 import re
 from urllib.parse import urljoin, urlsplit
 
-from .http import FetchPolicy, bounded_fetch, _policy, source_client
+from .http import ConnectorTransportError, FetchPolicy, bounded_fetch, _policy, source_client
 from .models import TenderNotice
 from .opportunities import validate_notice
 
@@ -209,6 +209,13 @@ class TekTorgPublicSource:
                     except (ValueError, httpx.HTTPStatusError):
                         # A changed/removed public card is not reliable tender data.
                         # Drop only that card; do not ingest it or bypass redirects.
+                        continue
+                    except ConnectorTransportError as error:
+                        # Only a transient single original DETAIL failure may
+                        # be skipped to inspect later independent originals.
+                        # Policy, public-IP and TLS failure must not be hidden.
+                        if not error.retryable:
+                            raise
                         continue
                     notice = TenderNotice(
                         source=SOURCE_ID, external_id=identity,

@@ -279,6 +279,12 @@ class GpbEtpPublicSource:
                         # Fail closed for stale individual notices; never store an
                         # unverified card or substitute a fabricated fallback.
                         continue
+                    except ConnectorTransportError as error:
+                        # Only transient transport of one public ORIGINAL may
+                        # be skipped. Fail closed on TLS, public-IP and policy.
+                        if not error.retryable:
+                            raise
+                        continue
 
                 if not verified and listing_from_html:
                     # Valid HTML with only stale/deleted originals must not
@@ -304,6 +310,10 @@ class GpbEtpPublicSource:
                                 item.content, identity, detail_url,
                             ))
                         except (ValueError, httpx.HTTPStatusError):
+                            continue
+                        except ConnectorTransportError as error:
+                            if not error.retryable:
+                                raise
                             continue
                         if len(verified) >= cap:
                             break

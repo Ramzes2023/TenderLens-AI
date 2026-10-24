@@ -802,6 +802,10 @@ def test_real_bot_worker_sql_requires_successful_job_and_skips_later_uncommitted
         assert finished.state == "succeeded"
         checkpoint = store.last_succeeded_ingushetia_sync_utc(EIS)
         assert checkpoint is not None
+        # Diagnose a broken freshness contract at its origin instead of
+        # relying on the catalog's intentionally redacted SourceFailure.
+        direct = asyncio.run(strict.registry.get(EIS).source.fetch(limit=10))
+        assert {n.tender_number for n in direct} == {N1}
         accepted = asyncio.run(result())
         assert not accepted.failures
         assert {n.tender_number for n in accepted.notices} == {N1}

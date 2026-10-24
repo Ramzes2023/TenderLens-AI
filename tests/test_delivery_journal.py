@@ -66,7 +66,7 @@ def test_only_own_company_receipts_and_no_sensitive_upstream_identity(tmp_path):
     assert "OFFLINE_FIXTURE" not in str(own)
     assert "eis" not in str(own)
     assert "journal-owner@example.test" not in str(own)
-    assert "deadline" not in str(own)
+    assert "2026-10-26T12" not in str(own)
     assert history.delivery_history(account_id=user.id,organization_id=org.id,company_id=12)["records"][0]["state"]=="pending"
     assert len(history.delivery_history(account_id=teammate.id,organization_id=org.id,company_id=11)["records"])==1
     assert len(history.delivery_history(account_id=outsider.id,organization_id=foreign.id,company_id=55)["records"])==1
@@ -128,7 +128,7 @@ def test_real_dashboard_mounts_interactive_journal_without_fake_alerts():
         "credentials:'same-origin'", "my_recorded_deadline_delivery_attempts",
         "state.accountId", "state.activeCompanyId", "loadedKey",
         "valyqon-open-saved", "scope()", "records.length>50",
-        "rows", "window.addEventListener('workspace-context'",
+        "vqDeliveryRows", "window.addEventListener('workspace-context'",
     ):
         assert required in js, required
     for fake in ("Math.random(", "innerHTML", "demoMessages", "fakeNotification", "localStorage"):

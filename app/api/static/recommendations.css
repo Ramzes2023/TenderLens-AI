@@ -1,0 +1,38 @@
+/* Real archived Discovery match ranking; not live recommendations. */
+body.saas .vq-recommendations{min-width:0;padding-bottom:30px}
+body.saas .vq-recommend-hero{display:flex;gap:20px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:radial-gradient(ellipse at 92% 5%,#3f579d,transparent 55%),linear-gradient(120deg,#0c2350,#1c2d6b);border:1px solid #3b5499;border-radius:22px;padding:31px;color:#fff;box-shadow:0 15px 39px #213d7e2c}
+body.saas .vq-recommend-eyebrow{display:inline-block;letter-spacing:.13em;color:#a1bfff;font-size:10px;font-weight:850}
+body.saas .vq-recommend-hero h2{font-size:clamp(26px,3vw,42px);letter-spacing:-.045em;line-height:1.12;color:#fff;margin:12px 0}
+body.saas .vq-recommend-hero p{font-size:12px;color:#cbdaf5;max-width:650px;line-height:1.6}
+body.saas .vq-recommend-actions{display:flex;gap:10px;flex-wrap:wrap}
+body.saas .vq-recommend-actions button,body.saas .vq-recommend-actions a{min-height:42px;padding:10px 14px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;border:1px solid #8ca3ef;border-radius:11px;background:#3766dc;color:#fff;font-weight:800;text-decoration:none;cursor:pointer}
+body.saas .vq-recommend-actions a{background:#ffffff19}
+body.saas .vq-recommend-actions button:disabled{opacity:.5;cursor:not-allowed}
+body.saas #vqRecommendationsStatus{color:#7084a7;font-size:12px;line-height:1.5;min-height:22px;margin:16px 0}
+body.saas .vq-recommend-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+body.saas .vq-recommend-metrics article{display:grid;gap:10px;background:#fff;border:1px solid #e0e7f5;border-radius:16px;padding:19px;box-shadow:0 8px 22px #23438310}
+body.saas .vq-recommend-metrics small{color:#7185a5;font-size:11px}
+body.saas .vq-recommend-metrics strong{color:#3054a2;font-size:28px;font-variant-numeric:tabular-nums;letter-spacing:-.05em}
+body.saas .vq-recommend-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:22px 0 15px}
+body.saas .vq-recommend-controls label{font-size:11px;color:#697da2}
+body.saas .vq-recommend-controls select{border:1px solid #d7e1f6;background:#fff;color:#354d84;min-height:42px;border-radius:10px;padding:8px 12px;font-size:11px}
+body.saas .vq-recommend-controls a{margin-left:auto;color:#496bca;text-decoration:none;font-weight:850;font-size:11px}
+body.saas .vq-recommend-results{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
+body.saas .vq-recommend-card{display:flex;flex-direction:column;gap:12px;min-width:0;padding:19px;background:#fff;border:1px solid #e2e8f5;border-radius:15px;box-shadow:0 8px 22px #233e7f0c}
+body.saas .vq-recommend-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+body.saas .vq-recommend-source{font-size:10px;color:#6882bb;background:#edf2ff;border-radius:7px;padding:6px 9px;overflow-wrap:anywhere}
+body.saas .vq-recommend-score{color:#347867;background:#def7ee;border-radius:9px;padding:7px 10px;white-space:nowrap;font-size:13px}
+body.saas .vq-recommend-card h3{font-size:14px;line-height:1.5;color:#213a6c;overflow-wrap:anywhere;letter-spacing:-.01em;margin:3px 0}
+body.saas .vq-recommend-bar{height:8px;border-radius:10px;background:#ecf0fb;overflow:hidden}
+body.saas .vq-recommend-bar-fill{display:block;height:100%;border-radius:10px;background:linear-gradient(90deg,#4472dd,#4fbc9d)}
+body.saas .vq-recommend-meta{font-size:11px;color:#7486a4;margin:0}
+body.saas .vq-recommend-completeness{color:#8192ae;font-size:10px}
+body.saas .vq-recommend-open{margin-top:auto;padding-top:12px;border-top:1px solid #edf0f8;color:#4166d8;text-decoration:none;font-size:11px;font-weight:800}
+body.saas .vq-recommend-empty{grid-column:1/-1;min-height:315px;display:grid;place-content:center;justify-items:center;gap:10px;text-align:center;border:1px dashed #c7d5ed;border-radius:20px;background:radial-gradient(ellipse at 50% 0,#edf3ff,#fff 65%);padding:32px}
+body.saas .vq-recommend-empty-icon{display:grid;place-items:center;width:68px;height:68px;background:#e8efff;border-radius:18px;font-size:35px;color:#5275da}
+body.saas .vq-recommend-empty h3{color:#2a487b;font-size:22px}
+body.saas .vq-recommend-empty p{max-width:490px;color:#8290a9;line-height:1.6;font-size:12px}
+body.saas .vq-recommend-empty a{color:#4b6cdb;font-size:12px;font-weight:800;text-decoration:none}
+body.saas .vq-recommend-disclosure{margin-top:20px;padding:15px 2px;color:#8190ab;font-size:11px;line-height:1.7}
+@media(max-width:1050px){body.saas .vq-recommend-results{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){body.saas .vq-recommend-hero{padding:22px}body.saas .vq-recommend-results{grid-template-columns:1fr}body.saas .vq-recommend-metrics{gap:8px}body.saas .vq-recommend-metrics article{padding:12px}body.saas .vq-recommend-metrics strong{font-size:23px}body.saas .vq-recommend-controls a{margin-left:0}}

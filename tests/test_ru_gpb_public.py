@@ -383,3 +383,83 @@ def test_gpb_rss_security_failure_never_retried(monkeypatch, reason):
     with pytest.raises(ConnectorTransportError):
         asyncio.run(GpbEtpPublicSource().fetch(1))
     assert seen == [LIST_URL, f"https://{HOST}/procedures.rss"]
+
+
+def test_gpb_valid_but_entirely_stale_html_index_recovers_current_official_rss(monkeypatch):
+    """Official RSS gets a second chance, never re-accepts stale HTML IDs."""
+    rss_new = "https://etpgpb.ru/procedures/etp/1299762/"
+    requests = []
+
+    class Reply:
+        def __init__(self, data, mime):
+            self.content, self.headers = data, {"content-type": mime}
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        async def get(self, url, **kw):
+            requests.append(url)
+            if url == LIST_URL:
+                return Reply(listing(), "text/html")
+            if url == URL:
+                return Reply(b"<html><h1>Удалённая карточка</h1></html>", "text/html")
+            if url == f"https://{HOST}/procedures.rss":
+                return Reply(rss(), "application/rss+xml")
+            if url == rss_new:
+                return Reply(detail("1299762", "Оказание услуг перевозки грузов"), "text/html")
+            raise AssertionError("Unexpected upstream original or unbounded GET")
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        assert kwargs["trust_env"] is False
+        assert kwargs["follow_redirects"] is False
+        yield Client()
+
+    import app.sources.gpb_etp_public as mod
+    monkeypatch.setattr(mod, "source_client", client)
+    result = asyncio.run(GpbEtpPublicSource().fetch(1))
+    assert [(n.external_id, n.url) for n in result] == [("1299762", rss_new)]
+    assert requests == [LIST_URL, URL, f"https://{HOST}/procedures.rss", rss_new]
+
+
+def test_gpb_all_stale_html_and_rss_cannot_fabricate_original(monkeypatch):
+    requests = []
+    class Reply:
+        def __init__(self, data, mime):
+            self.content, self.headers = data, {"content-type": mime}
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        async def get(self, url, **kw):
+            requests.append(url)
+            if url == LIST_URL:
+                return Reply(listing(), "text/html")
+            if url == f"https://{HOST}/procedures.rss":
+                return Reply(rss(first=URL, second=URL).replace(
+                    b"<link>" + URL.encode() + b"</link></item><item>",
+                    b"<link>" + URL.encode() + b"</link></item><item>"
+                ), "application/rss+xml")
+            return Reply(b"<html><h1>Недоступный оригинал</h1></html>", "text/html")
+
+    @asynccontextmanager
+    async def client(**kw):
+        yield Client()
+
+    import app.sources.gpb_etp_public as mod
+    monkeypatch.setattr(mod, "source_client", client)
+    with pytest.raises(ValueError, match="No independently verified"):
+        asyncio.run(GpbEtpPublicSource().fetch(1))
+    # No extra detail GET when the RSS candidate is the previously rejected ID.
+    assert requests == [LIST_URL, URL, f"https://{HOST}/procedures.rss"]
+
+
+def test_gpb_source_worker_budget_is_explicitly_bounded_for_stale_html_and_rss():
+    from app.sources.ingestion import HOSTS, ConnectorSyncHandler
+    from app.sources.gpb_etp_public import MAX_CANDIDATES, MAX_DETAILS
+    assert HOSTS["gpb_etp_public"] == frozenset({HOST})
+    assert MAX_CANDIDATES == 9 and MAX_DETAILS == 3
+    # Budget: initial HTML + 9 independently checked HTML details +
+    # up to 2 published RSS fetches + 3 independently checked RSS details.
+    budget = min(20, MAX_DETAILS) * 4 + 3
+    assert budget == 15

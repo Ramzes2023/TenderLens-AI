@@ -29,36 +29,54 @@ def _text(parts):
 
 
 class _PublicListing(HTMLParser):
+    """Only visible, independently linked first-party procurement candidates."""
+
+    _HIDDEN = frozenset({"head", "script", "style", "iframe",
+                         "svg", "object", "template", "noscript"})
+
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.current = None
         self.records = []
-    
+        self.hidden = []
+
     def handle_starttag(self, tag, attrs):
         if self.current is not None:
-            if tag.lower() in {"script", "style", "iframe", "svg", "object", "template"}:
+            # Active markup inside a first-party candidate is suspicious;
+            # fail closed instead of silently repairing an invalid title.
+            if tag in self._HIDDEN:
                 raise ValueError("Active markup inside public procurement title")
             return
-        if tag != "a":
+        if tag in self._HIDDEN:
+            self.hidden.append(tag)
+            return
+        if self.hidden or tag != "a":
             return
         raw = dict(attrs).get("href", "")
-        if type(raw) is not str or len(raw) > 2000:
+        if (type(raw) is not str or not raw or len(raw) > 2000
+                or chr(92) in raw or "%" in raw
+                or any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in raw)):
             return
-        p = urlsplit(urljoin(LIST_URL, raw))
+        try:
+            p = urlsplit(urljoin(LIST_URL, raw))
+        except ValueError:
+            return
         m = _PATH.fullmatch(p.path)
         if (m and p.scheme == "https" and p.netloc == HOST
                 and not p.query and not p.fragment and not p.username
                 and not p.password and p.port is None):
             self.current = [m.group(1), p.geturl(), []]
-    
+
     def handle_data(self, data):
-        if self.current is not None:
+        if self.current is not None and not self.hidden:
             self.current[2].append(data)
 
     def handle_endtag(self, tag):
-        if self.current is None:
+        if self.hidden:
+            if self.hidden[-1] == tag:
+                self.hidden.pop()
             return
-        if tag == 'a':
+        if tag == "a" and self.current is not None:
             identity, url, parts = self.current
             self.records.append((identity, url, _text(parts)))
             self.current = None

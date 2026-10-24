@@ -45,6 +45,7 @@ class MonitoringSettings:
     ru_dagestan_public_list_enabled: bool = False
     ru_samara_public_list_enabled: bool = False
     kavkaz_rf_firstparty_enabled: bool = False
+    ru_ingushetia_fabrikant44_enabled: bool = False
     ru_background_catalog_enabled: bool = False
     eis_direct_enabled: bool = False
     eis_system_trust_enabled: bool = False
@@ -134,6 +135,7 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         ru_dagestan_public_list_enabled=_bool("RU_DAGESTAN_PUBLIC_LIST_ENABLED", False),
         ru_samara_public_list_enabled=_bool("RU_SAMARA_PUBLIC_LIST_ENABLED", False),
         kavkaz_rf_firstparty_enabled=_bool("KAVKAZ_RF_FIRSTPARTY_ENABLED", False),
+        ru_ingushetia_fabrikant44_enabled=_bool("RU_INGUSHETIA_FABRIKANT44_ENABLED", False),
         ru_background_catalog_enabled=_bool("VALYQON_RU_BACKGROUND_CATALOG_ENABLED", False),
         eis_direct_enabled=_bool("EIS_DIRECT_ENABLED", False),
         eis_system_trust_enabled=_bool("EIS_SYSTEM_TRUST_ENABLED", False),

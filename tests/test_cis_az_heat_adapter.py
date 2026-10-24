@@ -151,5 +151,24 @@ def test_all_unreachable_details_remain_live_source_failure(monkeypatch):
         asyncio.run(AzerbaijanHeatSource().fetch(5))
 
 
+def test_worker_safe_stage_diagnostic_only_uses_hardcoded_error_codes():
+    from app.jobs.worker import PermanentJobError, RetryableJobError
+    from scripts.ci_cis_az_heat_live_acceptance import _safe_worker_source_stage
+
+    assert _safe_worker_source_stage(
+        PermanentJobError("Invalid connector storage data.")
+    ) == "SQL_INTEGRITY_REJECTED"
+    assert _safe_worker_source_stage(
+        PermanentJobError("Connector schema/configuration failed.")
+    ) == "SOURCE_SCHEMA_OR_CONFIG_FAILED"
+    assert _safe_worker_source_stage(
+        RetryableJobError("Connector unavailable.")
+    ) == "OFFICIAL_TRANSPORT_UNAVAILABLE"
+    assert _safe_worker_source_stage(
+        PermanentJobError("private upstream detail token=X")
+    ) == "UNKNOWN"
+    assert _safe_worker_source_stage(ValueError("secret")) == "UNKNOWN"
+
+
 if __name__ == "__main__":
     unittest.main()

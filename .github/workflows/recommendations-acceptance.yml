@@ -1,0 +1,59 @@
+name: VALYQON Historic Recommendations Acceptance
+
+on:
+  push:
+    branches:
+      - feat/real-saved-discovery-recommendations-20261024
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recommendations-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Verify real existing company-scoped Discovery history APIs and new screen
+        run: |
+          node --check app/api/static/recommendations.js
+          python -m pytest -q tests/test_recommendations_ui.py tests/test_discovery_history_api_behavior.py tests/test_search_history_ui_contract.py tests/test_customer_discovery_contract.py
+
+  recommendations-real-chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install 'playwright>=1.55,<2'
+          python -m playwright install --with-deps chromium
+      - name: Run actual Chromium with clearly labelled offline history fixtures
+        run: |
+          python -m pytest -q -rs --junitxml=/tmp/recommendations-browser.xml tests/test_recommendations_browser.py
+          python - <<'PY'
+          from xml.etree import ElementTree as ET
+          root=ET.parse('/tmp/recommendations-browser.xml').getroot()
+          nodes=list(root) if root.tag=='testsuites' else [root]
+          count=sum(int(x.attrib.get('tests',0)) for x in nodes)
+          skipped=sum(int(x.attrib.get('skipped',0)) for x in nodes)
+          failures=sum(int(x.attrib.get('failures',0))+int(x.attrib.get('errors',0)) for x in nodes)
+          print(f'RECOMMENDATION_CHROMIUM_COUNT={count};SKIPPED={skipped};FAILURES={failures}')
+          if count<1 or skipped or failures:raise SystemExit('BROWSER_ACCEPTANCE_INCOMPLETE')
+          PY

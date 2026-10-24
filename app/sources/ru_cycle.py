@@ -24,6 +24,9 @@ RU_APPROVED_SOURCES = (
     "ru_samara_public_list",
     # Official anonymous Dagestan list -> fenced Worker/SQL; deep details login-protected.
     "ru_dagestan_public_list",
+    # Explicitly enabled EIS 44-FZ originals mirrored via accredited Fabrikant.
+    # The operator queue transports records; it never counts new EIS publications.
+    "ru_ingushetia_fabrikant44",
 )
 
 

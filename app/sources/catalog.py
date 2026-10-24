@@ -28,6 +28,7 @@ from .nmck_native_public import NmckNativePublicSource
 from .stan_commercial_public import StanCommercialPublicSource
 from .south_ural_public import SouthUralPublicSource
 from .ru_dagestan_public_list import DagestanPublicListSource, GRID as DAG_PUBLIC_GRID
+from .ru_ingushetia_fabrikant44 import IngushetiaFabrikant44Source, HOST as ING_FABRIKANT_HOST
 from .ru_samara_public_list import SamaraPublicListSource, GRID as SAMARA_PUBLIC_GRID
 from .kavkaz_rf_firstparty import KavkazRfFirstpartySource
 from .canada_buys_dataset import CanadaBuysDatasetSource
@@ -793,6 +794,25 @@ def build_source_catalog(
                 documents=False,
                 incremental_sync=False,
                 authentication_required=False,
+            ),
+        ))
+
+    # The Fabrikant ETP mirrors official 44-FZ notices. They are NOT
+    # additional independent publications beyond EIS. Explicit operator
+    # opt-in only; original ID, title, INN and organizer verified per card.
+    if settings.ru_ingushetia_fabrikant44_enabled:
+        registry.register(SourceRegistration(
+            key="ru_ingushetia_fabrikant44",
+            display_name="Ингушетия — аккредитованная ЭТП Фабрикант (зеркало ЕИС 44-ФЗ)",
+            source=IngushetiaFabrikant44Source(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url="https://" + ING_FABRIKANT_HOST + "/44/catalog/procedure/published",
+            official=False, enabled=True,
+            capabilities=SourceCapabilities(
+                keyword_search=False, pagination=False, documents=False,
+                incremental_sync=False, authentication_required=False,
             ),
         ))
 

@@ -1,0 +1,78 @@
+name: RU Ingushetia Fabrikant original 44-FZ verified main integration
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/ru_ingushetia_fabrikant44.py
+      - app/monitoring/config.py
+      - app/sources/catalog.py
+      - app/sources/ingestion.py
+      - app/scoring/runs.py
+      - app/sources/ru_notice_identity.py
+      - tests/test_ru_ingushetia_fabrikant_main.py
+      - scripts/ci_ru_ingushetia_fabrikant_main_worker.py
+      - scripts/ci_ru_ingushetia_fabrikant_main_authenticated.py
+      - scripts/ci_ru_ingushetia_fabrikant_local_alert.py
+      - .github/workflows/ru-ingushetia-fabrikant-main-isolated.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ingushetia-fabrikant-main-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require official first-party mirrored originals, safe host and strict opt-in
+        run: python -m pytest -q tests/test_ru_ingushetia_fabrikant_main.py
+
+  ingushetia-fabrikant-main-current-original-worker-sql:
+    runs-on: windows-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require 2+ live Ingushetia committee originals → bounded leased Worker → disposable SQLite
+        timeout-minutes: 8
+        run: python -B -m scripts.ci_ru_ingushetia_fabrikant_main_worker
+
+  ingushetia-fabrikant-main-current-tenant-scoring:
+    runs-on: windows-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require real mirrored original detail in signed-in user scoring, deny cross tenant
+        timeout-minutes: 8
+        run: python -B -m scripts.ci_ru_ingushetia_fabrikant_main_authenticated
+
+  ingushetia-fabrikant-main-current-local-alert-only:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require current official Ingushetia mirrored EIS originals to match user keyword and local alert ACK, retry and dedup
+        timeout-minutes: 12
+        run: python -B -m scripts.ci_ru_ingushetia_fabrikant_local_alert

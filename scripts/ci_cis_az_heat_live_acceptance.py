@@ -90,6 +90,27 @@ def verify(source_id):
                         diagnostics["source_probe_safe_reason"] = str(exc)[:120]
                 else:
                     diagnostics["source_probe_rows"] = len(probe_rows)
+                # A single valid post may succeed when a larger live batch
+                # fails due to a different upstream detail or altered list.
+                # These observational probes never seed Worker SQL or create
+                # a success status. Only hardcoded allowlisted stage labels
+                # enter CI logs; vendor payload/URL/error text is forbidden.
+                try:
+                    full_rows = asyncio.run(registration.source.fetch(5))
+                except SourceError as exc:
+                    failure_codes = {
+                        "AZ official tender listing contains no valid posts.": "NO_TRUSTED_INDEX_POSTS",
+                        "AZ official complete notice batch empty.": "NO_COMPLETE_ORIGINALS",
+                        "AZ official complete notice batch duplicated.": "DUPLICATED_ORIGINALS",
+                        "AZ official list not HTML.": "INDEX_NOT_HTML",
+                        "AZ verified official HTTPS retrieval failed.": "NONTRANSIENT_HTTPS_FAILURE",
+                    }
+                    diagnostics["full_batch_probe_safe_stage"] = failure_codes.get(
+                        str(exc), "SOURCE_CONTRACT_FAILURE")
+                except Exception as exc:
+                    diagnostics["full_batch_probe_error_class"] = type(exc).__name__
+                else:
+                    diagnostics["full_batch_probe_verified_rows"] = len(full_rows)
                 return diagnostics
 
             stored = notices.read(source_id, limit=100)

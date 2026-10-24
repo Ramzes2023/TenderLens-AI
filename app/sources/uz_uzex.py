@@ -93,6 +93,35 @@ def parse_uzex_tradelist(data, *, type_id: int):
     return list(result.values())
 
 
+def parse_uzex_current_batch(data, *, type_id: int):
+    """Keep independently valid official current rows; no ID-only acceptance.
+
+    TradeList sometimes includes incomplete individual entries. Reject those
+    entries without losing other strictly verified original tenders. The
+    entire batch still fails when no complete original remains, when the
+    official list shape changes, or when a duplicate original ID appears.
+    """
+    if type_id not in (1, 2) or type(data) is not list or not 0 < len(data) <= PER_TYPE:
+        raise SourceError("UzEx changed public list shape.")
+    accepted = []
+    seen = set()
+    for row in data:
+        try:
+            notices = parse_uzex_tradelist([row], type_id=type_id)
+        except SourceError:
+            # A bad individual row is not a verified original; skipping
+            # does not turn its synthetic/unknown fields into tender data.
+            continue
+        item = notices[0]
+        if item.external_id in seen:
+            raise SourceError("UzEx duplicated official original in current batch.")
+        seen.add(item.external_id)
+        accepted.append(item)
+    if not accepted:
+        raise SourceError("UzEx no independently verified tender rows in current batch.")
+    return accepted
+
+
 @dataclass(frozen=True)
 class UzbekistanUzexSource:
     timeout: float = 12.0
@@ -127,7 +156,7 @@ class UzbekistanUzexSource:
                         raise SourceError("UzEx official response was not JSON.")
                     if len(response.content) > MAX_BODY:
                         raise SourceError("UzEx oversized official response.")
-                    series.append(parse_uzex_tradelist(response.json(), type_id=type_id))
+                    series.append(parse_uzex_current_batch(response.json(), type_id=type_id))
         except (httpx.HTTPError, ConnectorTransportError, OSError) as error:
             if transient_transport(error):
                 raise SourceTransportError("UzEx official HTTPS temporarily unavailable.") from None

@@ -27,7 +27,7 @@ MAX_DETAILS = 3
 # A bounded surplus of same-host published candidates tolerates stale first pages.
 # Only separately corroborated original details become actual tender notices.
 MAX_CANDIDATES = 9
-DETAIL_PATH = re.compile(r"/procedure/([A-Z0-9]{8,24})/1/?")
+DETAIL_PATH = re.compile(r"/procedure/([A-Z0-9]{8,24})(?:/1)?/?")
 
 
 def _html(payload):
@@ -144,6 +144,28 @@ def parse_roseltorg_detail(payload, *, identity, url):
     detail.feed(_html(payload))
     detail.close()
     visible = " ".join(" ".join(detail.visible).split())
+    # The publisher also serves same-origin public standalone procedure cards:
+    # https://www.roseltorg.ru/procedure/RT22042500009
+    # Their H1 is "Процедура: <ID>", and "Наименование процедуры"
+    # is a separate visible field. Do not accept a hidden/page-title ID or
+    # invent a title by taking the whole page body.
+    direct = re.fullmatch(r"/procedure/" + re.escape(identity) + r"/?", urlsplit(url).path)
+    if direct:
+        expected_heading = "Процедура: " + identity
+        if detail.headings != [expected_heading]:
+            raise ValueError("Roseltorg standalone H1 identity mismatch")
+        match = re.search(
+            r"(?:^|\\s)Наименование процедуры\\s+(.{5,1000}?)\\s+Организатор торгов(?:\\s|$)",
+            visible,
+        )
+        if not match:
+            raise ValueError("Roseltorg standalone labeled title not independently visible")
+        title = match.group(1).strip()
+        if not 5 <= len(title) <= 1000:
+            raise ValueError("Roseltorg standalone title invalid")
+        notice = TenderNotice(source=SOURCE_ID, external_id=identity, title=title, url=url)
+        validate_notice(notice, SOURCE_ID)
+        return notice
     # Verified against the official public Roseltorg detail (RU3 live).
     # The same exact procedure ID must occur twice in the visible breadcrumb:
     # "Закупки <ID> Лот <number> <ID>". Arbitrary scripts/sidebar IDs are unsafe.

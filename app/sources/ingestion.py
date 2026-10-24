@@ -42,6 +42,7 @@ HOSTS = {
     'nmck_native_public': frozenset({'xn--j1adc1b.xn--p1ai'}),
     'stan_commercial_public': frozenset({'stantorgi.ru'}),
     'kavkaz_rf_firstparty': frozenset({'xn--80aafvlc.xn--p1ai'}),
+    'ru_ingushetia_fabrikant44': frozenset({'44.fabrikant.ru', 'soap4.fabrikant.ru'}),
     'south_ural_public': frozenset({'www.vendorportal.ru'}),
     'ru_dagestan_public_list': frozenset({'goszakaz.e-dag.ru'}),
     'ru_samara_public_list': frozenset({'webtorgi.samregion.ru'}),
@@ -180,6 +181,7 @@ class ConnectorSyncHandler:
                          # B2B public root may require one same-origin partial
                          # office fallback; source.fetch has exactly two calls.
                          else 2 if source_id == 'b2b_center'
+                         else 12 if source_id == 'ru_ingushetia_fabrikant44'  # list + bounded same-host originals
                          else 2 if source_id == 'mikroton_tender'
                          else 1)
         async def fetch():

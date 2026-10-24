@@ -38,4 +38,4 @@ jobs:
       - name: Verify disposable isolated loopback transport
         run: |
           python -m compileall -q scripts/ci_deadline_worker_mailpit_e2e.py
-          python -B scripts/ci_deadline_worker_mailpit_e2e.py
+          python -B -m scripts.ci_deadline_worker_mailpit_e2e

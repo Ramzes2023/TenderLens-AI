@@ -12,6 +12,8 @@ from .ru_source_inventory import RU_STAGED_ADAPTERS, RU_RESEARCH_TARGETS
 # This is an informational inventory, NOT the runtime registry or live health.
 # Keep keys, titles, transports and official URLs aligned with app/sources/catalog.py.
 _RU_OPT_IN_ADAPTERS = (
+    ("ru_ingushetia_eis44", "Ингушетия — ЕИС 44-ФЗ", "rss", True, "regional_small", "https://zakupki.gov.ru/"),
+    ("ru_ingushetia_fabrikant44", "Ингушетия — Фабрикант (зеркало ЕИС)", "html", False, "regional_small", "https://44.fabrikant.ru/44/catalog/procedure/published"),
     ("eis_223", "EIS 223-FZ", "rss", True, "general", "https://zakupki.gov.ru/"),
     ("b2b_center", "B2B-Center", "html", False, "general", "https://www.b2b-center.ru/"),
     ("mikroton_tender", "MikroTon Tender — public procurement API", "api", False, "general", "https://tender.mt52.ru/"),

@@ -8,6 +8,7 @@ on:
       - scripts/ci_ru_roseltorg_real_worker.py
       - scripts/ci_ru_roseltorg_authenticated.py
       - scripts/ci_ru_roseltorg_safe_probe.py
+      - .github/workflows/ru-roseltorg-isolated.yml
   workflow_dispatch:
 permissions:
   contents: read

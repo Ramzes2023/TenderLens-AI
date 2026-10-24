@@ -1,5 +1,14 @@
 name: RU Roseltorg isolated first-party originals and Worker acceptance
 on:
+  push:
+    branches: [fix/ru-roseltorg-isolated-originals-20261022]
+    paths:
+      - app/sources/roseltorg_public.py
+      - tests/test_ru_roseltorg_public.py
+      - scripts/ci_ru_roseltorg_real_worker.py
+      - scripts/ci_ru_roseltorg_authenticated.py
+      - scripts/ci_ru_roseltorg_safe_probe.py
+      - .github/workflows/ru-roseltorg-isolated.yml
   pull_request:
     branches: [main]
     paths:

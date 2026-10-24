@@ -27,7 +27,7 @@
     geography: ['Geography Intelligence', 'География закупок'],
     overview: ['Overview', 'Обзор'], discover: ['Discover', 'Поиск'],
     'search-history': ['Search History', 'История поиска'], recommended: ['Recommended', 'Рекомендации'],
-    saved: ['Saved', 'Сохранённое'], monitoring: ['Monitoring', 'Мониторинг'],
+    saved: ['Saved', 'Сохранённое'], 'tender-planner': ['Tender Planner', 'Планировщик'], monitoring: ['Monitoring', 'Мониторинг'],
     'source-health': ['Source Health', 'Состояние источников'], 'ai-analysis': ['AI Analysis', 'ИИ-анализ'],
     documents: ['Documents', 'Документы'], companies: ['Companies', 'Компании'],
     notifications: ['Notifications', 'Уведомления'], team: ['Team', 'Команда'],

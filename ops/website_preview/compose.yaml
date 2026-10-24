@@ -1,0 +1,81 @@
+# Completely separate review stack: no existing VALYQON volumes, bot or source workers.
+# Use with -p valyqon-website-review and --env-file ops/website_preview/review.env.
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: valyqon-website-review:local
+    restart: "no"
+    init: true
+    mem_limit: 768m
+    cpus: 1.0
+    ports:
+      - "127.0.0.1:18865:8000"
+    environment:
+      PYTHON_DOTENV_DISABLED: "1"
+      APP_ENV: development
+      VALYQON_WEBSITE_REVIEW_ONLY: "1"
+      LOG_LEVEL: WARNING
+      API_HOST: 0.0.0.0
+      API_PORT: "8000"
+      API_RELOAD: "false"
+      DATABASE_URL: sqlite:////app/data/website-review.sqlite
+      DATA_DIR: /app/data
+      COMPANY_PROFILE_FILE: /app/config/company_profile.example.json
+      RAG_ENABLED: "false"
+      MONITORING_ENABLED: "false"
+      EIS_PROFILE_FEEDS_ENABLED: "false"
+      EIS_RSS_URLS: ""
+      VALYQON_PUBLIC_AI_ENABLED: "false"
+      # Public graphs are explicitly illustrative until independently validated live observations.
+      VALYQON_PUBLIC_ANALYTICS_MODE: "demo"
+      VALYQON_RESTRICT_PAID_SOURCE_DETAILS: "true"
+      VALYQON_AI_FALLBACK_ENABLED: "false"
+      GIGACHAT_CREDENTIALS: ""
+      GROQ_API_KEY: ""
+      YANDEX_API_KEY: ""
+      TELEGRAM_BOT_TOKEN: ""
+      # Local email capture only. No messages go to an external email provider.
+      VALYQON_EMAIL_MODE: smtp
+      VALYQON_SMTP_HOST: mailpit
+      VALYQON_SMTP_PORT: "1025"
+      VALYQON_SMTP_FROM: "review@valyqon.example.test"
+      VALYQON_SMTP_STARTTLS: "false"
+      VALYQON_SMTP_SSL: "false"
+      VALYQON_PUBLIC_BASE_URL: "http://127.0.0.1:18865"
+      OUTBOUND_PROXY_URL: ""
+      EIS_DIRECT_ENABLED: "false"
+      EIS_44_HTML_ENABLED: "false"
+      EIS_223_ENABLED: "false"
+      B2B_CENTER_ENABLED: "false"
+      TEKTORG_PUBLIC_ENABLED: "false"
+      GPB_ETP_PUBLIC_ENABLED: "false"
+      VALYQON_RU_BACKGROUND_CATALOG_ENABLED: "false"
+      VALYQON_DATABASE_REQUIRE_POSTGRES: "false"
+      TENDERLENS_API_KEY: ""
+      TENDERLENS_HEALTHCHECK_URL: http://127.0.0.1:8000/health
+    depends_on:
+      mailpit:
+        condition: service_started
+    volumes:
+      - website_review_data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: "no"
+    mem_limit: 128m
+    cpus: 0.25
+    ports:
+      - "127.0.0.1:18866:8025"
+    environment:
+      MP_MAX_MESSAGES: "100"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+volumes:
+  website_review_data:

@@ -848,3 +848,50 @@ def test_worker_success_checkpoint_never_accepts_other_source_or_future_cutoff(t
             store.read("eis", not_after=datetime.now(timezone.utc))
     finally:
         db.close()
+
+
+def test_fresh_worker_sql_candidate_scan_never_silently_drops_a_1001st_match():
+    """Synthetic bounded repository: a full 1000-row page is ambiguous.
+
+    Return an explicit unavailable source instead of a misleading healthy
+    'no matching notices' notification when tenant keywords might match
+    only an unscanned 1001st fresh original. No network/Telegram call.
+    """
+    source = EIS
+    calls = []
+    single = notice(N1, title="Поставка канцелярских принадлежностей")
+
+    class FullPageRepository:
+        def latest_seen_utc(self, key):
+            assert key == source
+            return datetime.now(timezone.utc)
+
+        def read(self, key, limit=20, search_terms=(), **kwargs):
+            calls.append((key, limit, search_terms, kwargs))
+            assert kwargs.get("_fresh_ingushetia_candidate_scan") is True
+            return [single] * 1000
+
+    candidate = FreshIngushetiaWorkerSource(FullPageRepository(), EIS)
+    for terms in ((), ("оборудования",)):
+        selector = candidate.for_search_terms(terms) if terms else candidate
+        with pytest.raises(ValueError, match="candidate scan truncated"):
+            asyncio.run(selector.fetch(limit=2))
+    assert len(calls) == 2
+    assert all(n == 1000 and key == EIS for key, n, _, _ in calls)
+
+
+def test_999_fresh_worker_sql_candidates_remain_eligible_for_filtering():
+    record = notice(N1, title="Поставка медицинского оборудования")
+
+    class BoundedRepository:
+        def latest_seen_utc(self, key):
+            assert key == EIS
+            return datetime.now(timezone.utc)
+
+        def read(self, key, limit=20, search_terms=(), **kwargs):
+            assert key == EIS and limit == 1000
+            return [record] * 999
+
+    source = FreshIngushetiaWorkerSource(BoundedRepository(), EIS)
+    matches = asyncio.run(source.for_search_terms(("оборудования",)).fetch(limit=2))
+    assert len(matches) == 2 and all(x.tender_number == N1 for x in matches)

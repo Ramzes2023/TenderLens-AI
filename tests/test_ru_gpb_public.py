@@ -460,3 +460,70 @@ def test_gpb_source_worker_budget_is_explicitly_bounded_for_stale_html_and_rss()
     # up to 2 published RSS fetches + 3 independently checked RSS details.
     budget = min(20, MAX_DETAILS) * 4 + 3
     assert budget == 15
+
+
+def test_gpb_one_transient_original_detail_failure_does_not_starve_next(monkeypatch):
+    from app.sources.http import ConnectorTransportError
+    second = "https://etpgpb.ru/procedures/etp/1299762/"
+    source_index = (
+        f"<html><a href='{URL}'>Поставка оборудования</a>"
+        f"<a href='{second}'>Оказание услуг перевозки грузов</a></html>"
+    ).encode("utf-8")
+    calls = []
+
+    class Reply:
+        def __init__(self, body, mime="text/html"):
+            self.content, self.headers = body, {"content-type": mime}
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        async def get(self, url, **kwargs):
+            calls.append(url)
+            if url == LIST_URL:
+                return Reply(source_index)
+            if url == URL:
+                raise ConnectorTransportError(retryable=True, reason="network")
+            if url == second:
+                return Reply(detail("1299762", "Оказание услуг перевозки грузов"))
+            raise AssertionError("Unapproved source or detail request")
+
+    @asynccontextmanager
+    async def client(**kw):
+        assert kw["trust_env"] is False
+        assert kw["follow_redirects"] is False
+        yield Client()
+
+    import app.sources.gpb_etp_public as module
+    monkeypatch.setattr(module, "source_client", client)
+    result = asyncio.run(GpbEtpPublicSource().fetch(1))
+    assert [(n.external_id, n.url) for n in result] == [("1299762", second)]
+    assert calls == [LIST_URL, URL, second]
+
+
+@pytest.mark.parametrize("reason", ["tls_certificate", "public_ip", "policy"])
+def test_gpb_unsafe_original_detail_transport_never_skipped(monkeypatch, reason):
+    from app.sources.http import ConnectorTransportError
+    seen = []
+
+    class Reply:
+        content, headers = listing(), {"content-type": "text/html"}
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        async def get(self, url, **kwargs):
+            seen.append(url)
+            if url == LIST_URL:
+                return Reply()
+            raise ConnectorTransportError(retryable=False, reason=reason)
+
+    @asynccontextmanager
+    async def client(**kw):
+        yield Client()
+
+    import app.sources.gpb_etp_public as module
+    monkeypatch.setattr(module, "source_client", client)
+    with pytest.raises(ConnectorTransportError):
+        asyncio.run(GpbEtpPublicSource().fetch(1))
+    assert seen == [LIST_URL, URL]

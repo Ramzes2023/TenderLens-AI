@@ -757,3 +757,90 @@ def test_regional_sql_101st_unseen_tender_delivered_after_first_100_acknowledged
         asyncio.run(scan_limits())
     finally:
         db.close()
+
+
+def test_real_bot_worker_sql_requires_successful_job_and_skips_later_uncommitted_rows(
+        monkeypatch, tmp_path):
+    """Offline production components: partial writes cannot certify notifications."""
+    from app.jobs import HandlerRegistry, JobRepository, JobSettings
+    from app.jobs.models import JobScope
+    from app.jobs.worker import Worker
+    from app.sources.ingestion import JOB_TYPE, ConnectorSyncHandler, ConnectorSyncService
+    from app.sources.ru_ingushetia_eis44 import IngushetiaEis44Source
+
+    db = Database(DatabaseSettings("strict-ing-job", tmp_path / "strict.sqlite"))
+    jobs = JobRepository(db, JobSettings(lease_seconds=240, heartbeat_seconds=10))
+    jobs.initialize()
+    store = OpportunityRepository(db)
+    store.initialize()
+    cfg = settings(ru_ingushetia_fabrikant44_enabled=False)
+    catalog = build_source_catalog(cfg)
+    strict = fresh_ingushetia_worker_catalog(
+        catalog, store, require_completed_job=True
+    )
+
+    async def result():
+        return await strict.fetch(source_keys=(EIS,))
+
+    try:
+        # An old direct write cannot impersonate a completed durable lease.
+        store.upsert(notice(N1), connector_version(EIS))
+        denied = asyncio.run(result())
+        assert denied.total_failure and not denied.notices
+        assert store.last_succeeded_ingushetia_sync_utc(EIS) is None
+
+        async def simulated_eis_list(self, limit=20):
+            assert limit == 10
+            return [notice(N1)]
+
+        monkeypatch.setattr(IngushetiaEis44Source, "fetch", simulated_eis_list)
+        job = ConnectorSyncService(jobs, catalog).enqueue(EIS)
+        handlers = HandlerRegistry()
+        handlers.register(JOB_TYPE, ConnectorSyncHandler(catalog, store, max_records=10))
+        assert Worker(jobs, handlers, job_types=(JOB_TYPE,)).run_once()
+        finished = jobs.get(job.id, scope=JobScope())
+        assert finished.state == "succeeded"
+        checkpoint = store.last_succeeded_ingushetia_sync_utc(EIS)
+        assert checkpoint is not None
+        accepted = asyncio.run(result())
+        assert not accepted.failures
+        assert {n.tender_number for n in accepted.notices} == {N1}
+
+        # Emulate a later *failed* job that fenced-wrote a row before
+        # aborting: SQL retains it for historical audit, but no new
+        # successful job checkpoint exists to authorize bot delivery.
+        store.upsert(notice(N2, title="Незавершённая закупка"), connector_version(EIS))
+        after_success = (checkpoint + timedelta(seconds=1)).isoformat()
+        with db.connect() as conn:
+            conn.execute(
+                "UPDATE source_opportunities SET last_seen=? WHERE source_id=? AND external_id=?",
+                (after_success, EIS, N2),
+            )
+        assert {n.tender_number for n in store.read(EIS)} == {N1, N2}
+        delivered = asyncio.run(result())
+        assert not delivered.failures
+        assert {n.tender_number for n in delivered.notices} == {N1}
+        assert store.last_succeeded_ingushetia_sync_utc(EIS) == checkpoint
+    finally:
+        db.close()
+
+
+def test_worker_success_checkpoint_never_accepts_other_source_or_future_cutoff(tmp_path):
+    db = Database(DatabaseSettings("strict-ing-source", tmp_path / "strict-2.sqlite"))
+    jobs = None
+    try:
+        from app.jobs import JobRepository
+        jobs = JobRepository(db)
+        jobs.initialize()
+        store = OpportunityRepository(db)
+        store.initialize()
+        for invalid in ("eis", "ru_ingushetia_unknown", "../private"):
+            with pytest.raises(ValueError):
+                store.last_succeeded_ingushetia_sync_utc(invalid)
+        assert store.last_succeeded_ingushetia_sync_utc(EIS) is None
+        with pytest.raises(ValueError, match="UTC regional"):
+            store.read(EIS, not_after=datetime.now())
+        with pytest.raises(ValueError, match="UTC regional"):
+            store.read("eis", not_after=datetime.now(timezone.utc))
+    finally:
+        db.close()

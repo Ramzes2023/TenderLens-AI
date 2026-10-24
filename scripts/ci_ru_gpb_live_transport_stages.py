@@ -61,8 +61,23 @@ async def probe():
                         raise ValueError("GPB list not HTML")
                     found = parse_gpb_public_links(response.content, limit=3)
                     print("GPB_DISCOVERY=PUBLIC_HTML")
-                except (ConnectorTransportError, httpx.HTTPStatusError,
-                        httpx.TransportError, ValueError, TimeoutError, OSError):
+                except ConnectorTransportError as error:
+                    # Permanent rejection by publisher TLS, public-IP/DNS or
+                    # approved fetch policy must stop the entire probe.
+                    # A different path is not a substitute for that denial.
+                    if not error.retryable:
+                        raise
+                    stage = "OFFICIAL_RSS_GET"
+                    feed = await client.get(f"https://{HOST}/procedures.rss",
+                                            headers={"Accept": "application/rss+xml, application/xml"})
+                    feed.raise_for_status()
+                    if not any(x in feed.headers.get("content-type", "").lower()
+                               for x in ("rss", "xml")):
+                        raise ValueError("Official GPB RSS not XML")
+                    found = parse_gpb_official_rss(feed.content, limit=3)
+                    print("GPB_DISCOVERY=OFFICIAL_RSS")
+                except (httpx.HTTPStatusError, httpx.TransportError,
+                        ValueError, TimeoutError, OSError):
                     stage = "OFFICIAL_RSS_GET"
                     feed = await client.get(f"https://{HOST}/procedures.rss",
                                             headers={"Accept": "application/rss+xml, application/xml"})
@@ -78,10 +93,16 @@ async def probe():
                 for identity, url in found:
                     try:
                         detail = await client.get(url)
+                        # HTTP 404/401/403 with an HTML error template is NOT
+                        # an original tender, even if it embeds the same ID.
+                        detail.raise_for_status()
                         if "html" not in detail.headers.get("content-type", "").lower():
                             stale += 1
                             continue
                         parse_gpb_verified_detail(detail.content, identity, url)
+                    except httpx.HTTPStatusError:
+                        stale += 1
+                        continue
                     except ConnectorTransportError as error:
                         # A deleted/not-public original cannot be used; never
                         # mask a network/TLS failure as a stale individual card.

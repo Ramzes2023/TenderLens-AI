@@ -1,0 +1,68 @@
+name: Ingushetia optional one-message test Telegram Bot API receipt
+
+# Manual only. Never triggered by push, pull requests, schedules, or merges.
+# This does not attest that EIS/Fabrikant notices were fetched.
+on:
+  workflow_dispatch:
+    inputs:
+      authorize_test_send:
+        description: "I authorize exactly ONE diagnostic test message to the dedicated test chat"
+        required: true
+        type: boolean
+        default: false
+      confirm_test_chat:
+        description: "Enter the exact numeric dedicated test chat ID (not a real customer chat)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: valyqon-ingushetia-test-telegram-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  dedicated-bot-api-test:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.authorize_test_send == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test requirements
+        run: python -m pip install -r requirements-dev.txt
+      - name: Run fail-closed synthetic Bot API identity and receipt tests
+        run: python -m pytest -q tests/test_ru_ingushetia_telegram_test.py
+      - name: Confirm separate TEST-only configuration is present
+        shell: bash
+        env:
+          TEST_TELEGRAM_BOT_TOKEN: ${{ secrets.VALYQON_INGUSHETIA_TEST_BOT_TOKEN }}
+          TEST_TELEGRAM_BOT_ID: ${{ vars.VALYQON_INGUSHETIA_TEST_BOT_ID }}
+          TEST_TELEGRAM_CHAT_ID: ${{ secrets.VALYQON_INGUSHETIA_TEST_CHAT_ID }}
+          CONFIRMED_TEST_CHAT: ${{ inputs.confirm_test_chat }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$TEST_TELEGRAM_BOT_TOKEN" || -z "$TEST_TELEGRAM_BOT_ID" || -z "$TEST_TELEGRAM_CHAT_ID" ]]; then
+            echo "Dedicated test bot ID, token and numeric chat ID must be configured separately."
+            exit 2
+          fi
+          if [[ "$CONFIRMED_TEST_CHAT" != "$TEST_TELEGRAM_CHAT_ID" ]]; then
+            echo "Manual confirmation does not match the dedicated test chat. No message sent."
+            exit 2
+          fi
+      - name: ONE authorized quiet diagnostic message to dedicated test chat
+        shell: bash
+        env:
+          TEST_TELEGRAM_SEND_AUTHORIZED: YES_TEST_CHAT_ONLY
+          TEST_TELEGRAM_BOT_TOKEN: ${{ secrets.VALYQON_INGUSHETIA_TEST_BOT_TOKEN }}
+          TEST_TELEGRAM_BOT_ID: ${{ vars.VALYQON_INGUSHETIA_TEST_BOT_ID }}
+          TEST_TELEGRAM_CHAT_ID: ${{ secrets.VALYQON_INGUSHETIA_TEST_CHAT_ID }}
+          CONFIRMED_TEST_CHAT: ${{ inputs.confirm_test_chat }}
+        run: |
+          set -euo pipefail
+          python -B -m scripts.ru_ingushetia_telegram_test --send --confirm-test-chat "$CONFIRMED_TEST_CHAT"

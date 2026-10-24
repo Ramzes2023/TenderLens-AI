@@ -24,6 +24,10 @@ RU_APPROVED_SOURCES = (
     "ru_samara_public_list",
     # Official anonymous Dagestan list -> fenced Worker/SQL; deep details login-protected.
     "ru_dagestan_public_list",
+    # Both sources have genuine Worker/SQL proofs, but must still be approved
+    # individually by the operator. Same EIS original is never counted twice.
+    "ru_ingushetia_eis44",
+    "ru_ingushetia_fabrikant44",
 )
 
 

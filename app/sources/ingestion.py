@@ -44,6 +44,8 @@ HOSTS = {
     'kavkaz_rf_firstparty': frozenset({'xn--80aafvlc.xn--p1ai'}),
     'south_ural_public': frozenset({'www.vendorportal.ru'}),
     'ru_dagestan_public_list': frozenset({'goszakaz.e-dag.ru'}),
+    'ru_ingushetia_eis44': frozenset({'zakupki.gov.ru'}),
+    'ru_ingushetia_fabrikant44': frozenset({'44.fabrikant.ru', 'soap4.fabrikant.ru'}),
     'ru_samara_public_list': frozenset({'webtorgi.samregion.ru'}),
     'eis_223': frozenset({'zakupki.gov.ru'}),
     'eis_44_html': frozenset({'zakupki.gov.ru'}),
@@ -177,6 +179,8 @@ class ConnectorSyncHandler:
                          else min(self.max_records, 10) + 1 if source_id == 'south_ural_public'
                          else 1 + min(3, (self.max_records + 9) // 10) if source_id == 'ru_samara_public_list'
                          else 2 if source_id == 'ru_dagestan_public_list'
+                         else 1 if source_id == 'ru_ingushetia_eis44'
+                         else 12 if source_id == 'ru_ingushetia_fabrikant44'
                          # B2B public root may require one same-origin partial
                          # office fallback; source.fetch has exactly two calls.
                          else 2 if source_id == 'b2b_center'
@@ -186,7 +190,7 @@ class ConnectorSyncHandler:
             with bounded_fetch(FetchPolicy(
                 HOSTS[source_id], request_limit,
                 max_bytes=(2 * 1024 * 1024 if source_id == 'b2b_center' else
-                           1_800_000 if source_id in {'nmck_native_public', 'stan_commercial_public', 'south_ural_public', 'kavkaz_rf_firstparty'} else 25 * 1024 * 1024),
+                           1_800_000 if source_id in {'nmck_native_public', 'stan_commercial_public', 'south_ural_public', 'kavkaz_rf_firstparty', 'ru_ingushetia_eis44', 'ru_ingushetia_fabrikant44'} else 25 * 1024 * 1024),
             )):
                 return await asyncio.wait_for(source.fetch(self.max_records), timeout=180)
         try:

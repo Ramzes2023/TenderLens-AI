@@ -327,3 +327,33 @@ def test_tektorg_disallowed_transport_exception_never_hidden(monkeypatch, reason
     with pytest.raises(ConnectorTransportError):
         asyncio.run(TekTorgPublicSource().fetch(1))
     assert seen == [LIST_URL, first]
+
+
+@pytest.mark.parametrize("tag", ["head", "script", "style", "template",
+                                  "noscript", "svg", "iframe", "object"])
+def test_hidden_official_page_link_is_not_a_real_published_tektorg_card(tag):
+    hidden = (f"<html><{tag}><a href='/223-fz/procedures/20000521'>"
+              f"Hidden prototype</a></{tag}><main>No tenders</main></html>").encode()
+    with pytest.raises(ValueError, match="No public TEK-Torg"):
+        parse_public_listing(hidden)
+
+
+def test_hidden_prototype_cannot_replace_real_firstparty_link():
+    fake = (b"<template><a href='/223-fz/procedures/20000521'>"
+            b"Unpublished original</a></template>")
+    assert parse_public_listing(fake + listing()) == [
+        ("20000521", f"https://{HOST}/223-fz/procedures/20000521", "Поставка стали")
+    ]
+
+
+@pytest.mark.parametrize("href", [
+    "https://www.tektorg.ru/223-fz/procedures/20000521/%0a",
+    "https://www.tektorg.ru/223-fz/procedures/20000521/\r\n",
+    "https://www.tektorg.ru/223-fz/procedures/20000521/\x7f",
+    "https://www.tektorg.ru/223-fz/procedures/20000521/\t",
+    "https://www.tektorg.ru/223-fz/procedures/20000521/\\evil",
+    "http://[broken/223-fz/procedures/20000521",
+])
+def test_unsafe_or_malformed_tektorg_urls_never_become_candidates(href):
+    with pytest.raises(ValueError, match="No public TEK-Torg"):
+        parse_public_listing(listing(link=href))

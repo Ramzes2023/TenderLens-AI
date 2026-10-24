@@ -216,7 +216,7 @@ class OpportunityRepository:
         if not_after is not None:
             if (source_id not in {'ru_ingushetia_eis44', 'ru_ingushetia_fabrikant44'}
                     or not isinstance(not_after, datetime)
-                    or not_after.tzinfo or not_after.utcoffset() != timezone.utc.utcoffset(None)):
+                    or not_after.tzinfo is None or not_after.utcoffset() != timezone.utc.utcoffset(None)):
                 raise ValueError('Only UTC regional Worker snapshot upper cutoffs are allowed')
             not_after = not_after.astimezone(timezone.utc).isoformat()
         if not_before is not None and not_after is not None and not_before > not_after:

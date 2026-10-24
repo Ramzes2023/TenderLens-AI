@@ -48,6 +48,22 @@ def create_dispatcher() -> Dispatcher:
     return dispatcher
 
 
+def require_ingushetia_worker_sql_settings(settings, catalog):
+    """Refuse operator-selected SQL alerts without sources and background monitor."""
+    if not settings.ru_ingushetia_worker_sql_alerts_enabled:
+        return
+    from app.monitoring.config import MonitoringConfigurationError
+    keys = frozenset({"ru_ingushetia_eis44", "ru_ingushetia_fabrikant44"})
+    if not keys.intersection(catalog.enabled_keys):
+        raise MonitoringConfigurationError(
+            "Worker-SQL alerts require an explicitly enabled Ingushetia source"
+        )
+    if not (settings.ru_background_catalog_enabled and settings.enabled):
+        raise MonitoringConfigurationError(
+            "Ingushetia Worker SQL alerts require explicit background monitoring"
+        )
+
+
 async def run_bot(settings: Settings, tender_provider=None, tender_max_chars: int = 20000,
                   company_profile=None, tender_repository=None, rag_service=None,
                   monitoring_service=None, company_service=None, auth_service=None,
@@ -201,6 +217,18 @@ def main() -> int:
     try:
         monitor_settings = load_monitoring_settings()
         source_catalog = build_source_catalog(monitor_settings)
+        require_ingushetia_worker_sql_settings(monitor_settings, source_catalog)
+        if monitor_settings.ru_ingushetia_worker_sql_alerts_enabled:
+            from app.sources.opportunities import OpportunityRepository
+            from app.sources.snapshots import fresh_ingushetia_worker_catalog
+            opportunities = OpportunityRepository(database)
+            opportunities.initialize()
+            try:
+                source_catalog = fresh_ingushetia_worker_catalog(source_catalog, opportunities)
+            except ValueError:
+                raise MonitoringConfigurationError(
+                    "Invalid Ingushetia Worker-SQL source routing"
+                ) from None
         eis_registration = (
             source_catalog.registry.get(
                 "eis"

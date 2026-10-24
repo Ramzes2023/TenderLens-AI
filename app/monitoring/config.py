@@ -45,6 +45,7 @@ class MonitoringSettings:
     ru_dagestan_public_list_enabled: bool = False
     ru_samara_public_list_enabled: bool = False
     ru_ingushetia_eis44_enabled: bool = False
+    ru_ingushetia_worker_sql_alerts_enabled: bool = False
     ru_ingushetia_fabrikant44_enabled: bool = False
     ru_ingushetia_eis44_rss_url: str | None = None
     kavkaz_rf_firstparty_enabled: bool = False
@@ -137,6 +138,7 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         ru_dagestan_public_list_enabled=_bool("RU_DAGESTAN_PUBLIC_LIST_ENABLED", False),
         ru_samara_public_list_enabled=_bool("RU_SAMARA_PUBLIC_LIST_ENABLED", False),
         ru_ingushetia_eis44_enabled=_bool("RU_INGUSHETIA_EIS44_ENABLED", False),
+        ru_ingushetia_worker_sql_alerts_enabled=_bool("RU_INGUSHETIA_WORKER_SQL_ALERTS_ENABLED", False),
         ru_ingushetia_fabrikant44_enabled=_bool("RU_INGUSHETIA_FABRIKANT44_ENABLED", False),
         ru_ingushetia_eis44_rss_url=os.environ.get("RU_INGUSHETIA_EIS44_RSS_URL", "").strip() or None,
         kavkaz_rf_firstparty_enabled=_bool("KAVKAZ_RF_FIRSTPARTY_ENABLED", False),

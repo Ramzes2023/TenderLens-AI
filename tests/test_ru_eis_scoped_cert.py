@@ -44,6 +44,9 @@ def test_verified_der_and_pem_transports_resolve_to_same_pinned_root(monkeypatch
     # Synthetic bytes test format normalization only, not real X.509 trust.
     der = bytes([0x30, 0x82]) + bytes([0x42]) * 512
     monkeypatch.setattr(probe, "ROOT_SHA256", hashlib.sha256(der).hexdigest())
+    # Runtime trust verifier is now shared with the scoped EIS adapter.
+    from app.sources import eis_pinned_ca
+    monkeypatch.setattr(eis_pinned_ca, "ROOT_SHA256", hashlib.sha256(der).hexdigest())
     pem = ssl.DER_cert_to_PEM_cert(der)
 
     assert probe.verify_root(der) == pem
@@ -61,5 +64,8 @@ def test_multi_certificate_pem_and_wrong_pin_fail_closed(monkeypatch):
     with pytest.raises(ValueError, match="fingerprint mismatch"):
         probe.verify_root(pem.encode("ascii"))
     monkeypatch.setattr(probe, "ROOT_SHA256", hashlib.sha256(der).hexdigest())
+    # Runtime trust verifier is now shared with the scoped EIS adapter.
+    from app.sources import eis_pinned_ca
+    monkeypatch.setattr(eis_pinned_ca, "ROOT_SHA256", hashlib.sha256(der).hexdigest())
     with pytest.raises(ValueError, match="PEM certificate"):
         probe.verify_root((pem + pem).encode("ascii"))

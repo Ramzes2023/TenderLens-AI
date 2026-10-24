@@ -1,0 +1,41 @@
+name: VALYQON Combined Mailpit Worker E2E
+
+# Dedicated disposable Mailpit on GitHub runner loopback, never production.
+on:
+  push:
+    branches:
+      - feat/pr264-integrated-audit-and-notifications-20261024
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  worker-to-smtp-mailpit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mailpit:
+        image: axllent/mailpit:latest
+        ports:
+          - 127.0.0.1:1025:1025
+          - 127.0.0.1:8025:8025
+        env:
+          MP_MAX_MESSAGES: "30"
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+      VALYQON_DEADLINE_ALERTS_ENABLED: 'false'
+      VALYQON_EMAIL_MODE: 'disabled'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install tests and app
+        run: python -m pip install -r requirements-dev.txt
+      - name: Verify disposable isolated loopback transport
+        run: |
+          python -m compileall -q scripts/ci_deadline_worker_mailpit_e2e.py
+          python -B -m scripts.ci_deadline_worker_mailpit_e2e

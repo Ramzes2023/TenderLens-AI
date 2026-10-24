@@ -1,0 +1,107 @@
+name: VALYQON PR264 Browser and PostgreSQL Acceptance
+
+# Independent audit checks on the feature audit HEAD; no deployment or payments.
+on:
+  push:
+    branches:
+      - audit/pr264-functional-20261024
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    env:
+      PYTHON_DOTENV_DISABLED: '1'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install application tests and Chromium
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install 'playwright>=1.55,<2'
+          python -m playwright install --with-deps chromium
+      - name: Verify browser and strict audit fixtures
+        run: |
+          python -c "from playwright.sync_api import sync_playwright; print('PLAYWRIGHT_INSTALLED=YES')"
+          python -m compileall -q tests/test_auth_browser.py tests/test_planner_browser.py tests/test_team_browser.py
+      - name: Run actual Chromium + authenticated API + SQLite browser regressions
+        run: |
+          python -m pytest -q -rs --junitxml=/tmp/valyqon-pr264-browser.xml tests/test_auth_browser.py tests/test_planner_browser.py tests/test_team_browser.py
+          python - <<'PY'
+          from xml.etree import ElementTree as ET
+          testsuites=ET.parse('/tmp/valyqon-pr264-browser.xml').getroot()
+          nodes=list(testsuites) if testsuites.tag=='testsuites' else [testsuites]
+          total=sum(int(node.attrib.get('tests',0)) for node in nodes)
+          skipped=sum(int(node.attrib.get('skipped',0)) for node in nodes)
+          errors=sum(int(node.attrib.get('errors',0)) for node in nodes)
+          failed=sum(int(node.attrib.get('failures',0)) for node in nodes)
+          print(f'REAL_CHROMIUM_CASES={total}; SKIPPED={skipped}; ERRORS={errors}; FAILURES={failed}')
+          if total < 3 or skipped or errors or failed:
+              raise SystemExit('BROWSER_ACCEPTANCE_INCOMPLETE')
+          PY
+
+  postgres-16:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: valyqon_ci
+          POSTGRES_PASSWORD: only-for-disposable-github-postgres16-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U valyqon_ci -d postgres -h 127.0.0.1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+      VALYQON_DATABASE_REQUIRE_POSTGRES: 'true'
+      VALYQON_PG_CI_CONTEXT: valyqon-phase24-postgres16-ephemeral-ci-v1
+      VALYQON_PG_CI_TEST_PASSWORD: only-for-disposable-github-postgres16-ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: PostgreSQL 16 migrations, quotas, tenant isolation and concurrency
+        run: python -B scripts/ci_phase24_postgres16_acceptance.py
+      - name: PostgreSQL 16 backup and isolated restore
+        env:
+          VALYQON_PG_RESTORE_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: python -B scripts/ci_phase24_postgres16_restore_drill.py
+
+  analytics-barrier-repeat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Repeat original non-relaxed cancellation and admission assertions
+        run: |
+          for repetition in 1 2 3 4 5; do
+            echo "ANALYTICS_ORIGINAL_BARRIER_REPEAT=$repetition"
+            python -m pytest -q tests/test_analytics_admission.py
+          done

@@ -93,6 +93,24 @@ def parse_uzex_tradelist(data, *, type_id: int):
     return list(result.values())
 
 
+def _uzex_public_rows(payload):
+    """Official public TradeList may return a direct list or a data/items list.
+
+    Never interpret an opaque mapping, an error response, or an ID-only record
+    as an actual tender. Only complete first-party rows can survive the
+    independent per-notice validator.
+    """
+    if type(payload) is list:
+        return payload
+    if type(payload) is dict:
+        if payload.get("success") is False or payload.get("ok") is False:
+            raise SourceError("UzEx public API reported failure.")
+        for field in ("data", "items"):
+            if type(payload.get(field)) is list:
+                return payload[field]
+    raise SourceError("UzEx changed public list envelope.")
+
+
 def parse_uzex_current_batch(data, *, type_id: int):
     """Keep independently valid official current rows; no ID-only acceptance.
 
@@ -156,7 +174,7 @@ class UzbekistanUzexSource:
                         raise SourceError("UzEx official response was not JSON.")
                     if len(response.content) > MAX_BODY:
                         raise SourceError("UzEx oversized official response.")
-                    series.append(parse_uzex_current_batch(response.json(), type_id=type_id))
+                    series.append(parse_uzex_current_batch(_uzex_public_rows(response.json()), type_id=type_id))
         except (httpx.HTTPError, ConnectorTransportError, OSError) as error:
             if transient_transport(error):
                 raise SourceTransportError("UzEx official HTTPS temporarily unavailable.") from None

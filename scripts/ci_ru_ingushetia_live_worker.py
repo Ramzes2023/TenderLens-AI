@@ -111,7 +111,12 @@ async def _check_isolated_dispatch(catalog, cfg, notices, db_path, *, repository
             assert chat_id == fake_chat and kwargs.get("disable_web_page_preview") is True
             self.messages.append(text)
             stop.set()
-            return SimpleNamespace(message_id=len(self.messages))
+            # Mirror the strict production Bot API acknowledgement shape.
+            # The sink is isolated: this does not call Telegram or claim real
+            # delivery, but our monitor must not mark a notice until both the
+            # positive message ID and the correct recipient are present.
+            return SimpleNamespace(message_id=len(self.messages),
+                                   chat=SimpleNamespace(id=chat_id), text=text)
 
     sink = IsolatedAckSink()
     await asyncio.wait_for(

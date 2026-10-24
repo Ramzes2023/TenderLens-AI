@@ -42,7 +42,18 @@ def acceptance():
     if SOURCE not in catalog.enabled_keys:
         raise AssertionError("INGUSHETIA_FABRIKANT public catalog not explicitly enabled")
     # The source does a bounded public listing + separate detail GETs, all real.
-    notices = asyncio.run(catalog.registry.get(SOURCE).source.fetch(limit=3))
+    from app.sources.http import ConnectorTransportError
+    import time
+    # Each attempt fetches a fresh authenticated-by-nobody PUBLIC native
+    # list and independently verified original cards. No cached or mock rows.
+    for attempt in range(3):
+        try:
+            notices = asyncio.run(catalog.registry.get(SOURCE).source.fetch(limit=3))
+            break
+        except ConnectorTransportError as exc:
+            if not exc.retryable or attempt == 2:
+                raise
+            time.sleep((1.25, 2.25)[attempt])
     if not 2 <= len(notices) <= 3:
         raise AssertionError("No real independently verified INGUSHETIA_FABRIKANT tender data")
 

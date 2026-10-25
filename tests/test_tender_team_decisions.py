@@ -40,6 +40,33 @@ def args(who,org,saved,company=11):
     return dict(account_id=who.id,organization_id=org.id,company_id=company,saved_id=saved)
 
 
+def test_simultaneous_assignment_has_one_winner_and_one_audit_event(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    db,org,saved,other,owner,admin,member,viewer,stranger=setup(tmp_path)
+    barrier=Barrier(2)
+
+    def assign(target):
+        barrier.wait(timeout=10)
+        try:
+            return TeamDecision(db).change(**args(owner,org,saved), action="assign",
+                assignee_account_id=target.id, expected_revision=0)
+        except WorkflowConflict:
+            return "conflict"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results=list(pool.map(assign, [admin,member]))
+    assert results.count("conflict")==1
+    winner=next(result for result in results if isinstance(result,dict))
+    persisted=TeamDecision(db).get(**args(owner,org,saved))
+    assert persisted["revision"]==1
+    assert persisted["assignee_account_id"]==winner["assignee_account_id"]
+    events=TeamDecision(db).events(**args(owner,org,saved))
+    assert len(events)==1
+    assert events[0]["next_assignee_account_id"]==winner["assignee_account_id"]
+
+
 def test_assign_request_approve_and_revision_with_real_audit(tmp_path):
     db,org,saved,other,owner,admin,member,viewer,stranger=setup(tmp_path)
     svc=TeamDecision(db)

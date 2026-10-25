@@ -47,3 +47,7 @@ Thumbs.db
 # Isolated local UI verification environment
 .ui-fix-venv/
 .intl-source-venv/
+
+# Disposable PR264 functional audit output and test databases.
+/artifacts/audit-pr264-*
+/artifacts/qa-*/

@@ -14,7 +14,9 @@ on:
       - tests/test_public_pilot_release_policy.py
       - .github/workflows/release-edge-readiness.yml
   push:
-    branches: [integration/valyqon-release-candidate-20261025]
+    branches:
+      - integration/valyqon-release-candidate-20261025
+      - release/valyqon-public-real-data-source-guard-20261025
   workflow_dispatch:
     inputs:
       public_https_url:

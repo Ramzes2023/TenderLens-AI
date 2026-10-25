@@ -1,0 +1,69 @@
+name: VALYQON Combined journal-browser
+
+on:
+  push:
+    branches:
+      - qa/integrated-web-audit-20261025
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  journal-api-and-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Verify Python and browser script syntax
+        run: |
+          python -m compileall -q app tests/test_delivery_journal.py
+          node --check app/api/static/delivery_journal.js
+          node --check app/api/static/delivery_preferences.js
+      - name: Validate real SQLite receipts, tenant isolation and HTTP route
+        run: |
+          python -m pytest -q tests/test_delivery_journal.py tests/test_deadline_alerts_database.py tests/test_deadline_alerts_launch.py
+      - name: Confirm no accidental UI or review regressions
+        run: |
+          python -m pytest -q tests/test_team_decision_ui.py tests/test_tender_planner_ui.py tests/test_workspace_home_workbench.py
+
+  journal-real-chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 23
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install browser and application dependencies
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install 'playwright>=1.55,<2'
+          python -m playwright install --with-deps chromium
+      - name: Real Chromium to authenticated ASGI API to temporary SQLite
+        run: |
+          python -m pytest -q -rs --junitxml=/tmp/journal-chromium.xml tests/test_delivery_journal_browser.py
+          python - <<'PY'
+          from xml.etree import ElementTree as ET
+          root=ET.parse('/tmp/journal-chromium.xml').getroot()
+          nodes=list(root) if root.tag=='testsuites' else [root]
+          tests=sum(int(n.attrib.get('tests',0)) for n in nodes)
+          skips=sum(int(n.attrib.get('skipped',0)) for n in nodes)
+          failures=sum(int(n.attrib.get('failures',0))+int(n.attrib.get('errors',0)) for n in nodes)
+          print(f'DELIVERY_JOURNAL_CHROMIUM_TESTS={tests};SKIPPED={skips};FAILURES={failures}')
+          if tests<1 or skips or failures:
+              raise SystemExit('BROWSER_EVIDENCE_NOT_COMPLETE')
+          PY

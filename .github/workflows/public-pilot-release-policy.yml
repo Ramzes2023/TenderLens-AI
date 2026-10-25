@@ -1,0 +1,31 @@
+name: Public pilot fail-closed release policy
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - compose.public.yaml
+      - .env.example
+      - scripts/ci_public_pilot_release_policy.py
+      - tests/test_public_pilot_release_policy.py
+      - docs/PUBLIC_PILOT_LAUNCH_20261025.md
+      - .github/workflows/public-pilot-release-policy.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  public-pilot-static-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==9.1.1
+      - name: Fail if any blocked source, production bot monitoring, paid details, demo metrics, or public port guard is unsafe
+        run: python -m pytest -q tests/test_public_pilot_release_policy.py
+      - name: Report configuration status without claiming source or notification delivery
+        run: python -B -m scripts.ci_public_pilot_release_policy

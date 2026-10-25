@@ -59,6 +59,17 @@ try {
                     $status = $observation.status
                     if ($status -cin @('HTTPS_VISIBLE_NOT_INGESTED', 'HTTP_REACHABLE_NON200', 'BLOCKED')) {
                         Write-Output ('RU_FIVE_NETWORK_' + $observation.source.ToUpperInvariant() + '=' + $status)
+                        if ($observation.source -ceq 'roseltorg' -and
+                                $status -ceq 'HTTPS_VISIBLE_NOT_INGESTED' -and
+                                $null -ne $observation.visible_canonical_candidates_not_verified -and
+                                ($observation.visible_canonical_candidates_not_verified -is [long] -or
+                                 $observation.visible_canonical_candidates_not_verified -is [int])) {
+                            $candidates = [int]$observation.visible_canonical_candidates_not_verified
+                            if ($candidates -ge 0 -and $candidates -le 100) {
+                                Write-Output ('RU_FIVE_ROSELTORG_VISIBLE_CANDIDATES_NOT_VERIFIED=' + $candidates)
+                            }
+                        }
+
                         if ($status -ceq 'HTTP_REACHABLE_NON200' -and
                                 $null -ne $observation.http_status -and
                                 ($observation.http_status -is [int] -or $observation.http_status -is [long])) {

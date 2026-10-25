@@ -76,9 +76,10 @@ def test_all_navigation_targets_and_palette_destinations_are_mapped():
     shell = (ROOT / 'app/api/static/shell.js').read_text(encoding='utf-8')
     # Static Notifications now uses real worker sender receipts, not a future-page stub.
     assigned = {'companies', 'documents', 'monitoring', 'team', 'settings'}
-    future = {'recommended', 'ai-analysis'}
+    future = {'ai-analysis'}
     assert nav == static | assigned | future
     assert 'notifications' in static
+    assert 'recommended' in static
     assert 'id="vqDeliveryJournal"' in html
     assert 'id="vqDeliveryCount">—</strong>' in html
     for key in future - {'ai-analysis'}:
@@ -108,7 +109,10 @@ def test_unloaded_counts_and_future_pages_do_not_fabricate_results():
     assert 'id="vqDeliveryJournal"' in html
     assert 'id="vqDeliveryCount">—</strong>' in html
     assert "notifications:'The notifications inbox is not available yet" not in shell
-    assert 'Use Discover to inspect preliminary company fit' in shell
+    assert 'id="vqRecommendations"' in html
+    assert 'data-page="recommended"' in html
+    assert '/assets/recommendations.js' in html
+    assert "recommended:'" not in shell
     for forbidden in ('Upgrade now', 'Checkout', 'unreadCount', 'recommendation-card'):
         assert forbidden not in html
     assert 'No search has been run here' in landing_html()

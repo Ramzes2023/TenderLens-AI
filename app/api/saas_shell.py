@@ -3,6 +3,7 @@
 from .command_center_ui import COMMAND_CENTER_HTML
 from .discovery_ui import DISCOVERY_HTML
 from .history_ui import HISTORY_HTML
+from .recommendations_ui import RECOMMENDATIONS_HTML
 from .saved_ui import SAVED_HTML
 from .notifications_ui import DELIVERY_JOURNAL_HTML
 from .planner_ui import PLANNER_HTML
@@ -550,6 +551,7 @@ def shell_html(html: str) -> str:
         HISTORY_HTML
         + "\n"
         + SAVED_HTML
+        + RECOMMENDATIONS_HTML
         + PLANNER_HTML
         + "\n"
         + SOURCE_HEALTH_HTML.replace('<h2>', '<h2 data-ui-en="Source Health" data-ui-ru="Состояние источников">', 1)
@@ -565,7 +567,7 @@ def shell_html(html: str) -> str:
         '<link rel="stylesheet" href="/assets/saas.css">'
         '<link rel="stylesheet" href="/assets/premium.css?v=phase24-visual-20261012&main_i18n=2">''<link rel="stylesheet" href="/assets/support.css?v=thread-dark-20261017">'
         '<link rel="stylesheet" href="/assets/rag.css?v=pilot1">'
-        '<link rel="stylesheet" href="/assets/workspace_luxe.css?v=20261023c">''<link rel="stylesheet" href="/assets/workspace_home.css?v=20261023a"><link rel="stylesheet" href="/assets/planner.css?v=20261023a"><link rel="stylesheet" href="/assets/delivery_journal.css?v=20261024a"><link rel="stylesheet" href="/assets/tender_team.css?v=20261023a">'
+        '<link rel="stylesheet" href="/assets/workspace_luxe.css?v=20261023c">''<link rel="stylesheet" href="/assets/workspace_home.css?v=20261023a"><link rel="stylesheet" href="/assets/planner.css?v=20261023a"><link rel="stylesheet" href="/assets/recommendations.css?v=20261025a"><link rel="stylesheet" href="/assets/delivery_journal.css?v=20261024a"><link rel="stylesheet" href="/assets/tender_team.css?v=20261023a">'
         '<link rel="stylesheet" href="/assets/responsive.css?v=phase24q">'
         "</head>",
     )
@@ -707,7 +709,7 @@ def shell_html(html: str) -> str:
         '<script src="/assets/workspace_ux.js?v=20261013"></script>'
         '<script src="/assets/geography_fallback.js?v=1"></script>'
         '<script src="/assets/geography.js?v=3"></script>'
-        '<script src="/assets/workspace_luxe.js?v=20261023b"></script>''<script src="/assets/workspace_home.js?v=20261023a"></script><script src="/assets/planner.js?v=20261023a"></script><script src="/assets/delivery_journal.js?v=20261024a"></script><script src="/assets/delivery_preferences.js?v=20261024a"></script><script src="/assets/tender_team.js?v=20261023a"></script><script src="/assets/source_history.js?v=20261023a"></script>'
+        '<script src="/assets/workspace_luxe.js?v=20261023b"></script>''<script src="/assets/workspace_home.js?v=20261023a"></script><script src="/assets/planner.js?v=20261023a"></script><script src="/assets/recommendations.js?v=20261025a"></script><script src="/assets/delivery_journal.js?v=20261024a"></script><script src="/assets/delivery_preferences.js?v=20261024a"></script><script src="/assets/tender_team.js?v=20261023a"></script><script src="/assets/source_history.js?v=20261023a"></script>'
         "</body>",
     )
 

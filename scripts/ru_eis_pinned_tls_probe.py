@@ -16,15 +16,22 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 OFFICIAL_URL = "https://gu-st.ru/content/Other/doc/russian_trusted_root_ca.cer"
-# Load the single fingerprint-pinned implementation without importing
-# app.sources.__init__ (which imports httpx). The trusted-probe offline
-# security workflow intentionally has no third-party dependencies.
-from runpy import run_path
-
-_scoped_ca = run_path(str(Path(__file__).resolve().parents[1] / "app" / "sources" / "eis_pinned_ca.py"))
-MAX_CERT_BYTES = _scoped_ca["MAX_CERT_BYTES"]
-ROOT_SHA256 = _scoped_ca["ROOT_SHA256"]
-verify_root = _scoped_ca["verify_root"]
+# Re-export the identical production verifier when app dependencies exist.
+# The minimal stdlib-only trusted-probe offline job has no httpx installed;
+# load the SAME locally versioned verifier without importing app.sources
+# package side effects in that one isolated diagnostic environment.
+try:
+    from app.sources.eis_pinned_ca import MAX_CERT_BYTES, ROOT_SHA256, verify_root
+except ModuleNotFoundError as exc:
+    if exc.name != "httpx":
+        raise
+    from runpy import run_path
+    _scoped_ca = run_path(
+        str(Path(__file__).resolve().parents[1] / "app" / "sources" / "eis_pinned_ca.py")
+    )
+    MAX_CERT_BYTES = _scoped_ca["MAX_CERT_BYTES"]
+    ROOT_SHA256 = _scoped_ca["ROOT_SHA256"]
+    verify_root = _scoped_ca["verify_root"]
 
 
 def official_download() -> bytes:

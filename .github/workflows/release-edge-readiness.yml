@@ -1,6 +1,16 @@
 name: VALYQON Public Launch Readiness (Read Only)
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - compose.public.yaml
+      - .env.example
+      - scripts/verify_public_https.py
+      - scripts/ci_public_pilot_release_policy.py
+      - tests/test_verify_public_https.py
+      - tests/test_public_pilot_release_policy.py
+      - .github/workflows/release-edge-readiness.yml
   push:
     branches: [integration/valyqon-release-candidate-20261025]
   workflow_dispatch:

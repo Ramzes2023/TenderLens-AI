@@ -19,6 +19,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install minimal test dependency (no live network probes)
+        run: python -m pip install pytest
       - name: Ensure main-only and explicit proof no-send contract
         run: python -m pytest -q tests/test_ru_five_windows_live_audit.py
 

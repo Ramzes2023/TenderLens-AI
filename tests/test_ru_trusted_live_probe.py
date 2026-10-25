@@ -20,7 +20,7 @@ class ProbeSafetyTests(unittest.TestCase):
             f"<a href='/procedure/{rt}?session=x'>unsafe query</a>"
             f"<a href='/procedure/{rt}%2f'>ambiguous escape</a>"
             f"<a href='https://www.roseltorg.ru:badport/procedure/{rt}'>malformed</a>"
-            f"<a href='/procedure/NOTACARD'>whitespace title</a>"
+            f"<a href='/procedure/NO'>noncanonical short ID</a>"
             "</body>"
         ).encode("utf-8")
         self.assertEqual(roseltorg_visible_original_candidates(html), 2)

@@ -56,3 +56,33 @@ def test_no_actual_telegram_receipt_can_be_inferred_from_local_proof():
     assert "'RU_CHECHNYA_E2E_TEST_BOT_TOKEN'" in data
     assert "'RU_CHECHNYA_E2E_TEST_CHAT_ID'" in data
     assert "NOT_VERIFIED" in data
+
+
+
+def test_real_worker_count_is_required_for_gpb_tektorg_not_a_marker_only():
+    data = SCRIPT.read_text("utf-8")
+    assert "RU_FIVE_REAL" not in data  # no invented E2E delivery status
+    assert "Evidence = 'RU_GPB_REAL_WORKER_EVIDENCE='" in data
+    assert "Evidence = 'RU_TEKTORG_FENCED_EVIDENCE='" in data
+    for key in (
+        "worker_inserted", "real_detail_verified", "sqlite_search_verified",
+        "fenced_worker_inserted", "official_details", "sqlite_search",
+        "idempotent_replay", "idempotent", "production_changed",
+    ):
+        assert key in data
+    assert "ConvertFrom-Json" in data
+    assert "if ($evidenceLines.Count -ne 1)" in data
+    assert "RU_FIVE_ACCEPTED_ISOLATED_WORKER_SQL=" in data
+    assert "RU_FIVE_ORIGINAL_" in data and "_WORKER_SQL_COUNT=" in data
+    assert "RU_FIVE_CUSTOMER_TELEGRAM_ACK=NOT_VERIFIED" in data
+    assert "PASS_ISOLATED_WORKER_SQL" in data
+
+
+def test_non200_http_status_is_reported_only_as_sanitized_integer():
+    data = SCRIPT.read_text("utf-8")
+    assert "HTTP_REACHABLE_NON200" in data
+    assert "RU_FIVE_NETWORK_" in data and "_HTTP_STATUS=" in data
+    assert "$code -ge 100 -and $code -le 599" in data
+    assert "StringComparison]::Ordinal" in data
+    assert "REDACTED_INVALID_OBSERVATION" in data
+    assert "PRODUCTION_CHANGED=NO" in data

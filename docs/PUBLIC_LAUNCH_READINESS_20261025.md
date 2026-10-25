@@ -41,6 +41,9 @@ A green HTTP `/health` check or localhost Docker image does not satisfy this tab
 3. Accept actual official notices and E2E user alerts with consented synthetic accounts and current source links.
 4. Manually inspect secrets and DNS on the trusted server (print only YES/NO statuses). Securely set `TENDERLENS_DOMAIN` and `ACME_EMAIL` there, not in source code.
 5. Deploy Caddy/API first using reviewed production Compose with complete policy configuration; run `python scripts/verify_public_https.py --url https://YOUR-ACTUAL-DOMAIN` from an external network. This script is **read-only**, validates actual HTTPS and never reports commercial readiness.
+   - Default Compose now **excludes the Telegram bot** through the `verified-bot` profile. The bot must remain inactive on the public pilot. `MONITORING_ENABLED=false` alone does not stop polling or command replies.
+   - Only after a verified authorized Bot API delivery and single-poller review may an operator consider the explicit `--profile verified-bot` service. The default deployment must never activate this profile.
+   - The exact-candidate CI checks **both resolved Compose modes** with a disposable `.env`: default (API + Caddy only) and explicit bot profile (API + Caddy + bot, all unverified delivery/source flags still off). This is configuration verification, **not live Bot acceptance**.
 6. Release registration and paid features only after email/merchant/source gates, controlled abuse and backup restore pass. Monitor errors and have rollback rehearsed.
 
 ## Required external setup

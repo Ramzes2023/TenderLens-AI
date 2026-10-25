@@ -30,6 +30,13 @@ def test_each_source_can_never_be_enabled_from_public_env_file(source_flag):
     assert source_flag in " ".join(public_pilot_failures(exposed, ENV))
 
 
+def test_unverified_bot_cannot_start_in_default_compose_profile():
+    assert "    profiles:\n      - verified-bot" in COMPOSE
+    unsafe = COMPOSE.replace("    profiles:\n      - verified-bot\n", "", 1)
+    failures = public_pilot_failures(unsafe, ENV)
+    assert any("verified-bot" in reason for reason in failures)
+
+
 def test_production_bot_alerts_cannot_be_implicitly_enabled():
     bad = COMPOSE.replace('MONITORING_ENABLED: "false"', 'MONITORING_ENABLED: "true"')
     assert any("Bot API" in x for x in public_pilot_failures(bad, ENV))
@@ -48,7 +55,10 @@ def test_no_accidental_direct_public_api_or_bot_ports():
     api = COMPOSE.replace("    expose:\n      - \"8000\"",
                           "    ports:\n      - \"8000:8000\"")
     assert any("publish" in x for x in public_pilot_failures(api, ENV))
-    bot = COMPOSE.replace("  bot:\n    build:", "  bot:\n    ports:\n      - \"8001:8001\"\n    build:")
+    bot = COMPOSE.replace(
+        '    command: ["python", "-m", "app.bot"]',
+        '    ports:\n      - "8001:8001"\n    command: ["python", "-m", "app.bot"]',
+    )
     assert any("publish" in x for x in public_pilot_failures(bot, ENV))
 
 

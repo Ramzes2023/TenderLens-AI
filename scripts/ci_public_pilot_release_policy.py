@@ -75,6 +75,14 @@ def public_pilot_failures(compose: str, template: str) -> list[str]:
             problems.append("Missing public service " + name)
     if problems:
         return problems
+    # MONITORING_ENABLED=false stops the background monitor, NOT the
+    # Telegram command polling process. An inherited token can still make
+    # the Bot run. Keep this service behind explicit verified-bot opt-in.
+    bot_lines = services["bot"].splitlines()
+    if not any(line == "    profiles:" for line in bot_lines) or not any(
+        line == "      - verified-bot" for line in bot_lines
+    ):
+        problems.append("Telegram bot must require the explicit verified-bot Compose profile")
     for service_name in ("api", "bot"):
         body = services[service_name]
         if any(line == "    ports:" for line in body.splitlines()):

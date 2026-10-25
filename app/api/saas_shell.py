@@ -4,6 +4,8 @@ from .command_center_ui import COMMAND_CENTER_HTML
 from .discovery_ui import DISCOVERY_HTML
 from .history_ui import HISTORY_HTML
 from .saved_ui import SAVED_HTML
+from .planner_ui import PLANNER_HTML
+from .workspace_home_panels import WORKSPACE_HOME_HTML, WORKSPACE_UTILITIES_HTML
 from .source_health_ui import SOURCE_HEALTH_HTML
 from .support_ui import SUPPORT_HTML
 
@@ -14,6 +16,7 @@ PAGES = [
     "Search History",
     "Recommended",
     "Saved",
+    "Tender Planner",
     "Geography",
     "Monitoring",
     "Source Health",
@@ -36,6 +39,7 @@ def shell_html(html: str) -> str:
             "Search History",
             "Recommended",
             "Saved",
+            "Tender Planner",
         ],
         "Intelligence": [
             "Geography",
@@ -108,6 +112,10 @@ def shell_html(html: str) -> str:
   <p class="fine">
     Find. Analyze. Score. Win.
   </p>
+  <button id="vqSidebarCompact" class="vq-sidebar-compact" type="button"
+    aria-label="Collapse sidebar" title="Collapse sidebar" aria-pressed="false">
+    <span aria-hidden="true">⇤</span><span class="vq-compact-caption">Compact menu</span>
+  </button>
 
   <nav aria-label="Main navigation">
     {nav}
@@ -199,8 +207,20 @@ def shell_html(html: str) -> str:
     </details>
   </div>
 </header>
+<nav class="vq-workspace-shortcuts" aria-label="Quick workspace destinations">
+  <span class="vq-shortcut-caption">QUICK ACCESS</span>
+  <a href="#discover"><span aria-hidden="true">⌕</span><span data-ui-en="Find tenders" data-ui-ru="Найти закупки">Find tenders</span></a>
+  <a href="#tender-planner"><span aria-hidden="true">▣</span><span data-ui-en="Planner" data-ui-ru="Планировщик">Planner</span></a>
+  <a href="#saved"><span aria-hidden="true">◇</span><span data-ui-en="Saved" data-ui-ru="Сохранённые">Saved</span></a>
+  <a href="#monitoring"><span aria-hidden="true">◉</span><span data-ui-en="Monitoring" data-ui-ru="Мониторинг">Monitoring</span></a>
+  <a href="#source-health"><span aria-hidden="true">▥</span><span data-ui-en="Sources" data-ui-ru="Источники">Sources</span></a>
+  <a href="#team"><span aria-hidden="true">♧</span><span data-ui-en="Team" data-ui-ru="Команда">Team</span></a>
+</nav>
+{WORKSPACE_UTILITIES_HTML}
 <p id="shellLocaleScope" class="shell-locale-scope" hidden>Navigation and account controls only. Monitoring Center, Source Health, other page content and workspace forms remain in English.</p>
 '''
+
+    top = top.replace("{WORKSPACE_UTILITIES_HTML}", WORKSPACE_UTILITIES_HTML)
 
     start = html.index('<div class="top">')
     end = html.index(
@@ -260,6 +280,18 @@ def shell_html(html: str) -> str:
   </div>
 </section>
 
+<section class="vq-action-center" data-page="overview" aria-labelledby="vqActionHeading">
+ <div class="vq-action-heading"><div><span class="vq-card-eyebrow">YOUR WORKSPACE</span><h2 id="vqActionHeading" data-ui-en="Pick up where you left off" data-ui-ru="Продолжите работу с закупками">Pick up where you left off</h2>
+ <p data-ui-en="Direct access to the existing product workflows. Figures only appear after your workspace loads." data-ui-ru="Быстрый доступ к действующим функциям. Показатели появляются после загрузки рабочего пространства.">Direct access to the existing product workflows. Figures only appear after your workspace loads.</p></div>
+ <button type="button" class="vq-action-command" id="vqActionCommand" aria-label="Open quick workspace navigation" data-ui-en="Quick navigation · Ctrl K" data-ui-ru="Быстрый переход · Ctrl K">Quick navigation · Ctrl K</button></div>
+ <div class="vq-action-grid">
+  <a class="vq-action-card" href="#discover"><span class="vq-action-glyph" aria-hidden="true">⌕</span><strong data-ui-en="Find opportunities" data-ui-ru="Поиск подходящих закупок">Find opportunities</strong><p data-ui-en="Explore procurement notices with your company context." data-ui-ru="Ищите закупки с учётом профиля компании.">Explore procurement notices with your company context.</p><small data-ui-en="Open discovery →" data-ui-ru="Открыть поиск →">Open discovery →</small></a>
+  <a class="vq-action-card" href="#saved"><span class="vq-action-glyph" aria-hidden="true">◇</span><strong data-ui-en="Review saved work" data-ui-ru="Проверить сохранённое">Review saved work</strong><p data-ui-en="Continue your existing saved procurement review." data-ui-ru="Продолжайте работу с сохранёнными закупками.">Continue your existing saved procurement review.</p><small data-ui-en="Open saved →" data-ui-ru="Открыть сохранённое →">Open saved →</small></a>
+  <a class="vq-action-card" href="#monitoring"><span class="vq-action-glyph" aria-hidden="true">◉</span><strong data-ui-en="Check monitoring" data-ui-ru="Проверить мониторинг">Check monitoring</strong><p data-ui-en="Review scan availability and your configured status." data-ui-ru="Проверьте сканирование и доступность источников.">Review scan availability and your configured status.</p><small data-ui-en="Open monitoring →" data-ui-ru="Открыть мониторинг →">Open monitoring →</small></a>
+  <a class="vq-action-card" href="#team"><span class="vq-action-glyph" aria-hidden="true">♧</span><strong data-ui-en="Coordinate with your team" data-ui-ru="Работать с командой">Coordinate with your team</strong><p data-ui-en="Open verified organizations, roles and invitations." data-ui-ru="Управляйте организацией, ролями и приглашениями.">Open verified organizations, roles and invitations.</p><small data-ui-en="Open team →" data-ui-ru="Открыть команду →">Open team →</small></a>
+ </div>
+</section>
+{WORKSPACE_HOME_HTML}
 <section id="firstRunPreview" class="p" data-page="overview" hidden>
   <span class="eyebrow">YOUR FIRST MATCHING OPPORTUNITIES</span>
   <h2>Real tenders matched to your company</h2>
@@ -490,6 +522,7 @@ def shell_html(html: str) -> str:
   <p id="pdfPreviewNotice" role="status" hidden data-ui-en="Local preview on port 8765 disables /api. Uploads and workspace data are unavailable here; this does not verify production backend health." data-ui-ru="Локальное превью на порту 8765 отключает /api. Загрузка и данные рабочей области здесь недоступны; это не проверка состояния production backend.">Local preview on port 8765 disables /api. Uploads and workspace data are unavailable here; this does not verify production backend health.</p>
 </section>
 ''' + context
+    context = context.replace("{WORKSPACE_HOME_HTML}", WORKSPACE_HOME_HTML)
     context = '<section id="geographyWorkspace" class="geo-workspace" data-page="geography" hidden></section>\n' + context
     context = context.replace("<!-- COMMAND_CENTER -->", COMMAND_CENTER_HTML)
 
@@ -510,6 +543,7 @@ def shell_html(html: str) -> str:
         HISTORY_HTML
         + "\n"
         + SAVED_HTML
+        + PLANNER_HTML
         + "\n"
         + SOURCE_HEALTH_HTML.replace('<h2>', '<h2 data-ui-en="Source Health" data-ui-ru="Состояние источников">', 1)
         + "\n"
@@ -524,6 +558,7 @@ def shell_html(html: str) -> str:
         '<link rel="stylesheet" href="/assets/saas.css">'
         '<link rel="stylesheet" href="/assets/premium.css?v=phase24-visual-20261012&main_i18n=2">''<link rel="stylesheet" href="/assets/support.css?v=thread-dark-20261017">'
         '<link rel="stylesheet" href="/assets/rag.css?v=pilot1">'
+        '<link rel="stylesheet" href="/assets/workspace_luxe.css?v=20261023c">''<link rel="stylesheet" href="/assets/workspace_home.css?v=20261023a"><link rel="stylesheet" href="/assets/planner.css?v=20261023a"><link rel="stylesheet" href="/assets/tender_team.css?v=20261023a">'
         '<link rel="stylesheet" href="/assets/responsive.css?v=phase24q">'
         "</head>",
     )
@@ -665,6 +700,7 @@ def shell_html(html: str) -> str:
         '<script src="/assets/workspace_ux.js?v=20261013"></script>'
         '<script src="/assets/geography_fallback.js?v=1"></script>'
         '<script src="/assets/geography.js?v=3"></script>'
+        '<script src="/assets/workspace_luxe.js?v=20261023b"></script>''<script src="/assets/workspace_home.js?v=20261023a"></script><script src="/assets/planner.js?v=20261023a"></script><script src="/assets/tender_team.js?v=20261023a"></script><script src="/assets/source_history.js?v=20261023a"></script>'
         "</body>",
     )
 

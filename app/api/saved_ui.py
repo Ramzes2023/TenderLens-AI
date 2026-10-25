@@ -129,5 +129,39 @@ SAVED_HTML = """
     <p id="savedWorkflowStatus" role="status">Not loaded.</p>
     <h4>Recent changes</h4><ol id="savedWorkflowEvents"></ol>
   </section>
+  <section id="savedSourceHistoryPanel" class="p vq-source-history-panel" hidden aria-label="Observed EIS notice revisions">
+    <div class="toolbar">
+      <div><span class="eyebrow" data-ui-en="OFFICIAL SOURCE EVIDENCE" data-ui-ru="ДАННЫЕ ОФИЦИАЛЬНОГО ИСТОЧНИКА">OFFICIAL SOURCE EVIDENCE</span>
+        <h3 data-ui-en="Notice change history" data-ui-ru="История изменений извещения">Notice change history</h3></div>
+      <button id="refreshSavedSourceHistory" type="button" data-ui-en="Refresh stored evidence" data-ui-ru="Обновить историю из базы">Refresh stored evidence</button>
+    </div>
+    <p class="fine" data-ui-en="Only recorded worker observations from EIS / 223-FZ. This view does not fetch the official site or compare PDFs. Missing records never mean the tender has not changed." data-ui-ru="Только сохранённые сборщиком версии ЕИС / 223-ФЗ. Экран не опрашивает официальный сайт и не сравнивает PDF. Отсутствие записей не означает, что изменений не было.">Only recorded worker observations from EIS / 223-FZ. This view does not fetch the official site or compare PDFs. Missing records never mean the tender has not changed.</p>
+    <p id="savedSourceHistoryStatus" role="status"></p>
+    <ol id="savedSourceHistoryEvents" class="vq-source-history-list"></ol>
+  </section>
+  <section id="savedTenderTeamPanel" class="p vq-team-panel" hidden aria-label="Internal tender assignment and participation approval">
+    <div class="vq-team-head"><div>
+      <span class="eyebrow" data-ui-en="TEAM DECISION DESK" data-ui-ru="КОМАНДНОЕ СОГЛАСОВАНИЕ">TEAM DECISION DESK</span>
+      <h3 data-ui-en="Responsibility and approval" data-ui-ru="Ответственный и согласование">Responsibility and approval</h3>
+    </div><span id="savedTenderTeamApproval" class="vq-team-approval">—</span></div>
+    <p class="fine" data-ui-en="Internal approval does not submit a bid or prove a contract award." data-ui-ru="Внутреннее согласование не подаёт заявку и не подтверждает победу в закупке.">Internal approval does not submit a bid or prove a contract award.</p>
+    <div class="vq-team-fields">
+      <label for="savedTenderAssignee" data-ui-en="Assigned colleague" data-ui-ru="Ответственный сотрудник">Assigned colleague</label>
+      <select id="savedTenderAssignee" disabled><option value="">Not assigned</option></select>
+      <button type="button" id="saveTenderAssignee" disabled data-ui-en="Save assignee" data-ui-ru="Сохранить ответственного">Save assignee</button>
+    </div>
+    <div class="vq-team-review">
+      <div><strong data-ui-en="Participation approval" data-ui-ru="Согласование участия">Participation approval</strong><p id="savedTenderTeamExplanation" class="fine"></p></div>
+      <div class="vq-team-buttons">
+        <button type="button" id="requestTenderApproval" disabled data-ui-en="Request review" data-ui-ru="Запросить согласование">Request review</button>
+        <button type="button" id="approveTenderParticipation" disabled data-ui-en="Approve internally" data-ui-ru="Согласовать">Approve internally</button>
+        <button type="button" id="rejectTenderParticipation" disabled data-ui-en="Reject internally" data-ui-ru="Отклонить">Reject internally</button>
+        <button type="button" id="withdrawTenderApproval" disabled data-ui-en="Withdraw request" data-ui-ru="Отозвать запрос">Withdraw request</button>
+      </div>
+    </div>
+    <p id="savedTenderTeamStatus" role="status" aria-live="polite">Not loaded.</p>
+    <h4 data-ui-en="Accountable decision history" data-ui-ru="Журнал решений">Accountable decision history</h4>
+    <ol id="savedTenderTeamEvents" class="vq-team-event-list"></ol>
+  </section>
 </dialog>
 """

@@ -14,7 +14,8 @@ function element() {
 const nodes = {}, get = id => nodes[id] ||= element();
 const links = [...html.matchAll(/<a href="#([^"]+)" data-nav="([^"]+)">[\s\S]*?<span>([^<]+)<\/span>/g)]
   .map(m => Object.assign(element(), {dataset:{nav:m[2]},textContent:m[3]}));
-assert.equal(links.length,16);
+assert.equal(links.length,17);
+assert(links.some(link=>link.dataset.nav==='tender-planner'));
 const articles = ['companies','companyCreator','tenders','monitoringCenter','organizationCard','telegramCard'].map(get);
 const sections = [...html.matchAll(/data-page="([^"]+)"/g)]
   .map(m => Object.assign(element(), {dataset:{page:m[1]}}));

@@ -61,7 +61,7 @@ try {
                         Write-Output ('RU_FIVE_NETWORK_' + $observation.source.ToUpperInvariant() + '=' + $status)
                         if ($status -ceq 'HTTP_REACHABLE_NON200' -and
                                 $null -ne $observation.http_status -and
-                                $observation.http_status -is [int]) {
+                                ($observation.http_status -is [int] -or $observation.http_status -is [long])) {
                             $code = [int]$observation.http_status
                             if ($code -ge 100 -and $code -le 599) {
                                 Write-Output ('RU_FIVE_NETWORK_' + $observation.source.ToUpperInvariant() + '_HTTP_STATUS=' + $code)
@@ -117,8 +117,8 @@ try {
                             if (($count -isnot [long] -and $count -isnot [int]) -or
                                     $count -lt 1 -or $count -gt $entry.MaxCount -or
                                     $details -ne $count -or $search -ne $count -or
-                                    $proof.idempotent_replay -ceq $false -and $entry.Name -eq 'gpb' -or
-                                    $proof.idempotent -ceq $false -and $entry.Name -eq 'tektorg' -or
+                                    ($entry.Name -eq 'gpb' -and $proof.idempotent_replay -ne $true) -or
+                                    ($entry.Name -eq 'tektorg' -and $proof.idempotent -ne $true) -or
                                     $proof.production_changed -ne $false) {
                                 $accepted = $false
                             } else {

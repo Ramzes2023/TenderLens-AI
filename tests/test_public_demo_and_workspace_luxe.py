@@ -41,7 +41,8 @@ def test_demonstration_cannot_modify_real_guest_api_without_database(monkeypatch
 def test_public_compose_opt_in_does_not_enable_paid_access():
     from pathlib import Path
     yaml = (Path(__file__).resolve().parents[1] / 'compose.public.yaml').read_text()
-    assert 'VALYQON_PUBLIC_ANALYTICS_MODE: "demo"' in yaml
+    assert 'VALYQON_PUBLIC_ANALYTICS_MODE: "real"' in yaml
+    assert 'VALYQON_PUBLIC_ANALYTICS_MODE: "demo"' not in yaml
     assert 'VALYQON_RESTRICT_PAID_SOURCE_DETAILS: "true"' in yaml
     assert 'VALYQON_PUBLIC_AI_ENABLED: "true"' not in yaml
 

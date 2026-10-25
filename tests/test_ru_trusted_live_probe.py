@@ -180,7 +180,8 @@ class ProbeSafetyTests(unittest.TestCase):
         self.assertEqual(set(RECOVERY_FIVE), {
             "ingushetia", "chechnya", "roseltorg", "gpb", "tektorg"
         })
-        self.assertEqual(RECOVERY_FIVE["gpb"], TARGETS["gpb_rss"])
+        self.assertEqual(RECOVERY_FIVE["gpb"], ON_DEMAND_TARGETS["gpb_public_html"])
+        self.assertNotEqual(RECOVERY_FIVE["gpb"], TARGETS["gpb_rss"])
         self.assertEqual(RECOVERY_FIVE["ingushetia"], TARGETS["fabrikant_44_mirror"])
         self.assertEqual(RECOVERY_FIVE["chechnya"], ON_DEMAND_TARGETS["eis_official_home"])
         self.assertEqual(len({(v.host, v.path) for v in RECOVERY_FIVE.values()}), 5)

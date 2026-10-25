@@ -22,6 +22,13 @@ def sample():
     return {"services":{"api":api,"bot":bot,"caddy":caddy}}
 
 
+def test_default_compose_excludes_telegram_bot_instead_of_starting_polling():
+    doc=sample()
+    del doc["services"]["bot"]
+    assert violations(doc,mode="default")==[]
+    assert any("Unexpected public services" in issue for issue in violations(sample(),mode="default"))
+
+
 def test_resolved_public_config_is_safe():
     assert violations(sample())==[]
 

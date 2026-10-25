@@ -895,3 +895,86 @@ def test_999_fresh_worker_sql_candidates_remain_eligible_for_filtering():
     source = FreshIngushetiaWorkerSource(BoundedRepository(), EIS)
     matches = asyncio.run(source.for_search_terms(("оборудования",)).fetch(limit=2))
     assert len(matches) == 2 and all(x.tender_number == N1 for x in matches)
+
+
+def test_ingushetia_outage_recovery_requires_bot_ack_and_never_realerts_crossfeed(tmp_path):
+    """Offline regression: no upstream fixtures count as live or real Bot API receipts.
+
+    Empty/unavailable Worker storage -> no alert. A fresh marketplace original
+    is NOT marked sent on wrong-chat Bot API acknowledgement. After a valid
+    acknowledgement it is not resent when the official EIS copy appears.
+    """
+    from types import SimpleNamespace
+    from app.bot.monitoring import monitor_loop
+    from app.monitoring.repository import MonitoringRepository
+    from app.monitoring.service import TenderMonitorService
+
+    db = Database(DatabaseSettings("ingush-outage-recovery", tmp_path / "worker.sqlite"))
+    worker_sql = OpportunityRepository(db)
+    worker_sql.initialize()
+    flags = settings()
+    catalog = fresh_ingushetia_worker_catalog(build_source_catalog(flags), worker_sql)
+    monitor_repo = MonitoringRepository(tmp_path / "notifications.sqlite")
+    monitor_repo.initialize()
+    monitor_repo.set_subscription(451, 9021, True)
+    service = TenderMonitorService(flags, None, monitor_repo, None)
+
+    class Bot:
+        def __init__(self):
+            self.calls = []
+            self.wrong_chat_once = True
+
+        async def send_message(self, chat_id, body, **kwargs):
+            self.calls.append((chat_id, body))
+            if self.wrong_chat_once:
+                self.wrong_chat_once = False
+                return SimpleNamespace(message_id=1, chat=SimpleNamespace(id=3333))
+            return SimpleNamespace(message_id=len(self.calls) + 1,
+                                   chat=SimpleNamespace(id=chat_id))
+
+    bot = Bot()
+    original_active = service.active_subscriptions
+
+    async def one_cycle():
+        stopper = asyncio.Event()
+
+        async def active_and_stop():
+            stopper.set()
+            return await original_active()
+
+        service.active_subscriptions = active_and_stop
+        try:
+            await monitor_loop(bot, service, stopper, source_catalog=catalog)
+        finally:
+            service.active_subscriptions = original_active
+
+    try:
+        # All source snapshots absent: a healthy empty source may not be
+        # fabricated; no Telegram message and no "seen" identity.
+        asyncio.run(one_cycle())
+        assert bot.calls == []
+        assert not monitor_repo.seen(451, "eis_44", N1)
+
+        worker_sql.upsert(notice(N1, source=FAB), connector_version(FAB))
+        asyncio.run(one_cycle())
+        assert len(bot.calls) == 1 and N1 in bot.calls[0][1]
+        assert not monitor_repo.seen(451, "eis_44", N1)
+
+        # Only a valid receipt for this exact chat may advance de-duplication.
+        asyncio.run(one_cycle())
+        assert len(bot.calls) == 2 and N1 in bot.calls[1][1]
+        assert monitor_repo.seen(451, "eis_44", N1)
+
+        # The EIS copy is the SAME 44-FZ original, not a second notification.
+        worker_sql.upsert(notice(N1, source=EIS), connector_version(EIS))
+        asyncio.run(one_cycle())
+        assert len(bot.calls) == 2
+
+        # A different independently stored original remains eligible.
+        worker_sql.upsert(notice(N2, source=EIS), connector_version(EIS))
+        asyncio.run(one_cycle())
+        assert len(bot.calls) == 3
+        assert N2 in bot.calls[-1][1]
+        assert monitor_repo.seen(451, "eis_44", N2)
+    finally:
+        db.close()

@@ -75,8 +75,10 @@ jobs:
           trap 'rm -f .env' EXIT
           cp .env.example .env
           printf '\nTENDERLENS_DOMAIN=valyqon-ci.example.org\nACME_EMAIL=ci@example.org\n' >> .env
-          docker compose -f compose.public.yaml config --format json > "${RUNNER_TEMP}/valyqon-public-resolved.json"
-          python -m scripts.ci_public_compose_resolved "${RUNNER_TEMP}/valyqon-public-resolved.json"
+          docker compose -f compose.public.yaml config --format json > "${RUNNER_TEMP}/valyqon-public-default.json"
+          python -m scripts.ci_public_compose_resolved default "${RUNNER_TEMP}/valyqon-public-default.json"
+          docker compose --profile verified-bot -f compose.public.yaml config --format json > "${RUNNER_TEMP}/valyqon-public-opt-in.json"
+          python -m scripts.ci_public_compose_resolved verified-bot "${RUNNER_TEMP}/valyqon-public-opt-in.json"
           echo 'REAL_PUBLIC_HTTPS=NOT_TESTED'
           echo 'LIVE_TENDERS_AND_BOT=NOT_TESTED'
       - name: Regression tests for interpolated source/bot/paywall guards

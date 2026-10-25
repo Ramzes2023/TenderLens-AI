@@ -18,9 +18,9 @@ class TrustedPublisherWatchContracts(unittest.TestCase):
         self.assertEqual(RECOVERY_FIVE["ingushetia"], TARGETS["fabrikant_44_mirror"])
         self.assertEqual(RECOVERY_FIVE["chechnya"], ON_DEMAND_TARGETS["eis_official_home"])
         self.assertEqual(RECOVERY_FIVE["roseltorg"], TARGETS["roseltorg"])
-        self.assertEqual(RECOVERY_FIVE["gpb"], Target(
-            "etpgpb.ru", "/procedures.rss", "rss",
-        ))
+        self.assertEqual(RECOVERY_FIVE["gpb"], ON_DEMAND_TARGETS["gpb_public_html"])
+        self.assertEqual(RECOVERY_FIVE["gpb"], Target("etpgpb.ru", "/procedures/", "html"))
+        self.assertNotEqual(RECOVERY_FIVE["gpb"], TARGETS["gpb_rss"])
         self.assertEqual(RECOVERY_FIVE["tektorg"], TARGETS["tektorg"])
         self.assertEqual(len({(v.host, v.path) for v in RECOVERY_FIVE.values()}), 5)
         for target in RECOVERY_FIVE.values():

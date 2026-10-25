@@ -38,8 +38,8 @@ $proofs = @(
     @{ Name = 'ingushetia'; Script = 'ci_ru_ingushetia_live_worker.py'; Module = 'scripts.ci_ru_ingushetia_live_worker'; Marker = 'RU_INGUSHETIA_LIVE_ACCEPTANCE=PASS' },
     @{ Name = 'chechnya'; Script = 'ci_ru_chechnya_eis_real_worker.py'; Module = 'scripts.ci_ru_chechnya_eis_real_worker'; Marker = 'RU_CHECHNYA_EIS_STRICT_LIVE=PASS_LOCAL_CAPTURE_ONLY' },
     @{ Name = 'roseltorg'; Script = 'ci_ru_roseltorg_real_worker.py'; Module = 'scripts.ci_ru_roseltorg_real_worker'; Marker = 'RU_ROSELTORG_REAL_WORKER=PASS' },
-    @{ Name = 'gpb'; Script = 'ci_ru_gpb_public_worker.py'; Module = 'scripts.ci_ru_gpb_public_worker'; Marker = 'RU_GPB_REAL_WORKER=PASS' },
-    @{ Name = 'tektorg'; Script = 'ci_ru_tektorg_fenced_acceptance.py'; Module = 'scripts.ci_ru_tektorg_fenced_acceptance'; Marker = 'RU_TEKTORG_FENCED_REAL=PASS' }
+    @{ Name = 'gpb'; Script = 'ci_ru_gpb_public_worker.py'; Module = 'scripts.ci_ru_gpb_public_worker'; Marker = 'RU_GPB_REAL_WORKER=PASS'; Evidence = 'RU_GPB_REAL_WORKER_EVIDENCE='; CountKey = 'worker_inserted'; DetailKey = 'real_detail_verified'; SearchKey = 'sqlite_search_verified'; MaxCount = 3 },
+    @{ Name = 'tektorg'; Script = 'ci_ru_tektorg_fenced_acceptance.py'; Module = 'scripts.ci_ru_tektorg_fenced_acceptance'; Marker = 'RU_TEKTORG_FENCED_REAL=PASS'; Evidence = 'RU_TEKTORG_FENCED_EVIDENCE='; CountKey = 'fenced_worker_inserted'; DetailKey = 'official_details'; SearchKey = 'sqlite_search'; MaxCount = 5 }
 )
 
 $failures = 0
@@ -59,6 +59,25 @@ try {
                     $status = $observation.status
                     if ($status -cin @('HTTPS_VISIBLE_NOT_INGESTED', 'HTTP_REACHABLE_NON200', 'BLOCKED')) {
                         Write-Output ('RU_FIVE_NETWORK_' + $observation.source.ToUpperInvariant() + '=' + $status)
+                        if ($observation.source -ceq 'roseltorg' -and
+                                $status -ceq 'HTTPS_VISIBLE_NOT_INGESTED' -and
+                                $null -ne $observation.visible_canonical_candidates_not_verified -and
+                                ($observation.visible_canonical_candidates_not_verified -is [long] -or
+                                 $observation.visible_canonical_candidates_not_verified -is [int])) {
+                            $candidates = [int]$observation.visible_canonical_candidates_not_verified
+                            if ($candidates -ge 0 -and $candidates -le 100) {
+                                Write-Output ('RU_FIVE_ROSELTORG_VISIBLE_CANDIDATES_NOT_VERIFIED=' + $candidates)
+                            }
+                        }
+
+                        if ($status -ceq 'HTTP_REACHABLE_NON200' -and
+                                $null -ne $observation.http_status -and
+                                ($observation.http_status -is [int] -or $observation.http_status -is [long])) {
+                            $code = [int]$observation.http_status
+                            if ($code -ge 100 -and $code -le 599) {
+                                Write-Output ('RU_FIVE_NETWORK_' + $observation.source.ToUpperInvariant() + '_HTTP_STATUS=' + $code)
+                            }
+                        }
                     }
                 }
             } catch { Write-Output 'RU_FIVE_NETWORK=REDACTED_INVALID_OBSERVATION' }
@@ -66,9 +85,13 @@ try {
             Write-Output $line
         }
     }
+    # This is transport of five particular URLs, not end-to-end source health.
+    # The GPB probe now checks the same first-party HTML list as its Worker;
+    # a different optional RSS URL must not override a verified Worker result.
     if ($probeExit -ne 0) { $failures++ }
     Write-Output ('RU_FIVE_NETWORK_AUDIT=' + $(if ($probeExit -eq 0) { 'PASS_REACHABILITY_ONLY' } else { 'BLOCKED' }))
 
+    $isolatedPassed = 0
     if ($RunLiveProofs) {
         foreach ($entry in $proofs) {
             $label = $entry.Name.ToUpperInvariant()
@@ -88,7 +111,37 @@ try {
                 [Environment]::SetEnvironmentVariable('RU_CHECHNYA_E2E_TEST_CHAT_ID', $null, 'Process')
                 $safeCapture = @(& $py -B -m $entry.Module 2>&1 | ForEach-Object { [string]$_ })
                 $proofExit = $LASTEXITCODE
-                if ($proofExit -eq 0 -and $safeCapture -ccontains $entry.Marker) {
+                $accepted = ($proofExit -eq 0 -and $safeCapture -ccontains $entry.Marker)
+                # The two installed worker proofs must expose independently
+                # corroborated first-party originals, persisted rows and local
+                # searchable rows. A PASS marker alone is not enough.
+                if ($accepted -and $entry.ContainsKey('Evidence')) {
+                    $evidenceLines = @($safeCapture | Where-Object { $_.StartsWith($entry.Evidence, [StringComparison]::Ordinal) })
+                    if ($evidenceLines.Count -ne 1) {
+                        $accepted = $false
+                    } else {
+                        try {
+                            $proof = ($evidenceLines[0].Substring($entry.Evidence.Length) | ConvertFrom-Json)
+                            $count = $proof.($entry.CountKey)
+                            $details = $proof.($entry.DetailKey)
+                            $search = $proof.($entry.SearchKey)
+                            if (($count -isnot [long] -and $count -isnot [int]) -or
+                                    $count -lt 1 -or $count -gt $entry.MaxCount -or
+                                    $details -ne $count -or $search -ne $count -or
+                                    ($entry.Name -eq 'gpb' -and $proof.idempotent_replay -ne $true) -or
+                                    ($entry.Name -eq 'tektorg' -and $proof.idempotent -ne $true) -or
+                                    $proof.production_changed -ne $false) {
+                                $accepted = $false
+                            } else {
+                                Write-Output ('RU_FIVE_ORIGINAL_' + $label + '_WORKER_SQL_COUNT=' + [int]$count)
+                            }
+                        } catch {
+                            $accepted = $false
+                        }
+                    }
+                }
+                if ($accepted) {
+                    $isolatedPassed++
                     Write-Output ('RU_FIVE_ORIGINAL_' + $label + '=PASS_ISOLATED_WORKER_SQL')
                 } else {
                     Write-Output ('RU_FIVE_ORIGINAL_' + $label + '=BLOCKED_NO_ACCEPTED_CURRENT_ORIGINAL')
@@ -102,6 +155,7 @@ try {
                 [Environment]::SetEnvironmentVariable('RU_CHECHNYA_E2E_TEST_CHAT_ID', $priorChatId, 'Process')
             }
         }
+        Write-Output ('RU_FIVE_ACCEPTED_ISOLATED_WORKER_SQL=' + $isolatedPassed + '/5')
     } else {
         Write-Output 'RU_FIVE_SOURCE_WORKER_TESTS=NOT_REQUESTED'
     }

@@ -4,6 +4,32 @@ from unittest.mock import patch
 from scripts.ru_trusted_live_probe import TARGETS, ON_DEMAND_TARGETS, UnsafeAddress, checked_ips, describe, main, read_public, Target
 
 class ProbeSafetyTests(unittest.TestCase):
+    def test_roseltorg_exact_visible_original_links_are_only_unverified_candidates(self):
+        from scripts.ru_trusted_live_probe import roseltorg_visible_original_candidates
+        ident = "0318300120826000550"
+        rt = "RT22042500009"
+        html = (
+            f"<head><title>hidden</title><a href='/procedure/{ident}/1'>hidden</a></head>"
+            f"<template><a href='/procedure/{ident}/1'>hidden</a></template>"
+            f"<script><a href='/procedure/{ident}/1'>hidden</a></script>"
+            f"<body><a href='/procedure/{ident}/1'>first real listing link</a>"
+            f"<a href='https://www.roseltorg.ru/procedure/{rt}'>second link</a>"
+            f"<a href='/procedure/{ident}/1'>duplicate</a>"
+            f"<a href='https://www.roseltorg.ru.evil.invalid/procedure/{ident}/1'>evil</a>"
+            f"<a href='http://www.roseltorg.ru/procedure/{ident}/1'>insecure</a>"
+            f"<a href='/procedure/{rt}?session=x'>unsafe query</a>"
+            f"<a href='/procedure/{rt}%2f'>ambiguous escape</a>"
+            f"<a href='https://www.roseltorg.ru:badport/procedure/{rt}'>malformed</a>"
+            f"<a href='/procedure/NO'>noncanonical short ID</a>"
+            "</body>"
+        ).encode("utf-8")
+        self.assertEqual(roseltorg_visible_original_candidates(html), 2)
+        self.assertEqual(roseltorg_visible_original_candidates(
+            f"<html><template><a href='/procedure/{ident}/1'>no visible</a></template>"
+            "</html>".encode()), 0)
+        with self.assertRaises(ValueError):
+            roseltorg_visible_original_candidates(b"")
+
     def test_fixed_unique_approved_targets(self):
         self.assertEqual(len(TARGETS), 37)
         pairs = {(t.host, t.path) for t in TARGETS.values()}
@@ -180,7 +206,8 @@ class ProbeSafetyTests(unittest.TestCase):
         self.assertEqual(set(RECOVERY_FIVE), {
             "ingushetia", "chechnya", "roseltorg", "gpb", "tektorg"
         })
-        self.assertEqual(RECOVERY_FIVE["gpb"], TARGETS["gpb_rss"])
+        self.assertEqual(RECOVERY_FIVE["gpb"], ON_DEMAND_TARGETS["gpb_public_html"])
+        self.assertNotEqual(RECOVERY_FIVE["gpb"], TARGETS["gpb_rss"])
         self.assertEqual(RECOVERY_FIVE["ingushetia"], TARGETS["fabrikant_44_mirror"])
         self.assertEqual(RECOVERY_FIVE["chechnya"], ON_DEMAND_TARGETS["eis_official_home"])
         self.assertEqual(len({(v.host, v.path) for v in RECOVERY_FIVE.values()}), 5)

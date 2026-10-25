@@ -79,6 +79,7 @@ def _term_match(
         "\u044b\u0435",
         "\u0438\u0435",
         "\u0438\u044f",
+        "\u0438\u0438",  # -ция/-ции: канализация <-> канализации
         "\u044b\u0445",
         "\u0438\u0445",
         "\u0443\u044e",
@@ -350,11 +351,34 @@ class TenderMonitorService:
         catalog: "SourceCatalog",
         profile: CompanyProfile | None,
         *, source_keys: tuple[str, ...] | None = None,
+        max_items: int | None = None,
     ) -> tuple[
         list[MonitorMatch],
         "MultiSourceFetchReport",
     ]:
-        """Fetch global sources and pre-filter against an explicit profile."""
+        """Fetch global sources and pre-filter against an explicit profile.
+
+        max_items overrides the *per-source candidate* bound only for the
+        shared, non-personalized fixed regional poll. Callers still apply
+        their own result caps *after* tenant keyword/region filtering.
+        """
+        if max_items is not None:
+            if type(max_items) is not int or not 1 <= max_items <= 1000:
+                raise ValueError("Invalid bounded catalog candidate limit")
+            if max_items > 100:
+                # Never raise the ordinary per-user upstream network cap.
+                # Deep scans are permissible only for a separately enabled,
+                # time-bounded, read-only Worker-SQL adapter on Ingushetia.
+                from app.sources.snapshots import FreshIngushetiaWorkerSource
+                allowed = {"ru_ingushetia_eis44", "ru_ingushetia_fabrikant44"}
+                registry = getattr(catalog, "registry", None)
+                if (not source_keys or not set(source_keys).issubset(allowed)
+                        or registry is None
+                        or any(not isinstance(
+                            registry.get(key).source,
+                            FreshIngushetiaWorkerSource,
+                        ) for key in source_keys)):
+                    raise ValueError("Deep regional scan requires fresh Worker SQL sources")
 
         search_terms = (
             tuple(profile.monitoring_keywords)
@@ -363,7 +387,7 @@ class TenderMonitorService:
         )
 
         report = await catalog.fetch(
-            limit_per_source=self.settings.max_items,
+            limit_per_source=(self.settings.max_items if max_items is None else max_items),
             source_keys=source_keys,
             search_terms=search_terms,
             max_eis_feeds=self.settings.profile_feed_limit,
@@ -560,6 +584,20 @@ class TenderMonitorService:
         )
         if not report.attempted_sources or report.total_failure:
             raise ValueError("No successfully fetched source for baseline.")
+        # A new regional subscription cannot claim a complete baseline if
+        # its first fetch missed one explicitly enabled Ingushetia source.
+        # Otherwise, when that source recovers on the next cycle, already
+        # published notices could be mislabelled as newly discovered and
+        # delivered in a burst. Existing active subscriptions still retain
+        # healthy-source partial-outage delivery behavior.
+        regional = frozenset({
+            "ru_ingushetia_eis44", "ru_ingushetia_fabrikant44",
+        }).intersection(source_keys or ())
+        if regional and (
+            not regional.issubset(report.successful_sources)
+            or any(failure.source in regional for failure in report.failures)
+        ):
+            raise ValueError("Incomplete Ingushetia regional subscription baseline.")
         return len(await self.claim_new(owner_user_id, matches)), report
 
     async def subscribe(self, owner_user_id: int, chat_id: int) -> Subscription:

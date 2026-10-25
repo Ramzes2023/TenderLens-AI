@@ -7,7 +7,6 @@ The provider certificate is trusted only by the two EIS test adapters.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
 import ssl
 import sys
@@ -17,36 +16,22 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 OFFICIAL_URL = "https://gu-st.ru/content/Other/doc/russian_trusted_root_ca.cer"
-ROOT_SHA256 = "d26d2d0231b7c39f92cc738512ba54103519e4405d68b5bd703e9788ca8ecf31"
-MAX_CERT_BYTES = 65536
-
-
-def verify_root(data: bytes) -> str:
-    """Accept PEM or DER transport, pin SHA-256 of the canonical DER certificate.
-
-    An official .cer can be distributed as PEM text. Hashing PEM transport
-    bytes against a DER fingerprint incorrectly rejects the exact same root.
-    No certificate is trusted unless the canonical DER fingerprint matches.
-    """
-    if not isinstance(data, bytes) or len(data) > MAX_CERT_BYTES or len(data) < 200:
-        raise ValueError("Invalid root CA certificate size")
-
-    der = data
-    if b"-----BEGIN CERTIFICATE-----" in data:
-        try:
-            pem = data.decode("ascii").strip()
-            if (not pem.startswith("-----BEGIN CERTIFICATE-----")
-                    or not pem.endswith("-----END CERTIFICATE-----")
-                    or pem.count("-----BEGIN CERTIFICATE-----") != 1
-                    or pem.count("-----END CERTIFICATE-----") != 1):
-                raise ValueError("Invalid PEM certificate wrapper")
-            der = ssl.PEM_cert_to_DER_cert(pem)
-        except (ValueError, UnicodeError) as error:
-            raise ValueError("Invalid PEM certificate format") from None
-
-    if hashlib.sha256(der).hexdigest() != ROOT_SHA256:
-        raise ValueError("Official root CA fingerprint mismatch; nothing trusted")
-    return ssl.DER_cert_to_PEM_cert(der)
+# Re-export the identical production verifier when app dependencies exist.
+# The minimal stdlib-only trusted-probe offline job has no httpx installed;
+# load the SAME locally versioned verifier without importing app.sources
+# package side effects in that one isolated diagnostic environment.
+try:
+    from app.sources.eis_pinned_ca import MAX_CERT_BYTES, ROOT_SHA256, verify_root
+except ModuleNotFoundError as exc:
+    if exc.name != "httpx":
+        raise
+    from runpy import run_path
+    _scoped_ca = run_path(
+        str(Path(__file__).resolve().parents[1] / "app" / "sources" / "eis_pinned_ca.py")
+    )
+    MAX_CERT_BYTES = _scoped_ca["MAX_CERT_BYTES"]
+    ROOT_SHA256 = _scoped_ca["ROOT_SHA256"]
+    verify_root = _scoped_ca["verify_root"]
 
 
 def official_download() -> bytes:
@@ -56,6 +41,16 @@ def official_download() -> bytes:
         if url.scheme != "https" or url.hostname != "gu-st.ru" or response.status != 200:
             raise ValueError("Official CA download origin/status mismatch")
         return response.read(MAX_CERT_BYTES + 1)
+
+
+def pinned_ssl_context(source_file: Path) -> ssl.SSLContext:
+    """Load only the fingerprint-verified root in memory on Windows or Linux.
+
+    No /dev/stdin, system-store installation, environment CA or second file
+    read is needed. Hostname and certificate validation remain mandatory.
+    """
+    pem = verify_root(source_file.read_bytes())
+    return ssl.create_default_context(cadata=pem)
 
 
 def run(source_file: Path | None = None) -> int:

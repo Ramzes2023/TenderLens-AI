@@ -16,7 +16,7 @@ _SOURCE_KEY = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}\Z")
 
 # Only sources that explicitly identify the EIS original in their own
 # adapter contract. Non-EIS platform number formats are never reclassified.
-_EIS_44_ORIGINAL = frozenset({"eis", "eis_44_html", "fabrikant_44_public"})
+_EIS_44_ORIGINAL = frozenset({"eis", "eis_44_html", "fabrikant_44_public", "ru_ingushetia_eis44", "ru_ingushetia_fabrikant44"})
 _EIS_223_ORIGINAL = frozenset({"eis", "eis_223"})
 
 def original_notice_key(notice: TenderNotice) -> tuple[str, str]:

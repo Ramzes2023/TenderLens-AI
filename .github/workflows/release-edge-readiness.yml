@@ -8,6 +8,8 @@ on:
       - .env.example
       - scripts/verify_public_https.py
       - scripts/ci_public_pilot_release_policy.py
+      - scripts/ci_public_compose_resolved.py
+      - tests/test_public_compose_resolved.py
       - tests/test_verify_public_https.py
       - tests/test_public_pilot_release_policy.py
       - .github/workflows/release-edge-readiness.yml
@@ -55,6 +57,31 @@ jobs:
           print('STATIC_PUBLIC_EDGE_GATES=PASS')
           print('PRODUCTION_PUBLIC_DEPLOYMENT=NOT_PERFORMED')
           PY
+  resolved-compose-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check resolved public Compose with ONLY disposable example env
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e .env
+          trap 'rm -f .env' EXIT
+          cp .env.example .env
+          printf '\nTENDERLENS_DOMAIN=valyqon-ci.example.org\nACME_EMAIL=ci@example.org\n' >> .env
+          docker compose -f compose.public.yaml config --format json > "${RUNNER_TEMP}/valyqon-public-resolved.json"
+          python -m scripts.ci_public_compose_resolved "${RUNNER_TEMP}/valyqon-public-resolved.json"
+          echo 'REAL_PUBLIC_HTTPS=NOT_TESTED'
+          echo 'LIVE_TENDERS_AND_BOT=NOT_TESTED'
+      - name: Regression tests for interpolated source/bot/paywall guards
+        run: |
+          python -m pip install pytest==9.1.1
+          python -m pytest -q tests/test_public_compose_resolved.py tests/test_public_pilot_release_policy.py
+
   public-edge-probe:
     if: github.event_name == 'workflow_dispatch' && inputs.public_https_url != ''
     runs-on: ubuntu-latest

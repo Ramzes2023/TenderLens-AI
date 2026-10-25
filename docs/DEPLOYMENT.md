@@ -104,5 +104,34 @@ Existing production keeps its current runtime env, project name and volume.
 The branding change requires no data or infrastructure migration; see
 [compatibility](BRANDING_COMPATIBILITY.md). This guide does not authorize a deployment.
 
+### Exact public Compose environment-file behavior
+
+`.env.public.example` is **only a template**. Compose does not automatically load
+a file named `.env.public`. Public edge variable interpolation requires an
+explicit `--env-file .env.public`; the `api` service still separately requires
+a secured `.env` through its `env_file` entry. Do not commit either file.
+
+On a **dedicated authorized staging VPS only**, after provisioning the real
+DNS hostname, ACME contact and a dedicated non-customer state volume:
+
+```sh
+# Provision .env and .env.public through the operator's secret channel first.
+docker compose --env-file .env.public -f compose.public.yaml config --quiet
+# Review every rendered setting privately. Do not paste secret-bearing
+# 'docker compose config' output into GitHub logs or public chat.
+docker compose --env-file .env.public -f compose.public.yaml up -d --build api caddy
+python -B scripts/verify_public_https.py --url https://YOUR-REAL-DOMAIN
+```
+
+This is **not** an instruction to run the command against the existing VPS or
+production data before independent acceptance. In particular, do not run
+`down -v`, do not start a second Telegram polling process and do not expose
+PostgreSQL, Mailpit, the bot or the API directly to the public Internet.
+The bot is intentionally absent from the initial HTTPS-only staging startup.
+Public analytics operate in **real-data mode** in the release candidate;
+without verified Worker storage they must show an empty/unavailable state, not
+fictional notice counts. Paid source details stay locked pending entitlements.
+See [current release blockers](PUBLIC_LAUNCH_READINESS_20261025.md).
+
 Single-node storage, process-local throttling and operational backup/retention
 requirements still apply. HTTPS does not imply high availability or certification.

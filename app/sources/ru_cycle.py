@@ -28,6 +28,13 @@ RU_APPROVED_SOURCES = (
     # without explicit configuration.
     "ru_ingushetia_eis44",
     "ru_ingushetia_fabrikant44",
+    # Preserve concurrently reviewed regional sources already approved on
+    # main. These keys remain inert unless the merged catalog independently
+    # registers AND the operator explicitly enables each source.
+    # Samara public listing is list-only; do not claim deep-card verification.
+    "ru_samara_public_list",
+    # Dagestan original details can require login; do not claim deep access.
+    "ru_dagestan_public_list",
 )
 
 

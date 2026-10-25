@@ -75,7 +75,7 @@ def public_pilot_failures(compose: str, template: str) -> list[str]:
         return problems
     for service_name in ("api", "bot"):
         body = services[service_name]
-        if "\n    ports:" in body:
+        if any(line == "    ports:" for line in body.splitlines()):
             problems.append(service_name + " must not publish API/bot ports")
         try:
             env = _environment(body)
@@ -94,7 +94,7 @@ def public_pilot_failures(compose: str, template: str) -> list[str]:
                 problems.append("Illustrative metrics must be marked demo")
             if env.get("VALYQON_RESTRICT_PAID_SOURCE_DETAILS") != "true":
                 problems.append("Unverified merchant billing must not unlock paid details")
-    if "\n    ports:" not in services["caddy"]:
+    if not any(line == "    ports:" for line in services["caddy"].splitlines()):
         problems.append("Public edge must explicitly publish only Caddy ports")
     defaults = {}
     for raw in template.splitlines():

@@ -57,6 +57,7 @@ services:
     command: ["python", "-m", "app.bot"]
     environment:
       # No customer poll/alerts until a real authorized Bot API receipt is verified.
+      MONITORING_ENABLED: "false"
       APP_ENV: production
       # Explicitly block unaccepted external publisher sources even if .env is stale.
       GPB_ETP_PUBLIC_ENABLED: "false"

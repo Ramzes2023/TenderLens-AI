@@ -9,12 +9,23 @@ services:
       - .env
     environment:
       APP_ENV: production
+      MONITORING_ENABLED: "false"
+      # Explicitly block unaccepted external publisher sources even if .env is stale.
+      GPB_ETP_PUBLIC_ENABLED: "false"
+      ROSELTORG_PUBLIC_ENABLED: "false"
+      TEKTORG_PUBLIC_ENABLED: "false"
+      B2B_CENTER_ENABLED: "false"
+      EIS_44_HTML_ENABLED: "false"
+      EIS_223_ENABLED: "false"
+      VALYQON_RU_BACKGROUND_CATALOG_ENABLED: "false"
+      VALYQON_DEADLINE_ALERTS_ENABLED: "false"
+      VALYQON_PUBLIC_AI_ENABLED: "false"
       API_HOST: 0.0.0.0
       API_PORT: 8000
       API_RELOAD: "false"
       # Fail-closed before merchant-backed subscription verification exists.
-      # Public graphs are explicitly illustrative until independently validated live observations.
-      VALYQON_PUBLIC_ANALYTICS_MODE: "demo"
+      # Real-data only: no illustrative market numbers, even if source tables are empty.
+      VALYQON_PUBLIC_ANALYTICS_MODE: "real"
       VALYQON_RESTRICT_PAID_SOURCE_DETAILS: "true"
       TENDERLENS_TRUSTED_PROXY_IPS: 172.30.19.2
       DATABASE_URL: sqlite:////app/data/tenderlens.db
@@ -45,7 +56,19 @@ services:
       - .env
     command: ["python", "-m", "app.bot"]
     environment:
+      # No customer poll/alerts until a real authorized Bot API receipt is verified.
+      MONITORING_ENABLED: "false"
       APP_ENV: production
+      # Explicitly block unaccepted external publisher sources even if .env is stale.
+      GPB_ETP_PUBLIC_ENABLED: "false"
+      ROSELTORG_PUBLIC_ENABLED: "false"
+      TEKTORG_PUBLIC_ENABLED: "false"
+      B2B_CENTER_ENABLED: "false"
+      EIS_44_HTML_ENABLED: "false"
+      EIS_223_ENABLED: "false"
+      VALYQON_RU_BACKGROUND_CATALOG_ENABLED: "false"
+      VALYQON_DEADLINE_ALERTS_ENABLED: "false"
+      VALYQON_PUBLIC_AI_ENABLED: "false"
       DATABASE_URL: sqlite:////app/data/tenderlens.db
       DATA_DIR: /app/data
       RAG_QDRANT_PATH: /app/data/qdrant-bot

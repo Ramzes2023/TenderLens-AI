@@ -1,0 +1,45 @@
+name: RU five blocked-source Windows operator audit offline gate
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/ru_five_windows_live_audit.ps1
+      - tests/test_ru_five_windows_live_audit.py
+      - .github/workflows/ru-five-windows-audit-contract.yml
+permissions:
+  contents: read
+jobs:
+  five-source-audit-offline-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Ensure main-only and explicit proof no-send contract
+        run: python -m pytest -q tests/test_ru_five_windows_live_audit.py
+
+  five-source-windows-powershell-parse:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Parse PowerShell 7 audit offline; NEVER execute five-source network probe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Join-Path $PWD 'scripts/ru_five_windows_live_audit.ps1'),
+              [ref]$tokens, [ref]$errors
+          )
+          if ($errors.Count -ne 0) { throw 'Operator audit syntax rejected' }
+          Write-Host 'RU_FIVE_POWERSHELL_SYNTAX=PASS_OFFLINE'
+          Write-Host 'RU_FIVE_UPSTREAM_NETWORK_TESTED=NO'
+          Write-Host 'PRODUCTION_CHANGED=NO'

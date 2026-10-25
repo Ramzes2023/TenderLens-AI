@@ -7,6 +7,7 @@ production readiness require *separate* acceptance.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import re
 import socket
@@ -15,7 +16,7 @@ import sys
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
 
 def validate_target(url: str) -> tuple[str, int]:
@@ -32,7 +33,23 @@ def validate_target(url: str) -> tuple[str, int]:
     if any(not 1 <= len(label) <= 63 or label.startswith("-") or label.endswith("-")
            for label in hostname.split(".")):
         raise ValueError("Invalid DNS label.")
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        pass
+    else:
+        raise ValueError("A verified DNS hostname, not an IP literal, is required.")
     return hostname, 443
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    """A public health check must not follow redirects to another host."""
+    def redirect_request(self, request, fp, code, msg, headers, newurl):
+        return None
+
+
+def _https_client():
+    return build_opener(HTTPSHandler(context=ssl.create_default_context()), _NoRedirect())
 
 
 def verify(url: str, timeout: float = 8.0) -> dict:
@@ -53,12 +70,17 @@ def verify(url: str, timeout: float = 8.0) -> dict:
         addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
         if not addresses:
             raise OSError("No DNS addresses found.")
+        for address in addresses:
+            parsed_ip = ipaddress.ip_address(address[4][0])
+            if not parsed_ip.is_global:
+                raise OSError("DNS record resolves outside globally routable address space.")
         result["dns"] = "PASS"
-        # HTTPS must validate the remote certificate with normal trust anchors.
-        context = ssl.create_default_context()
-        with urlopen(Request(f"https://{host}/", headers={
+        # TLS validates the public certificate. Redirects are rejected to
+        # prevent a health-probe input from reaching any unrelated host.
+        client = _https_client()
+        with client.open(Request(f"https://{host}/", headers={
                 "User-Agent": "VALYQON-ReleaseReadiness/1.0"
-        }), context=context, timeout=timeout) as response:
+        }), timeout=timeout) as response:
             result["tls"] = "PASS"
             payload = response.read(131072).decode("utf-8",errors="replace")
             result["homepage"] = ("PASS" if response.status==200
@@ -68,9 +90,9 @@ def verify(url: str, timeout: float = 8.0) -> dict:
                 headers.get("Strict-Transport-Security","").lower()
                 and headers.get("X-Content-Type-Options","").lower()=="nosniff"
                 else "FAIL")
-        with urlopen(Request(f"https://{host}/health", headers={
+        with client.open(Request(f"https://{host}/health", headers={
                 "User-Agent": "VALYQON-ReleaseReadiness/1.0"
-        }), context=context, timeout=timeout) as response:
+        }), timeout=timeout) as response:
             data = response.read(16384)
             result["health"] = ("PASS" if response.status==200
                 and isinstance(json.loads(data),dict) else "FAIL")

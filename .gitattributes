@@ -1,3 +1,6 @@
 # Preserve the exact bytes of the authenticated SHA-256-pinned synthetic fixture.
 # Git text normalization would otherwise alter its intentional CRLF newline.
 tests/fixtures/p39d_offline_history.json -text
+# Keep the Git-blob commitment valid in Windows checkouts as well as Linux CI.
+tests/fixtures/ted_public_search_sample.json -text
+tests/fixtures/eforms/official_sdk_cn_24_minimal.xml -text

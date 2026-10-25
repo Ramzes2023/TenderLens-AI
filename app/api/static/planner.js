@@ -83,6 +83,11 @@
       }).sort((a,b)=>(a.date?.day.getTime()??Infinity)-(b.date?.day.getTime()??Infinity));
   };
   const keyFor=record=>String(record.id);
+  function openSaved(record){
+    window.dispatchEvent(new CustomEvent('valyqon-open-saved',{
+      detail:{id:record.id,organizationId:state.organizationId,companyId:state.activeCompanyId}
+    }));
+  }
   const workflowURL=id=>'/api/v1/organizations/'+encodeURIComponent(state.organizationId)+
     '/shortlist/'+encodeURIComponent(id)+'/workflow';
   function reset(message){
@@ -221,9 +226,7 @@
     link.href='#saved';link.title=t('Open the full saved tender detail',
       'Открыть полную карточку сохранённой закупки');
     link.addEventListener('click',()=>{
-      window.dispatchEvent(new CustomEvent('valyqon-open-saved',{
-        detail:{id:record.id,organizationId:state.organizationId,companyId:state.activeCompanyId}
-      }));
+      openSaved(record);
     });
     footer.append(link);article.append(footer);
     if(canEdit()&&record.workflow){
@@ -354,6 +357,7 @@
         for(const record of (grouped.get(date)||[]).slice(0,4)){
           const a=make('a','vq-month-tender '+decorateDate(record.date),title(record));
           a.href='#saved';a.title=deadlineInfo(record.date);
+          a.addEventListener('click',()=>openSaved(record));
           cell.append(a);
         }
         if((grouped.get(date)||[]).length>4)

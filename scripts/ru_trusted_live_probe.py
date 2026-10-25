@@ -212,7 +212,9 @@ RECOVERY_FIVE = {
     "ingushetia": TARGETS["fabrikant_44_mirror"],
     "chechnya": ON_DEMAND_TARGETS["eis_official_home"],
     "roseltorg": TARGETS["roseltorg"],
-    "gpb": TARGETS["gpb_rss"],
+    # Match the actual Worker HTML list URL; RSS availability is an optional
+    # separate origin observation and must not veto independently verified HTML.
+    "gpb": ON_DEMAND_TARGETS["gpb_public_html"],
     "tektorg": TARGETS["tektorg"],
 }
 

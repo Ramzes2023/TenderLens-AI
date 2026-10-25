@@ -1,7 +1,7 @@
 name: RU approved source operator queue contract
 on:
   push:
-    branches: [feat/ru-approved-catalog-queue-cycle-20261018]
+    branches: [feat/ru-approved-catalog-queue-cycle-20261018, feat/ru-ingushetia-eis-live-gated-20261019]
     paths:
       - app/sources/ru_cycle.py
       - app/sources/ru_ingushetia_eis44.py
@@ -27,5 +27,5 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -r requirements-dev.txt
-      - name: Nine strictly enabled RU adapters, including two opt-in Ingushetia first-party routes, durable hourly dedup
+      - name: Operator RU queue keeps main Samara/Dagestan plus opt-in Ingushetia, fenced SQL hourly dedup
         run: python -m pytest -q tests/test_ru_approved_operator_cycle.py tests/test_ru_ingushetia_hourly_enqueue.py tests/test_cis_operator_cycle.py tests/test_ru_kavkaz_firstparty_registration.py

@@ -1,6 +1,6 @@
 """Release-edge verification contracts; never contact external hosts in tests."""
 from email.message import Message
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from urllib.error import URLError
 import pytest
 
@@ -44,8 +44,8 @@ def test_public_edge_pass_does_not_claim_tenders_or_payments():
         }),
         _Response('{"status":"ready"}'),
     ]
-    with patch("scripts.verify_public_https.socket.getaddrinfo",return_value=[("dummy",)]),\
-         patch("scripts.verify_public_https.urlopen",side_effect=responses):
+    with patch("scripts.verify_public_https.socket.getaddrinfo",return_value=[(0,0,0,"",("93.184.216.34",443))]),\
+         patch("scripts.verify_public_https._https_client",return_value=MagicMock(open=MagicMock(side_effect=responses))):
         result=verify("https://example.org")
     assert result["public_edge_pass"] is True
     assert result["ready_for_commercial_launch"] is False
@@ -54,10 +54,25 @@ def test_public_edge_pass_does_not_claim_tenders_or_payments():
 
 
 def test_tls_or_network_failure_blocks_release_without_leaking_body():
-    with patch("scripts.verify_public_https.socket.getaddrinfo",return_value=[("dummy",)]),\
-         patch("scripts.verify_public_https.urlopen",side_effect=URLError("network unavailable")):
+    with patch("scripts.verify_public_https.socket.getaddrinfo",return_value=[(0,0,0,"",("93.184.216.34",443))]),\
+         patch("scripts.verify_public_https._https_client",return_value=MagicMock(open=MagicMock(side_effect=URLError("network unavailable")))):
         result=verify("https://example.org")
     assert result["public_edge_pass"] is False
     assert result["ready_for_commercial_launch"] is False
     assert "network unavailable" not in str(result)
     assert main(["--url","http://example.org"])==2
+
+
+def test_private_dns_is_refused_before_any_http_request():
+    with patch("scripts.verify_public_https.socket.getaddrinfo",
+               return_value=[(0,0,0,"",("127.0.0.1",443))]),\
+         patch("scripts.verify_public_https._https_client") as client:
+        result=verify("https://example.org")
+    assert result["public_edge_pass"] is False
+    assert result["dns"]=="NOT_VERIFIED"
+    client.assert_not_called()
+
+
+def test_redirect_handler_refuses_cross_host_and_any_redirect():
+    from scripts.verify_public_https import _NoRedirect
+    assert _NoRedirect().redirect_request(None,None,302,"Moved",{}, "https://elsewhere.example/") is None

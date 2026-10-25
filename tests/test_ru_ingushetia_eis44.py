@@ -1,0 +1,553 @@
+"""Offline contract checks only; these do NOT certify live EIS delivery."""
+import asyncio
+from dataclasses import replace
+
+import pytest
+
+from app.monitoring.config import MonitoringSettings, MonitoringConfigurationError, load_monitoring_settings
+from app.sources.catalog import build_source_catalog
+from app.sources.eis_rss import EisRssSource, SourceError
+from app.sources.ingestion import HOSTS
+from app.sources.models import TenderNotice
+from app.sources.ru_dedup import deduplicate
+from app.sources.ru_ingushetia_eis44 import (
+    SOURCE_ID, REGION, RSS_URL, IngushetiaEis44Source, normalize_ingushetia_notice,
+    validate_ingushetia_rss_url,
+)
+from app.sources.ru_notice_identity import original_notice_key
+
+N = "0114500000826002364"
+U = "https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber=" + N
+
+
+def sample(**overrides):
+    fields = dict(source=SOURCE_ID, external_id="EIS-GUID-" + N,
+                  tender_number=N, url=U, title="Поставка медицинских товаров",
+                  customer="Комитет государственного заказа Республики Ингушетия",
+                  region=None, published_at="2026-10-16")
+    fields.update(overrides)
+    return TenderNotice(**fields)
+
+
+def settings(**kw):
+    fields = dict(enabled=False, interval_seconds=600, max_items=10,
+                  max_notifications_per_cycle=3, request_timeout=20,
+                  eis_rss_urls=(), ca_bundle_file=None, profile_feeds_enabled=False)
+    fields.update(kw)
+    return MonitoringSettings(**fields)
+
+
+def test_region_requires_original_metadata_not_title_or_untrusted_query():
+    n = normalize_ingushetia_notice(sample())
+    assert n.region == REGION
+    assert n.external_id == n.tender_number == N
+    assert n.enrichment is None
+    assert normalize_ingushetia_notice(sample(
+        customer="Больница постороннего региона", region=None,
+        title="Доставка в Республику Ингушетия")) is None
+    assert normalize_ingushetia_notice(sample(
+        customer="Муниципальное учреждение", region="Ингушетия республика")) is not None
+
+
+@pytest.mark.parametrize("patch", [
+    {"tender_number": None},
+    {"tender_number": "12345"},
+    {"url": U.replace("zakupki.gov.ru", "zakupki.gov.ru.attacker.example")},
+    {"url": U.replace("https:", "http:")},
+    {"url": U.replace("regNumber=", "regNumber=123&other=")},
+    {"url": U + "&token=test"},
+    {"url": U.replace("/epz/order/notice/", "/223/purchase/public/purchase/")},
+    {"source": "eis"},
+])
+def test_unsafe_original_provenance_fails_closed(patch):
+    with pytest.raises(SourceError):
+        normalize_ingushetia_notice(sample(**patch))
+
+
+def test_no_duplicate_eis_notifications_for_same_original():
+    regional = normalize_ingushetia_notice(sample())
+    ordinary = replace(regional, source="eis", external_id="different-eis-guid")
+    assert original_notice_key(regional) == ("eis_44", N)
+    assert original_notice_key(ordinary) == ("eis_44", N)
+    unique, duplicates = deduplicate([ordinary, regional])
+    assert len(unique) == 1 and unique[0].source == "eis"
+    assert len(duplicates) == 1
+
+
+def test_original_card_probe_preserves_rss_client_identity(monkeypatch):
+    import httpx
+    from scripts import ci_ru_ingushetia_live_worker as acceptance
+    from app.sources.eis_rss import EIS_USER_AGENT
+
+    requests = []
+    def respond(request):
+        requests.append(request)
+        status = 200 if request.headers.get("User-Agent") == EIS_USER_AGENT else 404
+        return httpx.Response(status, text=N, headers={"Content-Type": "text/html"})
+
+    def client(**kwargs):
+        assert kwargs["verify"].check_hostname
+        assert kwargs["follow_redirects"] is False
+        assert kwargs["trust_env"] is False
+        return httpx.AsyncClient(transport=httpx.MockTransport(respond), **kwargs)
+
+    monkeypatch.setattr(acceptance, "source_client", client)
+    asyncio.run(acceptance._check_original_links([sample()]))
+    assert str(requests[0].url) == U
+
+
+def test_source_stays_off_by_default_and_uses_one_official_host():
+    from urllib.parse import parse_qs, urlsplit
+    assert RSS_URL.startswith("https://zakupki.gov.ru/")
+    query = parse_qs(urlsplit(RSS_URL).query)
+    assert query["searchString"] == ["Ингушетия"]
+    assert query["fz44"] == ["on"]
+    assert "regions" not in query
+    assert HOSTS[SOURCE_ID] == frozenset({"zakupki.gov.ru"})
+    assert SOURCE_ID not in build_source_catalog(settings()).registry.keys()
+    catalog = build_source_catalog(settings(ru_ingushetia_eis44_enabled=True))
+    assert SOURCE_ID in catalog.enabled_keys
+    entry = catalog.registry.get(SOURCE_ID)
+    assert isinstance(entry.source, IngushetiaEis44Source)
+    assert entry.homepage_url == RSS_URL and entry.official
+    assert entry.jurisdictions == ("RU",)
+
+
+def test_environment_explicit_opt_in_and_invalid_value(monkeypatch, tmp_path):
+    f = tmp_path / "not-present.env"
+    monkeypatch.delenv("RU_INGUSHETIA_EIS44_ENABLED", raising=False)
+    assert load_monitoring_settings(f).ru_ingushetia_eis44_enabled is False
+    monkeypatch.setenv("RU_INGUSHETIA_EIS44_ENABLED", "true")
+    assert load_monitoring_settings(f).ru_ingushetia_eis44_enabled is True
+    monkeypatch.setenv("RU_INGUSHETIA_EIS44_ENABLED", "invalid")
+    with pytest.raises(MonitoringConfigurationError):
+        load_monitoring_settings(f)
+
+
+def test_live_adapter_shape_with_mocked_upstream_never_counts_as_live(monkeypatch):
+    async def synthetic(self, limit=20):
+        assert limit == 100
+        assert self.name == SOURCE_ID and self.direct is True
+        assert self.urls == (RSS_URL,)
+        return [
+            sample(title="Поставка тестового оборудования"),
+            sample(customer="Чужой регион", title="Ингушетия оборудование", region=None,
+                   tender_number="0114500000826002365",
+                   url=U.replace(N, "0114500000826002365")),
+            sample(),
+        ]
+
+    monkeypatch.setattr(EisRssSource, "fetch", synthetic)
+    notices = asyncio.run(IngushetiaEis44Source().fetch(limit=2))
+    assert len(notices) == 1 and notices[0].external_id == N
+    with pytest.raises(ValueError):
+        asyncio.run(IngushetiaEis44Source().fetch(limit=0))
+
+@pytest.mark.parametrize("url", [
+    "https://evil.example/epz/order/extendedsearch/rss.html?fz44=on",
+    "http://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on",
+    "https://zakupki.gov.ru.evil.test/epz/order/extendedsearch/rss.html?fz44=on",
+    "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz223=on",
+    "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&fz223=on",
+    "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&fz44=off",
+    "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&token=secret",
+    "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on#fragment",
+    "https://user@zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on",
+    "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on\\\\danger",
+])
+def test_operator_rss_override_rejects_untrusted_destinations(url):
+    with pytest.raises(ValueError):
+        validate_ingushetia_rss_url(url)
+
+
+def test_operator_can_supply_exact_official_eis_filter_without_scoping_shortcut():
+    url = "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&searchString=%D0%9F%D0%BE%D1%81%D1%82%D0%B0%D0%B2%D0%BA%D0%B0"
+    assert validate_ingushetia_rss_url(url) == url
+    entry = build_source_catalog(settings(
+        ru_ingushetia_eis44_enabled=True, ru_ingushetia_eis44_rss_url=url,
+    )).registry.get(SOURCE_ID)
+    assert entry.source.rss_url == url
+    assert normalize_ingushetia_notice(sample(customer="Чужой регион", region=None)) is None
+
+
+def test_env_operator_filter_is_stored_but_source_stays_disabled(monkeypatch, tmp_path):
+    monkeypatch.setenv("RU_INGUSHETIA_EIS44_RSS_URL",
+                       "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on")
+    monkeypatch.delenv("RU_INGUSHETIA_EIS44_ENABLED", raising=False)
+    cfg = load_monitoring_settings(tmp_path / "absent.env")
+    assert cfg.ru_ingushetia_eis44_rss_url.endswith("fz44=on")
+    assert SOURCE_ID not in build_source_catalog(cfg).enabled_keys
+
+def test_regional_sources_are_not_falsely_advertised_when_operator_flags_off():
+    from app.api.public_sources import source_directory
+    result = source_directory(build_source_catalog(settings()))
+    assert "ru_ingushetia_eis44" not in build_source_catalog(settings()).enabled_keys
+    assert "ru_ingushetia_fabrikant44" not in build_source_catalog(settings()).enabled_keys
+    assert "ru_ingushetia_eis44" not in {item["key"] for item in result["sources"]}
+    assert "ru_ingushetia_fabrikant44" not in {item["key"] for item in result["sources"]}
+
+
+
+def test_real_monitor_dispatch_path_uses_isolated_ack_sink_without_telegram_api(tmp_path):
+    """Synthetic offline contract; live CI separately supplies genuine EIS SQL rows."""
+    from scripts.ci_ru_ingushetia_live_worker import _check_isolated_dispatch
+
+    cfg = settings(ru_ingushetia_eis44_enabled=True,
+                   ru_background_catalog_enabled=True,
+                   max_notifications_per_cycle=1)
+    catalog = build_source_catalog(cfg)
+    first = normalize_ingushetia_notice(sample())
+    other_id = "0114500000826002365"
+    second = normalize_ingushetia_notice(sample(
+        tender_number=other_id,
+        url=U.replace(N, other_id),
+        external_id="EIS-GUID-" + other_id,
+        title="Поставка средств связи",
+    ))
+    assert first is not None and second is not None
+    # Only one alert can be marked as seen during this constrained cycle;
+    # the second genuinely stored record must remain eligible next cycle.
+    from app.database.backend import Database
+    from app.database.config import DatabaseSettings
+    from app.sources.opportunities import OpportunityRepository
+    from app.sources.ingestion import connector_version
+    db = Database(DatabaseSettings("synthetic-monitor-contract", tmp_path / "opportunities.sqlite"))
+    try:
+        store = OpportunityRepository(db)
+        store.initialize()
+        for notice in (first, second):
+            store.upsert(notice, connector_version(SOURCE_ID))
+        count = asyncio.run(_check_isolated_dispatch(
+            catalog, cfg, store.read(SOURCE_ID, limit=2), tmp_path / "ingush-staging-ack.sqlite",
+            repository=store,
+        ))
+    finally:
+        db.close()
+    assert count == 1
+
+
+def test_live_eis_acceptance_worker_only_downloads_rss_once(monkeypatch):
+    """Offline synthetic contract, NOT proof of external EIS or Telegram delivery."""
+    from scripts import ci_ru_ingushetia_live_worker as acceptance
+
+    numbers = (N, "0114500000826002365")
+    titles = ("Поставка медицинских товаров", "Поставка связи")
+    fetch_calls = []
+    detail_calls = []
+
+    async def fake_fetch(self, limit=20):
+        fetch_calls.append(limit)
+        assert limit == 10
+        return [
+            normalize_ingushetia_notice(sample(
+                tender_number=number,
+                external_id="EIS-GUID-" + number,
+                url=U.replace(N, number),
+                title=title,
+            ))
+            for number, title in zip(numbers, titles)
+        ]
+
+    async def fake_original_cards(notices):
+        detail_calls.append([item.tender_number for item in notices])
+        assert all(item.source == SOURCE_ID for item in notices)
+        assert len(notices) == 2
+
+    monkeypatch.setattr(IngushetiaEis44Source, "fetch", fake_fetch)
+    monkeypatch.setattr(acceptance, "_check_original_links", fake_original_cards)
+
+    result = acceptance.proof()
+    assert fetch_calls == [10]
+    assert len(detail_calls) == 1 and set(detail_calls[0]) == set(numbers)
+    assert result["leased_worker_state"] == "succeeded"
+    assert result["stored_and_searchable"] == 2
+    assert result["original_cards_corresponding_to_list"] == 2
+    assert result["isolated_staging_sink_dispatches"] == 2
+    assert result["replay_duplicates"] == 0
+    assert result["real_user_notifications_sent"] is False
+
+
+def test_eis_live_acceptance_retries_one_real_durable_queue_transport_failure(monkeypatch):
+    """Offline synthetic source outage; the actual durable Worker retries itself."""
+    from scripts import ci_ru_ingushetia_live_worker as acceptance
+    from app.sources.http import ConnectorTransportError
+
+    numbers = (N, "0114500000826002365")
+    calls = []
+
+    async def fake_fetch(self, limit=20):
+        calls.append(limit)
+        if len(calls) == 1:
+            raise ConnectorTransportError(retryable=True)
+        return [
+            normalize_ingushetia_notice(sample(
+                tender_number=number, external_id=number,
+                url=U.replace(N, number), title="Поставка медицинских товаров",
+            )) for number in numbers
+        ]
+
+    async def check_originals(notices):
+        assert {n.tender_number for n in notices} == set(numbers)
+
+    monkeypatch.setattr(IngushetiaEis44Source, "fetch", fake_fetch)
+    monkeypatch.setattr(acceptance, "_check_original_links", check_originals)
+
+    result = acceptance.proof()
+    assert calls == [10, 10]
+    assert result["leased_worker_state"] == "succeeded"
+    assert result["stored_and_searchable"] == 2
+    assert result["isolated_staging_sink_dispatches"] == 2
+
+
+def test_safe_eis_failure_shape_excludes_untrusted_job_fields():
+    from types import SimpleNamespace
+    from scripts.ci_ru_ingushetia_live_worker import IngushetiaEisWorkerFailure
+
+    errored = IngushetiaEisWorkerFailure(SimpleNamespace(
+        state="failed", failure_code="handler_error"
+    ))
+    assert errored.job_state == "failed"
+    assert errored.job_failure_code == "handler_error"
+
+    unknown = IngushetiaEisWorkerFailure(SimpleNamespace(
+        state="secret state", failure_code="token=TEST_PRIVATE_VALUE"
+    ))
+    assert unknown.job_state == "UNKNOWN"
+    assert unknown.job_failure_code == "UNKNOWN"
+    assert "TEST_PRIVATE_VALUE" not in str(unknown)
+
+
+def test_eis_live_acceptance_survives_two_consecutive_retryable_transport_failures(monkeypatch):
+    """Offline: third and final real durable Worker attempt succeeds after two outages."""
+    from scripts import ci_ru_ingushetia_live_worker as acceptance
+    from app.sources.http import ConnectorTransportError
+
+    numbers = (N, "0114500000826002365")
+    calls = []
+
+    async def fake_fetch(self, limit=20):
+        calls.append(limit)
+        if len(calls) <= 2:
+            raise ConnectorTransportError(retryable=True)
+        return [
+            normalize_ingushetia_notice(sample(
+                tender_number=number, external_id=number,
+                url=U.replace(N, number), title="Поставка медицинских товаров",
+            )) for number in numbers
+        ]
+
+    async def check_originals(notices):
+        assert {n.tender_number for n in notices} == set(numbers)
+
+    monkeypatch.setattr(IngushetiaEis44Source, "fetch", fake_fetch)
+    monkeypatch.setattr(acceptance, "_check_original_links", check_originals)
+
+    result = acceptance.proof()
+    assert calls == [10, 10, 10]  # exactly the real queue's three attempts
+    assert result["leased_worker_state"] == "succeeded"
+    assert result["stored_and_searchable"] == 2
+    assert result["isolated_staging_sink_dispatches"] == 2
+    assert result["real_user_notifications_sent"] is False
+
+
+def test_eis_live_acceptance_stays_red_after_all_three_real_retry_failures(monkeypatch):
+    """Offline: no fixture, TLS bypass or status override can claim a failed source."""
+    from scripts import ci_ru_ingushetia_live_worker as acceptance
+    from app.sources.http import ConnectorTransportError
+    from scripts.ci_ru_ingushetia_live_worker import IngushetiaEisWorkerFailure
+
+    calls = []
+
+    async def always_down(self, limit=20):
+        calls.append(limit)
+        raise ConnectorTransportError(retryable=True)
+
+    monkeypatch.setattr(IngushetiaEis44Source, "fetch", always_down)
+    with pytest.raises(IngushetiaEisWorkerFailure) as error:
+        acceptance.proof()
+    assert calls == [10, 10, 10]
+    assert error.value.job_state == "failed"
+    assert error.value.job_failure_code == "handler_error"
+
+
+def test_normal_operator_enabled_ingushetia_eis_uses_pinned_root_by_default(monkeypatch):
+    """Offline. Production adapter path must match the successful isolated CA test."""
+    from pathlib import Path
+    from scripts.ru_eis_pinned_tls_probe import verify_root
+
+    seen = []
+
+    async def source_fetch(self, limit=20):
+        seen.append((self.ca_bundle_file, self.system_trust, self.direct, limit))
+        assert self.ca_bundle_file is not None
+        assert Path(self.ca_bundle_file).name == "russian_trusted_root_ca_pem.crt"
+        verify_root(self.ca_bundle_file.read_bytes())
+        return [sample()]
+
+    monkeypatch.setattr(EisRssSource, "fetch", source_fetch)
+    result = asyncio.run(IngushetiaEis44Source().fetch(limit=2))
+    assert [n.tender_number for n in result] == [N]
+    assert len(seen) == 1 and seen[0][1:] == (False, True, 100)
+
+
+def test_ingushetia_eis_rejects_unpinned_ca_override_before_network(monkeypatch, tmp_path):
+    import app.sources.ru_ingushetia_eis44 as source
+
+    bad = tmp_path / "wrong-root.pem"
+    bad.write_text("-----BEGIN CERTIFICATE-----\nNOT_AN_OFFICIAL_CERT\n-----END CERTIFICATE-----\n")
+
+    async def never_network(*args, **kwargs):
+        pytest.fail("No network on bad official CA")
+
+    monkeypatch.setattr(EisRssSource, "fetch", never_network)
+    with pytest.raises(ValueError, match="root CA|certificate"):
+        asyncio.run(source.IngushetiaEis44Source(ca_bundle_file=bad).fetch(limit=2))
+
+
+def test_explicit_windows_system_trust_mode_does_not_secretly_override_ca(monkeypatch):
+    """Explicit operator choice only; real Windows trust verified in separate CI."""
+    seen = []
+
+    async def source_fetch(self, limit=20):
+        seen.append((self.ca_bundle_file, self.system_trust, self.direct))
+        return [sample()]
+
+    monkeypatch.setattr(EisRssSource, "fetch", source_fetch)
+    assert len(asyncio.run(IngushetiaEis44Source(system_trust=True).fetch(limit=1))) == 1
+    assert seen == [(None, True, True)]
+
+
+def test_pinned_eis_root_resolves_both_docker_and_checkout_layouts(tmp_path):
+    """Offline: production Docker copies app/ and /app/certs but NO scripts/."""
+    from pathlib import Path
+    from app.sources.eis_pinned_ca import select_verified_eis_ca, verify_root
+
+    original = Path(__file__).resolve().parents[1] / "russian_trusted_root_ca_pem.crt"
+    pem = original.read_bytes()
+    verify_root(pem)
+
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    (checkout / original.name).write_bytes(pem)
+    assert select_verified_eis_ca(project_root=checkout) == checkout / original.name
+
+    docker = tmp_path / "app"
+    (docker / "certs").mkdir(parents=True)
+    (docker / "certs" / original.name).write_bytes(pem)
+    assert select_verified_eis_ca(project_root=docker) == docker / "certs" / original.name
+    assert select_verified_eis_ca(docker / "certs" / original.name) == docker / "certs" / original.name
+
+
+def test_pinned_eis_root_rejects_tampered_docker_cert_and_absent_layout(tmp_path):
+    from pathlib import Path
+    from app.sources.eis_pinned_ca import select_verified_eis_ca
+
+    with pytest.raises(ValueError, match="not bundled"):
+        select_verified_eis_ca(project_root=tmp_path)
+
+    certs = tmp_path / "certs"
+    certs.mkdir()
+    (certs / "russian_trusted_root_ca_pem.crt").write_bytes(b"tampered")
+    with pytest.raises(ValueError, match="certificate"):
+        select_verified_eis_ca(project_root=tmp_path)
+
+    # A bad explicit override must not fall back to the real bundled root.
+    existing = Path(__file__).resolve().parents[1] / "russian_trusted_root_ca_pem.crt"
+    with pytest.raises(ValueError, match="certificate"):
+        select_verified_eis_ca(certs / "russian_trusted_root_ca_pem.crt",
+                               project_root=existing.parent)
+
+
+def test_pinned_root_probe_reexports_same_production_verifier():
+    from app.sources.eis_pinned_ca import verify_root as production_verify, ROOT_SHA256 as production_pin
+    from scripts.ru_eis_pinned_tls_probe import verify_root as probe_verify, ROOT_SHA256 as probe_pin
+
+    assert probe_verify is production_verify
+    assert probe_pin == production_pin
+
+
+def test_operator_enabled_ingushetia_uses_only_fingerprint_pinned_root(tmp_path):
+    """Production catalog must use the same verified CA as successful local proof."""
+    from app.sources.eis_pinned_ca import select_verified_eis_ca
+
+    bundled = select_verified_eis_ca()
+    cat = build_source_catalog(settings(
+        ru_ingushetia_eis44_enabled=True, eis_system_trust_enabled=True,
+    ))
+    source = cat.registry.get(SOURCE_ID).source
+    assert source.ca_bundle_file == bundled
+    assert source.system_trust is False  # no OS store escape hatch
+
+    malicious = tmp_path / "untrusted.pem"
+    malicious.write_bytes(b"bad root" * 100)
+    with pytest.raises(ValueError):
+        build_source_catalog(settings(
+            ru_ingushetia_eis44_enabled=True, ca_bundle_file=malicious,
+        ))
+    # No enabled regional EIS -> selecting an unrelated global EIS bundle
+    # must not activate the new source or alter existing EIS settings.
+    disabled = build_source_catalog(settings(ca_bundle_file=malicious))
+    assert SOURCE_ID not in disabled.enabled_keys
+
+
+
+
+def test_ingushetia_eis_uses_verified_bundled_root_without_system_trust():
+    """Official root selected from local checkout or Docker, only for regional EIS."""
+    from app.sources.eis_pinned_ca import select_verified_eis_ca, verify_root
+    from app.sources.eis_rss import eis_tls_verify
+
+    source = IngushetiaEis44Source()
+    assert source.ca_bundle_file == select_verified_eis_ca()
+    assert source.system_trust is False
+    assert verify_root(source.ca_bundle_file.read_bytes()).startswith(
+        "-----BEGIN CERTIFICATE-----"
+    )
+    assert eis_tls_verify(
+        direct=True, system_trust=False,
+        ca_bundle_file=source.ca_bundle_file,
+    ) == str(source.ca_bundle_file)
+
+    cat = build_source_catalog(settings(ru_ingushetia_eis44_enabled=True))
+    assert cat.registry.get(SOURCE_ID).source.ca_bundle_file == select_verified_eis_ca()
+    assert cat.registry.get("eis").source.ca_bundle_file is None
+
+
+def test_ingushetia_eis_local_and_docker_root_layouts_pin_same_cert(tmp_path):
+    from app.sources.eis_pinned_ca import ROOT_FILENAME, select_verified_eis_ca
+
+    actual = select_verified_eis_ca()
+    docker_certs = tmp_path / "certs"
+    docker_certs.mkdir()
+    (docker_certs / ROOT_FILENAME).write_bytes(actual.read_bytes())
+    assert select_verified_eis_ca(project_root=tmp_path) == docker_certs / ROOT_FILENAME
+    (docker_certs / ROOT_FILENAME).unlink()
+    (tmp_path / ROOT_FILENAME).write_bytes(actual.read_bytes())
+    assert select_verified_eis_ca(project_root=tmp_path) == tmp_path / ROOT_FILENAME
+
+
+def test_ingushetia_eis_invalid_or_absent_bundled_root_fails_closed(monkeypatch, tmp_path):
+    from functools import partial
+    from app.sources import ru_ingushetia_eis44 as mod
+    from app.sources.eis_pinned_ca import ROOT_FILENAME, select_verified_eis_ca
+
+    monkeypatch.setattr(mod, "select_verified_eis_ca",
+                        partial(select_verified_eis_ca, project_root=tmp_path))
+    with pytest.raises(SourceError, match="Verified scoped EIS root is unavailable"):
+        IngushetiaEis44Source()
+
+    fake = tmp_path / ROOT_FILENAME
+    fake.write_text("untrusted certificate", encoding="ascii")
+    with pytest.raises(SourceError, match="Verified scoped EIS root is unavailable"):
+        IngushetiaEis44Source()
+
+
+
+def test_operator_explicit_eis_ca_or_system_trust_not_silently_overridden(tmp_path):
+    # Preserve explicit operator settings. System-trust mode must remain
+    # mutually exclusive with a CA file in eis_tls_verify().
+    source = IngushetiaEis44Source(system_trust=True)
+    assert source.ca_bundle_file is None and source.system_trust is True
+    operator_ca = tmp_path / "operator.pem"
+    source = IngushetiaEis44Source(ca_bundle_file=operator_ca)
+    assert source.ca_bundle_file == operator_ca and source.system_trust is False

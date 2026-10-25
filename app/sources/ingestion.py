@@ -45,6 +45,8 @@ HOSTS = {
     'south_ural_public': frozenset({'www.vendorportal.ru'}),
     'ru_dagestan_public_list': frozenset({'goszakaz.e-dag.ru'}),
     'ru_samara_public_list': frozenset({'webtorgi.samregion.ru'}),
+    'ru_ingushetia_eis44': frozenset({'zakupki.gov.ru'}),
+    'ru_ingushetia_fabrikant44': frozenset({'44.fabrikant.ru', 'soap4.fabrikant.ru'}),
     'eis_223': frozenset({'zakupki.gov.ru'}),
     'eis_44_html': frozenset({'zakupki.gov.ru'}),
     'eis': frozenset({'zakupki.gov.ru', 'www.zakupki.gov.ru'}),
@@ -176,6 +178,8 @@ class ConnectorSyncHandler:
                          else min(self.max_records, 2) + 1 if source_id == 'kavkaz_rf_firstparty'
                          else min(self.max_records, 10) + 1 if source_id == 'south_ural_public'
                          else 1 + min(3, (self.max_records + 9) // 10) if source_id == 'ru_samara_public_list'
+                         else 1 if source_id == 'ru_ingushetia_eis44'
+                         else 12 if source_id == 'ru_ingushetia_fabrikant44'
                          else 2 if source_id == 'ru_dagestan_public_list'
                          # B2B public root may require one same-origin partial
                          # office fallback; source.fetch has exactly two calls.

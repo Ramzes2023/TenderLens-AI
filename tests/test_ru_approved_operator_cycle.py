@@ -170,3 +170,25 @@ def test_ingushetia_pair_stays_default_off_and_only_explicit_opt_in_is_queued(tm
     assert original_notice_key(originals[0]) == original_notice_key(originals[1]) == (
         "eis_44", number,
     )
+
+
+def test_main_samara_config_is_preserved_without_enabling_ingushetia(monkeypatch, tmp_path):
+    """Merge-safety: main's separate regional opt-in survives this draft branch."""
+    from app.monitoring.config import load_monitoring_settings, MonitoringConfigurationError
+
+    config_file = tmp_path / "missing.env"
+    monkeypatch.delenv("RU_SAMARA_PUBLIC_LIST_ENABLED", raising=False)
+    baseline = load_monitoring_settings(config_file)
+    assert baseline.ru_samara_public_list_enabled is False
+    assert baseline.ru_ingushetia_eis44_enabled is False
+    assert baseline.ru_ingushetia_fabrikant44_enabled is False
+
+    monkeypatch.setenv("RU_SAMARA_PUBLIC_LIST_ENABLED", "true")
+    selected = load_monitoring_settings(config_file)
+    assert selected.ru_samara_public_list_enabled is True
+    assert selected.ru_ingushetia_eis44_enabled is False
+    assert selected.ru_ingushetia_fabrikant44_enabled is False
+
+    monkeypatch.setenv("RU_SAMARA_PUBLIC_LIST_ENABLED", "unsafe")
+    with pytest.raises(MonitoringConfigurationError):
+        load_monitoring_settings(config_file)

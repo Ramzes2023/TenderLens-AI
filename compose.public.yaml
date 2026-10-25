@@ -9,6 +9,14 @@ services:
       - .env
     environment:
       APP_ENV: production
+      # Pilot release: blocked first-party sources cannot be silently enabled
+      # by a stale .env. Lift only through a separately reviewed live acceptance.
+      GPB_ETP_PUBLIC_ENABLED: "false"
+      TEKTORG_PUBLIC_ENABLED: "false"
+      B2B_CENTER_ENABLED: "false"
+      EIS_44_HTML_ENABLED: "false"
+      EIS_223_ENABLED: "false"
+      VALYQON_RU_BACKGROUND_CATALOG_ENABLED: "false"
       API_HOST: 0.0.0.0
       API_PORT: 8000
       API_RELOAD: "false"
@@ -46,6 +54,16 @@ services:
     command: ["python", "-m", "app.bot"]
     environment:
       APP_ENV: production
+      # No live subscriber claims until production Bot API receipt is verified.
+      MONITORING_ENABLED: "false"
+      # Pilot release: blocked first-party sources cannot be silently enabled
+      # by a stale .env. Lift only through a separately reviewed live acceptance.
+      GPB_ETP_PUBLIC_ENABLED: "false"
+      TEKTORG_PUBLIC_ENABLED: "false"
+      B2B_CENTER_ENABLED: "false"
+      EIS_44_HTML_ENABLED: "false"
+      EIS_223_ENABLED: "false"
+      VALYQON_RU_BACKGROUND_CATALOG_ENABLED: "false"
       DATABASE_URL: sqlite:////app/data/tenderlens.db
       DATA_DIR: /app/data
       RAG_QDRANT_PATH: /app/data/qdrant-bot

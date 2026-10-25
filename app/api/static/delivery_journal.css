@@ -1,0 +1,58 @@
+/* Authenticated delivery journal: actual sender receipts, no invented activity. */
+body.saas .vq-delivery-journal{min-width:0;margin:0 0 35px}
+body.saas .vq-delivery-hero{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;background:radial-gradient(ellipse at right,#3c4b9a 0,transparent 60%),linear-gradient(125deg,#122756,#1b2a66);padding:29px 32px;color:#fff;border:1px solid #405fa7;border-radius:20px;box-shadow:0 12px 35px #203e7729}
+body.saas .vq-delivery-eyebrow{font-weight:850;color:#90a9eb;font-size:10px;letter-spacing:.12em}
+body.saas .vq-delivery-hero h2{color:#fff;font-size:clamp(25px,3vw,40px);letter-spacing:-.04em;margin:9px 0}
+body.saas .vq-delivery-hero p{font-size:12px;color:#cbdbfb;line-height:1.6;max-width:650px}
+body.saas .vq-delivery-actions{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+body.saas .vq-delivery-actions button,body.saas .vq-delivery-actions a{display:inline-flex;align-items:center;justify-content:center;min-height:41px;padding:10px 14px;border:1px solid #8ca8ed;color:#fff;background:#466add;border-radius:10px;font-size:11px;font-weight:800;cursor:pointer;text-decoration:none}
+body.saas .vq-delivery-actions a{background:#ffffff20}
+body.saas .vq-delivery-actions button:disabled{opacity:.55;cursor:not-allowed}
+body.saas #vqDeliveryStatus{min-height:22px;margin:17px 0;color:#6b7fa5;font-size:12px}
+body.saas .vq-delivery-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:24px}
+body.saas .vq-delivery-summary article{background:#fff;border:1px solid #e0e8f5;border-radius:15px;padding:19px;display:grid;gap:11px;box-shadow:0 8px 19px #1d36730c}
+body.saas .vq-delivery-summary small{font-size:11px;color:#7183a2}
+body.saas .vq-delivery-summary strong{font-size:30px;color:#2d4e97;font-weight:850;letter-spacing:-.05em;font-variant-numeric:tabular-nums}
+body.saas .vq-delivery-summary article:nth-child(2) strong{color:#24866f}
+body.saas .vq-delivery-summary article:nth-child(3) strong{color:#c16b44}
+body.saas .vq-delivery-summary article:nth-child(4) strong{color:#8978aa}
+body.saas .vq-delivery-list-heading{display:flex;justify-content:space-between;align-items:end;gap:12px;margin:12px 0}
+body.saas .vq-delivery-list-heading .vq-delivery-eyebrow{color:#6580bd}
+body.saas .vq-delivery-list-heading h3{font-size:19px;letter-spacing:-.025em;color:#23385f;margin:7px 0}
+body.saas .vq-delivery-list-heading>span{color:#8494af;font-size:11px}
+body.saas .vq-delivery-rows{display:grid;gap:10px}
+body.saas .vq-delivery-row{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #e1e8f5;border-radius:14px;padding:17px;min-width:0}
+body.saas .vq-delivery-glyph{width:40px;height:40px;flex-shrink:0;display:grid;place-items:center;background:#e8efff;color:#506ce0;border-radius:12px;font-size:23px}
+body.saas .vq-delivery-row.sent .vq-delivery-glyph{background:#e3f8ef;color:#249779}
+body.saas .vq-delivery-row.failed .vq-delivery-glyph{background:#fff0e9;color:#d07955}
+body.saas .vq-delivery-row-copy{display:grid;gap:6px;min-width:0;flex:1}
+body.saas .vq-delivery-row-copy strong{font-size:13px;color:#243d6e}
+body.saas .vq-delivery-row-copy small,body.saas .vq-delivery-row-copy span{font-size:10px;color:#7d90b0}
+body.saas .vq-delivery-row-meta{display:grid;gap:8px;justify-items:end}
+body.saas .vq-delivery-state{border-radius:999px;padding:7px 11px;background:#f1f3fa;color:#687caa;font-size:10px;font-weight:800;white-space:nowrap}
+body.saas .vq-delivery-state.sent{background:#e5f7ef;color:#247c60}
+body.saas .vq-delivery-state.failed{background:#fff1e8;color:#ab6542}
+body.saas .vq-delivery-row-meta small{font-size:10px;color:#7e8ead}
+body.saas .vq-delivery-row-meta a{font-size:10px;color:#446adc;text-decoration:none;font-weight:800}
+body.saas .vq-delivery-empty{min-height:280px;background:radial-gradient(ellipse at 50% 0%,#eff3ff,#fff 65%);border:1px dashed #c6d3eb;border-radius:17px;display:grid;justify-items:center;place-content:center;padding:28px;text-align:center;gap:8px}
+body.saas .vq-delivery-empty-icon{display:grid;place-items:center;width:64px;height:64px;background:#e6edff;border-radius:17px;color:#5f7ee8;font-size:32px}
+body.saas .vq-delivery-empty h3{font-size:20px;color:#294778;margin:7px 0}
+body.saas .vq-delivery-empty p{max-width:490px;color:#8292b0;line-height:1.65;font-size:12px}
+body.saas .vq-delivery-empty a{color:#416ddd;font-weight:800;text-decoration:none;font-size:12px}
+body.saas .vq-delivery-disclaimer{border-top:1px solid #e7ebf5;color:#8492ac;padding-top:14px;margin:23px 0;font-size:11px;line-height:1.65}
+@media(max-width:850px){body.saas .vq-delivery-summary{grid-template-columns:repeat(2,minmax(0,1fr))}body.saas .vq-delivery-hero{padding:21px}body.saas .vq-delivery-row{align-items:start}}
+@media(max-width:570px){body.saas .vq-delivery-row{flex-wrap:wrap}body.saas .vq-delivery-row-meta{width:100%;display:flex;align-items:center;justify-content:space-between}body.saas .vq-delivery-summary{gap:8px}body.saas .vq-delivery-summary article{padding:12px}body.saas .vq-delivery-summary strong{font-size:24px}}
+
+
+/* Authenticated opt-in controls backed by the existing preferences API. */
+body.saas .vq-delivery-prefs{margin-top:19px;padding:22px;background:#fff;border:1px solid #dbe5f7;border-radius:16px;box-shadow:0 8px 26px #2241790c;display:grid;gap:16px}
+body.saas .vq-delivery-prefs .vq-delivery-eyebrow{color:#607bc8}
+body.saas .vq-delivery-prefs h3{font-size:19px;color:#233d71;margin:8px 0;letter-spacing:-.025em}
+body.saas .vq-delivery-prefs p{font-size:11px;color:#7588a7;line-height:1.65;max-width:850px}
+body.saas .vq-delivery-prefs-controls{display:flex;flex-wrap:wrap;align-items:center;gap:12px}
+body.saas .vq-delivery-prefs-controls label{display:flex;align-items:center;gap:10px;border:1px solid #e1e7f5;padding:11px 13px;border-radius:11px;color:#3a578c;font-size:12px;font-weight:800}
+body.saas .vq-delivery-prefs-controls input{width:17px;height:17px;accent-color:#486bf0}
+body.saas .vq-delivery-prefs-controls button{background:#436beb;color:#fff;border:1px solid #7d98ed;border-radius:10px;font-size:11px;padding:11px 15px;min-height:43px;font-weight:850;cursor:pointer}
+body.saas .vq-delivery-prefs-controls button:disabled{cursor:not-allowed;opacity:.45}
+body.saas .vq-delivery-prefs-controls button:hover:not(:disabled){background:#5879ec}
+body.saas #vqDeliveryPrefsStatus{margin:0;color:#637dab;font-size:11px}

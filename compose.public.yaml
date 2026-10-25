@@ -47,6 +47,10 @@ services:
     stop_grace_period: 20s
 
   bot:
+    # Explicit production opt-in: default "docker compose up -d" MUST NOT
+    # start Telegram polling or send replies before live Bot API acceptance.
+    profiles:
+      - verified-bot
     build:
       context: .
       dockerfile: Dockerfile

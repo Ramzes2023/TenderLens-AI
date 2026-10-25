@@ -17,6 +17,8 @@ UNVERIFIED_FLAGS = (
     "EIS_223_ENABLED",
     "VALYQON_RU_BACKGROUND_CATALOG_ENABLED",
     "ROSELTORG_PUBLIC_ENABLED",  # unmerged candidate; future default-deny
+    "VALYQON_DEADLINE_ALERTS_ENABLED",
+    "VALYQON_PUBLIC_AI_ENABLED",
 )
 
 
@@ -87,8 +89,8 @@ def public_pilot_failures(compose: str, template: str) -> list[str]:
         for key in UNVERIFIED_FLAGS:
             if env.get(key) != "false":
                 problems.append(service_name + ": " + key + " must be forced false")
-        if service_name == "bot" and env.get("MONITORING_ENABLED") != "false":
-            problems.append("Unverified real Bot API sends must stay off in pilot")
+        if env.get("MONITORING_ENABLED") != "false":
+            problems.append(service_name + ": unverified background Bot API or source monitoring must stay off")
         if service_name == "api":
             if env.get("VALYQON_PUBLIC_ANALYTICS_MODE") != "real":
                 problems.append("Public metrics must use real data only; no illustrative/demo values")

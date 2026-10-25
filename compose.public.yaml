@@ -12,6 +12,7 @@ services:
       # Pilot release: blocked first-party sources cannot be silently enabled
       # by a stale .env. Lift only through a separately reviewed live acceptance.
       GPB_ETP_PUBLIC_ENABLED: "false"
+      ROSELTORG_PUBLIC_ENABLED: "false"
       TEKTORG_PUBLIC_ENABLED: "false"
       B2B_CENTER_ENABLED: "false"
       EIS_44_HTML_ENABLED: "false"
@@ -59,6 +60,7 @@ services:
       # Pilot release: blocked first-party sources cannot be silently enabled
       # by a stale .env. Lift only through a separately reviewed live acceptance.
       GPB_ETP_PUBLIC_ENABLED: "false"
+      ROSELTORG_PUBLIC_ENABLED: "false"
       TEKTORG_PUBLIC_ENABLED: "false"
       B2B_CENTER_ENABLED: "false"
       EIS_44_HTML_ENABLED: "false"

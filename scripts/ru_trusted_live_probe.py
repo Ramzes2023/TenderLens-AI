@@ -229,15 +229,20 @@ class _RoseltorgVisibleOriginalCandidates(HTMLParser):
                     or "%" in href or "\\" in href
                     or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in href)):
                 return
-            p = urlsplit(href)
-            if (p.scheme not in ("", "https") or
-                    (p.netloc and p.netloc != "www.roseltorg.ru") or
-                    p.query or p.fragment or p.username or p.password or
-                    p.port is not None):
+            try:
+                p = urlsplit(href)
+                if (p.scheme not in ("", "https") or
+                        (p.netloc and p.netloc != "www.roseltorg.ru") or
+                        p.query or p.fragment or p.username or p.password or
+                        p.port is not None):
+                    return
+                m = self.PATH.fullmatch(p.path)
+                if m:
+                    self.current = (m.group(1), [])
+            except ValueError:
+                # One malformed external link must not block visible valid
+                # first-party procurement candidates on the same page.
                 return
-            m = self.PATH.fullmatch(p.path)
-            if m:
-                self.current = (m.group(1), [])
 
     def handle_data(self, data):
         if self.current is not None and not self.hidden:

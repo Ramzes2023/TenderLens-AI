@@ -7,6 +7,7 @@ No data stored. This diagnoses reachability, NOT successful tender ingestion.
 from __future__ import annotations
 
 import http.client
+from html.parser import HTMLParser
 import json
 from concurrent.futures import ThreadPoolExecutor
 import ipaddress
@@ -204,6 +205,66 @@ def describe(mode: str, payload: bytes) -> dict[str, int]:
     }
 
 
+
+class _RoseltorgVisibleOriginalCandidates(HTMLParser):
+    """Count public listing links, never treat them as verified detail records."""
+    HIDDEN = frozenset({"head", "script", "style", "template", "noscript",
+                        "svg", "iframe", "object"})
+    PATH = re.compile(r"/procedure/([A-Z0-9]{8,24})(?:/1)?/?\Z")
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.hidden = []
+        self.current = None
+        self.ids = set()
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self.HIDDEN:
+            self.hidden.append(tag)
+        if self.hidden:
+            return
+        if tag == "a":
+            href = dict(attrs).get("href")
+            if (type(href) is not str or not href or len(href) > 1500
+                    or "%" in href or "\\" in href
+                    or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in href)):
+                return
+            p = urlsplit(href)
+            if (p.scheme not in ("", "https") or
+                    (p.netloc and p.netloc != "www.roseltorg.ru") or
+                    p.query or p.fragment or p.username or p.password or
+                    p.port is not None):
+                return
+            m = self.PATH.fullmatch(p.path)
+            if m:
+                self.current = (m.group(1), [])
+
+    def handle_data(self, data):
+        if self.current is not None and not self.hidden:
+            self.current[1].append(data)
+
+    def handle_endtag(self, tag):
+        if self.hidden:
+            if self.hidden[-1] == tag:
+                self.hidden.pop()
+            return
+        if tag == "a" and self.current is not None:
+            identity, title_parts = self.current
+            if any(piece.strip() for piece in title_parts):
+                self.ids.add(identity)
+            self.current = None
+
+
+def roseltorg_visible_original_candidates(body: bytes) -> int:
+    """Potential original links visible in public list, NOT detail verification."""
+    if type(body) is not bytes or not 0 < len(body) <= MAX_BYTES:
+        raise ValueError("Invalid publisher document")
+    parsed = _RoseltorgVisibleOriginalCandidates()
+    parsed.feed(body.decode("utf-8-sig", "replace"))
+    parsed.close()
+    return min(100, len(parsed.ids))
+
+
 # Five independent sources requiring real procurement-release proof; labels
 # map only to published first-party transport targets. Ingushetia's registered
 # Fabrikant mirror is a 44-FZ EIS crosspost; Chechnya's EIS HOME confirms only
@@ -230,8 +291,13 @@ def priority_five_network() -> int:
         try:
             mime, body = read_public(target)
             observed = describe(target.mode, body)
-            return {"source": label, "status": "HTTPS_VISIBLE_NOT_INGESTED",
+            item = {"source": label, "status": "HTTPS_VISIBLE_NOT_INGESTED",
                     "bytes": len(body), "document_tokens": observed}
+            if label == "roseltorg":
+                item["visible_canonical_candidates_not_verified"] = (
+                    roseltorg_visible_original_candidates(body)
+                )
+            return item
         except Non200OfficialResponse as error:
             return {"source": label, "status": "HTTP_REACHABLE_NON200",
                     "http_status": error.status}

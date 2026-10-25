@@ -82,6 +82,7 @@ def test_non200_http_status_is_reported_only_as_sanitized_integer():
     data = SCRIPT.read_text("utf-8")
     assert "HTTP_REACHABLE_NON200" in data
     assert "RU_FIVE_NETWORK_" in data and "_HTTP_STATUS=" in data
+    assert "RU_FIVE_ROSELTORG_VISIBLE_CANDIDATES_NOT_VERIFIED=" in data
     assert "$code -ge 100 -and $code -le 599" in data
     assert "StringComparison]::Ordinal" in data
     assert "REDACTED_INVALID_OBSERVATION" in data

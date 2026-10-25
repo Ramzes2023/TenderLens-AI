@@ -78,3 +78,20 @@ def test_production_real_metrics_are_empty_when_no_verified_source_data():
     assert 'VALYQON_PUBLIC_ANALYTICS_MODE: "demo"' not in COMPOSE
     assert 'VALYQON_PUBLIC_ANALYTICS_MODE=real' in ENV
     assert 'MONITORING_ENABLED: "false"' in service_regions(COMPOSE)['bot']
+
+
+def test_public_api_background_monitoring_also_cannot_start_from_stale_env():
+    api_block = service_regions(COMPOSE)["api"]
+    assert 'MONITORING_ENABLED: "false"' in api_block
+    bad = COMPOSE.replace('MONITORING_ENABLED: "false"',
+                          'MONITORING_ENABLED: "true"', 1)
+    failures = public_pilot_failures(bad, ENV)
+    assert any("api:" in f and "monitoring" in f for f in failures)
+
+
+@pytest.mark.parametrize("flag", ("VALYQON_DEADLINE_ALERTS_ENABLED", "VALYQON_PUBLIC_AI_ENABLED"))
+def test_public_ai_and_customer_deadline_sends_stay_off_in_both_services(flag):
+    for name in ("api", "bot"):
+        assert f'{flag}: "false"' in service_regions(COMPOSE)[name]
+    malicious = COMPOSE.replace(f'{flag}: "false"', f'{flag}: "true"', 1)
+    assert flag in " ".join(public_pilot_failures(malicious, ENV))

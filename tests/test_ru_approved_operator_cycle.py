@@ -28,12 +28,13 @@ def queue(tmp_path, cat):
     return db, repo, ConnectorSyncService(JobService(repo), cat)
 
 
-def test_only_nine_explicitly_verified_operator_sources_and_no_side_effects(tmp_path):
+def test_reviewed_operator_sources_preserve_main_samara_dagestan_and_ingushetia(tmp_path):
     assert RU_APPROVED_SOURCES == (
         "b2b_center", "lenobl_small_public", "nmck_native_public",
         "mikroton_tender", "south_ural_public", "stan_commercial_public",
         "kavkaz_rf_firstparty", "ru_ingushetia_eis44",
         "ru_ingushetia_fabrikant44",
+        "ru_samara_public_list", "ru_dagestan_public_list",
     )
     cat = catalog()
     with pytest.raises(ValueError, match="No operator-approved"):
@@ -91,18 +92,21 @@ def test_ru_cycle_hourly_repeat_is_idempotent_then_next_hour_unique(tmp_path):
         first = enqueue_approved_ru(service, cat, now=start)
         same_hour = enqueue_approved_ru(service, cat, now=start + timedelta(minutes=42))
         next_hour = enqueue_approved_ru(service, cat, now=start + timedelta(hours=1))
-        assert tuple(first) == RU_APPROVED_SOURCES
+        # Additional main routes are retained in the allowlist, but this
+        # staging branch must not enqueue them without an enabled registration.
+        expected = tuple(k for k in RU_APPROVED_SOURCES if k in cat.enabled_keys)
+        assert tuple(first) == expected
         assert {s: j["job_id"] for s, j in first.items()} == {
             s: j["job_id"] for s, j in same_hour.items()
         }
         assert all(first[key]["job_id"] != next_hour[key]["job_id"]
-                   for key in RU_APPROVED_SOURCES)
+                   for key in expected)
         with db.connect() as conn:
             assert conn.execute("SELECT COUNT(*) FROM durable_jobs").fetchone()[0] == 18
             ids = {json.loads(row[0])["source_id"] for row in conn.execute(
                 "SELECT payload_json FROM durable_jobs"
             )}
-        assert ids == set(RU_APPROVED_SOURCES)
+        assert ids == set(expected)
     finally:
         db.close()
 

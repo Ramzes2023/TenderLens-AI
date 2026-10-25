@@ -13,15 +13,18 @@ from scripts.ci_public_pilot_release_policy import UNVERIFIED_FLAGS
 EXPECTED_PORTS = {("80", "80", "tcp"), ("443", "443", "tcp"), ("443", "443", "udp")}
 
 
-def violations(document: dict) -> list[str]:
+def violations(document: dict, *, mode: str = 'verified-bot') -> list[str]:
     errors=[]
     if not isinstance(document, dict) or not isinstance(document.get("services"),dict):
         return ["Invalid resolved Compose document"]
     services=document["services"]
-    if set(services)!={"api","bot","caddy"}:
-        errors.append("Unexpected public services; only api, bot, caddy allowed")
+    if mode not in {"default","verified-bot"}:
+        return ["Unknown Compose profile validation mode"]
+    expected = {"api","caddy"} if mode=="default" else {"api","bot","caddy"}
+    if set(services)!=expected:
+        errors.append("Unexpected public services in "+mode+" mode: "+str(sorted(services)))
         return errors
-    for name in ("api","bot"):
+    for name in ("api",) if mode=="default" else ("api","bot"):
         service=services[name]
         if service.get("ports"):
             errors.append(name+" must never publish host ports")
@@ -37,10 +40,10 @@ def violations(document: dict) -> list[str]:
             if str(env.get(flag)).lower()!="false":
                 errors.append(name+" unverified feature must be off: "+flag)
     api=services["api"]
-    bot=services["bot"]
+    bot=services.get("bot")
     if api.get("profiles"):
         errors.append("API must be active by default")
-    if bot.get("profiles")!=["verified-bot"]:
+    if mode=="verified-bot" and bot.get("profiles")!=["verified-bot"]:
         errors.append("Bot must require verified-bot profile: MONITORING=false alone is insufficient")
     for flag,want in (
         ("VALYQON_PUBLIC_ANALYTICS_MODE","real"),
@@ -73,10 +76,12 @@ def violations(document: dict) -> list[str]:
 
 
 def main() -> int:
-    if len(sys.argv)!=2:
-        raise SystemExit("Usage: python -m scripts.ci_public_compose_resolved <config.json>")
-    document=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-    issues=violations(document)
+    if len(sys.argv)!=3:
+        raise SystemExit("Usage: python -m scripts.ci_public_compose_resolved <default|verified-bot> <config.json>")
+    mode=sys.argv[1]
+    document=json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+    issues=violations(document,mode=mode)
+    print("RESOLVED_PUBLIC_COMPOSE_MODE="+mode)
     print("RESOLVED_PUBLIC_COMPOSE="+("BLOCKED" if issues else "PASS"))
     print("RESOLVED_PUBLIC_POLICY_ISSUES="+json.dumps(issues,ensure_ascii=False))
     print("BOT_DEFAULT_POLLING="+("BLOCKED" if not issues else "NOT_VERIFIED"))

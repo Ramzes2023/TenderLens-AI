@@ -30,6 +30,7 @@ from .south_ural_public import SouthUralPublicSource
 from .ru_dagestan_public_list import DagestanPublicListSource, GRID as DAG_PUBLIC_GRID
 from .ru_samara_public_list import SamaraPublicListSource, GRID as SAMARA_PUBLIC_GRID
 from .kavkaz_rf_firstparty import KavkazRfFirstpartySource
+from .ru_ingushetia_fabrikant44 import IngushetiaFabrikant44Source, LIST_URL as ING_FAB_LIST
 from .canada_buys_dataset import CanadaBuysDatasetSource
 from .eis_rss import EisRssSource, SourceError
 from .eis_44_public_html import Eis44PublicHtmlSource
@@ -769,6 +770,23 @@ def build_source_catalog(
             jurisdictions=("RU",),
             languages=("ru",),
             homepage_url="https://xn--80aafvlc.xn--p1ai/purchases_sales/zakupki/tekushchie-/",
+            official=False,
+            enabled=True,
+            capabilities=SourceCapabilities(),
+        ))
+
+    # Federally accredited marketplace mirrors EIS 44-FZ originals.
+    # This query route is NOT independently proven to filter by buyer.
+    # Fail closed unless each first-party list row and exact-ID detail corroborate.
+    if settings.ru_ingushetia_fabrikant44_enabled:
+        registry.register(SourceRegistration(
+            key="ru_ingushetia_fabrikant44",
+            display_name="Ингушетия — Фабрикант, зеркало ЕИС 44-ФЗ (проверка источника)",
+            source=IngushetiaFabrikant44Source(timeout=min(timeout, 30)),
+            transport=SourceTransport.HTML,
+            jurisdictions=("RU",),
+            languages=("ru",),
+            homepage_url=ING_FAB_LIST,
             official=False,
             enabled=True,
             capabilities=SourceCapabilities(),

@@ -20,6 +20,10 @@ RU_APPROVED_SOURCES = (
     "south_ural_public",
     "stan_commercial_public",
     "kavkaz_rf_firstparty",
+    # Proven native public LIST -> fenced Worker -> SQLite; original deep details not verified.
+    "ru_samara_public_list",
+    # Official anonymous Dagestan list -> fenced Worker/SQL; deep details login-protected.
+    "ru_dagestan_public_list",
     # EIS first-party originals passed local real Worker acceptance; the
     # accredited Fabrikant ETP mirror passed GitHub-hosted real acceptance
     # on 2026-10-20 (run 39407402210). These are *overlapping* 44-FZ
@@ -28,10 +32,6 @@ RU_APPROVED_SOURCES = (
     # without explicit configuration.
     "ru_ingushetia_eis44",
     "ru_ingushetia_fabrikant44",
-    # Proven native public LIST -> fenced Worker -> SQLite; original deep details not verified.
-    "ru_samara_public_list",
-    # Official anonymous Dagestan list -> fenced Worker/SQL; deep details login-protected.
-    "ru_dagestan_public_list",
 )
 
 

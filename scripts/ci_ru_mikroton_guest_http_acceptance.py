@@ -164,17 +164,39 @@ def acceptance():
                     if item.get("analysis_stage")!="metadata_preview":
                         raise AssertionError("Unverified AI analysis was claimed")
                 matches=len(discovery["items"])
+                # A real matched notice is saved through the user's actual
+                # tenant-scoped HTTP route and must survive a subsequent read.
+                selected=discovery["items"][0]
+                saved_response=private.post(api+"/shortlist",json=selected)
+                if saved_response.status_code!=200:
+                    raise AssertionError("Authorized real-notice shortlist save failed")
+                saved=saved_response.json()
+                if (saved.get("opportunity",{}).get("external_id")!=selected["external_id"] or
+                    saved.get("opportunity",{}).get("source")!=SOURCE):
+                    raise AssertionError("Saved notice identity changed")
+                remembered=private.get(api+"/shortlist")
+                if (remembered.status_code!=200 or
+                    not any(r.get("id")==saved.get("id") for r in remembered.json())):
+                    raise AssertionError("Real saved notice did not persist in account shortlist")
+                replay=private.post(api+"/shortlist",json=selected)
+                if replay.status_code!=200 or replay.json().get("id")!=saved.get("id"):
+                    raise AssertionError("Real saved opportunity is not duplicate-idempotent")
                 private.cookies.clear()
                 private.cookies.set(SESSION_COOKIE,auth.create_session(outsider))
                 denied=private.post(api+"/discover/tenders?snapshots=true")
                 if denied.status_code!=403:
                     raise AssertionError("Cross-tenant registered user could access search")
+                if private.get(api+"/shortlist").status_code!=403:
+                    raise AssertionError("Cross-tenant registered user could read saved genuine tenders")
             return {
                 "origin":SOURCE,
                 "real_worker_written":report["accepted_count"],
                 "stored_reloaded":len(persisted),
                 "guest_public_rows":data["shown"],
                 "authenticated_company_matches":matches,
+                "authorized_saved_real_notice":True,
+                "saved_replay_no_duplicates":True,
+                "outsider_saved_access_denied":True,
                 "cross_tenant_scope_denied":True,
                 "keyword_http_match":True,
                 "guest_details_locked":True,

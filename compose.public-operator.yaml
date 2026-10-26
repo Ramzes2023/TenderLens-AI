@@ -9,7 +9,7 @@ services:
   # continuously crashing or competing for an existing Telegram polling token.
   bot:
     profiles:
-      - authorized-telegram
+      - verified-bot
     environment:
       # A separate approved send test is still required to enable user alerts.
       MONITORING_ENABLED: "false"

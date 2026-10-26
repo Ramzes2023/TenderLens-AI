@@ -144,3 +144,59 @@ def test_public_edge_does_not_accept_legacy_login_even_when_http_200():
     assert result["homepage"]=="FAIL"
     assert result["public_edge_pass"] is False
     assert result["ready_for_commercial_launch"] is False
+
+
+def test_live_http_error_reports_status_and_phase_without_leaking_upstream_details():
+    """Public diagnosis may expose only the status integer, never response body."""
+    from io import BytesIO
+    from urllib.error import HTTPError
+    for code in (302, 403, 502):
+        error = HTTPError(
+            "https://example.org/", code, "sensitive response message",
+            {"Location": "https://private.invalid/token/SECRET123"},
+            BytesIO(b"private response body SECRET123"),
+        )
+        with (
+            patch("scripts.verify_public_https.socket.getaddrinfo",
+                  return_value=[(0,0,0,"",("93.184.216.34",443))]),
+            patch("scripts.verify_public_https._https_client",
+                  return_value=MagicMock(open=MagicMock(side_effect=error))),
+        ):
+            result = verify("https://example.org")
+        assert result["dns"] == "PASS"
+        assert result["homepage"] == "NOT_VERIFIED"
+        assert result["http_status"] == code
+        assert result["blocked_at"] == "homepage"
+        assert result["blocker_type"] == "HTTPError"
+        assert result["public_edge_pass"] is False
+        assert result["ready_for_commercial_launch"] is False
+        for secret in ("SECRET123", "private.invalid", "sensitive response"):
+            assert secret not in str(result)
+
+
+def test_live_health_http_error_identifies_health_phase():
+    from io import BytesIO
+    from urllib.error import HTTPError
+    success = _Response(
+        '<html><body class="landing premium">VALYQON'
+        '<form id="guestSearchForm"></form>'
+        '<div id="guestSearchResults"></div></body></html>',
+        {"Strict-Transport-Security":"max-age=31536000",
+         "X-Content-Type-Options":"nosniff"},
+    )
+    error = HTTPError("https://example.org/health", 503, "Service unavailable",
+                      {}, BytesIO(b"secret"))
+    with (
+        patch("scripts.verify_public_https.socket.getaddrinfo",
+              return_value=[(0,0,0,"",("93.184.216.34",443))]),
+        patch("scripts.verify_public_https._https_client",
+              return_value=MagicMock(open=MagicMock(side_effect=[success,error]))),
+    ):
+        result = verify("https://example.org")
+    assert result["tls"] == "PASS"
+    assert result["homepage"] == "PASS"
+    assert result["security_headers"] == "PASS"
+    assert result["health"] == "NOT_VERIFIED"
+    assert result["http_status"] == 503
+    assert result["blocked_at"] == "health"
+    assert result["public_edge_pass"] is False

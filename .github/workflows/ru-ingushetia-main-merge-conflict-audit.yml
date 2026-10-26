@@ -1,0 +1,55 @@
+name: RU Ingushetia main integration conflict gate
+
+# This is a read-only dry run. It never updates main, starts workers,
+# deploys source flags, accesses Telegram, or claims live reachability.
+on:
+  push:
+    branches: [feat/ru-ingushetia-eis-live-gated-20261019]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ru-ingushetia-main-merge-conflict-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prospective-main-merge-tree:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Checkout immutable Ingushetia source commit without credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Fetch current main and inspect hypothetical merge tree only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
+          echo "PROSPECTIVE_BASE=origin/main"
+          echo "PROSPECTIVE_HEAD=$GITHUB_SHA"
+          echo "NO_ACTUAL_MERGE=YES"
+          echo "NO_DEPLOYMENT=YES"
+          echo "NO_SECRETS=YES"
+          # Git's real three-way merge algorithm; no working tree/index
+          # mutation and no unsupported ours/theirs conflict resolution.
+          set +e
+          git merge-tree --write-tree --name-only origin/main "$GITHUB_SHA" > merge-conflict-audit.txt 2>&1
+          result=$?
+          set -e
+          if [ "$result" -eq 0 ]; then
+            echo "INGUSHETIA_MAIN_MERGE_TREE=CONFLICT_FREE"
+            cat merge-conflict-audit.txt
+          elif [ "$result" -eq 1 ]; then
+            echo "INGUSHETIA_MAIN_MERGE_TREE=CONFLICTED"
+            sed -n '1,120p' merge-conflict-audit.txt
+            echo "::error::Main/Ingushetia have unresolved file conflicts. Do not merge or deploy."
+            exit 1
+          else
+            echo "INGUSHETIA_MAIN_MERGE_TREE=DIAGNOSTIC_FAILED"
+            sed -n '1,120p' merge-conflict-audit.txt
+            exit "$result"
+          fi

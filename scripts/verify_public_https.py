@@ -141,9 +141,13 @@ def verify(url: str, timeout: float = 8.0) -> dict:
                     else "FAIL"
                 )
     except HTTPError as exc:
-        # An HTTP error means a public response was obtained over verified
-        # HTTPS. Log only its integer status and the endpoint class; never
-        # copy the message, Location header, body or upstream error text.
+        # urllib's HTTPSHandler uses ssl.create_default_context(): an actual
+        # HTTP status (including a legacy 303 -> /login) is received only
+        # AFTER certificate and hostname verification succeeded. Mark TLS
+        # observed, but never claim homepage, health, or public launch.
+        result["tls"] = "PASS"
+        # Emit only the integer status and endpoint class; never reveal
+        # Location URLs, response bodies, credentials or error text.
         result["blocker_type"] = "HTTPError"
         result["http_status"] = int(exc.code)
         result["blocked_at"] = phase

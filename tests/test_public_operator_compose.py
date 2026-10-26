@@ -16,7 +16,7 @@ def resolved():
     return {
         "services":{
             "api":{"environment":{**base,
-                                   "VALYQON_RESTRICT_PAID_SOURCE_DETAILS":"true"},
+                                   "VALYQON_RESTRICT_PAID_SOURCE_DETAILS":"true","VALYQON_LEGAL_REQUIRED":"true"},
                    "networks":{"edge":{}}},
             "bot":{"environment":dict(base),
                    "profiles":["verified-bot"],"networks":{"edge":{}}},
@@ -60,7 +60,7 @@ def test_strict_opt_in_and_one_postgres_database(monkeypatch):
 
 @pytest.mark.parametrize("bad",[
     "worker-flag","bot-flag","api-flag","db-divergence","sqlite","worker-port",
-    "worker-host-net","bot-polling","autostart-worker","bot-autostart",
+    "worker-host-net","bot-polling","api-legal-off","api-paid-unlocked","autostart-worker","bot-autostart",
     "missing-api-dependency","wrong-worker-entrypoint",
 ])
 def test_fail_closed_when_operator_compose_contains_insecure_config(monkeypatch,bad):
@@ -74,6 +74,8 @@ def test_fail_closed_when_operator_compose_contains_insecure_config(monkeypatch,
     elif bad=="worker-port":worker["ports"]=[{"target":18765,"published":"18765"}]
     elif bad=="worker-host-net":worker["network_mode"]="host"
     elif bad=="bot-polling":doc["services"]["bot"]["environment"]["MONITORING_ENABLED"]="true"
+    elif bad=="api-legal-off":doc["services"]["api"]["environment"]["VALYQON_LEGAL_REQUIRED"]="false"
+    elif bad=="api-paid-unlocked":doc["services"]["api"]["environment"]["VALYQON_RESTRICT_PAID_SOURCE_DETAILS"]="false"
     elif bad=="autostart-worker":worker["profiles"]=[]
     elif bad=="bot-autostart":doc["services"]["bot"]["profiles"]=[]
     elif bad=="missing-api-dependency":worker["depends_on"]={}

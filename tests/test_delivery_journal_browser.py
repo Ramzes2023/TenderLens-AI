@@ -104,6 +104,13 @@ def test_delivery_journal_chromium_real_api_refresh_and_outsider_denial():
                     assert tuple(preference)==(1,0)
                 assert page.locator("#vqDeliverySent").inner_text()=="1"
                 assert page.locator("#vqDeliveryFailed").inner_text()=="1"
+                # Same company/account: the full-history reliability view must
+                # show the failed SMTP/Telegram sender record, not fake inbox
+                # delivery or a retry control.
+                assert page.locator("#vqDeliveryAllFailed").inner_text()=="1"
+                assert page.locator("#vqDeliveryOldPending").inner_text()=="0"
+                assert "needs-review" in page.locator(
+                    "#vqDeliveryReliabilityStatus").get_attribute("class")
                 assert page.locator(".vq-delivery-row").count()==2
                 assert page.locator("body").inner_text().find("OFFLINE_FIXTURE-notify")==-1
                 page.click("#vqDeliveryRefresh")
@@ -116,6 +123,8 @@ def test_delivery_journal_chromium_real_api_refresh_and_outsider_denial():
                 page.wait_for_function(
                     "document.getElementById('vqDeliveryStatus').textContent.includes('unavailable')")
                 assert page.locator("#vqDeliveryCount").inner_text()=="—"
+                assert page.locator("#vqDeliveryAllFailed").inner_text()=="—"
+                assert page.locator("#vqDeliveryOldPending").inner_text()=="—"
                 assert page.locator("#vqDeliverySavePrefs").is_disabled()
                 assert page.locator(".vq-delivery-row").count()==0
                 assert errors==[]

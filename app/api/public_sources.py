@@ -5,13 +5,15 @@ No private credentials, probe claims, or inferred uptime numbers are exposed.
 from __future__ import annotations
 from urllib.parse import urlsplit
 
-from .ru_source_inventory import RU_STAGED_ADAPTERS, RU_RESEARCH_TARGETS
+from .ru_source_inventory import RU_STAGED_ADAPTERS, RU_RESEARCH_TARGETS, RU_REGIONAL_PUBLISHER_FINDINGS
 
 
 # Implemented in main but gated behind optional operator settings.
 # This is an informational inventory, NOT the runtime registry or live health.
 # Keep keys, titles, transports and official URLs aligned with app/sources/catalog.py.
 _RU_OPT_IN_ADAPTERS = (
+    ("ru_ingushetia_eis44", "Ингушетия — ЕИС 44-ФЗ (опционально, без живого подтверждения)", "rss", True, "general", "https://zakupki.gov.ru/"),
+    ("ru_ingushetia_fabrikant44", "Ингушетия — Фабрикант / зеркало ЕИС (опционально, без живого подтверждения)", "html", False, "general", "https://44.fabrikant.ru/44/catalog/procedure"),
     ("eis_223", "EIS 223-FZ", "rss", True, "general", "https://zakupki.gov.ru/"),
     ("b2b_center", "B2B-Center", "html", False, "general", "https://www.b2b-center.ru/"),
     ("mikroton_tender", "MikroTon Tender — public procurement API", "api", False, "general", "https://tender.mt52.ru/"),
@@ -30,7 +32,8 @@ def source_directory(catalog):
     if registry is None:
         return {"sources": [], "source_count": 0, "enabled_count": 0,
                 "optional_sources": [], "optional_count": 0,
-                "scope": "current_runtime_registry", "live_health_verified": False}
+                "scope": "current_runtime_registry", "live_health_verified": False,
+                "regional_publisher_findings": list(RU_REGIONAL_PUBLISHER_FINDINGS)}
     sources = []
     for m in registry.metadata():
         url = m.homepage_url or ""
@@ -106,5 +109,6 @@ def source_directory(catalog):
         "enabled_count": sum(int(x["enabled"]) for x in sources),
         "scope": "runtime_registry_plus_separately_labeled_ru_inventory",
         "live_health_verified": False,
+        "regional_publisher_findings": list(RU_REGIONAL_PUBLISHER_FINDINGS),
         "note": "Registered, optional, staged, and research sources are different statuses. Only runtime-registered sources may operate. Neither status alone proves live delivery.",
     }

@@ -75,6 +75,7 @@ async def eis_client(factory, *, direct, **kwargs):
             yield client
 
 EIS_EXTENDED_RSS_URL = "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html"
+EIS_USER_AGENT = "TenderLensAI/0.9 (+RSS monitor)"
 
 
 def build_eis_rss_url(search_term: str) -> str:
@@ -506,7 +507,7 @@ class EisRssSource:
                 follow_redirects=not self.direct,
                 verify=verify,
                 trust_env=not self.direct,
-                headers={"User-Agent": "TenderLensAI/0.9 (+RSS monitor)"},
+                headers={"User-Agent": EIS_USER_AGENT},
             ) as client:
                 for url in self.urls[:page_limit(len(self.urls))]:
                     response = await client.get(url)

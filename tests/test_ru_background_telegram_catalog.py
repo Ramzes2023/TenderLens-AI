@@ -41,8 +41,7 @@ class DummyBot:
     async def send_message(self, chat_id, text, **kw):
         self.sent.append((chat_id, text, kw))
         self.event.set()
-        return SimpleNamespace(message_id=len(self.sent),
-                               chat=SimpleNamespace(id=chat_id))
+        return SimpleNamespace(message_id=len(self.sent), chat=SimpleNamespace(id=chat_id))
 
 
 class DummyService:
@@ -205,29 +204,106 @@ def test_ru_background_env_is_strict_and_defaults_off(monkeypatch, tmp_path):
         load_monitoring_settings(env)
 
 
+def test_partial_ingushetia_outage_keeps_valid_etp_alert_and_redacts_network_error(caplog):
+    """Synthetic monitoring regression, not real Bot API or source acceptance."""
+    from app.monitoring.service import MonitorMatch
+    from app.sources.models import TenderNotice
+
+    class IngushRegistry:
+        def metadata(self):
+            return (
+                SimpleNamespace(key="ru_ingushetia_eis44", enabled=True, jurisdictions=("RU",)),
+                SimpleNamespace(key="ru_ingushetia_fabrikant44", enabled=True, jurisdictions=("RU",)),
+            )
+
+    class IngushCatalog:
+        registry = IngushRegistry()
+
+    class PartiallyUnavailable(DummyService):
+        async def fetch_matches_from_catalog(self, catalog, owner_user_id, *, source_keys):
+            assert source_keys == ("ru_ingushetia_eis44", "ru_ingushetia_fabrikant44")
+            self.fetched.append((catalog, owner_user_id, source_keys))
+            self.event.set()
+            notice = TenderNotice(
+                source="ru_ingushetia_fabrikant44",
+                external_id="0114500000826002402",
+                tender_number="0114500000826002402",
+                title="Устройство ливневой канализации",
+                customer="КОМИТЕТ ГОСУДАРСТВЕННОГО ЗАКАЗА РЕСПУБЛИКИ ИНГУШЕТИЯ",
+                url="https://44.fabrikant.ru/44/procedure/okb20/0114500000826002402",
+                region="Республика Ингушетия",
+            )
+            # Unknown names and exception text in a failure must not be
+            # forwarded into the operator logs or Telegram messages.
+            report = SimpleNamespace(
+                attempted_sources=source_keys, total_failure=False,
+                successful_sources=("ru_ingushetia_fabrikant44",),
+                failures=(
+                    SimpleNamespace(source="ru_ingushetia_eis44", error="private-token-DO-NOT-LOG"),
+                    SimpleNamespace(source="evil-external-input", error="secret-credentials"),
+                ),
+            )
+            return [MonitorMatch(notice, ("ливневая канализация",))], report
+
+    async def scenario():
+        stop = asyncio.Event()
+        bot, service = DummyBot(stop), PartiallyUnavailable(stop)
+        await monitor_loop(bot, service, stop, source_catalog=IngushCatalog())
+        assert len(bot.sent) == 1
+        assert len(service.claimed) == 1
+        assert "0114500000826002402" in bot.sent[0][1]
+        assert "НОВАЯ ЗАКУПКА" in bot.sent[0][1]
+        assert not any("token" in text for _, text, _ in bot.sent)
+
+    asyncio.run(scenario())
+    assert "Russian source partial outage: ru_ingushetia_eis44" in caplog.text
+    assert "private-token-DO-NOT-LOG" not in caplog.text
+    assert "secret-credentials" not in caplog.text
+    assert "evil-external-input" not in caplog.text
+
+
+
 @pytest.mark.parametrize("receipt", [
     None,
     SimpleNamespace(message_id=0, chat=SimpleNamespace(id=201)),
-    SimpleNamespace(message_id=7, chat=SimpleNamespace(id=999)),
     SimpleNamespace(message_id=True, chat=SimpleNamespace(id=201)),
+    SimpleNamespace(message_id=37, chat=SimpleNamespace(id=999)),
+    SimpleNamespace(message_id=37),
 ])
-def test_invalid_automatic_bot_ack_never_claims_notice_and_retry_recovers(receipt):
-    """Offline: an awaited send without valid Bot API ACK is NOT delivery."""
-    class Unconfirmed(DummyBot):
-        async def send_message(self, chat_id, text, **kwargs):
-            self.sent.append((chat_id, text, kwargs))
+def test_malformed_bot_api_ack_does_not_mark_original_seen_and_can_retry(receipt):
+    """Offline: a returned object without a valid message and chat is NOT delivery."""
+    class UnconfirmedBot(DummyBot):
+        async def send_message(self, chat_id, text, **kw):
+            self.sent.append((chat_id, text, kw))
             self.event.set()
             return receipt
 
-    async def run():
+    async def scenario():
         stop = asyncio.Event()
         service = DummyService(stop)
-        first = Unconfirmed(stop)
-        await monitor_loop(first, service, stop, source_catalog=Catalog())
+        await monitor_loop(UnconfirmedBot(stop), service, stop, source_catalog=Catalog())
         assert service.claimed == []
-        stop.clear()
-        second = DummyBot(stop)
-        await monitor_loop(second, service, stop, source_catalog=Catalog())
-        assert len(second.sent) == len(service.claimed) == 1
 
-    asyncio.run(run())
+        # Simulated later successful Telegram Bot API acknowledgement is the
+        # first time the procurement may enter the delivered/seen ledger.
+        stop.clear()
+        valid_bot = DummyBot(stop)
+        await monitor_loop(valid_bot, service, stop, source_catalog=Catalog())
+        assert len(valid_bot.sent) == 1
+        assert len(service.claimed) == 1
+
+    asyncio.run(scenario())
+
+
+def test_bot_api_success_receipt_requires_exact_chat_and_positive_message_number():
+    from app.bot.monitoring import _require_telegram_delivery_ack
+
+    _require_telegram_delivery_ack(
+        SimpleNamespace(message_id=19, chat=SimpleNamespace(id=-1007000001)),
+        -1007000001,
+    )
+    with pytest.raises(ValueError, match="acknowledgement invalid"):
+        _require_telegram_delivery_ack(
+            SimpleNamespace(message_id=19, chat=SimpleNamespace(id=-1007000001)),
+            -1007000002,
+        )

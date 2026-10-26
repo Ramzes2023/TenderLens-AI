@@ -12,8 +12,28 @@ def test_pinned_root_fingerprint_is_full_sha256():
     assert all(ch in "0123456789abcdef" for ch in ROOT_SHA256)
 
 
+def test_scoped_context_loads_real_verified_root_without_system_install():
+    import ssl
+    from scripts.ru_eis_pinned_tls_probe import pinned_ssl_context
+
+    root = Path(__file__).resolve().parents[1] / "russian_trusted_root_ca_pem.crt"
+    context = pinned_ssl_context(root)
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is True
+    assert context.cert_store_stats()["x509_ca"] == 1
+
+
+def test_scoped_context_rejects_changed_root(tmp_path):
+    from scripts.ru_eis_pinned_tls_probe import pinned_ssl_context
+
+    root = tmp_path / "untrusted.pem"
+    root.write_bytes(b"untrusted" * 100)
+    with pytest.raises(ValueError, match="fingerprint mismatch"):
+        pinned_ssl_context(root)
+
+
 @pytest.mark.parametrize("untrusted", [b"", b"not-a-cert", b"Z" * 1000, b"P" * 65537],
-                         ids=["empty", "invalid", "short-garbage", "oversized"])
+                         ids=["empty", "invalid-text", "invalid-der", "oversized"])
 def test_untrusted_input_cannot_enable_eis_tls(untrusted):
     with pytest.raises(ValueError):
         verify_root(untrusted)
@@ -41,10 +61,13 @@ def test_verified_der_and_pem_transports_resolve_to_same_pinned_root(monkeypatch
     import hashlib
     import ssl
     from scripts import ru_eis_pinned_tls_probe as probe
+    from app.sources import eis_pinned_ca as trust
 
     # Synthetic bytes test format normalization only, not real X.509 trust.
     der = bytes([0x30, 0x82]) + bytes([0x42]) * 512
-    monkeypatch.setattr(probe, "ROOT_SHA256", hashlib.sha256(der).hexdigest())
+    # Production is the sole authoritative verifier after Docker refactor.
+    # This is synthetic DER formatting coverage, NOT an alternate trusted CA.
+    monkeypatch.setattr(trust, "ROOT_SHA256", hashlib.sha256(der).hexdigest())
     pem = ssl.DER_cert_to_PEM_cert(der)
 
     assert probe.verify_root(der) == pem
@@ -56,11 +79,14 @@ def test_multi_certificate_pem_and_wrong_pin_fail_closed(monkeypatch):
     import hashlib
     import ssl
     from scripts import ru_eis_pinned_tls_probe as probe
+    from app.sources import eis_pinned_ca as trust
 
     der = bytes([0x30, 0x82]) + bytes([0x43]) * 512
     pem = ssl.DER_cert_to_PEM_cert(der)
     with pytest.raises(ValueError, match="fingerprint mismatch"):
         probe.verify_root(pem.encode("ascii"))
-    monkeypatch.setattr(probe, "ROOT_SHA256", hashlib.sha256(der).hexdigest())
+    # Production is the sole authoritative verifier after Docker refactor.
+    # This is synthetic DER formatting coverage, NOT an alternate trusted CA.
+    monkeypatch.setattr(trust, "ROOT_SHA256", hashlib.sha256(der).hexdigest())
     with pytest.raises(ValueError, match="PEM certificate"):
         probe.verify_root((pem + pem).encode("ascii"))

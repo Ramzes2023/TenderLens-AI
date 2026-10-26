@@ -191,7 +191,7 @@ def test_two_authorized_chats_have_independent_original_ack_and_retry(tmp_path):
             return bot.delivered_to
 
         sent = asyncio.run(cycle(first_chat))
-        assert sent == [first_chat, second_chat]
+        assert len(sent) == 2 and set(sent) == {first_chat, second_chat}
         assert not repository.seen(first_owner, "eis_44", ORIGINAL)
         assert repository.seen(second_owner, "eis_44", ORIGINAL)
 

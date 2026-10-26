@@ -1,0 +1,132 @@
+name: VALYQON Release Candidate Deep Acceptance
+
+# Safe disposable test data only; production is never deployed from CI.
+on:
+  push:
+    branches: [integration/valyqon-release-candidate-20261025]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install browser + application QA
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install 'playwright>=1.55,<2'
+          python -m playwright install --with-deps chromium
+      - name: Auth, Planner, team decisions, notifications in real Chromium
+        run: |
+          python -m pytest -q -rs --junitxml=/tmp/valyqon-release-browser.xml \
+            tests/test_auth_browser.py tests/test_planner_browser.py \
+            tests/test_team_browser.py tests/test_delivery_journal_browser.py
+          python - <<'PY'
+          from xml.etree import ElementTree as ET
+          root=ET.parse('/tmp/valyqon-release-browser.xml').getroot()
+          nodes=list(root) if root.tag=='testsuites' else [root]
+          tests=sum(int(n.attrib.get('tests',0)) for n in nodes)
+          skip=sum(int(n.attrib.get('skipped',0)) for n in nodes)
+          failed=sum(int(n.attrib.get('failures',0))+int(n.attrib.get('errors',0)) for n in nodes)
+          print(f'RELEASE_REAL_CHROMIUM_TESTS={tests};SKIPPED={skip};FAILURES={failed}')
+          if tests < 4 or skip or failed:
+              raise SystemExit('BROWSER_ACCEPTANCE_INCOMPLETE')
+          PY
+
+  real-postgresql-16-and-restore:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: valyqon_ci
+          POSTGRES_PASSWORD: only-for-disposable-github-postgres16-ci
+          POSTGRES_DB: postgres
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U valyqon_ci -d postgres -h 127.0.0.1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+      VALYQON_DATABASE_REQUIRE_POSTGRES: 'true'
+      VALYQON_PG_CI_CONTEXT: valyqon-phase24-postgres16-ephemeral-ci-v1
+      VALYQON_PG_CI_TEST_PASSWORD: only-for-disposable-github-postgres16-ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Check migrations, concurrency, roles, tenant isolation
+        run: python -B scripts/ci_phase24_postgres16_acceptance.py
+      - name: pg_dump and isolated restore rehearsal
+        env:
+          VALYQON_PG_RESTORE_CONTAINER_ID: ${{ job.services.postgres.id }}
+        run: python -B scripts/ci_phase24_postgres16_restore_drill.py
+
+  real-smtp-to-disposable-mailpit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 17
+    services:
+      mailpit:
+        image: axllent/mailpit:latest
+        ports:
+          - 127.0.0.1:1025:1025
+          - 127.0.0.1:8025:8025
+        env:
+          MP_MAX_MESSAGES: "30"
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+      VALYQON_DEADLINE_ALERTS_ENABLED: 'false'
+      VALYQON_EMAIL_MODE: 'disabled'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Verify opt-in, Worker SMTP transport, Mailpit inbox, receipt and no duplicates
+        run: |
+          python -m compileall -q scripts/ci_deadline_worker_mailpit_e2e.py
+          python -B -m scripts.ci_deadline_worker_mailpit_e2e
+
+  analytics-concurrency-repeat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Repeat original nonrelaxed concurrency test five times
+        run: |
+          for n in 1 2 3 4 5; do
+            echo "RELEASE_ANALYTICS_BARRIER_REPEAT=$n"
+            python -m pytest -q tests/test_analytics_admission.py
+          done

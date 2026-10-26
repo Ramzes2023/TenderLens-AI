@@ -74,3 +74,7 @@ This overlay **does not launch the website**. Default production runs only `api`
 Only a separate approved operator rollout can activate the optional connector profile **after** specific real-original-source, Worker→DB→authorized user, delivery and backup acceptance. The overlay and CI explicitly deny unreviewed source flags inherited from `.env`, including on the Worker. Adding an opt-in Worker is **not** a substitute for obtaining user consent, running a source job or proving search results.
 
 A read-only audit of the exact running image and HTTPS health should precede any changes to the existing VPS. Do not overwrite its `.env`, `docker-compose` project or persistent volumes from these instructions.
+
+## Mandatory legal release gate
+
+The public API now forces `VALYQON_LEGAL_REQUIRED=true` regardless of the operator `.env`. Registration therefore stays unavailable until actual approved operator information, registration/address/contact/retention/data region and the reviewed version of separate affirmative offer and personal-data consents are configured. This is deliberate, not an error to bypass. An HTTPS site with registration blocked is a **private/staging website**, not an approved customer launch. Obtain professional jurisdiction-specific review of data localization/processing notices and merchant documents before signups or payment collection. Never toggle this flag to false to make the release probe green.

@@ -42,7 +42,8 @@ def test_public_edge_pass_does_not_claim_tenders_or_payments():
             "Strict-Transport-Security":"max-age=31536000",
             "X-Content-Type-Options":"nosniff",
         }),
-        _Response('{"status":"ready"}'),
+        _Response('{"status":"ok","service":"VALYQON AI","components":'
+                  '{"database":"ready","scoring":"ready","cache":"ready"}}'),
     ]
     with patch("scripts.verify_public_https.socket.getaddrinfo",return_value=[(0,0,0,"",("93.184.216.34",443))]),\
          patch("scripts.verify_public_https._https_client",return_value=MagicMock(open=MagicMock(side_effect=responses))):
@@ -51,6 +52,36 @@ def test_public_edge_pass_does_not_claim_tenders_or_payments():
     assert result["ready_for_commercial_launch"] is False
     assert result["billing_entitlements"]=="NOT_TESTED"
     assert result["real_source_worker_to_user"]=="NOT_TESTED"
+
+
+@pytest.mark.parametrize("health_json", [
+    '{"status":"degraded","service":"VALYQON AI","components":'
+    '{"database":"unavailable","scoring":"ready","cache":"ready"}}',
+    '{"status":"ok","service":"VALYQON AI","components":'
+    '{"database":"ready","scoring":"unavailable","cache":"ready"}}',
+    '{"status":"ok","service":"VALYQON AI","components":'
+    '{"database":"ready","scoring":"ready","cache":"unavailable"}}',
+    '{"status":"ok","components":{"database":"ready","scoring":"ready"}}',
+    '{"unexpected":"JSON object but not actual health"}',
+])
+def test_https_probe_rejects_unhealthy_service_even_with_http_200(health_json):
+    responses=[
+        _Response("<html>VALYQON AI public portal</html>",{
+            "Strict-Transport-Security":"max-age=31536000",
+            "X-Content-Type-Options":"nosniff",
+        }),
+        _Response(health_json),
+    ]
+    with patch("scripts.verify_public_https.socket.getaddrinfo",
+               return_value=[(0,0,0,"",("93.184.216.34",443))]), \\
+         patch("scripts.verify_public_https._https_client",
+               return_value=MagicMock(open=MagicMock(side_effect=responses))):
+        result=verify("https://example.org")
+    assert result["dns"]=="PASS"
+    assert result["tls"]=="PASS"
+    assert result["health"]=="FAIL"
+    assert result["public_edge_pass"] is False
+    assert result["ready_for_commercial_launch"] is False
 
 
 def test_tls_or_network_failure_blocks_release_without_leaking_body():

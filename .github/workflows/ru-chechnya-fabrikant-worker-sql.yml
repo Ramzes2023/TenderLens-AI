@@ -1,0 +1,44 @@
+name: RU Chechnya accredited 44-FZ regional real Worker and SQLite acceptance
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/monitoring/config.py
+      - app/sources/catalog.py
+      - app/sources/ru_chechnya_fabrikant44.py
+      - app/sources/ingestion.py
+      - app/scoring/runs.py
+      - scripts/ci_ru_chechnya_fabrikant_worker_sql.py
+      - tests/test_ru_chechnya_fabrikant_worker_contract.py
+      - .github/workflows/ru-chechnya-fabrikant-worker-sql.yml
+permissions:
+  contents: read
+jobs:
+  chechnya-operator-offline-lease-guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Deny source by default and verify real queue lease on synthetic-only fixture
+        run: python -m pytest -q tests/test_ru_chechnya_fabrikant44.py tests/test_ru_chechnya_fabrikant_worker_contract.py
+
+  chechnya-current-native-original-to-fenced-worker-sql:
+    runs-on: windows-latest
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Current government committee list and separately verified first-party original to leased Worker SQLite exact-ID search
+        timeout-minutes: 8
+        run: python -B -m scripts.ci_ru_chechnya_fabrikant_worker_sql

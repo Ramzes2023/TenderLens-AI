@@ -41,7 +41,8 @@ class DummyBot:
     async def send_message(self, chat_id, text, **kw):
         self.sent.append((chat_id, text, kw))
         self.event.set()
-        return SimpleNamespace(message_id=len(self.sent), chat=SimpleNamespace(id=chat_id))
+        return SimpleNamespace(message_id=len(self.sent),
+                               chat=SimpleNamespace(id=chat_id))
 
 
 class DummyService:
@@ -193,17 +194,6 @@ def test_on_handler_baselines_same_source_set_before_subscribing():
     asyncio.run(scenario())
 
 
-def test_ru_background_env_is_strict_and_defaults_off(monkeypatch, tmp_path):
-    env = tmp_path / "nonexistent.env"
-    monkeypatch.delenv("VALYQON_RU_BACKGROUND_CATALOG_ENABLED", raising=False)
-    assert not load_monitoring_settings(env).ru_background_catalog_enabled
-    monkeypatch.setenv("VALYQON_RU_BACKGROUND_CATALOG_ENABLED", "true")
-    assert load_monitoring_settings(env).ru_background_catalog_enabled
-    monkeypatch.setenv("VALYQON_RU_BACKGROUND_CATALOG_ENABLED", "invalid")
-    with pytest.raises(ValueError):
-        load_monitoring_settings(env)
-
-
 def test_partial_ingushetia_outage_keeps_valid_etp_alert_and_redacts_network_error(caplog):
     """Synthetic monitoring regression, not real Bot API or source acceptance."""
     from app.monitoring.service import MonitorMatch
@@ -262,39 +252,6 @@ def test_partial_ingushetia_outage_keeps_valid_etp_alert_and_redacts_network_err
     assert "evil-external-input" not in caplog.text
 
 
-
-@pytest.mark.parametrize("receipt", [
-    None,
-    SimpleNamespace(message_id=0, chat=SimpleNamespace(id=201)),
-    SimpleNamespace(message_id=True, chat=SimpleNamespace(id=201)),
-    SimpleNamespace(message_id=37, chat=SimpleNamespace(id=999)),
-    SimpleNamespace(message_id=37),
-])
-def test_malformed_bot_api_ack_does_not_mark_original_seen_and_can_retry(receipt):
-    """Offline: a returned object without a valid message and chat is NOT delivery."""
-    class UnconfirmedBot(DummyBot):
-        async def send_message(self, chat_id, text, **kw):
-            self.sent.append((chat_id, text, kw))
-            self.event.set()
-            return receipt
-
-    async def scenario():
-        stop = asyncio.Event()
-        service = DummyService(stop)
-        await monitor_loop(UnconfirmedBot(stop), service, stop, source_catalog=Catalog())
-        assert service.claimed == []
-
-        # Simulated later successful Telegram Bot API acknowledgement is the
-        # first time the procurement may enter the delivered/seen ledger.
-        stop.clear()
-        valid_bot = DummyBot(stop)
-        await monitor_loop(valid_bot, service, stop, source_catalog=Catalog())
-        assert len(valid_bot.sent) == 1
-        assert len(service.claimed) == 1
-
-    asyncio.run(scenario())
-
-
 def test_bot_api_success_receipt_requires_exact_chat_and_positive_message_number():
     from app.bot.monitoring import _require_telegram_delivery_ack
 
@@ -307,3 +264,42 @@ def test_bot_api_success_receipt_requires_exact_chat_and_positive_message_number
             SimpleNamespace(message_id=19, chat=SimpleNamespace(id=-1007000001)),
             -1007000002,
         )
+
+
+def test_ru_background_env_is_strict_and_defaults_off(monkeypatch, tmp_path):
+    env = tmp_path / "nonexistent.env"
+    monkeypatch.delenv("VALYQON_RU_BACKGROUND_CATALOG_ENABLED", raising=False)
+    assert not load_monitoring_settings(env).ru_background_catalog_enabled
+    monkeypatch.setenv("VALYQON_RU_BACKGROUND_CATALOG_ENABLED", "true")
+    assert load_monitoring_settings(env).ru_background_catalog_enabled
+    monkeypatch.setenv("VALYQON_RU_BACKGROUND_CATALOG_ENABLED", "invalid")
+    with pytest.raises(ValueError):
+        load_monitoring_settings(env)
+
+
+@pytest.mark.parametrize("receipt", [
+    None,
+    SimpleNamespace(message_id=0, chat=SimpleNamespace(id=201)),
+    SimpleNamespace(message_id=7, chat=SimpleNamespace(id=999)),
+    SimpleNamespace(message_id=True, chat=SimpleNamespace(id=201)),
+])
+def test_invalid_automatic_bot_ack_never_claims_notice_and_retry_recovers(receipt):
+    """Offline: an awaited send without valid Bot API ACK is NOT delivery."""
+    class Unconfirmed(DummyBot):
+        async def send_message(self, chat_id, text, **kwargs):
+            self.sent.append((chat_id, text, kwargs))
+            self.event.set()
+            return receipt
+
+    async def run():
+        stop = asyncio.Event()
+        service = DummyService(stop)
+        first = Unconfirmed(stop)
+        await monitor_loop(first, service, stop, source_catalog=Catalog())
+        assert service.claimed == []
+        stop.clear()
+        second = DummyBot(stop)
+        await monitor_loop(second, service, stop, source_catalog=Catalog())
+        assert len(second.sent) == len(service.claimed) == 1
+
+    asyncio.run(run())

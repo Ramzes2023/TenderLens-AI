@@ -8,6 +8,13 @@ from __future__ import annotations
 
 from .registry import SourceRegistryError
 
+# Dedicated overlapping EIS 44-FZ regional mirrors. Neither is enabled
+# without a separate operator-approved source registration.
+INGUSHETIA_APPROVED_SOURCES = (
+    "ru_ingushetia_eis44",
+    "ru_ingushetia_fabrikant44",
+)
+
 # Only adapters with a first-party/live buyer list→notice→leased Worker→SQL
 # acceptance previously checked; platform research/blocked PRs are excluded.
 # This is a *publisher-connection* allowlist, not independent procurement
@@ -24,16 +31,6 @@ RU_APPROVED_SOURCES = (
     "ru_samara_public_list",
     # Official anonymous Dagestan list -> fenced Worker/SQL; deep details login-protected.
     "ru_dagestan_public_list",
-)
-
-
-
-# Separate small opt-in group. Preserve the exact main-approved source list
-# (and its Samara/Dagestan acceptance policy) unchanged for other workstreams.
-# These two overlapping EIS/ETP mirrors are not independently new notices.
-INGUSHETIA_APPROVED_SOURCES = (
-    "ru_ingushetia_eis44",
-    "ru_ingushetia_fabrikant44",
 )
 
 

@@ -58,6 +58,13 @@ def official_download() -> bytes:
         return response.read(MAX_CERT_BYTES + 1)
 
 
+
+def pinned_ssl_context(source_file: Path) -> ssl.SSLContext:
+    """Strict, source-scoped fingerprint-verified EIS TLS root, no host trust edits."""
+    return ssl.create_default_context(cadata=verify_root(source_file.read_bytes()))
+
+
+
 def run(source_file: Path | None = None) -> int:
     data = source_file.read_bytes() if source_file else official_download()
     pem = verify_root(data)

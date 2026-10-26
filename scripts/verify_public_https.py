@@ -69,6 +69,7 @@ def verify(url: str, timeout: float = 8.0) -> dict:
         "checked_utc": datetime.now(timezone.utc).isoformat(),
         "host": host, "dns": "NOT_VERIFIED", "tls": "NOT_VERIFIED",
         "homepage": "NOT_VERIFIED", "health": "NOT_VERIFIED",
+        "premium_css": "NOT_VERIFIED",
         "security_headers": "NOT_VERIFIED",
         "real_source_worker_to_user": "NOT_TESTED",
         "billing_entitlements": "NOT_TESTED",
@@ -123,6 +124,22 @@ def verify(url: str, timeout: float = 8.0) -> dict:
                 and health["components"].get("cache") != "unavailable"
             )
             result["health"] = "PASS" if valid_health else "FAIL"
+        # A stale image can serve the new branded landing HTML and report
+        # /health ready while its premium stylesheet is still 404. Exact
+        # same-origin, strict TLS, no redirects, bounded bytes or auth.
+        if result["homepage"] == "PASS" and result["health"] == "PASS":
+            phase = "premium_css"
+            with client.open(Request(f"https://{host}/assets/premium.css", headers={
+                    "User-Agent": "VALYQON-ReleaseReadiness/1.0"
+            }), timeout=timeout) as response:
+                css = response.read(131072).decode("utf-8", errors="replace")
+                content_type = response.headers.get("Content-Type", "").lower()
+                result["premium_css"] = (
+                    "PASS" if response.status == 200
+                    and content_type.startswith("text/css")
+                    and ".landing.premium" in css
+                    else "FAIL"
+                )
     except HTTPError as exc:
         # An HTTP error means a public response was obtained over verified
         # HTTPS. Log only its integer status and the endpoint class; never
@@ -149,7 +166,7 @@ def verify(url: str, timeout: float = 8.0) -> dict:
         result["blocker_type"] = type(exc).__name__
         result["blocked_at"] = phase
     result["public_edge_pass"] = all(result[k]=="PASS" for k in (
-        "dns","tls","homepage","health","security_headers"))
+        "dns","tls","homepage","health","premium_css","security_headers"))
     return result
 
 

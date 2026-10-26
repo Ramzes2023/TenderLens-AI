@@ -10,7 +10,9 @@ from pathlib import Path
 
 REMOTE = r"""
 set -u
+printf '%s\n' VALYQON_PREFLIGHT_STAGE=START >&2
 echo PREFLIGHT_SCHEMA=2
+printf '%s\n' VALYQON_PREFLIGHT_STAGE=REPOSITORY >&2
 if test -d /opt/tenderlens/.git; then
   echo REPO_PRESENT=YES
   rev="$(git -C /opt/tenderlens rev-parse --verify HEAD 2>/dev/null || true)"
@@ -28,11 +30,13 @@ else
   echo REMOTE_SHA=UNKNOWN
   echo WORKTREE_CLEAN=UNKNOWN
 fi
+printf '%s\n' VALYQON_PREFLIGHT_STAGE=DOCKER >&2
 if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   echo DOCKER_USABLE=YES
 else
   echo DOCKER_USABLE=NO
 fi
+printf '%s\n' VALYQON_PREFLIGHT_STAGE=PUBLIC_COMPOSE >&2
 if test -f /opt/tenderlens/compose.public.yaml; then
   echo PUBLIC_COMPOSE_PRESENT=YES
 else
@@ -62,6 +66,7 @@ fi
 # The existing owner AWS preview is *not* a public production site.
 # Report its presence separately; never mistake a private preview for
 # a deployed production checkout or public HTTPS.
+printf '%s\n' VALYQON_PREFLIGHT_STAGE=PRIVATE_PREVIEW >&2
 if test -d /home/ubuntu/valyqon-personal-preview; then
   echo PRIVATE_PREVIEW_TREE_PRESENT=YES
 else
@@ -81,22 +86,62 @@ echo TELEGRAM_BOT_API_ACK=NOT_CHECKED
 echo LIVE_TENDER_DB=NOT_CHECKED
 echo EXTERNAL_HTTPS=NOT_CHECKED
 echo PRODUCTION_CHANGED=NO
+printf '%s\n' VALYQON_PREFLIGHT_STAGE=COMPLETE >&2
 """
 
 class SSHPreflightError(RuntimeError):
     """Only a fixed diagnostic category, never private SSH stderr or key data."""
 
-    def __init__(self, category: str):
+    def __init__(self, category: str, *, stage="UNKNOWN", exit_code=None):
         if category not in {
             "SSH_HOST_KEY_UNVERIFIED", "SSH_AUTH_REJECTED",
             "SSH_CONNECT_TIMEOUT", "SSH_CONNECTION_REFUSED",
             "SSH_ROUTE_UNREACHABLE", "SSH_DNS_FAILURE",
-            "SSH_REMOTE_COMMAND_FAILED", "SSH_COMMAND_UNAVAILABLE",
+            "SSH_REMOTE_COMMAND_FAILED", "SSH_REMOTE_SHELL_UNAVAILABLE",
+            "SSH_REMOTE_SCRIPT_FAILED", "SSH_COMMAND_UNAVAILABLE",
             "SSH_PROCESS_TIMEOUT", "SSH_UNCLASSIFIED",
         }:
             category = "SSH_UNCLASSIFIED"
         self.failure_code = category
+        self.stage = stage if stage in {
+            "START", "REPOSITORY", "DOCKER", "PUBLIC_COMPOSE",
+            "PRIVATE_PREVIEW", "COMPLETE", "UNKNOWN",
+        } else "UNKNOWN"
+        self.exit_class = (
+            "SSH_TRANSPORT_255" if exit_code == 255
+            else "REMOTE_NONZERO" if type(exit_code) is int and exit_code != 0
+            else "UNKNOWN"
+        )
         super().__init__("SSH preflight failed (private error suppressed)")
+
+
+def _safe_remote_stage(stderr: str) -> str:
+    """Only this finite enum can enter logs; never print remote stderr."""
+    stages = {
+        "START", "REPOSITORY", "DOCKER", "PUBLIC_COMPOSE",
+        "PRIVATE_PREVIEW", "COMPLETE",
+    }
+    observed = [
+        line.removeprefix("VALYQON_PREFLIGHT_STAGE=")
+        for line in stderr.splitlines()
+        if line.startswith("VALYQON_PREFLIGHT_STAGE=")
+        and line.removeprefix("VALYQON_PREFLIGHT_STAGE=") in stages
+    ] if type(stderr) is str else []
+    return observed[-1] if observed else "UNKNOWN"
+
+
+def _remote_shell_probe(ssh_prefix):
+    """Independent read-only SSH shell check, no keys/env/data displayed."""
+    probe = ssh_prefix + ["sh", "-c", "printf '%s\\n' VALYQON_REMOTE_SHELL_OK"]
+    try:
+        run = subprocess.run(
+            probe, input="", capture_output=True, text=True,
+            timeout=20, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return (run.returncode == 0
+            and run.stdout.strip() == "VALYQON_REMOTE_SHELL_OK")
 
 
 def _safe_ssh_failure(stderr: str, returncode: int) -> str:
@@ -186,7 +231,14 @@ def inspect(host, key, user="ubuntu", expected_sha=None):
     except OSError:
         raise SSHPreflightError("SSH_COMMAND_UNAVAILABLE") from None
     if run.returncode != 0:
-        raise SSHPreflightError(_safe_ssh_failure(run.stderr, run.returncode))
+        code = _safe_ssh_failure(run.stderr, run.returncode)
+        stage = _safe_remote_stage(run.stderr)
+        if code == "SSH_REMOTE_COMMAND_FAILED":
+            # A second read-only shell probe separates shell/forced-command
+            # restrictions from an error *inside* the diagnostic script.
+            code = ("SSH_REMOTE_SCRIPT_FAILED" if _remote_shell_probe(args[:-2])
+                    else "SSH_REMOTE_SHELL_UNAVAILABLE")
+        raise SSHPreflightError(code, stage=stage, exit_code=run.returncode)
     out = parse_status(run.stdout)
     same = expected_sha is not None and out["REMOTE_SHA"] == expected_sha
     return out, same
@@ -204,6 +256,8 @@ def main(argv=None):
         print("VALYQON_VPS_PREFLIGHT=BLOCKED")
         print("FAILURE_CLASS=" + type(err).__name__)
         print("FAILURE_CODE=" + getattr(err, "failure_code", "VALIDATION_OR_RESPONSE_ERROR"))
+        print("FAILURE_STAGE=" + getattr(err, "stage", "UNKNOWN"))
+        print("FAILURE_EXIT_CLASS=" + getattr(err, "exit_class", "UNKNOWN"))
         print("PRODUCTION_CHANGED=NO")
         return 2
     for key, val in sorted(results.items()):

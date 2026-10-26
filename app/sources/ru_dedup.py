@@ -2,6 +2,7 @@
 import json
 import re
 from urllib.parse import parse_qs, urlsplit
+from .ru_notice_identity import original_notice_key
 
 
 def procedure_key(notice):
@@ -27,7 +28,9 @@ def procedure_key(notice):
 def deduplicate(notices):
     groups = {}
     for notice in notices:
-        key = procedure_key(notice) or notice.identity
+        procedure = procedure_key(notice)
+        key = (("eis_44" if procedure[0] == "44" else "eis_223", procedure[1])
+               if procedure is not None else original_notice_key(notice))
         groups.setdefault(key, []).append(notice)
     result, provenance = [], []
     for group in groups.values():

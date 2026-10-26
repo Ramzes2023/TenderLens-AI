@@ -131,17 +131,18 @@ class ProbeSafetyTests(unittest.TestCase):
             self.assertEqual(url.scheme, "https")
             self.assertFalse(url.username or url.password or url.query or url.fragment)
 
-    def test_five_operator_only_official_gpb_and_eis_targets_do_not_expand_batch(self):
+    def test_six_operator_only_official_gpb_and_eis_targets_do_not_expand_batch(self):
         self.assertEqual(len(TARGETS), 37)
         self.assertEqual(ON_DEMAND_TARGETS, {
             "gpb_public_html": Target("etpgpb.ru", "/procedures/"),
             "gpb_new_public_html": Target("new.etpgpb.ru", "/procedures/"),
             "gpb_new_rss": Target("new.etpgpb.ru", "/procedures.rss", "rss"),
             "gpb_gos44_html": Target("gos.etpgpb.ru", "/44/catalog/procedure"),
+            "gpb_gos44_published": Target("gos.etpgpb.ru", "/44/catalog/procedure/published"),
             "eis_official_home": Target("zakupki.gov.ru", "/"),
         })
         self.assertFalse(set(TARGETS).intersection(ON_DEMAND_TARGETS))
-        self.assertEqual(len({(z.host, z.path) for z in ON_DEMAND_TARGETS.values()}), 5)
+        self.assertEqual(len({(z.host, z.path) for z in ON_DEMAND_TARGETS.values()}), 6)
 
     def test_gpb_official_only_choice_does_not_use_user_supplied_urls(self):
         from contextlib import redirect_stdout
@@ -155,6 +156,14 @@ class ProbeSafetyTests(unittest.TestCase):
                 ON_DEMAND_TARGETS["gpb_public_html"],
                 ON_DEMAND_TARGETS["gpb_new_public_html"],
             ])
+        # The current-published 44-FZ URL is a fixed on-demand route, not
+        # a new unique EIS source or an arbitrary operator-entered URL.
+        with patch("scripts.ru_trusted_live_probe.read_public",
+                   return_value=("text/html", b"<table><tr><td>Published</td></tr></table>")) as get:
+            with redirect_stdout(StringIO()):
+                self.assertEqual(main("gpb_gos44_published"), 0)
+            self.assertEqual(get.call_args.args[0],
+                             ON_DEMAND_TARGETS["gpb_gos44_published"])
         with patch("scripts.ru_trusted_live_probe.checked_ips") as dns:
             self.assertEqual(main("gpb_new_rss?ref=private"), 2)
             self.assertEqual(main("http://new.etpgpb.ru/procedures.rss"), 2)
@@ -178,7 +187,7 @@ class ProbeSafetyTests(unittest.TestCase):
         self.assertEqual(TARGETS["gpb_rss"], Target("etpgpb.ru", "/procedures.rss", "rss"))
         path = Path(__file__).resolve().parents[1] / ".github/workflows/ru-gpb-alternative-hosts-observation.yml"
         workflow = path.read_text(encoding="utf-8")
-        self.assertIn("for source in gpb_rss gpb_public_html gpb_new_public_html gpb_new_rss gpb_gos44_html; do", workflow)
+        self.assertIn("for source in gpb_rss gpb_public_html gpb_new_public_html gpb_new_rss gpb_gos44_html gpb_gos44_published; do", workflow)
         self.assertIn('python -B -m scripts.ru_trusted_live_probe "$source"', workflow)
         self.assertIn("persist-credentials: false", workflow)
         for marker in ("RU_GPB_DETAIL_VERIFIED=NO", "RU_GPB_WORKER_SQL_ACCEPTED=NO",

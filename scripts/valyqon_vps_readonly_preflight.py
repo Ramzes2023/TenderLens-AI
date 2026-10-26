@@ -20,10 +20,15 @@ if test -d /opt/tenderlens/.git; then
     *[!0123456789abcdef]*|'') echo REMOTE_SHA=UNKNOWN;;
     *) echo "REMOTE_SHA=$rev";;
   esac
-  if test -z "$(git -C /opt/tenderlens status --porcelain 2>/dev/null)"; then
-    echo WORKTREE_CLEAN=YES
+  # A failed git status MUST NOT masquerade as a clean worktree.
+  if worktree_status="$(git -C /opt/tenderlens status --porcelain 2>/dev/null)"; then
+    if test -z "$worktree_status"; then
+      echo WORKTREE_CLEAN=YES
+    else
+      echo WORKTREE_CLEAN=NO
+    fi
   else
-    echo WORKTREE_CLEAN=NO
+    echo WORKTREE_CLEAN=UNKNOWN
   fi
 else
   echo REPO_PRESENT=NO
@@ -49,15 +54,21 @@ else
 fi
 if test -f /opt/tenderlens/compose.public.yaml &&
    command -v docker >/dev/null 2>&1; then
-  services="$(cd /opt/tenderlens &&
-      docker compose -f compose.public.yaml ps --services --status running 2>/dev/null || true)"
-  for service in api caddy bot; do
-    if printf '%s\n' "$services" | grep -qx "$service"; then
-      printf 'PUBLIC_%s_RUNNING=YES\n' "$service"
-    else
-      printf 'PUBLIC_%s_RUNNING=NO\n' "$service"
-    fi
-  done
+  # An unavailable Compose query is UNKNOWN, not proof a service is off.
+  if services="$(cd /opt/tenderlens &&
+      docker compose -f compose.public.yaml ps --services --status running 2>/dev/null)"; then
+    for service in api caddy bot; do
+      if printf '%s\n' "$services" | grep -qx "$service"; then
+        printf 'PUBLIC_%s_RUNNING=YES\n' "$service"
+      else
+        printf 'PUBLIC_%s_RUNNING=NO\n' "$service"
+      fi
+    done
+  else
+    echo PUBLIC_api_RUNNING=UNKNOWN
+    echo PUBLIC_caddy_RUNNING=UNKNOWN
+    echo PUBLIC_bot_RUNNING=UNKNOWN
+  fi
 else
   echo PUBLIC_api_RUNNING=UNKNOWN
   echo PUBLIC_caddy_RUNNING=UNKNOWN

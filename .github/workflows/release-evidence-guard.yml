@@ -1,0 +1,32 @@
+name: VALYQON Release Evidence & Public Homepage Guard
+
+on:
+  push:
+    branches:
+      - fix/release-evidence-guard-20261026
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHON_DOTENV_DISABLED: '1'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install test requirements
+        run: python -m pip install -r requirements-dev.txt
+      - name: Never commit private release evidence
+        run: python -B scripts/check_release_artifacts.py
+      - name: Python syntax / public homepage must be real
+        run: python -m compileall -q scripts/verify_public_https.py scripts/check_release_artifacts.py tests/test_verify_public_https.py tests/test_release_evidence_guard.py
+      - name: Exact release and backup guard tests
+        run: python -m pytest -q tests/test_verify_public_https.py tests/test_release_evidence_guard.py tests/test_public_demo_and_workspace_luxe.py tests/test_deployment.py

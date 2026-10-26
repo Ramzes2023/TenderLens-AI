@@ -1,0 +1,55 @@
+name: Release Edge & Backup Evidence Guard — main-based
+
+on:
+  push:
+    branches:
+      - fix/release-edge-backup-guard-main-20261026
+  pull_request:
+    branches:
+      - main
+    paths:
+      - scripts/verify_public_https.py
+      - tests/test_verify_public_https.py
+      - scripts/check_release_artifacts.py
+      - tests/test_release_evidence_guard.py
+      - .gitignore
+      - .github/workflows/release-edge-backup-main.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-edge-and-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      PYTHON_DOTENV_DISABLED: '1'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Fail if a backed-up database or release evidence enters Git
+        run: python -B scripts/check_release_artifacts.py
+      - name: Compile release scripts and tests
+        run: python -m compileall -q scripts/verify_public_https.py scripts/check_release_artifacts.py tests/test_verify_public_https.py tests/test_release_evidence_guard.py
+      - name: Verify true home, healthy service, staging safety and no tracked backups
+        run: python -m pytest -q tests/test_verify_public_https.py tests/test_release_evidence_guard.py tests/test_public_demo_and_workspace_luxe.py tests/test_deployment.py tests/test_public_pilot_release_policy.py tests/test_public_compose_resolved.py
+      - name: Preserve exact public bot and source guards on current main
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text=Path('compose.public.yaml').read_text()
+          for value in ('MONITORING_ENABLED: "false"',
+              'VALYQON_DEADLINE_ALERTS_ENABLED: "false"',
+              'VALYQON_RESTRICT_PAID_SOURCE_DETAILS: "true"',
+              'VALYQON_PUBLIC_ANALYTICS_MODE: "real"',
+              'profiles:', 'verified-bot'):
+              assert value in text, value
+          print('MAIN_PUBLIC_FAIL_CLOSED_CONFIG=PASS')
+          PY

@@ -1,0 +1,43 @@
+name: VALYQON temporary public endpoint probe 2026-10-26
+
+# Independent external read-only verification of the previously selected
+# temporary hostname. No AWS keys, SSH, credentials, deploy or DB access.
+on:
+  push:
+    branches:
+      - fix/release-edge-backup-guard-main-20261026
+    paths:
+      - .github/workflows/public-edge-live-field-probe.yml
+      - scripts/verify_public_https.py
+      - tests/test_verify_public_https.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-previously-selected-temporary-hostname:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 'Negative tests: status-only HTTP errors without leaking upstream data'
+        run: |
+          python -m pip install pytest==9.1.1
+          python -m pytest -q tests/test_verify_public_https.py
+      - name: Probe public HTTPS, verified TLS, premium landing and health
+        run: |
+          python -B scripts/verify_public_https.py --timeout 12 --url https://63-189-75-15.sslip.io/
+      - name: Reminder of non-verified commercial gates
+        if: always()
+        run: |
+          echo 'PRODUCTION_DEPLOYED_BY_THIS_JOB=NO'
+          echo 'CUSTOMER_REGISTRATION_LEGAL_GATE=NOT_TESTED'
+          echo 'LIVE_BILLING=NOT_TESTED'
+          echo 'SOURCE_TO_USER_DELIVERY=NOT_TESTED'
+          echo 'EXTERNAL_SMTP_DELIVERY=NOT_TESTED'

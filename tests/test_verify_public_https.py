@@ -38,11 +38,12 @@ class _Response:
 
 def test_public_edge_pass_does_not_claim_tenders_or_payments():
     responses=[
-        _Response("<html>VALYQON AI public portal</html>",{
+        _Response("<html><body class=\"landing premium\">VALYQON AI public portal<form id=\"guestSearchForm\"></form><div id=\"guestSearchResults\"></div></body></html>",{
             "Strict-Transport-Security":"max-age=31536000",
             "X-Content-Type-Options":"nosniff",
         }),
-        _Response('{"status":"ready"}'),
+        _Response('{"status":"ok","service":"VALYQON AI","components":'
+                  '{"database":"ready","scoring":"ready","cache":"ready"}}'),
     ]
     with patch("scripts.verify_public_https.socket.getaddrinfo",return_value=[(0,0,0,"",("93.184.216.34",443))]),\
          patch("scripts.verify_public_https._https_client",return_value=MagicMock(open=MagicMock(side_effect=responses))):
@@ -51,6 +52,38 @@ def test_public_edge_pass_does_not_claim_tenders_or_payments():
     assert result["ready_for_commercial_launch"] is False
     assert result["billing_entitlements"]=="NOT_TESTED"
     assert result["real_source_worker_to_user"]=="NOT_TESTED"
+
+
+@pytest.mark.parametrize("health_json", [
+    '{"status":"degraded","service":"VALYQON AI","components":'
+    '{"database":"unavailable","scoring":"ready","cache":"ready"}}',
+    '{"status":"ok","service":"VALYQON AI","components":'
+    '{"database":"ready","scoring":"unavailable","cache":"ready"}}',
+    '{"status":"ok","service":"VALYQON AI","components":'
+    '{"database":"ready","scoring":"ready","cache":"unavailable"}}',
+    '{"status":"ok","components":{"database":"ready","scoring":"ready"}}',
+    '{"unexpected":"JSON object but not actual health"}',
+])
+def test_https_probe_rejects_unhealthy_service_even_with_http_200(health_json):
+    responses=[
+        _Response("<html><body class=\"landing premium\">VALYQON AI public portal<form id=\"guestSearchForm\"></form><div id=\"guestSearchResults\"></div></body></html>",{
+            "Strict-Transport-Security":"max-age=31536000",
+            "X-Content-Type-Options":"nosniff",
+        }),
+        _Response(health_json),
+    ]
+    with (
+        patch("scripts.verify_public_https.socket.getaddrinfo",
+              return_value=[(0,0,0,"",("93.184.216.34",443))]),
+        patch("scripts.verify_public_https._https_client",
+              return_value=MagicMock(open=MagicMock(side_effect=responses))),
+    ):
+        result=verify("https://example.org")
+    assert result["dns"]=="PASS"
+    assert result["tls"]=="PASS"
+    assert result["health"]=="FAIL"
+    assert result["public_edge_pass"] is False
+    assert result["ready_for_commercial_launch"] is False
 
 
 def test_tls_or_network_failure_blocks_release_without_leaking_body():
@@ -76,3 +109,119 @@ def test_private_dns_is_refused_before_any_http_request():
 def test_redirect_handler_refuses_cross_host_and_any_redirect():
     from scripts.verify_public_https import _NoRedirect
     assert _NoRedirect().redirect_request(None,None,302,"Moved",{}, "https://elsewhere.example/") is None
+
+
+def test_public_edge_does_not_accept_legacy_login_even_when_http_200():
+    """A 200 OK login screen can contain VALYQON branding but is not public."""
+    from scripts.verify_public_https import _is_public_landing
+    legacy='<html><title>VALYQON AI</title><body class="login">Sign in</body></html>'
+    assert _is_public_landing(legacy) is False
+    assert _is_public_landing('<body class="landing premium">VALYQON</body>') is False
+    proper=(
+        '<body class="landing premium">VALYQON'
+        '<form id="guestSearchForm"></form>'
+        '<div id="guestSearchResults"></div></body>'
+    )
+    assert _is_public_landing(proper) is True
+
+    responses=[
+        _Response(legacy,{
+            "Strict-Transport-Security":"max-age=31536000",
+            "X-Content-Type-Options":"nosniff",
+        }),
+        _Response('{"status":"ok","service":"VALYQON AI","components":'
+                  '{"database":"ready","scoring":"ready","cache":"ready"}}'),
+    ]
+    with (
+        patch("scripts.verify_public_https.socket.getaddrinfo",
+              return_value=[(0,0,0,"",("93.184.216.34",443))]),
+        patch("scripts.verify_public_https._https_client",
+              return_value=MagicMock(open=MagicMock(side_effect=responses))),
+    ):
+        result=verify("https://example.org")
+    assert result["dns"]=="PASS"
+    assert result["tls"]=="PASS"
+    assert result["homepage"]=="FAIL"
+    assert result["public_edge_pass"] is False
+    assert result["ready_for_commercial_launch"] is False
+
+
+def test_live_http_error_reports_status_and_phase_without_leaking_upstream_details():
+    """Public diagnosis may expose only the status integer, never response body."""
+    from io import BytesIO
+    from urllib.error import HTTPError
+    for code in (302, 403, 502):
+        error = HTTPError(
+            "https://example.org/", code, "sensitive response message",
+            {"Location": "https://private.invalid/token/SECRET123"},
+            BytesIO(b"private response body SECRET123"),
+        )
+        with (
+            patch("scripts.verify_public_https.socket.getaddrinfo",
+                  return_value=[(0,0,0,"",("93.184.216.34",443))]),
+            patch("scripts.verify_public_https._https_client",
+                  return_value=MagicMock(open=MagicMock(side_effect=error))),
+        ):
+            result = verify("https://example.org")
+        assert result["dns"] == "PASS"
+        assert result["homepage"] == "NOT_VERIFIED"
+        assert result["http_status"] == code
+        assert result["blocked_at"] == "homepage"
+        assert result["blocker_type"] == "HTTPError"
+        assert result["public_edge_pass"] is False
+        assert result["ready_for_commercial_launch"] is False
+        for secret in ("SECRET123", "private.invalid", "sensitive response"):
+            assert secret not in str(result)
+
+
+def test_live_health_http_error_identifies_health_phase():
+    from io import BytesIO
+    from urllib.error import HTTPError
+    success = _Response(
+        '<html><body class="landing premium">VALYQON'
+        '<form id="guestSearchForm"></form>'
+        '<div id="guestSearchResults"></div></body></html>',
+        {"Strict-Transport-Security":"max-age=31536000",
+         "X-Content-Type-Options":"nosniff"},
+    )
+    error = HTTPError("https://example.org/health", 503, "Service unavailable",
+                      {}, BytesIO(b"secret"))
+    with (
+        patch("scripts.verify_public_https.socket.getaddrinfo",
+              return_value=[(0,0,0,"",("93.184.216.34",443))]),
+        patch("scripts.verify_public_https._https_client",
+              return_value=MagicMock(open=MagicMock(side_effect=[success,error]))),
+    ):
+        result = verify("https://example.org")
+    assert result["tls"] == "PASS"
+    assert result["homepage"] == "PASS"
+    assert result["security_headers"] == "PASS"
+    assert result["health"] == "NOT_VERIFIED"
+    assert result["http_status"] == 503
+    assert result["blocked_at"] == "health"
+    assert result["public_edge_pass"] is False
+
+
+@pytest.mark.parametrize(("location","classification"),[
+    ("/login","login"),
+    ("https://example.org/dashboard","dashboard"),
+    ("https://other.example.org/private?secret=abc","other_or_unknown_host"),
+    ("/register?token=secretValue","other_same_host"),
+])
+def test_public_redirect_classification_does_not_leak_location(location,classification):
+    from io import BytesIO
+    from urllib.error import HTTPError
+    err=HTTPError("https://example.org/",303,"See Other",
+                  {"Location":location},BytesIO(b"secretValue"))
+    with (
+        patch("scripts.verify_public_https.socket.getaddrinfo",
+              return_value=[(0,0,0,"",("93.184.216.34",443))]),
+        patch("scripts.verify_public_https._https_client",
+              return_value=MagicMock(open=MagicMock(side_effect=err))),
+    ):
+        result=verify("https://example.org")
+    assert result["redirect_class"]==classification
+    assert result["http_status"]==303
+    assert result["public_edge_pass"] is False
+    assert "secretValue" not in str(result)
+    assert "other.example.org" not in str(result)

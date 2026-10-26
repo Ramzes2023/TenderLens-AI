@@ -52,6 +52,16 @@ def _https_client():
     return build_opener(HTTPSHandler(context=ssl.create_default_context()), _NoRedirect())
 
 
+def _is_public_landing(html: str) -> bool:
+    """Require current public procurement landing, not legacy 200 OK login."""
+    return (
+        "VALYQON" in html.upper()
+        and re.search(r'<body\\b[^>]*class=["\\\'][^"\\\']*\\blanding\\b', html, re.I) is not None
+        and 'id="guestSearchForm"' in html
+        and 'id="guestSearchResults"' in html
+    )
+
+
 def verify(url: str, timeout: float = 8.0) -> dict:
     host, port = validate_target(url)
     result = {
@@ -83,8 +93,10 @@ def verify(url: str, timeout: float = 8.0) -> dict:
         }), timeout=timeout) as response:
             result["tls"] = "PASS"
             payload = response.read(131072).decode("utf-8",errors="replace")
-            result["homepage"] = ("PASS" if response.status==200
-                                  and "VALYQON" in payload.upper() else "FAIL")
+            result["homepage"] = (
+                "PASS" if response.status == 200 and _is_public_landing(payload)
+                else "FAIL"
+            )
             headers = response.headers
             result["security_headers"] = ("PASS" if "max-age=" in
                 headers.get("Strict-Transport-Security","").lower()

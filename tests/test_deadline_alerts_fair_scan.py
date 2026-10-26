@@ -10,7 +10,42 @@ import json
 from app.launch.deadline_alerts import (
     DeadlineAlerts, MAX_REMINDERS_PER_CYCLE, MAX_SCANNED_PER_CYCLE,
 )
-from tests.test_deadline_alerts_database import _fixture, NOW
+from datetime import datetime, timezone
+from app.auth import AuthRepository
+from app.database.backend import Database
+from app.database.config import DatabaseSettings
+from app.organizations import OrganizationRepository
+
+NOW=datetime(2026,10,17,12,0,tzinfo=timezone.utc)
+
+
+def _fixture(tmp_path):
+    db=Database(DatabaseSettings("",tmp_path/"isolated-fair-reminders.sqlite"))
+    db.migrate()
+    user=AuthRepository(db).create_account("fair-worker@example.test","test-only-hash")
+    org=OrganizationRepository(db).default_for_account(user.id)
+    with closing(db.connect()) as conn:
+        with conn:
+            conn.execute("UPDATE auth_accounts SET email_verified=1 WHERE id=?",(user.id,))
+            snapshot={
+                "source":"eis", "external_id":"OFFLINE_FIXTURE_000",
+                "title":"OFFLINE_FIXTURE initial past scan",
+                "url":"https://zakupki.gov.ru/view/OFFLINE_FIXTURE_000",
+                "deadline":"2026-10-19T10:00:00+00:00",
+                "reasons":[], "metadata_analysis":{},
+                "preliminary_scoring":{
+                    "profile_name":"OFFLINE_FIXTURE", "profile_version":"1",
+                    "fit_score":70, "scorable_weight":100,
+                    "completeness_percent":80, "criteria":[],
+                },
+            }
+            conn.execute(
+                "INSERT INTO saved_opportunities"
+                "(organization_id,company_id,source,external_id,snapshot_json,"
+                "created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+                (org.id,500,"eis",snapshot["external_id"],
+                 json.dumps(snapshot), NOW.isoformat(),NOW.isoformat()))
+    return db,user,org
 
 
 def _seed(db, organization_id, *, noise, valid):

@@ -324,5 +324,5 @@ def test_short_inventory_never_accepts_partial_response(tmp_path, monkeypatch):
     with pytest.raises(probe.SSHPreflightError) as raised:
         probe.inspect("63.189.75.15", key, expected_sha="a" * 40)
     assert raised.value.failure_code == "SSH_REMOTE_SCRIPT_FAILED"
-    assert raised.value.stage == "UNKNOWN"
-    assert count >= 3
+    assert raised.value.stage == "REPOSITORY"
+    assert count >= 4

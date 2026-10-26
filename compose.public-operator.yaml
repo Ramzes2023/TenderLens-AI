@@ -23,6 +23,11 @@ services:
     image: tenderlens-ai:phase19-public
     command: ["python", "-m", "app.jobs.worker", "--connectors"]
     restart: unless-stopped
+    # Wait until API migrations and its strict health probe succeed before
+    # consuming queued writes against the shared reviewed PostgreSQL DB.
+    depends_on:
+      api:
+        condition: service_healthy
     env_file:
       - .env
     environment:

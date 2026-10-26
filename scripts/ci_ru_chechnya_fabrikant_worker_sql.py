@@ -22,8 +22,15 @@ from app.sources.snapshots import snapshot_catalog
 from app.sources.ru_chechnya_fabrikant44 import HOST, ORGANIZER, REGION, SOURCE_ID
 from scripts.ci_ru_leased_connector import run_leased_connector
 
+STAGE = "SETUP"
+
+def mark(stage):
+    global STAGE
+    STAGE = stage
+
 
 def acceptance():
+    mark("CATALOG")
     catalog = build_source_catalog(MonitoringSettings(
         enabled=False, interval_seconds=600, max_items=3,
         max_notifications_per_cycle=3, request_timeout=25,
@@ -38,7 +45,9 @@ def acceptance():
         try:
             store = OpportunityRepository(db)
             store.initialize()
+            mark("CURRENT_OFFICIAL_ORIGINAL_TO_WORKER")
             stats = run_leased_connector(db, catalog, store, SOURCE_ID, max_records=3)
+            mark("WORKER_COUNTS")
             count = stats["fetched_count"]
             if (not 2 <= count <= 3
                     or stats["accepted_count"] != count
@@ -46,11 +55,13 @@ def acceptance():
                     or stats["skipped_count"] != 0
                     or stats["updated_count"] != 0):
                 raise AssertionError("Genuine Chechnya source Worker SQL contract failed")
+            mark("SQL_ROWS")
             rows = store.read(SOURCE_ID, limit=3)
             if len(rows) != count:
                 raise AssertionError("Chechnya SQL row count disagrees with Worker")
             snapshot = snapshot_catalog(catalog, store)
             for notice in rows:
+                mark("INDEPENDENT_NATIVE_ORIGINAL_FIELDS")
                 target = urlsplit(notice.url)
                 if (notice.source != SOURCE_ID
                         or notice.tender_number != notice.external_id
@@ -59,6 +70,7 @@ def acceptance():
                         or not target.path.endswith("/" + notice.external_id)
                         or notice.region != REGION or notice.customer != ORGANIZER):
                     raise AssertionError("Unverified Chechnya region/ID original")
+                mark("PERSISTED_KEYWORD_QUERY")
                 found = asyncio.run(snapshot.fetch(
                     source_keys=(SOURCE_ID,), search_terms=(notice.external_id,),
                     limit_per_source=3,
@@ -68,6 +80,7 @@ def acceptance():
                     for hit in found.notices
                 ):
                     raise AssertionError("Authentic Chechnya notice not locally searchable")
+                mark("IDEMPOTENT_REPLAY")
                 if store.upsert(notice, connector_version(SOURCE_ID)):
                     raise AssertionError("Chechnya identical notice replay made a duplicate")
             return {"verified_regional_originals": count, "worker_sql_inserted": count,
@@ -83,6 +96,19 @@ def main():
     except Exception as error:
         print("RU_CHECHNYA_FABRIKANT_WORKER_SQL=BLOCKED")
         print("FAILURE_CLASS=" + type(error).__name__)
+        print("FAILURE_STAGE=" + STAGE)
+        if isinstance(error, AssertionError):
+            # Local static assertion only. Never output upstream HTTP bodies,
+            # tender data, arbitrary exception text or customer details.
+            mapping = {
+                "Chechnya first-party operator opt-in missing": "CATALOG_DISABLED",
+                "Genuine Chechnya source Worker SQL contract failed": "COUNT_MISMATCH",
+                "Chechnya SQL row count disagrees with Worker": "SQL_COUNT_MISMATCH",
+                "Unverified Chechnya region/ID original": "ORIGINAL_INVALID",
+                "Authentic Chechnya notice not locally searchable": "SEARCH_MISSING",
+                "Chechnya identical notice replay made a duplicate": "DUPLICATE",
+            }
+            print("SAFE_ASSERTION_KIND=" + mapping.get(str(error), "WORKER_OR_ASSERTION"))
         print("ACTUAL_TELEGRAM_MESSAGE_DELIVERED=NO")
         print("PRODUCTION_CHANGED=NO")
         return 1

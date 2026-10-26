@@ -119,3 +119,53 @@ def test_preview_inventory_missing_or_secret_output_is_rejected():
     ):
         with pytest.raises(ValueError):
             probe.parse_status(bad)
+
+
+
+@pytest.mark.parametrize("message,code", [
+    ("Host key verification failed.", "SSH_HOST_KEY_UNVERIFIED"),
+    ("WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!", "SSH_HOST_KEY_UNVERIFIED"),
+    ("Permission denied (publickey).", "SSH_AUTH_REJECTED"),
+    ("ssh: connect to host 203.0.113.7 port 22: Connection timed out", "SSH_CONNECT_TIMEOUT"),
+    ("ssh: connect to host 203.0.113.7 port 22: Connection refused", "SSH_CONNECTION_REFUSED"),
+    ("ssh: connect to host 203.0.113.7 port 22: No route to host", "SSH_ROUTE_UNREACHABLE"),
+    ("Could not resolve hostname example.invalid", "SSH_DNS_FAILURE"),
+    ("token=PRIVATE no useful details", "SSH_UNCLASSIFIED"),
+])
+def test_ssh_stderr_is_reported_as_enum_only(tmp_path, monkeypatch, message, code):
+    key = tmp_path / "key"
+    key.write_text("synthetic key not a credential")
+    monkeypatch.setattr(probe.subprocess, "run", lambda *_a, **_kw: SimpleNamespace(
+        returncode=255, stdout="", stderr=message,
+    ))
+    with pytest.raises(probe.SSHPreflightError) as result:
+        probe.inspect("63.189.75.15", key)
+    assert result.value.failure_code == code
+    assert message not in str(result.value)
+    assert "PRIVATE" not in str(result.value)
+
+
+def test_subprocess_timeout_safe_code_not_private_stderr(tmp_path, monkeypatch):
+    import subprocess
+    key = tmp_path / "key"
+    key.write_text("synthetic")
+    def timeout(*a, **kw):
+        raise subprocess.TimeoutExpired(cmd="ssh PRIVATE", timeout=45,
+                                        stderr=b"SECRET")
+    monkeypatch.setattr(probe.subprocess, "run", timeout)
+    with pytest.raises(probe.SSHPreflightError) as e:
+        probe.inspect("63.189.75.15", key)
+    assert e.value.failure_code == "SSH_PROCESS_TIMEOUT"
+    assert "SECRET" not in str(e.value)
+
+
+def test_main_emits_only_sanitized_failure_code(monkeypatch, capsys):
+    monkeypatch.setattr(probe, "inspect", lambda *_a, **_kw: (
+        (_ for _ in ()).throw(probe.SSHPreflightError("SSH_AUTH_REJECTED"))
+    ))
+    rc = probe.main(["--host", "63.189.75.15", "--key", "/dummy"])
+    printed = capsys.readouterr().out
+    assert rc == 2
+    assert "FAILURE_CODE=SSH_AUTH_REJECTED" in printed
+    assert "PRODUCTION_CHANGED=NO" in printed
+    assert "token" not in printed.lower()

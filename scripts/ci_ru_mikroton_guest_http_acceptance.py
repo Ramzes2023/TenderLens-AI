@@ -107,6 +107,7 @@ def acceptance():
             from app.organizations import OrganizationRepository, OrganizationService
             from app.companies import CompanyRepository, CompanyService
             from app.monitoring import MonitoringRepository, TenderMonitorService
+            from app.database import TenderRepository
             from app.api.security import SESSION_COOKIE
 
             auth_repo=AuthRepository(db)
@@ -118,6 +119,8 @@ def acceptance():
             company_repo.initialize()
             monitor_repo=MonitoringRepository(db)
             monitor_repo.initialize()
+            saved_repo=TenderRepository(db)
+            saved_repo.initialize()
             owner=auth.register("ru-worker-owner@example.test","test account password 24680!")
             outsider=auth.register("ru-worker-outside@example.test","test account password 13579!")
             org=organizations.create("Isolated REAL_HTTP Worker QA",owner.id)
@@ -132,6 +135,7 @@ def acceptance():
                 tender_discovery_service=TenderMonitorService(
                     cfg, None, monitor_repo, None),
                 source_catalog=catalog,
+                tender_repository=saved_repo,
                 database=db,
             )
             private_app=create_app(runtime=private_runtime,

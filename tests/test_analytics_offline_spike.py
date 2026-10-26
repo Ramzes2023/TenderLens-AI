@@ -39,7 +39,7 @@ def clean(gate, count):
 
 
 @pytest.mark.parametrize('case', CASES)
-def test_real_h_all_kpi_identity_denominator_policy_parity(case):
+def test_real_h_all_kpi_identity_denominator_policy_parity(case, tmp_path):
     async def exercise():
         payload = fixture_payload(case)
         direct = calculate(payload)
@@ -90,7 +90,7 @@ def test_real_h_all_kpi_identity_denominator_policy_parity(case):
                 assert direct['U'] == [['ted', 'zero']]
                 assert direct['kpis']['High Fit']['value'] == 0
             assert gate.peaks[0]['peak_commit'] < MEMORY_LIMIT
-            evidence = Path('.cache/phase24p3/p39d-memory.jsonl')
+            evidence = tmp_path / 'p39d-memory.jsonl'
             with evidence.open('a', encoding='utf-8') as stream:
                 stream.write(json.dumps({'case': case, **gate.peaks[0]}) + '\n')
         finally:

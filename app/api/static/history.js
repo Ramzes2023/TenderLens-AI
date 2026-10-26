@@ -14,6 +14,7 @@ let snapshotItems=[];
 let serial=0;
 let detailSerial=0;
 let context='';
+let pendingRecommendation=null;
 
 const identity=()=>`${state.organizationId}:${state.activeCompanyId??''}:${state.uiEpoch||0}`;
 const currentPage=()=>location.hash.slice(1)||'overview';
@@ -223,6 +224,13 @@ async function loadHistory(){
    );
 
   renderHistory();
+  if(pendingRecommendation&&pendingRecommendation.scope===identity()){
+    const target=pendingRecommendation.id;
+    pendingRecommendation=null;
+    if(records.some(record=>record.id===target))openHistory(target);
+    else $('historyMessage').textContent=
+      'The requested Discovery run is not in the latest 50 company history entries.';
+  }
  }
  catch(error){
   if(ticket!==serial||scope!==identity())return;
@@ -389,6 +397,15 @@ $('closeHistorySnapshot').onclick=
 $('closeHistoryTenderDetail').onclick=
  closeTender;
 
+window.addEventListener('valyqon-open-discovery-history',event=>{
+ const selection=event.detail;
+ if(!selection||!Number.isInteger(selection.id)||selection.id<=0||
+    selection.organizationId!==state.organizationId||
+    selection.companyId!==state.activeCompanyId)return;
+ pendingRecommendation={id:selection.id,scope:identity()};
+ if(currentPage()==='search-history')loadHistory();
+});
+
 window.addEventListener(
  'workspace-context',
  ()=>{
@@ -396,6 +413,8 @@ window.addEventListener(
 
   if(context!==next){
    context=next;
+   if(pendingRecommendation&&pendingRecommendation.scope!==next)
+    pendingRecommendation=null;
    serial++;
    detailSerial++;
    clearHistory('Open Search History to load previous Discovery runs.');

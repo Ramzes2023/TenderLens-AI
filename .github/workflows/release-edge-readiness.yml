@@ -1,0 +1,102 @@
+name: VALYQON Public Launch Readiness (Read Only)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - compose.public.yaml
+      - .env.example
+      - scripts/verify_public_https.py
+      - scripts/ci_public_pilot_release_policy.py
+      - scripts/ci_public_compose_resolved.py
+      - tests/test_public_compose_resolved.py
+      - tests/test_verify_public_https.py
+      - tests/test_public_pilot_release_policy.py
+      - .github/workflows/release-edge-readiness.yml
+  push:
+    branches:
+      - integration/valyqon-release-candidate-20261025
+      - fix/public-bot-opt-in-profile-main-20261025
+  workflow_dispatch:
+    inputs:
+      public_https_url:
+        description: 'Public HTTPS URL to verify; required for live edge probe'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  release-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PYTHON_DOTENV_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Verify release script, hostname rejection, truthful gate flags
+        run: python -m pytest -q tests/test_verify_public_https.py tests/test_deployment.py
+      - name: Ensure public Compose is fail closed before merchant integration
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          compose=Path('compose.public.yaml').read_text(encoding='utf-8')
+          caddy=Path('Caddyfile').read_text(encoding='utf-8')
+          assert 'VALYQON_PUBLIC_ANALYTICS_MODE: "real"' in compose
+          assert 'VALYQON_PUBLIC_ANALYTICS_MODE: "demo"' not in compose
+          assert 'VALYQON_RESTRICT_PAID_SOURCE_DETAILS: "true"' in compose
+          assert 'APP_ENV: production' in compose
+          assert 'TENDERLENS_DOMAIN: "${TENDERLENS_DOMAIN:?' in compose
+          assert 'ACME_EMAIL: "${ACME_EMAIL:?' in compose
+          assert 'reverse_proxy api:8000' in caddy
+          assert 'Strict-Transport-Security' in caddy
+          print('STATIC_PUBLIC_EDGE_GATES=PASS')
+          print('PRODUCTION_PUBLIC_DEPLOYMENT=NOT_PERFORMED')
+          PY
+  resolved-compose-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check resolved public Compose with ONLY disposable example env
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e .env
+          trap 'rm -f .env' EXIT
+          cp .env.example .env
+          printf '\nTENDERLENS_DOMAIN=valyqon-ci.example.org\nACME_EMAIL=ci@example.org\n' >> .env
+          docker compose -f compose.public.yaml config --format json > "${RUNNER_TEMP}/valyqon-public-default.json"
+          python -m scripts.ci_public_compose_resolved default "${RUNNER_TEMP}/valyqon-public-default.json"
+          docker compose --profile verified-bot -f compose.public.yaml config --format json > "${RUNNER_TEMP}/valyqon-public-opt-in.json"
+          python -m scripts.ci_public_compose_resolved verified-bot "${RUNNER_TEMP}/valyqon-public-opt-in.json"
+          echo 'REAL_PUBLIC_HTTPS=NOT_TESTED'
+          echo 'LIVE_TENDERS_AND_BOT=NOT_TESTED'
+      - name: Regression tests for interpolated source/bot/paywall guards
+        run: |
+          python -m pip install pytest==9.1.1
+          python -m pytest -q tests/test_public_compose_resolved.py tests/test_public_pilot_release_policy.py
+
+  public-edge-probe:
+    if: github.event_name == 'workflow_dispatch' && inputs.public_https_url != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check true TLS, security headers and application health on supplied domain
+        env:
+          PUBLIC_URL: ${{ inputs.public_https_url }}
+        run: |
+          python -B scripts/verify_public_https.py --url "$PUBLIC_URL"

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 from html import escape
 from urllib.parse import quote
@@ -687,7 +688,28 @@ def _password_reset_page(*, reset: bool) -> str:
       finally{if(!completed)btn.disabled=false;}
     });
   </script>'''.replace('RESET_MODE', 'true' if reset else 'false')
-    return page[:script_start] + script + page[script_end:]
+    page = page[:script_start] + script + page[script_end:]
+    # Isolated browser preview is a separate SQLite account store, NOT the
+    # private AWS preview. Local Mailpit never delivers to actual mailboxes.
+    if not reset and os.getenv("VALYQON_WEBSITE_REVIEW_ONLY") == "1":
+        preview_note = (
+            '<aside class="hint" style="padding:14px;border:1px solid #cad7f4;'
+            'border-radius:12px;background:#f2f5ff;line-height:1.7">'
+            '<strong>Local preview password help</strong>'
+            '<p>Reset emails appear only in '
+            '<a href="http://127.0.0.1:18866/" target="_blank" rel="noopener noreferrer">'
+            'the local test inbox (Mailpit)</a>, not your real mailbox. '
+            'Only accounts registered on this 18865 preview can receive a '
+            'reset link here. Accounts from the 18765 AWS preview are separate.'
+            '</p><p>If no reset email appears, confirm the account was '
+            'registered at <a href="/register">this preview</a>. '
+            'Requests for unknown accounts are intentionally acknowledged '
+            'without sending mail.</p></aside>'
+        )
+        page = page.replace('<p class="switch"><a href="/login">Back to sign in</a></p>',
+                            preview_note + '<p class="switch"><a href="/login">Back to sign in</a></p>',
+                            1)
+    return page
 
 
 def forgot_password_html() -> str:

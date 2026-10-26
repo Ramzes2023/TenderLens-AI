@@ -164,6 +164,48 @@ def verify(url: str, timeout: float = 8.0) -> dict:
                 )
             else:
                 result["redirect_class"] = "other_or_unknown_host"
+        if phase == "homepage" and result["tls"] == "PASS":
+            # Diagnose the PUBLIC same-origin health and branded stylesheet
+            # independently of a legacy / -> /login redirect. This only
+            # identifies what is installed on this edge; it can never turn
+            # a non-public homepage into a PASS.
+            try:
+                with client.open(Request(f"https://{host}/health", headers={
+                        "User-Agent": "VALYQON-ReleaseReadiness/1.0"
+                }), timeout=timeout) as health_response:
+                    health = json.loads(health_response.read(16384))
+                    good = (
+                        health_response.status == 200 and isinstance(health, dict)
+                        and health.get("status") == "ok"
+                        and health.get("service") == "VALYQON AI"
+                        and isinstance(health.get("components"), dict)
+                        and health["components"].get("database") == "ready"
+                        and health["components"].get("scoring") == "ready"
+                        and health["components"].get("cache") != "unavailable"
+                    )
+                    result["health"] = "PASS" if good else "FAIL"
+            except HTTPError as check_error:
+                result["health_http_status"] = int(check_error.code)
+            except (socket.gaierror, ssl.SSLError, URLError, TimeoutError,
+                    ConnectionError, OSError, ValueError):
+                pass
+            try:
+                with client.open(Request(f"https://{host}/assets/premium.css", headers={
+                        "User-Agent": "VALYQON-ReleaseReadiness/1.0"
+                }), timeout=timeout) as css_response:
+                    css = css_response.read(131072).decode("utf-8", errors="replace")
+                    mime = css_response.headers.get("Content-Type", "").lower()
+                    result["premium_css"] = (
+                        "PASS" if css_response.status == 200
+                        and mime.startswith("text/css")
+                        and ".landing.premium" in css
+                        else "FAIL"
+                    )
+            except HTTPError as check_error:
+                result["premium_css_http_status"] = int(check_error.code)
+            except (socket.gaierror, ssl.SSLError, URLError, TimeoutError,
+                    ConnectionError, OSError, ValueError):
+                pass
     except (socket.gaierror,ssl.SSLError,URLError,TimeoutError,
             ConnectionError,OSError,ValueError) as exc:
         # Never leak request headers, cookies, credentials or raw upstream body.

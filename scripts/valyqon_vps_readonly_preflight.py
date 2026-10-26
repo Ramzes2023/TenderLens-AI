@@ -157,6 +157,42 @@ def _remote_shell_probe(ssh_prefix):
             and run.stdout.strip() == "VALYQON_REMOTE_SHELL_OK")
 
 
+def _segmented_readonly_inventory(ssh_prefix):
+    """Retry only *read-only* exact SSH inventory in short bounded shell parts.
+
+    Some SSH gateways accept the tiny verified shell command but reject a
+    long stdin script before its first stage marker. Segment only at known
+    stage boundaries where all previous shell compounds have already closed.
+    Each fragment remains the fixed original, is transmitted to the same
+    strictly host-key-verified host, and cannot consume local key contents
+    or mutate the remote host. No partial output is ever accepted as success.
+    """
+    marker = "printf '%s\\n' VALYQON_PREFLIGHT_STAGE="
+    parts = REMOTE.split(marker)
+    stages = ("START", "REPOSITORY", "DOCKER",
+              "PUBLIC_COMPOSE", "PRIVATE_PREVIEW", "COMPLETE")
+    if len(parts) != len(stages) + 1:
+        return None
+    combined = []
+    for stage, fragment in zip(stages, parts[1:]):
+        script = "set -u\\n" + marker + fragment
+        try:
+            run = subprocess.run(
+                ssh_prefix + ["sh", "-s"],
+                input=script, capture_output=True, text=True,
+                timeout=22, check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if run.returncode != 0 or _safe_remote_stage(run.stderr) != stage:
+            return None
+        combined.append(run.stdout)
+    try:
+        return parse_status("\\n".join(combined))
+    except ValueError:
+        return None
+
+
 def _safe_ssh_failure(stderr: str, returncode: int) -> str:
     """Classify only known SSH errors. No remote stderr ever leaves inspect()."""
     value = stderr.lower() if type(stderr) is str else ""
@@ -247,10 +283,21 @@ def inspect(host, key, user="ubuntu", expected_sha=None):
         code = _safe_ssh_failure(run.stderr, run.returncode)
         stage = _safe_remote_stage(run.stderr)
         if code == "SSH_REMOTE_COMMAND_FAILED":
-            # A second read-only shell probe separates shell/forced-command
-            # restrictions from an error *inside* the diagnostic script.
-            code = ("SSH_REMOTE_SCRIPT_FAILED" if _remote_shell_probe(args[:-2])
-                    else "SSH_REMOTE_SHELL_UNAVAILABLE")
+            # A tiny shell control checks whether the command runs at all.
+            # If it does and the full diagnostic had NO stage marker, recover
+            # a complete inventory via the same signed fixed script split
+            # at closed shell-compound boundaries. Never accept a partial
+            # inventory or SSH exit 255; no host-key/auth bypass.
+            if _remote_shell_probe(args[:-2]):
+                if stage == "UNKNOWN":
+                    segmented = _segmented_readonly_inventory(args[:-2])
+                    if segmented is not None:
+                        out = segmented
+                        same = expected_sha is not None and out["REMOTE_SHA"] == expected_sha
+                        return out, same
+                code = "SSH_REMOTE_SCRIPT_FAILED"
+            else:
+                code = "SSH_REMOTE_SHELL_UNAVAILABLE"
         raise SSHPreflightError(code, stage=stage, exit_code=run.returncode)
     out = parse_status(run.stdout)
     same = expected_sha is not None and out["REMOTE_SHA"] == expected_sha

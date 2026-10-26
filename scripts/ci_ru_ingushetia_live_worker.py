@@ -11,6 +11,7 @@ import asyncio
 import json
 import os
 import tempfile
+import time
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -42,6 +43,21 @@ from app.sources.snapshots import snapshot_catalog
 
 
 ROOT = Path(__file__).resolve().parents[1] / 'russian_trusted_root_ca_pem.crt'
+
+
+class IngushetiaEisWorkerFailure(AssertionError):
+    """Safe durable-queue status; never print endpoint errors or tokens."""
+
+    def __init__(self, job):
+        state = getattr(job, "state", None)
+        reason = getattr(job, "failure_code", None)
+        self.job_state = state if state in {"queued", "running", "failed", "succeeded", "cancelled"} else "UNKNOWN"
+        self.job_failure_code = reason if reason in {
+            "handler_error", "retryable_failure", "permanent_failure",
+            "lease_expired", "invalid_result", "unknown_type",
+        } else "UNKNOWN"
+        super().__init__("Real EIS leased Worker failed")
+
 
 
 def _catalog_settings():
@@ -161,10 +177,21 @@ def proof():
             job = ConnectorSyncService(jobs, catalog).enqueue(SOURCE_ID)
             handlers = HandlerRegistry()
             handlers.register(JOB_TYPE, ConnectorSyncHandler(catalog, store, max_records=10))
-            assert Worker(jobs, handlers, job_types=(JOB_TYPE,)).run_once()
-            completed = jobs.get(job.id, scope=JobScope())
+            worker = Worker(jobs, handlers, job_types=(JOB_TYPE,))
+            # Network retries must use the actual durable queue and the SAME
+            # leased, idempotent source job. Never seed SQL or ignore failures.
+            completed = None
+            for attempt in range(3):
+                if not worker.run_once():
+                    raise AssertionError("Real EIS Worker not claimed")
+                completed = jobs.get(job.id, scope=JobScope())
+                if completed is not None and completed.state == "succeeded":
+                    break
+                if completed is None or completed.state != "queued" or attempt == 2:
+                    raise IngushetiaEisWorkerFailure(completed)
+                time.sleep((1.25, 2.25)[attempt])
             if completed is None or completed.state != "succeeded":
-                raise AssertionError("Real fenced worker did not succeed")
+                raise IngushetiaEisWorkerFailure(completed)
             rows = store.read(SOURCE_ID, limit=10)
             if len(rows) < 2:
                 raise AssertionError("Insufficient real Ingushetia notices persisted")
@@ -261,6 +288,23 @@ def main():
             result = acceptance()
         except Exception as exc:
             diagnostic = {"route": upstream, **transport_failure(exc)}
+            if upstream == "official_eis_rss":
+                allowed_failures = {
+                    "Real EIS Worker not claimed": "EIS_WORKER_NOT_CLAIMED",
+                    "Real EIS leased Worker failed": "EIS_WORKER_FAILED",
+                    "Insufficient real Ingushetia notices persisted": "EIS_SQL_ROWS_INSUFFICIENT",
+                    "Real EIS Worker SQL counts do not match verified originals": "EIS_WORKER_SQL_COUNT_MISMATCH",
+                    "Real EIS Worker persisted noncanonical regional original": "EIS_NONCANONICAL_SQL_ORIGINAL",
+                    "Official EIS original card is not HTML": "EIS_ORIGINAL_NOT_HTML",
+                    "Official original card does not corroborate EIS number": "EIS_ORIGINAL_ID_MISMATCH",
+                }
+                diagnostic["safe_contract_failure"] = (
+                    allowed_failures.get(str(exc))
+                    if isinstance(exc, AssertionError) else None
+                )
+                if type(exc) is IngushetiaEisWorkerFailure:
+                    diagnostic["worker_job_state"] = exc.job_state
+                    diagnostic["worker_failure_code"] = exc.job_failure_code
             if upstream == "accredited_44fz_etp_mirror":
                 diagnostic["safe_contract_failure"] = _safe_ingushetia_vendor_failure(exc)
                 if type(exc).__name__ == "IngushetiaWorkerProofFailure":

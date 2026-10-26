@@ -188,6 +188,27 @@ class DeadlineAlerts:
         return records
 
     def _claim(self, row, deadline: str, lead_hours: int, channel: str) -> bool:
+        """Revalidate active consent, tenant membership, destination and notice.
+
+        Candidate rows are snapshots. A user may opt out or lose access after
+        candidate discovery. Re-check the *current* database state in the
+        same atomic SQL statement as the deduplicated claim, rather than
+        trusting a stale worker candidate. This is best-effort consent at
+        claim time; not a claim of atomic delivery with an external provider.
+        """
+        if channel == "email":
+            channel_guard = "p.email_enabled=1 AND a.email=?"
+            destination = row["email"]
+        elif channel == "telegram":
+            channel_guard = (
+                "p.telegram_enabled=1 AND EXISTS ("
+                "SELECT 1 FROM monitor_subscriptions m "
+                "WHERE m.owner_user_id=a.owner_user_id "
+                "AND m.enabled=1 AND m.chat_id=?)"
+            )
+            destination = row["chat_id"]
+        else:
+            raise ValueError("Unsupported reminder channel.")
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with closing(self.database.connect()) as conn:
             with conn:
@@ -195,9 +216,23 @@ class DeadlineAlerts:
                     "INSERT INTO deadline_alert_receipts "
                     "(account_id,organization_id,company_id,source,external_id,"
                     "deadline,lead_hours,channel,state,claimed_at) "
-                    "VALUES (?,?,?,?,?,?,?,?,'pending',?) ON CONFLICT DO NOTHING",
+                    "SELECT ?,?,?,?,?,?,?,?,'pending',? "
+                    "WHERE EXISTS ("
+                    " SELECT 1 FROM deadline_alert_preferences p "
+                    " JOIN auth_accounts a ON a.id=p.account_id "
+                    " JOIN organization_members om ON om.organization_id=p.organization_id "
+                    "  AND om.account_id=p.account_id "
+                    " JOIN saved_opportunities s ON s.organization_id=p.organization_id "
+                    "  AND s.company_id=p.company_id "
+                    " WHERE p.account_id=? AND p.organization_id=? AND p.company_id=? "
+                    "  AND s.source=? AND s.external_id=? "
+                    "  AND a.is_active=1 AND a.email_verified=1 "
+                    "  AND " + channel_guard + ") "
+                    "ON CONFLICT DO NOTHING",
                     (row["account_id"], row["organization_id"], row["company_id"],
-                     row["source"], row["external_id"], deadline, lead_hours, channel, now),
+                     row["source"], row["external_id"], deadline, lead_hours, channel,
+                     now, row["account_id"], row["organization_id"], row["company_id"],
+                     row["source"], row["external_id"], destination),
                 )
                 return cursor.rowcount == 1
 

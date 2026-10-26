@@ -20,6 +20,8 @@ def check(root: Path = ROOT) -> dict:
         "app/api/saas_shell.py",
         "app/api/static/premium.css",
         "app/api/landing.py",
+        "app/api/runtime.py",
+        "app/quotas/synchronous.py",
     ]
     missing = [path for path in required if not (root / path).is_file()]
     status = {
@@ -34,6 +36,8 @@ def check(root: Path = ROOT) -> dict:
         "live_worker_to_user": "NOT_VERIFIED",
         "payment_and_legal_approval": "NOT_VERIFIED",
         "postgres_cutover_required_for_premium_ui": "NOT_VERIFIED",
+        "existing_sqlite_api_startup_can_change_schema": "NOT_VERIFIED",
+        "same_sqlite_api_image_upgrade_approved": False,
         "public_deployment_authorized": False,
         "production_changed": False,
         "errors": [],
@@ -100,6 +104,13 @@ def check(root: Path = ROOT) -> dict:
         status["premium_asset_source"] = "ASSET_PRESENT_IN_MAIN"
     else:
         status["errors"].append("PREMIUM_STYLESHEET_NOT_IN_RENDERED_SHELL")
+    runtime=(root/"app/api/runtime.py").read_text(encoding="utf-8")
+    quota=(root/"app/quotas/synchronous.py").read_text(encoding="utf-8")
+    if ("runtime.synchronous_usage.initialize()" in runtime
+            and "self.repository.database.migrate('synchronous_usage')" in quota):
+        status["existing_sqlite_api_startup_can_change_schema"] = "YES"
+    else:
+        status["errors"].append("UNREVIEWED_SQLITE_STARTUP_MUTATION_BEHAVIOR")
     if not status["errors"]:
         status["postgres_cutover_required_for_premium_ui"] = "NO_STATIC_ARCHITECTURE"
     return status

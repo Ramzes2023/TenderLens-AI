@@ -372,11 +372,16 @@ def verify_eis_feed_law(payload: bytes, wanted: str) -> None:
             raise SourceError("EIS law verification failed: mixed, unknown or conflicting result")
 
 
-def validate_eis_direct_urls(urls) -> None:
+def validate_eis_direct_urls(urls, *, allow_extensionless_rss=False) -> None:
+    # National EIS callers retain their historical .html-only contract.
+    # The Chechnya adapter explicitly opts in to the verified same-host alias.
+    paths = {"/epz/order/extendedsearch/rss.html"}
+    if allow_extensionless_rss:
+        paths.add("/epz/order/extendedsearch/rss")
     for raw in urls:
         parts = urlsplit(raw)
         if (parts.scheme != "https" or parts.netloc != "zakupki.gov.ru"
-                or parts.path != "/epz/order/extendedsearch/rss.html" or parts.fragment
+                or parts.path not in paths or parts.fragment
                 or "\\" in raw or any(c.isspace() or ord(c) < 32 for c in raw)):
             raise SourceError("Direct EIS requires the official HTTPS RSS endpoint")
 
@@ -409,6 +414,19 @@ def parse_eis_feed(payload: bytes, *, source_name: str = "eis") -> list[TenderNo
         combined = _clean(" ".join(filter(None, [title, description])))
         number_match = _NOTICE_RE.search(combined + " " + link)
         tender_number = number_match.group(1) if number_match else None
+        if source_name == "ru_chechnya_eis":
+            # EIS descriptions may contain unrelated 19-digit original IDs
+            # (for example a referenced prior procedure). For this opt-in
+            # regional adapter, the official notice card's regNumber, not the
+            # first number in human text, is the authoritative 44-FZ identity.
+            # Never trust third-party links or non-official routes here.
+            official = urlsplit(link)
+            reference = parse_qs(official.query, keep_blank_values=True).get("regNumber", [])
+            if (official.scheme == "https" and official.netloc == "zakupki.gov.ru"
+                    and official.path.startswith("/epz/order/notice/")
+                    and not official.fragment and len(reference) == 1
+                    and re.fullmatch(r"[0-9]{19}", reference[0])):
+                tender_number = reference[0]
         external_id = guid or tender_number or _stable_id(guid, link, title, published or "")
         deadline_text = _extract(_DEADLINE_RE, combined)
         notices.append(TenderNotice(
@@ -474,6 +492,7 @@ class EisRssSource:
     name: str = "eis"
     direct: bool = False
     system_trust: bool = False
+    allow_extensionless_rss: bool = False
 
     def __post_init__(self):
         if not math.isfinite(self.timeout) or not 0 < self.timeout <= 120:
@@ -488,6 +507,7 @@ class EisRssSource:
             name=self.name,
             direct=self.direct,
             system_trust=self.system_trust,
+            allow_extensionless_rss=self.allow_extensionless_rss,
         )
 
     async def fetch(self, limit: int = 20) -> list[TenderNotice]:
@@ -495,7 +515,7 @@ class EisRssSource:
         if not self.urls:
             return []
         if self.direct:
-            validate_eis_direct_urls(self.urls)
+            validate_eis_direct_urls(self.urls, allow_extensionless_rss=self.allow_extensionless_rss)
         verify = eis_tls_verify(direct=self.direct, system_trust=self.system_trust,
                                 ca_bundle_file=self.ca_bundle_file)
         merged: list[TenderNotice] = []

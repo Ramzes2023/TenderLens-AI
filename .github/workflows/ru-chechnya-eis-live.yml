@@ -1,0 +1,362 @@
+name: RU Chechnya EIS 44 regional source gated acceptance
+
+on:
+  # A push to the repository-owned feature branch can run on trusted
+  # self-hosted infrastructure without a premature merge into main.
+  # NEVER execute unreviewed fork pull_request code on self-hosted runners.
+  push:
+    branches: [feat/ru-chechnya-eis-rss-20261022]
+    paths:
+      - .github/workflows/ru-chechnya-eis-live.yml
+      - .github/workflows/ru-chechnya-release-gate.yml
+      - scripts/ru_chechnya_release_gate.py
+      - tests/test_ru_chechnya_release_gate.py
+      - scripts/ci_ru_chechnya_eis_real_worker.py
+      - scripts/ru_chechnya_eis_transport_probe.py
+      - scripts/ru_chechnya_official_alternatives_probe.py
+      - scripts/ru_chechnya_windows_live.ps1
+      - scripts/ru_chechnya_validate_url.py
+      - scripts/ru_chechnya_windows_bootstrap.ps1
+      - app/sources/ru_chechnya_eis_rss.py
+      - app/sources/eis_rss.py
+      - tests/test_ru_chechnya_eis_rss.py
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/ru_chechnya_eis_rss.py
+      - app/sources/eis_rss.py
+      - app/sources/catalog.py
+      - app/sources/ingestion.py
+      - app/sources/ru_dedup.py
+      - app/sources/ru_notice_identity.py
+      - app/monitoring/config.py
+      - app/bot/monitoring.py
+      - tests/test_ru_chechnya_eis_rss.py
+      - scripts/ci_ru_chechnya_eis_real_worker.py
+      - scripts/ru_chechnya_windows_live.ps1
+      - scripts/ru_chechnya_validate_url.py
+      - scripts/ru_chechnya_windows_bootstrap.ps1
+      - scripts/ru_chechnya_eis_transport_probe.py
+      - scripts/ru_chechnya_official_alternatives_probe.py
+      - .github/workflows/ru-chechnya-eis-live.yml
+      - .github/workflows/ru-chechnya-release-gate.yml
+      - scripts/ru_chechnya_release_gate.py
+      - tests/test_ru_chechnya_release_gate.py
+  workflow_dispatch:
+    inputs:
+      regional_rss_url:
+        description: "Exact official EIS 44-FZ Chechnya-filtered RSS URL copied from EIS advanced search"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Several branch pushes used to leave stale offline/live jobs queued while
+# their RSS candidate, source code and acceptance assertions had changed.
+# Only the newest proof for this exact ref and event is useful; never cancel
+# an unrelated source or the main branch's acceptance work.
+concurrency:
+  group: ru-chechnya-proof-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chechnya-offline-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Compile new source and strict live acceptance
+        run: python -m compileall -q app/sources/ru_chechnya_eis_rss.py scripts/ci_ru_chechnya_eis_real_worker.py scripts/ru_chechnya_eis_transport_probe.py scripts/ru_chechnya_validate_url.py scripts/ru_chechnya_official_alternatives_probe.py
+      - name: Chechnya official URL, regional evidence, legal provenance, opt-in, Worker and dedup contracts
+        run: python -B -m pytest -q tests/test_ru_chechnya_eis_rss.py tests/test_ru_background_telegram_catalog.py tests/test_ru_telegram_original_dedup.py tests/test_ru_chechnya_release_gate.py
+      - name: Parse trusted Windows launcher and Python bootstrap (no remote calls)
+        shell: pwsh
+        run: |
+          foreach ($script in @(
+            'scripts/ru_chechnya_windows_live.ps1',
+            'scripts/ru_chechnya_windows_bootstrap.ps1'
+          )) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $script).Path,
+              [ref]$tokens, [ref]$parseErrors
+            ) | Out-Null
+            if ($parseErrors.Count -gt 0) {
+              $parseErrors | ForEach-Object { Write-Error $_ }
+              exit 1
+            }
+          }
+
+  chechnya-windows-url-preflight:
+    # Windows regression for the exact operator failure: the automatically
+    # generated official EIS RSS candidate must pass the production validator.
+    # No EIS HTTP and no Telegram; fork PR code is never run self-hosted.
+    runs-on: windows-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Official auto-generated Chechnya RSS passes Windows no-network smoke
+        shell: pwsh
+        run: |
+          & powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ru_chechnya_windows_live.ps1 -TryOfficialSearchCandidate -ValidateUrlOnly
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Official Chechnya 44-FZ RSS generator/validator mismatch on Windows'
+          }
+
+  chechnya-hosted-windows-live-signal:
+    # Independent, NO-SECRETS EIS→real Worker→disposable SQLite→search→
+    # LocalCaptureBot canary. Runs only on our exact trusted feature-branch
+    # push; it cannot write to production or use the external Telegram API.
+    # Success proves only this GitHub-hosted Windows environment, not RU
+    # self-hosted availability or real Telegram delivery.
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/feat/ru-chechnya-eis-rss-20261022'
+    runs-on: windows-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    env:
+      RU_CHECHNYA_EIS_ENABLED: "true"
+      EIS_DIRECT_ENABLED: "true"
+      EIS_SYSTEM_TRUST_ENABLED: "true"
+      EIS_CA_BUNDLE_FILE: ""
+      GIGACHAT_CA_BUNDLE_FILE: ""
+      EIS_PROFILE_FEEDS_ENABLED: "false"
+      MONITORING_ENABLED: "false"
+      RU_CHECHNYA_E2E_TEST_BOT_TOKEN: ""
+      RU_CHECHNYA_E2E_TEST_CHAT_ID: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Try real Chechnya 44-FZ EIS originals through isolated Windows Worker
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $env:RU_CHECHNYA_EIS_RSS_URLS = python -c 'from app.sources.eis_rss import build_eis_rss_url; print(build_eis_rss_url("Чеченская Республика"))'
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot generate official candidate URL' }
+          Write-Host 'CHECHNYA_WINDOWS_CANARY=UNVERIFIED_TEXT_QUERY_LOCAL_CAPTURE_ONLY'
+          python -B -m scripts.ci_ru_chechnya_eis_real_worker
+          $workerExit = $LASTEXITCODE
+          if ($workerExit -eq 0) {
+            Write-Host 'CHECHNYA_WINDOWS_CANARY=WORKER_SQLITE_QUERY_LOCAL_CAPTURE_VERIFIED'
+          } else {
+            Write-Host 'CHECHNYA_WINDOWS_CANARY=LIVE_WORKER_NOT_VERIFIED'
+            python -B -m scripts.ru_chechnya_eis_transport_probe
+            Write-Host 'CHECHNYA_WINDOWS_CANARY=OFFICIAL_EIS_NETWORK_DIAG_RECORDED'
+          }
+          Write-Host 'CHECHNYA_WINDOWS_CANARY_IS_NOT_RELEASE_GATE=YES'
+          Write-Host 'REAL_TELEGRAM_API_ACK=NOT_VERIFIED'
+          Write-Host 'PRODUCTION_CHANGED=NO'
+          # pwsh GitHub Actions propagates a previous native program's
+          # nonzero LASTEXITCODE even when all diagnostic host script lines
+          # succeed. This is intentionally a non-release-gating observation.
+          exit 0
+
+  chechnya-alternative-publisher-discovery:
+    # Strict read-only connectivity check for the official Chechen committee
+    # information page and one historical publicly advertised Fabrikant card.
+    # Neither URL is a tender LISTING API or valid EIS RSS release evidence.
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/feat/ru-chechnya-eis-rss-20261022'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Read-only regional official information and historic ETP route check
+        timeout-minutes: 3
+        env:
+          MONITORING_ENABLED: "false"
+          RU_CHECHNYA_E2E_TEST_BOT_TOKEN: ""
+          RU_CHECHNYA_E2E_TEST_CHAT_ID: ""
+        run: python -B -m scripts.ru_chechnya_official_alternatives_probe
+
+  chechnya-trusted-release-prerequisites:
+    # Trusted repository-owned branch PUSH only. Secrets are evaluated into
+    # boolean flags at the GitHub expression boundary and NEVER passed as
+    # token/chat values or echoed to a hosted diagnostic machine.
+    # This is a readiness signal, NOT real EIS ingestion or Telegram delivery.
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/feat/ru-chechnya-eis-rss-20261022'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    env:
+      HAS_TEST_BOT_TOKEN: ${{ secrets.VALYQON_RU_CHECHNYA_E2E_TEST_BOT_TOKEN != '' }}
+      HAS_TEST_CHAT_ID: ${{ secrets.VALYQON_RU_CHECHNYA_E2E_TEST_CHAT_ID != '' }}
+      HAS_OPERATOR_RSS_URL: ${{ vars.VALYQON_RU_CHECHNYA_EIS_RSS_URL != '' }}
+    steps:
+      - name: Report missing setup without revealing secret values
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$HAS_TEST_BOT_TOKEN" == "true" && "$HAS_TEST_CHAT_ID" == "true" ]]; then
+            echo "CHECHNYA_AUTHORIZED_TEST_CHAT_CREDENTIALS=CONFIGURED"
+          else
+            echo "CHECHNYA_AUTHORIZED_TEST_CHAT_CREDENTIALS=MISSING"
+          fi
+          if [[ "$HAS_OPERATOR_RSS_URL" == "true" ]]; then
+            echo "CHECHNYA_OPERATOR_OFFICIAL_RSS_URL=CONFIGURED_NOT_YET_LIVE_VERIFIED"
+          else
+            echo "CHECHNYA_OPERATOR_OFFICIAL_RSS_URL=NOT_CONFIGURED_UNVERIFIED_TEXT_CANDIDATE_ONLY"
+          fi
+          echo "CHECHNYA_PRODUCTION_ENABLED=NO"
+          echo "CHECHNYA_LIVE_EIS_AND_BOT_ACK_NOT_PROVEN=YES"
+
+  chechnya-hosted-network-signal:
+    # A read-only GitHub-hosted canary while the approved RU self-hosted Linux
+    # runner is offline/unassigned. This is NEVER regional live acceptance:
+    # network reachability depends on the runner's location and EIS policy.
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/feat/ru-chechnya-eis-rss-20261022'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Read-only EIS 44-FZ candidate probe via bounded public-IP HTTPS transport
+        env:
+          RU_CHECHNYA_EIS_ENABLED: "true"
+          EIS_DIRECT_ENABLED: "true"
+          EIS_SYSTEM_TRUST_ENABLED: "false"
+          EIS_CA_BUNDLE_FILE: ""
+          GIGACHAT_CA_BUNDLE_FILE: ""
+          MONITORING_ENABLED: "false"
+          RU_CHECHNYA_E2E_TEST_BOT_TOKEN: ""
+          RU_CHECHNYA_E2E_TEST_CHAT_ID: ""
+        shell: bash
+        run: |
+          set -euo pipefail
+          export RU_CHECHNYA_EIS_RSS_URLS="$(python -c 'from app.sources.eis_rss import build_eis_rss_url; print(build_eis_rss_url("Чеченская Республика"))')"
+          echo "EIS_NETWORK_CANARY=UNVERIFIED_TEXT_SEARCH_GITHUB_HOSTED_NOT_RELEASE_GATE"
+          # The probe logs only official public record counts and classified
+          # reasons, never a query URL, raw response or subscriber information.
+          if python -B -m scripts.ru_chechnya_eis_transport_probe; then
+            echo "EIS_HOSTED_NETWORK_CANARY=RECEIVED_ACCEPTABLE_ORIGINALS_NON_RU_RUNNER"
+          else
+            echo "EIS_HOSTED_NETWORK_CANARY=NOT_CONFIRMED_NON_RU_RUNNER"
+          fi
+          echo "EIS_HOSTED_NETWORK_CANARY_IS_NOT_PRODUCTION_ACCEPTANCE=YES"
+
+  chechnya-real-live-worker:
+    # Default-branch callback installed by safely merged infrastructure PR #262
+    # automatically re-runs the strict PR release-proof check AFTER this full
+    # first-party push workflow successfully completes on approved RU-01.
+    # That callback does not relax the EIS/Worker/SQLite/Telegram release gate.
+    # The physical runner outage remains tracked in blocker issue #259.
+    # workflow_dispatch is only discoverable once the workflow reaches the
+    # default branch; until then, trusted feature-branch push is the live gate.
+    # pull_request never reaches self-hosted machines.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' &&
+       github.ref == 'refs/heads/feat/ru-chechnya-eis-rss-20261022')
+    # Run the strictly isolated, read-only live diagnostic in parallel with
+    # Github-hosted contracts. Waiting for a busy ubuntu-latest queue would
+    # otherwise prevent the trusted RU runner from proving source reachability.
+    # Both jobs (and all required repository checks) must be green before merge.
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 15
+    env:
+      RU_CHECHNYA_EIS_ENABLED: "true"
+      RU_CHECHNYA_EIS_RSS_URLS: ${{ inputs.regional_rss_url || vars.VALYQON_RU_CHECHNYA_EIS_RSS_URL }}
+      EIS_PROFILE_FEEDS_ENABLED: "false"
+      EIS_DIRECT_ENABLED: "true"
+      EIS_SYSTEM_TRUST_ENABLED: "false"
+      EIS_CA_BUNDLE_FILE: ${{ vars.VALYQON_RU_EIS_CA_BUNDLE_FILE }}
+      MONITORING_ENABLED: "false"
+      # A REAL release-eligible acceptance must send exactly one verified
+      # public original to an explicitly authorized private test chat and
+      # verify the matching Telegram Bot API response. Never equate a local
+      # LocalCaptureBot receipt with external notification delivery.
+      RU_CHECHNYA_REQUIRE_TEST_BOT_ACK: "true"
+    steps:
+      # Reject any other self-hosted Linux runner BEFORE executing repository
+      # code or exposing the authorized test-chat secrets.
+      - name: Require specifically trusted Russian VALYQON worker
+        env:
+          ACTUAL_RUNNER_NAME: ${{ runner.name }}
+        shell: bash
+        run: |
+          test "$ACTUAL_RUNNER_NAME" = "VALYQON-RU-01"
+          echo "RU_CHECHNYA_TRUSTED_RU_RUNNER=VERIFIED"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Select strict official EIS 44-FZ regional RSS candidate if operator URL is absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${RU_CHECHNYA_EIS_RSS_URLS}" ]]; then
+            RU_CHECHNYA_EIS_RSS_URLS="$(python -c 'from app.sources.eis_rss import build_eis_rss_url; print(build_eis_rss_url("Чеченская Республика"))')"
+            echo "RSS_SEARCH_SCOPE=UNVERIFIED_TEXT_QUERY_CANDIDATE"
+          else
+            echo "RSS_SEARCH_SCOPE=OPERATOR_CONFIGURED_RSS"
+          fi
+          # Validate the operator input before writing to GitHub's env file:
+          # no arbitrary hosts, redirects, control characters or nationwide RSS.
+          export RU_CHECHNYA_EIS_RSS_URLS
+          python -c 'import os; from app.sources.ru_chechnya_eis_rss import validate_chechnya_feed_urls; validate_chechnya_feed_urls((os.environ["RU_CHECHNYA_EIS_RSS_URLS"],))'
+          echo "RU_CHECHNYA_EIS_RSS_URLS=${RU_CHECHNYA_EIS_RSS_URLS}" >> "$GITHUB_ENV"
+      - name: Official LIVE EIS -> Worker -> SQLite -> query -> local alert -> authorized real Bot API ACK
+        timeout-minutes: 7
+        env:
+          # Test-only secrets live ONLY in this final verified-runner step.
+          RU_CHECHNYA_E2E_TEST_BOT_TOKEN: ${{ secrets.VALYQON_RU_CHECHNYA_E2E_TEST_BOT_TOKEN }}
+          RU_CHECHNYA_E2E_TEST_CHAT_ID: ${{ secrets.VALYQON_RU_CHECHNYA_E2E_TEST_CHAT_ID }}
+        run: python -B -m scripts.ci_ru_chechnya_eis_real_worker
+      - name: Safe diagnosis on failed live EIS intake (never masks failure)
+        if: failure()
+        timeout-minutes: 2
+        run: python -B -m scripts.ru_chechnya_eis_transport_probe

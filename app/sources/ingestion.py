@@ -44,6 +44,7 @@ HOSTS = {
     'kavkaz_rf_firstparty': frozenset({'xn--80aafvlc.xn--p1ai'}),
     'south_ural_public': frozenset({'www.vendorportal.ru'}),
     'ru_dagestan_public_list': frozenset({'goszakaz.e-dag.ru'}),
+    'ru_chechnya_eis': frozenset({'zakupki.gov.ru'}),
     'ru_samara_public_list': frozenset({'webtorgi.samregion.ru'}),
     'eis_223': frozenset({'zakupki.gov.ru'}),
     'eis_44_html': frozenset({'zakupki.gov.ru'}),
@@ -166,7 +167,7 @@ class ConnectorSyncHandler:
                          else 1 + min(self.max_records, 5) if source_id in {'md_achizitii', 'az_azeristilik'}
                           else 11 if source_id == 'md_elicitatie'
                          else self.max_records + 1 if source_id == 'austender'
-                         else 5 if source_id in {'eis', 'eis_223', 'india_cppp', 'kz_goszakup'}
+                         else 5 if source_id in {'eis', 'eis_223', 'ru_chechnya_eis', 'india_cppp', 'kz_goszakup'}
                          else 2 if source_id in {'jp_jetro_national', 'jp_jetro_local'}
                          else min(self.max_records, 5) + 1 if source_id == 'tektorg'
                          else 4 if source_id == 'gpb_etp_public'

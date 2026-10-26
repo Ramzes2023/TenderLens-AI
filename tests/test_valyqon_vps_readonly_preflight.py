@@ -7,11 +7,13 @@ from scripts import valyqon_vps_readonly_preflight as probe
 
 def response(sha="a" * 40, running=("api", "caddy")):
     markers = {
-        "PREFLIGHT_SCHEMA": "1",
+        "PREFLIGHT_SCHEMA": "2",
         "REPO_PRESENT": "YES", "REMOTE_SHA": sha,
         "WORKTREE_CLEAN": "YES", "DOCKER_USABLE": "YES",
         "PUBLIC_COMPOSE_PRESENT": "YES",
         "APP_ENV_FILE_PRESENT": "YES",
+        "PRIVATE_PREVIEW_TREE_PRESENT": "YES",
+        "PRIVATE_PREVIEW_CONTAINERS_RUNNING": "YES",
         "PUBLIC_api_RUNNING": "YES" if "api" in running else "NO",
         "PUBLIC_caddy_RUNNING": "YES" if "caddy" in running else "NO",
         "PUBLIC_bot_RUNNING": "YES" if "bot" in running else "NO",
@@ -62,7 +64,7 @@ def test_incomplete_malicious_and_secret_output_is_never_accepted():
         response().replace("PRODUCTION_CHANGED=NO", "PRODUCTION_CHANGED=YES"),
         response() + "AWS_SECRET_KEY=top-secret\n",
         response().replace("REMOTE_SHA=" + "a"*40, "REMOTE_SHA=secret"),
-        response().replace("PREFLIGHT_SCHEMA=1", "PREFLIGHT_SCHEMA=2"),
+        response().replace("PREFLIGHT_SCHEMA=2", "PREFLIGHT_SCHEMA=3"),
         response().replace("APP_ENV_FILE_PRESENT=YES\n", ""),
     ):
         with pytest.raises(ValueError):
@@ -89,3 +91,31 @@ def test_ssh_transport_failure_does_not_expose_private_stderr(tmp_path, monkeypa
     with pytest.raises(RuntimeError, match="private error suppressed") as exc:
         probe.inspect("63.189.75.15", key)
     assert "private-secret" not in str(exc.value)
+
+
+def test_private_preview_is_reported_but_never_counts_as_public_release():
+    result = probe.parse_status(response(
+        sha="a" * 40, running=(),
+    ).replace("REPO_PRESENT=YES", "REPO_PRESENT=NO")
+     .replace("PUBLIC_COMPOSE_PRESENT=YES", "PUBLIC_COMPOSE_PRESENT=NO")
+     .replace("APP_ENV_FILE_PRESENT=YES", "APP_ENV_FILE_PRESENT=NO")
+     .replace("PRIVATE_PREVIEW_CONTAINERS_RUNNING=YES",
+              "PRIVATE_PREVIEW_CONTAINERS_RUNNING=NO"))
+    assert result["PRIVATE_PREVIEW_TREE_PRESENT"] == "YES"
+    assert result["PRIVATE_PREVIEW_CONTAINERS_RUNNING"] == "NO"
+    assert result["PUBLIC_api_RUNNING"] == "NO"
+    assert result["PUBLIC_caddy_RUNNING"] == "NO"
+    assert "docker compose up" not in probe.REMOTE
+    assert "docker start" not in probe.REMOTE
+    assert "docker stop" not in probe.REMOTE
+
+
+def test_preview_inventory_missing_or_secret_output_is_rejected():
+    for bad in (
+        response().replace("PRIVATE_PREVIEW_TREE_PRESENT=YES\n", ""),
+        response().replace("PRIVATE_PREVIEW_CONTAINERS_RUNNING=YES",
+                           "PRIVATE_PREVIEW_CONTAINERS_RUNNING=token-secret"),
+        response() + "PRIVATE_PREVIEW_TREE_PRESENT=NO\n",
+    ):
+        with pytest.raises(ValueError):
+            probe.parse_status(bad)

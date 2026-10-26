@@ -10,7 +10,7 @@ from pathlib import Path
 
 REMOTE = r"""
 set -u
-echo PREFLIGHT_SCHEMA=1
+echo PREFLIGHT_SCHEMA=2
 if test -d /opt/tenderlens/.git; then
   echo REPO_PRESENT=YES
   rev="$(git -C /opt/tenderlens rev-parse --verify HEAD 2>/dev/null || true)"
@@ -59,6 +59,24 @@ else
   echo PUBLIC_caddy_RUNNING=UNKNOWN
   echo PUBLIC_bot_RUNNING=UNKNOWN
 fi
+# The existing owner AWS preview is *not* a public production site.
+# Report its presence separately; never mistake a private preview for
+# a deployed production checkout or public HTTPS.
+if test -d /home/ubuntu/valyqon-personal-preview; then
+  echo PRIVATE_PREVIEW_TREE_PRESENT=YES
+else
+  echo PRIVATE_PREVIEW_TREE_PRESENT=NO
+fi
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+  preview_running="$(docker ps     --filter 'label=com.docker.compose.project=valyqon-private-preview'     --format '{{.ID}}' 2>/dev/null || true)"
+  if test -n "$preview_running"; then
+    echo PRIVATE_PREVIEW_CONTAINERS_RUNNING=YES
+  else
+    echo PRIVATE_PREVIEW_CONTAINERS_RUNNING=NO
+  fi
+else
+  echo PRIVATE_PREVIEW_CONTAINERS_RUNNING=UNKNOWN
+fi
 echo TELEGRAM_BOT_API_ACK=NOT_CHECKED
 echo LIVE_TENDER_DB=NOT_CHECKED
 echo EXTERNAL_HTTPS=NOT_CHECKED
@@ -68,6 +86,7 @@ echo PRODUCTION_CHANGED=NO
 KEYS = {
     "PREFLIGHT_SCHEMA", "REPO_PRESENT", "REMOTE_SHA", "WORKTREE_CLEAN",
     "DOCKER_USABLE", "PUBLIC_COMPOSE_PRESENT", "APP_ENV_FILE_PRESENT",
+    "PRIVATE_PREVIEW_TREE_PRESENT", "PRIVATE_PREVIEW_CONTAINERS_RUNNING",
     "PUBLIC_api_RUNNING", "PUBLIC_caddy_RUNNING", "PUBLIC_bot_RUNNING",
     "TELEGRAM_BOT_API_ACK", "LIVE_TENDER_DB", "EXTERNAL_HTTPS",
     "PRODUCTION_CHANGED",
@@ -99,7 +118,7 @@ def parse_status(output):
         if key not in KEYS or key in result or len(value) > 60:
             raise ValueError("Untrusted preflight output")
         if key == "PREFLIGHT_SCHEMA":
-            if value != "1":
+            if value != "2":
                 raise ValueError("Unexpected diagnostic version")
         elif key == "REMOTE_SHA":
             if value != "UNKNOWN" and not re.fullmatch("[0-9a-f]{40}", value):

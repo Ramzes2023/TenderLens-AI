@@ -1,0 +1,59 @@
+name: RU Ingushetia trusted domestic host HTTPS reachability (no code checkout)
+
+# This checks only fixed official targets, no repository checkout, installed
+# dependencies, secrets, production process or PR-provided runtime source code.
+# Results are OBSERVATIONAL and cannot satisfy a full ingestion merge gate.
+on:
+  push:
+    branches: [feat/ru-ingushetia-eis-live-gated-20261019]
+    paths:
+      - .github/workflows/ru-ingushetia-domestic-reachability.yml
+permissions: {}
+jobs:
+  ru01-fixed-firstparty-network:
+    if: github.repository == 'Ramzes2023/TenderLens-AI' && github.ref == 'refs/heads/feat/ru-ingushetia-eis-live-gated-20261019'
+    runs-on: valyqon-ru
+    timeout-minutes: 5
+    steps:
+      - name: Assert pinned trusted runner identity and no untrusted checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = "VALYQON-RU-01"
+          test "$(uname -s)" = "Linux"
+          if mountpoint -q /mnt/c; then
+            echo "INGUSHETIA_TRUSTED_RU_RUNNER=BLOCKED_WINDOWS_MOUNT"
+            exit 1
+          fi
+          echo "INGUSHETIA_TRUSTED_RU_RUNNER=PINNED"
+          echo "INGUSHETIA_PR_CODE_EXECUTED=NO"
+      - name: Fixed first-party EIS/Fabrikant diagnostic (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME:-}" = "VALYQON-RU-01"
+          t="$(mktemp -d)"
+          trap 'rm -rf "$t"' EXIT
+          count=0
+          for target in eis_ingush_rss fabrikant_current_catalog fabrikant_committee_inn; do
+            case "$target" in
+              eis_ingush_rss) url='https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on&searchString=%D0%98%D0%BD%D0%B3%D1%83%D1%88%D0%B5%D1%82%D0%B8%D1%8F&morphology=on&pageNumber=1';;
+              fabrikant_current_catalog) url='https://44.fabrikant.ru/44/catalog/procedure/published?dir=desc&order=publication_datetime';;
+              fabrikant_committee_inn) url='https://44.fabrikant.ru/44/catalog/procedure/published?placer_search_str=0608058533&order=publication_datetime&dir=desc';;
+              *) exit 8;;
+            esac
+            out="$t/$target"
+            if code="$(curl -sS --proto '=https' --tlsv1.2 --max-redirs 0 --connect-timeout 7 --max-time 25 --max-filesize 1800000 -o "$out" -w '%{http_code}' "$url" 2>/dev/null)"; then
+              size="$(wc -c <"$out" | tr -d ' ')"
+              case "$code" in
+                200) echo "INGUSHETIA_RU01_${target}=HTTP_200;BYTES=${size}"; count=$((count+1));;
+                *) echo "INGUSHETIA_RU01_${target}=HTTP_${code};BYTES=${size}";;
+              esac
+            else
+              echo "INGUSHETIA_RU01_${target}=FETCH_FAILED"
+            fi
+          done
+          echo "INGUSHETIA_RU01_OFFICIAL_HTTP_200_COUNT=${count}/3"
+          echo "INGUSHETIA_READ_ONLY_DIAGNOSTIC=YES"
+          echo "INGUSHETIA_PRODUCTION_CHANGED=NO"
+          echo "INGUSHETIA_LIVE_WORKER_PROVEN=NO"

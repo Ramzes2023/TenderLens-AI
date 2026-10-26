@@ -97,8 +97,19 @@ class MultiSourceFetcher:
         limit_per_source: int = 20,
         source_keys: Iterable[str] | None = None,
     ) -> MultiSourceFetchReport:
-        limit = max(1, min(int(limit_per_source), 100))
         selected = self._select(source_keys)
+        # Extended scans must NEVER expand an upstream HTTP/API request.
+        # They are reserved for the opt-in, already persisted and time-
+        # bounded Ingushetia Worker SQL sources. This lets a subscriber
+        # reach a 101st match after the first 100 originals are seen.
+        from .snapshots import FreshIngushetiaWorkerSource
+        sql_only = bool(selected) and all(
+            isinstance(item.source, FreshIngushetiaWorkerSource)
+            and item.key in {"ru_ingushetia_eis44", "ru_ingushetia_fabrikant44"}
+            for item in selected
+        )
+        maximum = 1000 if sql_only else 100
+        limit = max(1, min(int(limit_per_source), maximum))
         semaphore = asyncio.Semaphore(self.concurrency)
 
         async def run_one(
@@ -154,7 +165,17 @@ class MultiSourceFetcher:
                     int((perf_counter() - started) * 1000),
                 )
 
-                message = str(error).strip() or "Source fetch failed."
+                # Regional live connectors can fail with third-party URLs
+                # or proxy credentials embedded inside nested exceptions.
+                # SourceRunStatus/SourceFailure are returned to consumer code,
+                # so do not expose the vendor exception text in those public
+                # records. Diagnostics live in separately redacted CI output.
+                if registration.key in {
+                    "ru_ingushetia_eis44", "ru_ingushetia_fabrikant44",
+                }:
+                    message = "Regional source unavailable; inspect restricted diagnostics."
+                else:
+                    message = str(error).strip() or "Source fetch failed."
 
                 failure = SourceFailure(
                     source=registration.key,

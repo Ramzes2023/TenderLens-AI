@@ -1,0 +1,4 @@
+RU_EIS_SYSTEM_CA={"state":"PUBLIC_LAW_VERIFIED_NOTICE_FEED","http_status":200,"records":200,"error_type":null,"strict_tls":true,"hostname_check":true,"platform":"Windows","trust_source":"verified_pinned_root"}
+WINDOWS_CA_VERIFIED=NO
+NO_TLS_VERIFICATION_BYPASS=YES
+PRODUCTION_CHANGED=NO

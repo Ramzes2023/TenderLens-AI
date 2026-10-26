@@ -1,0 +1,1 @@
+INGUSHETIA_LIVE_CROSSFEED={"live_original_numbers": ["0114500000826002390", "0114500000826002391"], "production_changed": false, "real_telegram_delivery_proven": false, "repeat_eis_alerts": 0, "simulated_acknowledgements": 2, "sql_rows": 4, "unique_results": 2, "worker_states": {"eis": "succeeded", "ru_ingushetia_fabrikant44": "succeeded"}}

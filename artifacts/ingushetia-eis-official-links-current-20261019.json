@@ -1,0 +1,39 @@
+{
+  "official_root_download_pin_verified": true,
+  "tls_verified": true,
+  "rss_links": [
+    "https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber=0114500000826002390",
+    "https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber=0114100000126000011",
+    "https://zakupki.gov.ru/epz/order/notice/ea20/view/common-info.html?regNumber=0114100000126000012",
+    "https://zakupki.gov.ru/epz/order/notice/zk20/view/common-info.html?regNumber=0114500000826002384",
+    "https://zakupki.gov.ru/epz/order/notice/zk20/view/common-info.html?regNumber=0114500000826002383"
+  ],
+  "official_search_links": [
+    "/epz/order/notice/ea20/view/common-info.html?regNumber=0114100000126000011",
+    "/epz/order/notice/ea20/view/documents.html?regNumber=0114100000126000011",
+    "/epz/order/notice/printForm/listModal.html?regNumber=0114100000126000011",
+    "/epz/order/notice/printForm/view.html?regNumber=0114100000126000011"
+  ],
+  "same_card_requests": [
+    {
+      "user_agent": "python-httpx/0.28.1",
+      "http_status": 200,
+      "number_in_body": true
+    },
+    {
+      "user_agent": "TenderLensAI/0.9 (+RSS monitor)",
+      "http_status": 200,
+      "number_in_body": true
+    },
+    {
+      "user_agent": "python-httpx/0.28.1",
+      "http_status": 200,
+      "number_in_body": true
+    },
+    {
+      "user_agent": "TenderLensAI/0.9 (+RSS monitor)",
+      "http_status": 200,
+      "number_in_body": true
+    }
+  ]
+}

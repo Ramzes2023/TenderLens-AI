@@ -1,0 +1,43 @@
+name: RU Ingushetia official publisher route diagnostics
+on:
+  push:
+    branches: [feat/ru-ingushetia-eis-live-gated-20261019]
+    paths:
+      - scripts/research_ru_ingushetia_routes.py
+      - scripts/ru_ingushetia_independent_https_probe.py
+      - tests/test_ru_ingushetia_independent_https_probe.py
+      - .github/workflows/ru-ingushetia-network-diagnostics.yml
+  pull_request:
+    branches: [main, feat/ru-ingushetia-eis-live-gated-20261019]
+    paths:
+      - scripts/research_ru_ingushetia_routes.py
+      - scripts/ru_ingushetia_independent_https_probe.py
+      - tests/test_ru_ingushetia_independent_https_probe.py
+      - .github/workflows/ru-ingushetia-network-diagnostics.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  official-eis-and-marketplace-reachability:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Observe EIS using fingerprint-verified root without changing system trust
+        run: python -B -m scripts.ru_eis_system_ca_probe --pinned-root russian_trusted_root_ca_pem.crt
+      - name: Independently compare strict direct native curl transport with Python client
+        timeout-minutes: 4
+        run: python -B -m scripts.ru_ingushetia_independent_https_probe
+      - name: Observe genuine federal and accredited first-party HTTPS sites
+        timeout-minutes: 5
+        run: python -B -m scripts.research_ru_ingushetia_routes

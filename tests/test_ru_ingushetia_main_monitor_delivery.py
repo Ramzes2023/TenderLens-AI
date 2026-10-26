@@ -201,6 +201,20 @@ def test_two_authorized_chats_have_independent_original_ack_and_retry(tmp_path):
         assert retried == [first_chat]
         assert repository.seen(first_owner, "eis_44", ORIGINAL)
         assert repository.seen(second_owner, "eis_44", ORIGINAL)
-        assert asyncio.run(cycle(None)) == []
+        # No notification remains for either user.  A periodic monitor with
+        # zero sends cannot set the synthetic bot's stop event and will
+        # correctly wait its 600-second poll interval; calling cycle(None)
+        # here merely times out the test, not a real delivery regression.
+        # Verify the production SQL-backed unseen decision for both tenants.
+        async def verify_no_cross_tenant_duplicate():
+            for owner in (first_owner, second_owner):
+                matches, report = await service.fetch_matches_from_catalog(
+                    snapshot, owner,
+                    source_keys=("ru_ingushetia_fabrikant44",),
+                )
+                assert not report.failures
+                assert await service.unseen_matches(owner, matches) == []
+
+        asyncio.run(verify_no_cross_tenant_duplicate())
     finally:
         db.close()

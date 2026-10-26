@@ -1,0 +1,71 @@
+# Strictly opt-in services for a staged VALYQON deployment rehearsal.
+#
+# Use ONLY together with:
+#   -f compose.public.yaml -f compose.postgresql.example.yaml
+# This overlay cannot turn source adapters or Telegram subscriptions on.
+# No container is started merely by committing this file.
+services:
+  # The HTTPS website can start for staging without an unconfigured bot
+  # continuously crashing or competing for an existing Telegram polling token.
+  bot:
+    profiles:
+      - authorized-telegram
+    environment:
+      # A separate approved send test is still required to enable user alerts.
+      MONITORING_ENABLED: "false"
+      VALYQON_DEADLINE_ALERTS_ENABLED: "false"
+      VALYQON_RU_BACKGROUND_CATALOG_ENABLED: "false"
+      VALYQON_PUBLIC_AI_ENABLED: "false"
+      GPB_ETP_PUBLIC_ENABLED: "false"
+      ROSELTORG_PUBLIC_ENABLED: "false"
+      TEKTORG_PUBLIC_ENABLED: "false"
+      B2B_CENTER_ENABLED: "false"
+      EIS_44_HTML_ENABLED: "false"
+      EIS_223_ENABLED: "false"
+
+  connector-worker:
+    profiles:
+      - reviewed-source-worker
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tenderlens-ai:phase19-public
+    command: ["python", "-m", "app.jobs.worker", "--connectors"]
+    restart: unless-stopped
+    # Wait until API migrations and its strict health probe succeed before
+    # consuming queued writes against the shared reviewed PostgreSQL DB.
+    depends_on:
+      api:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      APP_ENV: production
+      MONITORING_ENABLED: "false"
+      VALYQON_DEADLINE_ALERTS_ENABLED: "false"
+      VALYQON_RU_BACKGROUND_CATALOG_ENABLED: "false"
+      VALYQON_PUBLIC_AI_ENABLED: "false"
+      GPB_ETP_PUBLIC_ENABLED: "false"
+      ROSELTORG_PUBLIC_ENABLED: "false"
+      TEKTORG_PUBLIC_ENABLED: "false"
+      B2B_CENTER_ENABLED: "false"
+      EIS_44_HTML_ENABLED: "false"
+      EIS_223_ENABLED: "false"
+      # The database URL comes only from the operator's trusted .env,
+      # never from a tracked GitHub secret or public fixed password.
+      DATABASE_URL: "${DATABASE_URL:?External reviewed PostgreSQL URL is required}"
+      VALYQON_DATABASE_REQUIRE_POSTGRES: "true"
+      DATA_DIR: /app/data
+      EIS_CA_BUNDLE_FILE: /app/certs/russian_trusted_root_ca_pem.crt
+      GIGACHAT_CA_BUNDLE_FILE: /app/certs/russian_trusted_root_ca_pem.crt
+      OUTBOUND_PROXY_URL: "${DOCKER_OUTBOUND_PROXY_URL:-}"
+    volumes:
+      - tenderlens_data:/app/data
+    networks:
+      edge:
+        ipv4_address: 172.30.19.5
+    stop_grace_period: 30s
+    healthcheck:
+      disable: true
+    # No published ports, no source scheduler and no automatic enqueue.
+    # The durable Worker stays idle until a separate operator-approved job.

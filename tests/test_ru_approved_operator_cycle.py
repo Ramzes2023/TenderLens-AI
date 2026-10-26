@@ -32,9 +32,9 @@ def test_reviewed_operator_sources_preserve_main_samara_dagestan_and_ingushetia(
     assert RU_APPROVED_SOURCES == (
         "b2b_center", "lenobl_small_public", "nmck_native_public",
         "mikroton_tender", "south_ural_public", "stan_commercial_public",
-        "kavkaz_rf_firstparty", "ru_ingushetia_eis44",
+        "kavkaz_rf_firstparty", "ru_samara_public_list",
+        "ru_dagestan_public_list", "ru_ingushetia_eis44",
         "ru_ingushetia_fabrikant44",
-        "ru_samara_public_list", "ru_dagestan_public_list",
     )
     cat = catalog()
     with pytest.raises(ValueError, match="No operator-approved"):

@@ -11,6 +11,7 @@ on:
       - app/sources/ingestion.py
       - scripts/ci_cis_az_heat_live_acceptance.py
       - tests/test_cis_az_heat_adapter.py
+      - tests/test_cis_az_heat_stale_worker_rejection.py
       - tests/test_connector_workers.py
       - tests/test_source_catalog.py
       - .github/workflows/cis-az-heat-official-live.yml
@@ -23,6 +24,7 @@ on:
       - app/sources/ingestion.py
       - scripts/ci_cis_az_heat_live_acceptance.py
       - tests/test_cis_az_heat_adapter.py
+      - tests/test_cis_az_heat_stale_worker_rejection.py
       - tests/test_connector_workers.py
       - tests/test_source_catalog.py
       - .github/workflows/cis-az-heat-official-live.yml
@@ -83,7 +85,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
           python -B -m unittest discover -s tests -p 'test_cis_az_heat_adapter.py' -v
-          python -B -m pytest -q tests/test_connector_workers.py tests/test_source_catalog.py
+          python -B -m pytest -q tests/test_cis_az_heat_stale_worker_rejection.py tests/test_connector_workers.py tests/test_source_catalog.py
 
   az-real-worker-sqlite-query:
     name: Azeri real HTTPS notices, fenced worker, disposable SQLite and saved search

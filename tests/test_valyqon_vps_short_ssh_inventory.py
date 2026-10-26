@@ -79,7 +79,7 @@ def test_tiny_inventory_refuses_unexpected_service_output():
             r.stdout = "api\nprivate-secret-project\n"
         return r
 
-    report, stage = tiny.short_inventory(["ssh", "host"], runner=malicious)
+    report, stage = tiny.short_inventory(["ssh", "-o", "StrictHostKeyChecking=yes", "-o", "IdentitiesOnly=yes", "host"], runner=malicious)
     assert report is None and stage == "PUBLIC_COMPOSE"
 
 
@@ -88,7 +88,7 @@ def test_tiny_inventory_refuses_failed_or_incomplete_first_probe():
     def fail(args, **kwargs):
         calls.append(kwargs["input"])
         return SimpleNamespace(returncode=2, stdout="secret", stderr="PRIVATE")
-    report, stage = tiny.short_inventory(["ssh", "host"], runner=fail)
+    report, stage = tiny.short_inventory(["ssh", "-o", "StrictHostKeyChecking=yes", "-o", "IdentitiesOnly=yes", "host"], runner=fail)
     assert report is None and stage == "START"
     assert calls == ["echo PREFLIGHT_SCHEMA=2\n"]
 
@@ -100,7 +100,7 @@ def test_do_not_mark_failed_docker_as_working():
             r.returncode = 1
         return r
 
-    report, stage = tiny.short_inventory(["ssh", "host"], runner=cannot_docker)
+    report, stage = tiny.short_inventory(["ssh", "-o", "StrictHostKeyChecking=yes", "-o", "IdentitiesOnly=yes", "host"], runner=cannot_docker)
     assert stage == "COMPLETE"
     assert report["DOCKER_USABLE"] == "NO"
     assert report["PUBLIC_api_RUNNING"] == "UNKNOWN"

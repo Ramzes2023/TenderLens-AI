@@ -39,6 +39,21 @@ def test_gpb_disabled_by_default_and_explicit_opt_in():
     assert "gpb_etp_public" in build_source_catalog(settings(True)).enabled_keys
 
 
+def test_observed_numeric_only_gpb_firstparty_route_without_synthetic_slug():
+    original = "https://etpgpb.ru/procedures/etp/1240053/"
+    assert parse_gpb_public_links(listing(original)) == [("1240053", original)]
+    notice = parse_gpb_verified_detail(detail("1240053"), "1240053", original)
+    assert notice.external_id == "1240053"
+    assert notice.url == original
+    for bad in (
+        "https://etpgpb.ru/procedures/etp/1240053/?access_token=hidden",
+        "https://etpgpb.ru/procedures/etp/1240053.evil/",
+        "https://etpgpb.ru.evil.example/procedures/etp/1240053/",
+    ):
+        with pytest.raises(ValueError):
+            parse_gpb_public_links(listing(bad))
+
+
 def test_exact_public_notice_and_independent_title():
     assert parse_gpb_public_links(listing()) == [("1299761", URL)]
     notice = parse_gpb_verified_detail(detail(), "1299761", URL)

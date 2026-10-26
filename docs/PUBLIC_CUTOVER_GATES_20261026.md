@@ -134,3 +134,67 @@ Its presence in git is **not** evidence that this version is deployed.
 Only after a trusted inventory identifies the running release and
 approved operator captures a rollback/backup can a staged, reviewed
 deployment fix the old 303 login root. Production remains unchanged.
+
+
+## 26 October — production inventory follow-up: two different release tracks
+
+The operator's subsequent **read-only** evidence established that the
+public host is reachable with trusted SSH. External HTTPS `GET /` returned
+`303 Location: /login`, `GET /dashboard` returned `303` without a session,
+and `GET /api/v1/auth/me` returned `401` without a session. This is a
+legacy public homepage, NOT successful premium cutover. A backend health PASS
+does not change that conclusion.
+
+A CSS check against `/static/public_luxe.css` returned 404, **but this is
+not the current source asset path**. The actual source template links to
+`/assets/premium.css`; only testing that exact HTTPS path can determine
+whether the correct asset is served at the edge. Do not confuse a guessed
+filename with the production contract.
+
+The checked-out VPS source was reportedly an older SHA, and a legacy
+`phase20-valyqon` container image was running. The container image to
+source commit mapping was NOT verified, and no release change was applied.
+The operator searched several likely backup directories and found only a
+non-database file and a generic package DB timer. **This is not an exhaustive
+backup audit** and must never be interpreted as proof that no backup exists.
+
+### Track A — strictly limited public landing/UI replacement
+
+The tracked `compose.public.yaml` already specifies the persistent named
+`tenderlens_data` volume and `sqlite:////app/data/tenderlens.db`, while
+keeping bot/source monitoring, deadline alerts and AI off, legal-required on,
+paid-source restrictions on and real-only analytics. The premium public
+landing and its stylesheet are application-code changes, *not automatically
+a PostgreSQL migration*. Use:
+
+```sh
+python -m scripts.valyqon_static_sqlite_premium_gate
+```
+
+This verifies **repository source only** and deliberately prints
+`public_deployment_authorized=false`,
+`sqlite_backup_restore=NOT_VERIFIED` and
+`rollback_artefact=NOT_VERIFIED`. A green result does NOT authorize a
+container update, a new registration flow, or a change to `main` on the
+VPS. Any actual limited cutover still requires an operator-approved
+restore-tested **off-host backup of the existing live SQLite database**,
+an identified existing-volume mapping, image digest/commit provenance, a
+reversible old-image rollback and the explicit legal/privacy gates.
+
+A public static/marketing landing may be staged separately with DB and
+payments untouched. Keep registration gating, detail locks and external
+notifications off unless independently accepted.
+
+### Track B — PostgreSQL migration and commercial platform activation
+
+Requires **additional** validated SQLite→PostgreSQL data migration,
+isolated restore from an actual encrypted off-host production backup,
+consistent source/target record and tenant authorization checks, controlled
+cutover windows and a tested application rollback path. The synthetic
+PostgreSQL restore drill run in GitHub Actions is evidence of *test machinery*,
+not proof that any live customer database was backed up or restored.
+
+**Both tracks remain blocked** for deployment until their own written
+backup/rollback evidence and explicit owner approval; Track A is not blocked
+by the *additional PostgreSQL schema-migration prerequisite*, but is still
+blocked by the live-backup and release-rollback prerequisites.

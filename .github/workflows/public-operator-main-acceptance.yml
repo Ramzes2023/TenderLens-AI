@@ -1,0 +1,61 @@
+name: VALYQON Main-Based Public Operator Readiness
+
+# Release infrastructure remains opt-in. No DNS, actual DB, Bot API, source
+# contact or customer deployment in these tests.
+on:
+  push:
+    branches:
+      - fix/public-postgres-worker-optin-main-20261026
+  pull_request:
+    branches:
+      - main
+    paths:
+      - compose.public-operator.yaml
+      - compose.public.yaml
+      - compose.postgresql.example.yaml
+      - scripts/check_public_operator_compose.py
+      - tests/test_public_operator_compose.py
+      - .github/workflows/public-operator-main-acceptance.yml
+
+permissions:
+  contents: read
+
+jobs:
+  operator-profile-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Synthetic env only — deny inherited unverified feature flags
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e .env
+          trap 'rm -f .env' EXIT
+          printf 'APP_ENV=production\nTELEGRAM_BOT_TOKEN=\n' > .env
+          chmod 600 .env
+          python -m scripts.check_public_operator_compose
+        env:
+          TENDERLENS_DOMAIN: stage.example.invalid
+          ACME_EMAIL: ci@example.invalid
+          DATABASE_URL: postgresql://synthetic:synthetic@db.example.invalid:5432/disposable
+          GPB_ETP_PUBLIC_ENABLED: 'true'
+          ROSELTORG_PUBLIC_ENABLED: 'true'
+          TEKTORG_PUBLIC_ENABLED: 'true'
+          B2B_CENTER_ENABLED: 'true'
+          EIS_223_ENABLED: 'true'
+          EIS_44_HTML_ENABLED: 'true'
+          MONITORING_ENABLED: 'true'
+          VALYQON_DEADLINE_ALERTS_ENABLED: 'true'
+          VALYQON_PUBLIC_AI_ENABLED: 'true'
+          VALYQON_RU_BACKGROUND_CATALOG_ENABLED: 'true'
+      - name: Negative tests and static no-network checks
+        run: |
+          python -m pip install pytest==9.1.1
+          python -m pytest -q tests/test_public_operator_compose.py tests/test_public_compose_resolved.py tests/test_public_pilot_release_policy.py
+          python -m compileall -q scripts/check_public_operator_compose.py

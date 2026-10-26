@@ -103,3 +103,66 @@ def test_unknown_timezone_is_not_sent(tmp_path):
     assert alerts.run_once(send_email=lambda *_: (_ for _ in ()).throw(
         AssertionError("Cannot send ambiguous deadline")),now=NOW)["sent"] == 0
     db.close()
+
+
+
+@pytest.mark.parametrize("revocation", [
+    "disable_email", "remove_membership", "deactivate_account",
+    "revoke_verification", "change_destination", "delete_saved_notice",
+])
+def test_stale_candidate_cannot_send_after_consent_or_access_revoked(tmp_path, monkeypatch, revocation):
+    """Candidate selection may precede opt-out or access removal.
+
+    A stale in-memory row must NOT produce a new receipt or outbound send.
+    Only an isolated SQLite test account and a fake sender are involved.
+    """
+    db, user, org = _fixture(tmp_path)
+    alerts = DeadlineAlerts(db)
+    alerts.set_preferences(account_id=user.id, organization_id=org.id,
+                           company_id=500, email_enabled=True, telegram_enabled=False)
+    candidate = alerts.candidates()[0]
+    if revocation == "disable_email":
+        alerts.set_preferences(account_id=user.id, organization_id=org.id,
+                               company_id=500, email_enabled=False, telegram_enabled=False)
+    else:
+        with closing(db.connect()) as conn:
+            with conn:
+                if revocation == "remove_membership":
+                    conn.execute("DELETE FROM organization_members WHERE organization_id=? "
+                                 "AND account_id=?", (org.id,user.id))
+                elif revocation == "deactivate_account":
+                    conn.execute("UPDATE auth_accounts SET is_active=0 WHERE id=?", (user.id,))
+                elif revocation == "revoke_verification":
+                    conn.execute("UPDATE auth_accounts SET email_verified=0 WHERE id=?", (user.id,))
+                elif revocation == "change_destination":
+                    conn.execute("UPDATE auth_accounts SET email=? WHERE id=?",
+                                 ("new-address@example.test",user.id))
+                elif revocation == "delete_saved_notice":
+                    conn.execute("DELETE FROM saved_opportunities WHERE "
+                                 "organization_id=? AND company_id=?",(org.id,500))
+    monkeypatch.setattr(alerts,"candidates",lambda: [candidate])
+    deliveries=[]
+    outcome=alerts.run_once(send_email=lambda to,msg:deliveries.append((to,msg)),now=NOW)
+    assert outcome == {"examined":1,"sent":0,"failed":0}, revocation
+    assert deliveries == []
+    with closing(db.connect()) as conn:
+        count=conn.execute("SELECT COUNT(*) FROM deadline_alert_receipts").fetchone()[0]
+    assert count==0,revocation
+    db.close()
+
+
+def test_normal_consent_remains_atomic_and_deduplicated_after_revalidation(tmp_path):
+    """The safety check must not accidentally disable valid reminders."""
+    db,user,org=_fixture(tmp_path)
+    alerts=DeadlineAlerts(db)
+    alerts.set_preferences(account_id=user.id,organization_id=org.id,
+                           company_id=500,email_enabled=True,telegram_enabled=False)
+    deliveries=[]
+    first=alerts.run_once(send_email=lambda to,msg:deliveries.append(to),now=NOW)
+    second=alerts.run_once(send_email=lambda to,msg:deliveries.append(to),now=NOW)
+    assert first["sent"]==1 and first["failed"]==0
+    assert second["sent"]==0 and len(deliveries)==1
+    with closing(db.connect()) as conn:
+        receipts=conn.execute("SELECT state FROM deadline_alert_receipts").fetchall()
+    assert len(receipts)==1 and receipts[0]["state"]=="sent"
+    db.close()

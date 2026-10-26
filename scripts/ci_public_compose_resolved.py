@@ -40,6 +40,8 @@ def violations(document: dict, *, mode: str = 'verified-bot') -> list[str]:
             if str(env.get(flag)).lower()!="false":
                 errors.append(name+" unverified feature must be off: "+flag)
     api=services["api"]
+    if str(api.get("environment",{}).get("VALYQON_LEGAL_REQUIRED")).lower() != "true":
+        errors.append("Public signup must require approved legal documents and consent.")
     bot=services.get("bot")
     if api.get("profiles"):
         errors.append("API must be active by default")

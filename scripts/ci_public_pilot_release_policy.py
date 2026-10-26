@@ -92,6 +92,8 @@ def public_pilot_failures(compose: str, template: str) -> list[str]:
         except ValueError as exc:
             problems.append(str(exc))
             continue
+        if service_name == "api" and env.get("VALYQON_LEGAL_REQUIRED") != "true":
+            problems.append("Public registration must require reviewed legal documents and separate consent.")
         if env.get("APP_ENV") != "production":
             problems.append(service_name + " must use production application settings")
         for key in UNVERIFIED_FLAGS:

@@ -10,6 +10,7 @@ def sample():
     api=dict(environment={
         **settings, "VALYQON_PUBLIC_ANALYTICS_MODE":"real",
         "VALYQON_RESTRICT_PAID_SOURCE_DETAILS":"true",
+        "VALYQON_LEGAL_REQUIRED":"true",
     })
     bot=dict(environment=settings,profiles=["verified-bot"])
     caddy=dict(environment={"TENDERLENS_DOMAIN":"audit.example.org"},
@@ -74,3 +75,9 @@ def test_actual_public_requires_real_metrics_and_no_extra_service():
     data=sample()
     data["services"]["collector"]={}
     assert any("Unexpected public services" in msg for msg in violations(data))
+
+
+def test_public_release_denies_registration_without_approved_operator_terms():
+    data=sample()
+    data["services"]["api"]["environment"]["VALYQON_LEGAL_REQUIRED"]="false"
+    assert any("legal" in m.lower() for m in violations(data))

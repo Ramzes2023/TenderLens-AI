@@ -11,6 +11,8 @@ on:
       - "app/sources/ru_notice_identity.py"
       - "app/monitoring/config.py"
       - "tests/test_ru_ingushetia_*.py"
+      - "app/bot/monitoring.py"
+      - "app/monitoring/service.py"
       - "tests/test_ru_approved_operator_cycle.py"
       - "scripts/ci_ru_ingushetia*.py"
       - ".github/workflows/ru-ingushetia-clean-main.yml"
@@ -30,7 +32,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r requirements-dev.txt
       - name: Strict source provenance, SQL queue, preview and identity tests
-        run: python -m pytest -q tests/test_ru_ingushetia_eis44.py tests/test_ru_ingushetia_fabrikant44.py tests/test_ru_approved_operator_cycle.py tests/test_ru_source_integration_contract.py tests/test_source_catalog.py tests/test_connector_workers.py
+        run: python -m pytest -q tests/test_ru_ingushetia_eis44.py tests/test_ru_ingushetia_fabrikant44.py tests/test_ru_ingushetia_main_monitor_delivery.py tests/test_ru_approved_operator_cycle.py tests/test_ru_source_integration_contract.py tests/test_source_catalog.py tests/test_connector_workers.py
   ingushetia-main-live-originals:
     runs-on: windows-latest
     timeout-minutes: 20

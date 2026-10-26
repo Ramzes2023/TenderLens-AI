@@ -77,6 +77,10 @@ def validate():
                 raise RuntimeError("Unverified feature enabled in public service: " + flag)
         if str(environment.get("MONITORING_ENABLED")).lower() != "false":
             raise RuntimeError("Unverified background source/Telegram monitoring enabled")
+    if services["api"]["environment"].get("VALYQON_LEGAL_REQUIRED") != "true":
+        raise RuntimeError("Public registration must require approved legal pages and consent")
+    if services["api"]["environment"].get("VALYQON_RESTRICT_PAID_SOURCE_DETAILS") != "true":
+        raise RuntimeError("Unverified paid access must remain locked")
     # The public API, optional bot and durable connector Worker MUST use
     # the same reviewed PostgreSQL database. Divergent databases could
     # silently let a successful Worker write tenders that users never see.

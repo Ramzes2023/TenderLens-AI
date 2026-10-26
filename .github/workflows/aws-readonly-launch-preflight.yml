@@ -1,0 +1,29 @@
+name: VALYQON operator AWS production readiness (offline preflight safety)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/valyqon_vps_readonly_preflight.py
+      - tests/test_valyqon_vps_readonly_preflight.py
+      - .github/workflows/aws-readonly-launch-preflight.yml
+permissions:
+  contents: read
+jobs:
+  ssh-readonly-preflight-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest==9.1.1
+      - name: Test read-only pinned SSH host behavior, no secrets or deployment calls
+        run: python -m pytest -q tests/test_valyqon_vps_readonly_preflight.py
+      - name: No AWS or SSH credentials may be used in pull request jobs
+        run: |
+          echo "REAL_AWS_SERVER_CONTACTED=NO"
+          echo "PUBLIC_DEPLOYMENT_PERFORMED=NO"
+          echo "LIVE_BOT_API_DELIVERY=NOT_VERIFIED"

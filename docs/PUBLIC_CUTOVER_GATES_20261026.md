@@ -181,9 +181,26 @@ restore-tested **off-host backup of the existing live SQLite database**,
 an identified existing-volume mapping, image digest/commit provenance, a
 reversible old-image rollback and the explicit legal/privacy gates.
 
-A public static/marketing landing may be staged separately with DB and
-payments untouched. Keep registration gating, detail locks and external
-notifications off unless independently accepted.
+**Critical nuance:** this is a source-level architectural distinction.
+`app/api/runtime.py` calls repository initialization, including
+`app/quotas/synchronous.py` which runs SQLite migrations. Starting a
+new full API container pointed at the old SQLite volume can **modify**
+the live schema even without changing the database engine. Do not
+treat a same-volume API image swap as a zero-migration static landing.
+The source-only gate explicitly reports
+`existing_sqlite_api_startup_can_change_schema=YES` and
+`same_sqlite_api_image_upgrade_approved=false`.
+
+A completely separate, read-only **static landing** served without
+connecting to the existing API/SQLite is the only marketing preview track
+that can claim to leave the production database untouched by construction.
+Even that needs reviewed HTTPS routing, asset checks, legal disclosures,
+rollback and explicit owner approval before any Caddy/site changes.
+
+For a full API redesign on SQLite, restore-test the *actual* live DB
+backup offline first and prove schema compatibility and old-image rollback.
+Keep registration gating, detail locks and external notifications off
+unless independently accepted.
 
 ### Track B — PostgreSQL migration and commercial platform activation
 

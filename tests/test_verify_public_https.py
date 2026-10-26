@@ -72,10 +72,12 @@ def test_https_probe_rejects_unhealthy_service_even_with_http_200(health_json):
         }),
         _Response(health_json),
     ]
-    with patch("scripts.verify_public_https.socket.getaddrinfo",
-               return_value=[(0,0,0,"",("93.184.216.34",443))]), \\
-         patch("scripts.verify_public_https._https_client",
-               return_value=MagicMock(open=MagicMock(side_effect=responses))):
+    with (
+        patch("scripts.verify_public_https.socket.getaddrinfo",
+              return_value=[(0,0,0,"",("93.184.216.34",443))]),
+        patch("scripts.verify_public_https._https_client",
+              return_value=MagicMock(open=MagicMock(side_effect=responses))),
+    ):
         result=verify("https://example.org")
     assert result["dns"]=="PASS"
     assert result["tls"]=="PASS"

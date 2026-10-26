@@ -42,6 +42,7 @@ def evaluate(*, ssh_host: str, ssh_key: str, hostname: str,
         "expected_sha": expected_sha,
         "local_compose": "NOT_VERIFIED",
         "vps_ssh": "NOT_VERIFIED",
+        "vps_ssh_failure_stage": "NOT_VERIFIED",
         "vps_public_tree": "NOT_VERIFIED",
         "vps_exact_sha": "NOT_VERIFIED",
         "vps_api_caddy": "NOT_VERIFIED",
@@ -49,6 +50,7 @@ def evaluate(*, ssh_host: str, ssh_key: str, hostname: str,
         "external_https": "NOT_VERIFIED",
         "external_homepage": "NOT_VERIFIED",
         "external_health": "NOT_VERIFIED",
+        "external_premium_css": "NOT_VERIFIED",
         "blocked_gates": list(DEFAULT_UNVERIFIED),
         "production_changed": False,
         "public_commercial_launch_approved": False,
@@ -64,6 +66,7 @@ def evaluate(*, ssh_host: str, ssh_key: str, hostname: str,
     try:
         status,same=ssh_check(ssh_host,ssh_key,expected_sha=expected_sha)
         result["vps_ssh"]="PASS_READ_ONLY"
+        result["vps_ssh_failure_stage"]="COMPLETE"
         result["vps_public_tree"]="PASS" if (
             status.get("REPO_PRESENT")=="YES"
             and status.get("PUBLIC_COMPOSE_PRESENT")=="YES") else "BLOCKED"
@@ -74,6 +77,7 @@ def evaluate(*, ssh_host: str, ssh_key: str, hostname: str,
         result["private_preview_not_counted"]=True
     except vps.SSHPreflightError as exc:
         result["vps_ssh"]="BLOCKED_"+exc.failure_code
+        result["vps_ssh_failure_stage"]=exc.stage
     except (ValueError, RuntimeError, OSError, TypeError):
         result["vps_ssh"]="BLOCKED_UNCLASSIFIED"
     try:
@@ -81,6 +85,7 @@ def evaluate(*, ssh_host: str, ssh_key: str, hostname: str,
         result["external_https"]="PASS" if status.get("public_edge_pass") is True else "BLOCKED"
         result["external_homepage"]=status.get("homepage","NOT_VERIFIED")
         result["external_health"]=status.get("health","NOT_VERIFIED")
+        result["external_premium_css"]=status.get("premium_css","NOT_VERIFIED")
         result["edge_failure_class"]=status.get("redirect_class") or status.get("blocker_type") or "NONE"
     except (ValueError, RuntimeError, OSError, TypeError):
         result["external_https"]="BLOCKED"

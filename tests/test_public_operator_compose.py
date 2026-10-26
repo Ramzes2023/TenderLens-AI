@@ -19,7 +19,7 @@ def resolved():
                                    "VALYQON_RESTRICT_PAID_SOURCE_DETAILS":"true"},
                    "networks":{"edge":{}}},
             "bot":{"environment":dict(base),
-                   "profiles":["authorized-telegram"],"networks":{"edge":{}}},
+                   "profiles":["verified-bot"],"networks":{"edge":{}}},
             "connector-worker":{
                 "environment":dict(base),"profiles":["reviewed-source-worker"],
                 "command":["python","-m","app.jobs.worker","--connectors"],
@@ -36,11 +36,11 @@ def set_transport(monkeypatch,document):
     def fake(*args):
         if args==("config","--services"):
             return "api\ncaddy\n"
-        if args==("--profile","authorized-telegram","config","--services"):
+        if args==("--profile","verified-bot","config","--services"):
             return "api\nbot\ncaddy\n"
         if args==("--profile","reviewed-source-worker","config","--services"):
             return "api\nconnector-worker\ncaddy\n"
-        if args==("--profile","authorized-telegram","--profile","reviewed-source-worker",
+        if args==("--profile","verified-bot","--profile","reviewed-source-worker",
                   "config","--format","json"):
             return json.dumps(document)
         raise AssertionError("Unexpected command")
@@ -90,5 +90,5 @@ def test_worker_source_flags_match_public_release_policy():
         # with an operator .env containing unreviewed true flags.
         assert compose.count(flag+': "false"')>=2,flag
     assert "reviewed-source-worker" in compose
-    assert "authorized-telegram" in compose
+    assert "verified-bot" in compose
     assert 'command: ["python", "-m", "app.jobs.worker", "--connectors"]' in compose

@@ -52,6 +52,16 @@ def _https_client():
     return build_opener(HTTPSHandler(context=ssl.create_default_context()), _NoRedirect())
 
 
+def _is_public_landing(html: str) -> bool:
+    """Require current public procurement landing, not legacy 200 OK login."""
+    return (
+        "VALYQON" in html.upper()
+        and '<body class="landing premium"' in html
+        and 'id="guestSearchForm"' in html
+        and 'id="guestSearchResults"' in html
+    )
+
+
 def verify(url: str, timeout: float = 8.0) -> dict:
     host, port = validate_target(url)
     result = {
@@ -83,8 +93,10 @@ def verify(url: str, timeout: float = 8.0) -> dict:
         }), timeout=timeout) as response:
             result["tls"] = "PASS"
             payload = response.read(131072).decode("utf-8",errors="replace")
-            result["homepage"] = ("PASS" if response.status==200
-                                  and "VALYQON" in payload.upper() else "FAIL")
+            result["homepage"] = (
+                "PASS" if response.status == 200 and _is_public_landing(payload)
+                else "FAIL"
+            )
             headers = response.headers
             result["security_headers"] = ("PASS" if "max-age=" in
                 headers.get("Strict-Transport-Security","").lower()
@@ -94,8 +106,20 @@ def verify(url: str, timeout: float = 8.0) -> dict:
                 "User-Agent": "VALYQON-ReleaseReadiness/1.0"
         }), timeout=timeout) as response:
             data = response.read(16384)
-            result["health"] = ("PASS" if response.status==200
-                and isinstance(json.loads(data),dict) else "FAIL")
+            health = json.loads(data)
+            # HTTP 200 with any JSON object is not proof the API is ready:
+            # /health deliberately returns "degraded" with 200 when the
+            # database/scoring or cache is unavailable.
+            valid_health = (
+                response.status == 200 and isinstance(health, dict)
+                and health.get("status") == "ok"
+                and health.get("service") == "VALYQON AI"
+                and isinstance(health.get("components"), dict)
+                and health["components"].get("database") == "ready"
+                and health["components"].get("scoring") == "ready"
+                and health["components"].get("cache") != "unavailable"
+            )
+            result["health"] = "PASS" if valid_health else "FAIL"
     except (socket.gaierror,ssl.SSLError,HTTPError,URLError,TimeoutError,
             ConnectionError,OSError,ValueError) as exc:
         # Never leak request headers, cookies, credentials or raw upstream body.

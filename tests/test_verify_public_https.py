@@ -44,11 +44,15 @@ def test_public_edge_pass_does_not_claim_tenders_or_payments():
         }),
         _Response('{"status":"ok","service":"VALYQON AI","components":'
                   '{"database":"ready","scoring":"ready","cache":"ready"}}'),
+        _Response(".landing.premium { --premium-blue: #2859c5; }", {
+            "Content-Type": "text/css; charset=utf-8",
+        }),
     ]
     with patch("scripts.verify_public_https.socket.getaddrinfo",return_value=[(0,0,0,"",("93.184.216.34",443))]),\
          patch("scripts.verify_public_https._https_client",return_value=MagicMock(open=MagicMock(side_effect=responses))):
         result=verify("https://example.org")
     assert result["public_edge_pass"] is True
+    assert result["premium_css"] == "PASS"
     assert result["ready_for_commercial_launch"] is False
     assert result["billing_entitlements"]=="NOT_TESTED"
     assert result["real_source_worker_to_user"]=="NOT_TESTED"
@@ -225,3 +229,68 @@ def test_public_redirect_classification_does_not_leak_location(location,classifi
     assert result["public_edge_pass"] is False
     assert "secretValue" not in str(result)
     assert "other.example.org" not in str(result)
+
+
+@pytest.mark.parametrize("asset_result,expected_blocker", [
+    ("HTTP_404", "HTTPError"),
+    ("WRONG_TYPE", None),
+    ("WRONG_BODY", None),
+])
+def test_public_edge_rejects_missing_or_wrong_premium_css(asset_result, expected_blocker):
+    from io import BytesIO
+    from urllib.error import HTTPError
+
+    landing = (
+        '<html><body class="landing premium">VALYQON'
+        '<form id="guestSearchForm"></form>'
+        '<div id="guestSearchResults"></div></body></html>'
+    )
+    responses = [
+        _Response(landing, {
+            "Strict-Transport-Security": "max-age=31536000",
+            "X-Content-Type-Options": "nosniff",
+        }),
+        _Response('{"status":"ok","service":"VALYQON AI","components":'
+                  '{"database":"ready","scoring":"ready","cache":"ready"}}'),
+    ]
+    if asset_result == "HTTP_404":
+        responses.append(HTTPError(
+            "https://example.org/assets/premium.css", 404, "not found", {},
+            BytesIO(b"private body must not be printed"),
+        ))
+    elif asset_result == "WRONG_TYPE":
+        responses.append(_Response(".landing.premium {}",
+                                   {"Content-Type": "text/html"}))
+    else:
+        responses.append(_Response("body { color: red }",
+                                   {"Content-Type": "text/css"}))
+    opens = []
+    def open_file(request, **kw):
+        opens.append(request.full_url)
+        obj = responses.pop(0)
+        if isinstance(obj, Exception):
+            raise obj
+        return obj
+    with (
+        patch("scripts.verify_public_https.socket.getaddrinfo",
+              return_value=[(0,0,0,"",("93.184.216.34",443))]),
+        patch("scripts.verify_public_https._https_client",
+              return_value=MagicMock(open=open_file)),
+    ):
+        result = verify("https://example.org")
+    assert opens == [
+        "https://example.org/",
+        "https://example.org/health",
+        "https://example.org/assets/premium.css",
+    ]
+    assert result["homepage"] == "PASS"
+    assert result["health"] == "PASS"
+    assert result["public_edge_pass"] is False
+    assert result["ready_for_commercial_launch"] is False
+    if expected_blocker:
+        assert result["blocked_at"] == "premium_css"
+        assert result["blocker_type"] == expected_blocker
+        assert result["http_status"] == 404
+        assert "private body" not in str(result)
+    else:
+        assert result["premium_css"] == "FAIL"

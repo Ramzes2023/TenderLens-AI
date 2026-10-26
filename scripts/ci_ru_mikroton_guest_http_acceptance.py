@@ -177,7 +177,9 @@ def acceptance():
                 "authenticated_company_matches":matches,
                 "cross_tenant_scope_denied":True,
                 "keyword_http_match":True,
-                "paid_details_locked":True,
+                "guest_details_locked":True,
+                "merchant_entitlement_verified":False,
+                "commercial_release_ready":False,
                 "public_private_fields_exposed":False,
                 "official_telegram_delivery":False,
                 "external_email_delivery":False,
@@ -197,5 +199,5 @@ if __name__ == "__main__":
         print("PRODUCTION_CHANGED=NO")
         raise SystemExit(2)
     print("RU_REAL_GUEST_API_EVIDENCE="+json.dumps(evidence,sort_keys=True))
-    print("RU_REAL_GUEST_API=PASS_GUEST_PROJECTION_ONLY")
+    print("RU_REAL_GUEST_API=PASS_REAL_GUEST_AND_AUTHENTICATED_SNAPSHOT_ONLY")
     print("PRODUCTION_CHANGED=NO")

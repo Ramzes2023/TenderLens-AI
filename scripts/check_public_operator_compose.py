@@ -67,6 +67,15 @@ def validate():
             raise RuntimeError("Public service is not configured for PostgreSQL")
         if service.get("ports") or service.get("network_mode") == "host":
             raise RuntimeError("Private application service publishes a host port")
+    # The public API, optional bot and durable connector Worker MUST use
+    # the same reviewed PostgreSQL database. Divergent databases could
+    # silently let a successful Worker write tenders that users never see.
+    urls = {
+        services[name]["environment"]["DATABASE_URL"]
+        for name in ("api", "bot", "connector-worker")
+    }
+    if len(urls) != 1:
+        raise RuntimeError("API, Telegram and connector Worker databases diverge")
     if services["bot"]["environment"].get("MONITORING_ENABLED") != "false":
         raise RuntimeError("Unapproved Telegram background delivery enabled")
     worker = services["connector-worker"]
@@ -76,8 +85,12 @@ def validate():
         raise RuntimeError("Source Worker must be opt-in")
     if services["bot"].get("profiles") != [TELEGRAM_PROFILE]:
         raise RuntimeError("Telegram polling must be opt-in")
-    if services["caddy"].get("profiles"):
+    gateway = services["caddy"]
+    if gateway.get("profiles"):
         raise RuntimeError("HTTPS gateway must be part of default staging stack")
+    published_targets = {entry.get("target") for entry in gateway.get("ports", ())}
+    if published_targets != {80, 443}:
+        raise RuntimeError("HTTPS gateway must be the only 80/443 entrypoint")
     return {
         "status": "OFFLINE_OPERATOR_COMPOSE_CONTRACTS_PASS",
         "default_services": sorted(default),

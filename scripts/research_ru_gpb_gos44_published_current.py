@@ -27,7 +27,7 @@ DETAIL = re.compile(r"/front/procedure/view/[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a
 
 def canonical(href: str):
     if (type(href) is not str or not 0 < len(href) <= 1300
-            or "%" in href or "\\" in href
+            or "\\" in href
             or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in href)):
         return None
     try:
@@ -37,7 +37,7 @@ def canonical(href: str):
         return None
     if (url.scheme != "https" or url.netloc != HOST or url.fragment
             or url.username or url.password or url.port is not None
-            or not DETAIL.fullmatch(url.path)
+            or "%" in url.path or not DETAIL.fullmatch(url.path)
             or params != [("backurl", BACKURL)]):
         return None
     return url.geturl()

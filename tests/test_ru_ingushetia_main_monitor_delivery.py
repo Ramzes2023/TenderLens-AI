@@ -132,3 +132,75 @@ async def check_no_repeated_alert(service, snapshot, keys):
     )
     assert not report.failures
     assert await service.unseen_matches(OWNER, matches) == []
+
+
+def test_two_authorized_chats_have_independent_original_ack_and_retry(tmp_path):
+    """Offline real SQL contract: invalid receipt for one user cannot affect another."""
+    cfg = MonitoringSettings(
+        enabled=True, interval_seconds=600, max_items=5,
+        max_notifications_per_cycle=5, request_timeout=12,
+        eis_rss_urls=(), ca_bundle_file=None, profile_feeds_enabled=False,
+        ru_ingushetia_fabrikant44_enabled=True,
+        ru_background_catalog_enabled=True,
+    )
+    catalog = build_source_catalog(cfg)
+    db = Database(DatabaseSettings("ingushetia-two-chat-test", tmp_path / "source.sqlite"))
+    try:
+        store = OpportunityRepository(db)
+        store.initialize()
+        original = TenderNotice(
+            source="ru_ingushetia_fabrikant44", external_id=ORIGINAL,
+            tender_number=ORIGINAL, title="Устройство ливневой канализации",
+            url="https://44.fabrikant.ru/44/procedure/okb20/" + ORIGINAL,
+            customer="Комитет государственного заказа Республики Ингушетия",
+            region="Республика Ингушетия", published_at="2026-10-20",
+        )
+        assert store.upsert(original, connector_version(original.source))
+        snapshot = snapshot_catalog(catalog, store)
+        repository = MonitoringRepository(tmp_path / "subscriptions.sqlite")
+        repository.initialize()
+        first_owner, second_owner = 121001, 121002
+        first_chat, second_chat = 122001, 122002
+        repository.set_subscription(first_owner, first_chat, True)
+        repository.set_subscription(second_owner, second_chat, True)
+        service = TenderMonitorService(cfg, None, repository, None)
+
+        class ControlledBot:
+            def __init__(self, stop, *, wrong_chat):
+                self.stop = stop
+                self.wrong_chat = wrong_chat
+                self.delivered_to = []
+
+            async def send_message(self, chat_id, text, **kwargs):
+                self.delivered_to.append(chat_id)
+                self.stop.set()
+                assert ORIGINAL in text and "НОВАЯ ЗАКУПКА" in text
+                assert kwargs["disable_web_page_preview"] is True
+                recipient = chat_id + 1 if self.wrong_chat == chat_id else chat_id
+                return SimpleNamespace(
+                    message_id=17, chat=SimpleNamespace(id=recipient), text=text,
+                )
+
+        async def cycle(wrong_chat):
+            stop = asyncio.Event()
+            bot = ControlledBot(stop, wrong_chat=wrong_chat)
+            await asyncio.wait_for(
+                monitor_loop(bot, service, stop, source_catalog=snapshot),
+                timeout=12,
+            )
+            return bot.delivered_to
+
+        sent = asyncio.run(cycle(first_chat))
+        assert sent == [first_chat, second_chat]
+        assert not repository.seen(first_owner, "eis_44", ORIGINAL)
+        assert repository.seen(second_owner, "eis_44", ORIGINAL)
+
+        # The first tenant retries its unacknowledged message. The second,
+        # already-acknowledged tenant receives no duplicate publication.
+        retried = asyncio.run(cycle(None))
+        assert retried == [first_chat]
+        assert repository.seen(first_owner, "eis_44", ORIGINAL)
+        assert repository.seen(second_owner, "eis_44", ORIGINAL)
+        assert asyncio.run(cycle(None)) == []
+    finally:
+        db.close()

@@ -22,5 +22,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install pinned HTTP transport required by scoped CA regression
+        run: python -m pip install httpx==0.28.1
       - name: Strict URL/DNS allowance and no unreviewed PR checkout
         run: python -B -m unittest discover -s tests -p 'test_ru_trusted_live_probe.py'

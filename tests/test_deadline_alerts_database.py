@@ -167,3 +167,53 @@ def test_normal_consent_remains_atomic_and_deduplicated_after_revalidation(tmp_p
         receipts=conn.execute("SELECT state FROM deadline_alert_receipts").fetchall()
     assert len(receipts)==1 and receipts[0]["state"]=="sent"
     db.close()
+
+
+
+@pytest.mark.parametrize("revocation", [
+    "telegram_opt_out", "unlink_telegram", "disable_link",
+    "relink_chat", "delete_membership",
+])
+def test_stale_telegram_candidate_cannot_send_to_revoked_or_relinked_chat(
+    tmp_path, monkeypatch, revocation
+):
+    db,user,org=_fixture(tmp_path)
+    alerts=DeadlineAlerts(db)
+    with closing(db.connect()) as conn:
+        with conn:
+            conn.execute(
+                "INSERT INTO monitor_subscriptions "
+                "(owner_user_id,chat_id,enabled,created_at,updated_at) "
+                "VALUES (?,?,1,?,?)",
+                (user.owner_user_id,123456,"now","now"),
+            )
+    alerts.set_preferences(account_id=user.id,organization_id=org.id,
+                           company_id=500,email_enabled=False,telegram_enabled=True)
+    old_row=alerts.candidates()[0]
+    if revocation == "telegram_opt_out":
+        alerts.set_preferences(account_id=user.id,organization_id=org.id,
+                               company_id=500,email_enabled=False,telegram_enabled=False)
+    else:
+        with closing(db.connect()) as conn:
+            with conn:
+                if revocation == "unlink_telegram":
+                    conn.execute("DELETE FROM monitor_subscriptions WHERE owner_user_id=?",
+                                 (user.owner_user_id,))
+                elif revocation == "disable_link":
+                    conn.execute("UPDATE monitor_subscriptions SET enabled=0 "
+                                 "WHERE owner_user_id=?", (user.owner_user_id,))
+                elif revocation == "relink_chat":
+                    conn.execute("UPDATE monitor_subscriptions SET chat_id=? "
+                                 "WHERE owner_user_id=?", (987654,user.owner_user_id))
+                else:
+                    conn.execute("DELETE FROM organization_members "
+                                 "WHERE organization_id=? AND account_id=?",
+                                 (org.id,user.id))
+    monkeypatch.setattr(alerts,"candidates",lambda: [old_row])
+    messages=[]
+    result=alerts.run_once(send_telegram=lambda chat,msg:messages.append((chat,msg)),now=NOW)
+    assert result=={"examined":1,"sent":0,"failed":0},revocation
+    assert messages==[]
+    with closing(db.connect()) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM deadline_alert_receipts").fetchone()[0]==0
+    db.close()

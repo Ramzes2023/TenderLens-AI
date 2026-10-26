@@ -74,14 +74,6 @@ class ProbeSafetyTests(unittest.TestCase):
             self.assertEqual(checked_ips("safe.example"), ["1.1.1.1","8.8.8.8"])
 
     def test_unapproved_redirect_like_and_query_rejected_before_dns(self):
-        # The current-published 44-FZ URL is a fixed on-demand route, not
-        # a new unique EIS source or an arbitrary operator-entered URL.
-        with patch("scripts.ru_trusted_live_probe.read_public",
-                   return_value=("text/html", b"<table><tr><td>Published</td></tr></table>")) as get:
-            with redirect_stdout(StringIO()):
-                self.assertEqual(main("gpb_gos44_published"), 0)
-            self.assertEqual(get.call_args.args[0],
-                             ON_DEMAND_TARGETS["gpb_gos44_published"])
         with patch("scripts.ru_trusted_live_probe.checked_ips") as dns:
             for path in ["//evil/path","/path?next=http://evil","/p#frag","/slash\\evil","example"]:
                 with self.assertRaises(ValueError):
@@ -164,6 +156,14 @@ class ProbeSafetyTests(unittest.TestCase):
                 ON_DEMAND_TARGETS["gpb_public_html"],
                 ON_DEMAND_TARGETS["gpb_new_public_html"],
             ])
+        # The current-published 44-FZ URL is a fixed on-demand route, not
+        # a new unique EIS source or an arbitrary operator-entered URL.
+        with patch("scripts.ru_trusted_live_probe.read_public",
+                   return_value=("text/html", b"<table><tr><td>Published</td></tr></table>")) as get:
+            with redirect_stdout(StringIO()):
+                self.assertEqual(main("gpb_gos44_published"), 0)
+            self.assertEqual(get.call_args.args[0],
+                             ON_DEMAND_TARGETS["gpb_gos44_published"])
         with patch("scripts.ru_trusted_live_probe.checked_ips") as dns:
             self.assertEqual(main("gpb_new_rss?ref=private"), 2)
             self.assertEqual(main("http://new.etpgpb.ru/procedures.rss"), 2)

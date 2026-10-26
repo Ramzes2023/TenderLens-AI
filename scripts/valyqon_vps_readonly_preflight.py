@@ -132,10 +132,12 @@ def _safe_remote_stage(stderr: str) -> str:
 
 def _remote_shell_probe(ssh_prefix):
     """Independent read-only SSH shell check, no keys/env/data displayed."""
-    probe = ssh_prefix + ["sh", "-c", "printf '%s\\n' VALYQON_REMOTE_SHELL_OK"]
+    # Match the full SSH stdin-shell invocation: a single fixed echo on stdin.
+    # Avoid remote sh -c quoting differences on Windows OpenSSH.
+    probe = ssh_prefix + ["sh", "-s"]
     try:
         run = subprocess.run(
-            probe, input="", capture_output=True, text=True,
+            probe, input="echo VALYQON_REMOTE_SHELL_OK\n", capture_output=True, text=True,
             timeout=20, check=False,
         )
     except (OSError, subprocess.TimeoutExpired):

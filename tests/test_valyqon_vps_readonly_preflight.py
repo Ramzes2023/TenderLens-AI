@@ -253,3 +253,76 @@ def test_remote_failure_cli_reports_only_enum_and_exit_class(monkeypatch, capsys
     assert "FAILURE_STAGE=PUBLIC_COMPOSE" in output
     assert "FAILURE_EXIT_CLASS=REMOTE_NONZERO" in output
     assert "PRODUCTION_CHANGED=NO" in output
+
+
+def test_short_fixed_inventory_recovers_only_full_verified_ssh_report(tmp_path, monkeypatch):
+    """Local fake SSH: full long stdin rejected before START, short stages work."""
+    key = tmp_path / "test-key"
+    key.write_text("synthetic not a secret")
+    stages = ("START", "REPOSITORY", "DOCKER",
+              "PUBLIC_COMPOSE", "PRIVATE_PREVIEW", "COMPLETE")
+    data = dict(line.split("=", 1) for line in response().splitlines())
+    owners = {
+        "START": ("PREFLIGHT_SCHEMA",),
+        "REPOSITORY": ("REPO_PRESENT", "REMOTE_SHA", "WORKTREE_CLEAN"),
+        "DOCKER": ("DOCKER_USABLE",),
+        "PUBLIC_COMPOSE": (
+            "PUBLIC_COMPOSE_PRESENT", "APP_ENV_FILE_PRESENT",
+            "PUBLIC_api_RUNNING", "PUBLIC_caddy_RUNNING", "PUBLIC_bot_RUNNING",
+        ),
+        "PRIVATE_PREVIEW": (
+            "PRIVATE_PREVIEW_TREE_PRESENT", "PRIVATE_PREVIEW_CONTAINERS_RUNNING",
+        ),
+        "COMPLETE": (
+            "TELEGRAM_BOT_API_ACK", "LIVE_TENDER_DB",
+            "EXTERNAL_HTTPS", "PRODUCTION_CHANGED",
+        ),
+    }
+    calls = []
+    def mocked_ssh(argv, **kw):
+        calls.append((argv, kw))
+        assert argv[-2:] == ["sh", "-s"]
+        assert "StrictHostKeyChecking=yes" in argv
+        assert "IdentitiesOnly=yes" in argv
+        assert argv[argv.index("-i") + 1] == str(key)
+        assert kw["check"] is False and kw["capture_output"]
+        if len(calls) == 1:
+            assert kw["input"] == probe.REMOTE
+            return SimpleNamespace(returncode=2, stdout="SECRET", stderr="private failure")
+        if len(calls) == 2:
+            assert kw["input"] == "echo VALYQON_REMOTE_SHELL_OK\n"
+            return SimpleNamespace(returncode=0, stdout="VALYQON_REMOTE_SHELL_OK\n", stderr="")
+        stage = stages[len(calls) - 3]
+        assert kw["input"].startswith("set -u\nprintf '%s\\n' VALYQON_PREFLIGHT_STAGE=" + stage)
+        assert "docker compose up" not in kw["input"]
+        output = "\n".join(f"{k}={data[k]}" for k in owners[stage]) + "\n"
+        return SimpleNamespace(returncode=0, stdout=output,
+                               stderr="VALYQON_PREFLIGHT_STAGE=" + stage + "\n")
+    monkeypatch.setattr(probe.subprocess, "run", mocked_ssh)
+    report, same = probe.inspect("63.189.75.15", key, expected_sha="a" * 40)
+    assert same and report["REPO_PRESENT"] == "YES"
+    assert report["WORKTREE_CLEAN"] == "YES"
+    assert report["PRODUCTION_CHANGED"] == "NO"
+    assert len(calls) == 8
+
+
+def test_short_inventory_never_accepts_partial_response(tmp_path, monkeypatch):
+    key = tmp_path / "test"
+    key.write_text("synthetic")
+    count = 0
+    def fake_run(argv, **kw):
+        nonlocal count
+        count += 1
+        if count == 1:
+            return SimpleNamespace(returncode=2, stdout="", stderr="without stage")
+        if count == 2:
+            return SimpleNamespace(returncode=0, stdout="VALYQON_REMOTE_SHELL_OK\n", stderr="")
+        # Deliberately give only one stage; never a complete report.
+        return SimpleNamespace(returncode=0, stdout="PREFLIGHT_SCHEMA=2\n",
+                               stderr="VALYQON_PREFLIGHT_STAGE=START\n")
+    monkeypatch.setattr(probe.subprocess, "run", fake_run)
+    with pytest.raises(probe.SSHPreflightError) as raised:
+        probe.inspect("63.189.75.15", key, expected_sha="a" * 40)
+    assert raised.value.failure_code == "SSH_REMOTE_SCRIPT_FAILED"
+    assert raised.value.stage == "UNKNOWN"
+    assert count >= 3

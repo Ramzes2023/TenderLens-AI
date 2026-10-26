@@ -18,6 +18,7 @@ on:
           - gpb_new_public_html
           - gpb_new_rss
           - gpb_gos44_html
+          - gpb_gos44_published
           - rzd_eshop
           - tektorg
           - batch_priority

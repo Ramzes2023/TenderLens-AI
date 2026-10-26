@@ -175,7 +175,7 @@ def _segmented_readonly_inventory(ssh_prefix):
         return None
     combined = []
     for stage, fragment in zip(stages, parts[1:]):
-        script = "set -u\\n" + marker + fragment
+        script = "set -u\n" + marker + fragment
         try:
             run = subprocess.run(
                 ssh_prefix + ["sh", "-s"],
@@ -188,7 +188,7 @@ def _segmented_readonly_inventory(ssh_prefix):
             return None
         combined.append(run.stdout)
     try:
-        return parse_status("\\n".join(combined))
+        return parse_status("\n".join(combined))
     except ValueError:
         return None
 

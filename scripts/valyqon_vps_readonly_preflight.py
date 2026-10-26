@@ -295,9 +295,21 @@ def inspect(host, key, user="ubuntu", expected_sha=None):
                         out = segmented
                         same = expected_sha is not None and out["REMOTE_SHA"] == expected_sha
                         return out, same
-                    # This describes which small, read-only stage failed,
-                    # not a successful or bypassed SSH preflight.
-                    stage = diagnosed_stage
+                    # If even the first segmented multiline script fails
+                    # while a one-line echo succeeded, try exact fixed tiny
+                    # individual read-only SSH statements. Never treat an
+                    # incomplete inventory as success or relax host-key
+                    # verification. This is only a diagnostics fallback.
+                    if diagnosed_stage == "START":
+                        from scripts.valyqon_vps_short_ssh_inventory import short_inventory
+                        short_report, tiny_stage = short_inventory(args[:-2])
+                        if short_report is not None:
+                            same = (expected_sha is not None
+                                    and short_report["REMOTE_SHA"] == expected_sha)
+                            return short_report, same
+                        stage = tiny_stage
+                    else:
+                        stage = diagnosed_stage
                 code = "SSH_REMOTE_SCRIPT_FAILED"
             else:
                 code = "SSH_REMOTE_SHELL_UNAVAILABLE"

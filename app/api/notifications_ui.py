@@ -23,6 +23,20 @@ DELIVERY_JOURNAL_HTML = """
     <article><small data-ui-en="Sender errors" data-ui-ru="Ошибки отправки">Sender errors</small><strong id="vqDeliveryFailed">—</strong></article>
     <article><small data-ui-en="Still pending" data-ui-ru="В ожидании">Still pending</small><strong id="vqDeliveryPending">—</strong></article>
   </div>
+  <section id="vqDeliveryReliability" class="vq-delivery-reliability" aria-labelledby="vqDeliveryReliabilityTitle">
+    <div class="vq-delivery-reliability-head">
+      <div><span class="vq-delivery-eyebrow" data-ui-en="DELIVERY RELIABILITY" data-ui-ru="НАДЁЖНОСТЬ ОТПРАВКИ">DELIVERY RELIABILITY</span>
+        <h3 id="vqDeliveryReliabilityTitle" data-ui-en="Attempts needing attention" data-ui-ru="Попытки, требующие внимания">Attempts needing attention</h3>
+      </div>
+      <strong id="vqDeliveryReliabilityStatus" role="status" aria-live="polite" data-ui-en="Not checked" data-ui-ru="Не проверено">Not checked</strong>
+    </div>
+    <div class="vq-delivery-reliability-counts">
+      <div><small data-ui-en="Failed sender calls · entire history" data-ui-ru="Ошибки отправителя · вся история">Failed sender calls · entire history</small><strong id="vqDeliveryAllFailed">—</strong></div>
+      <div><small data-ui-en="Pending over 30 minutes · possibly stranded" data-ui-ru="Ожидают более 30 минут · возможное зависание">Pending over 30 minutes · possibly stranded</small><strong id="vqDeliveryOldPending">—</strong></div>
+    </div>
+    <p data-ui-en="These counts cover all saved attempts for your account and active company, unlike the last-50 journal. An old pending claim may be in progress or stranded; sender errors may occur after provider acceptance. No automatic retries occur, since blindly resending could duplicate a notification. Contact support to investigate."
+       data-ui-ru="Это подсчёт всех записанных попыток вашего аккаунта и активной компании, а не только последних 50. Старая ожидающая попытка может выполняться или зависнуть; ошибка могла возникнуть уже после принятия сообщения провайдером. Автоматических повторов нет: слепая отправка создаёт риск дублей. Для расследования обратитесь в поддержку.">These counts cover all saved attempts for your account and active company, unlike the last-50 journal. An old pending claim may be in progress or stranded; sender errors may occur after provider acceptance. No automatic retries occur, since blindly resending could duplicate a notification. Contact support to investigate.</p>
+  </section>
   <div class="vq-delivery-list-heading">
     <div><span class="vq-delivery-eyebrow" data-ui-en="RECENT DELIVERY ATTEMPTS" data-ui-ru="ПОСЛЕДНИЕ ПОПЫТКИ">RECENT DELIVERY ATTEMPTS</span><h3 data-ui-en="Your reminder activity" data-ui-ru="История напоминаний">Your reminder activity</h3></div>
     <span data-ui-en="Last 50 only" data-ui-ru="Только последние 50">Last 50 only</span>

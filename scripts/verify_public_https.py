@@ -56,7 +56,7 @@ def _is_public_landing(html: str) -> bool:
     """Require current public procurement landing, not legacy 200 OK login."""
     return (
         "VALYQON" in html.upper()
-        and re.search(r'<body\\b[^>]*class=["\\\'][^"\\\']*\\blanding\\b', html, re.I) is not None
+        and '<body class="landing premium"' in html
         and 'id="guestSearchForm"' in html
         and 'id="guestSearchResults"' in html
     )

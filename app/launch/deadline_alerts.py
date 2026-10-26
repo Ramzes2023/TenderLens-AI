@@ -12,7 +12,9 @@ from urllib.parse import urlsplit
 from app.database.backend import database_for
 
 MAX_SAVED_PER_SCOPE = 200
-MAX_REMINDERS_PER_CYCLE = 100
+MAX_REMINDERS_PER_CYCLE = 100  # At most this many sender calls per cycle.
+SCAN_PAGE_SIZE = 100
+MAX_SCANNED_PER_CYCLE = 2000  # Explicit bounded scan; rotates across all opt-ins.
 LEAD_HOURS = (48,)  # 24-hour notifications require separate release approval.
 
 
@@ -165,7 +167,22 @@ class DeadlineAlerts:
             "delivery_confirmation": "sender_return_only",
         }
 
-    def candidates(self, *, limit: int = MAX_REMINDERS_PER_CYCLE):
+    def candidate_count(self) -> int:
+        """Count only opted-in, active, verified, still-member saved rows."""
+        with closing(self.database.connect()) as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS total FROM deadline_alert_preferences p "
+                "JOIN auth_accounts a ON a.id=p.account_id "
+                "JOIN organization_members om ON om.organization_id=p.organization_id "
+                " AND om.account_id=p.account_id "
+                "JOIN saved_opportunities s ON s.organization_id=p.organization_id "
+                " AND s.company_id=p.company_id "
+                "WHERE a.is_active=1 AND a.email_verified=1 "
+                "AND (p.email_enabled=1 OR p.telegram_enabled=1)"
+            ).fetchone()
+            return int(row["total"])
+
+    def candidates(self, *, limit: int = MAX_REMINDERS_PER_CYCLE, offset: int = 0):
         # Preferences + active organization membership + verified email; no unsolicited send.
         with closing(self.database.connect()) as conn:
             records = conn.execute(
@@ -181,11 +198,34 @@ class DeadlineAlerts:
                 "LEFT JOIN monitor_subscriptions m ON m.owner_user_id=a.owner_user_id "
                 "WHERE a.is_active=1 AND a.email_verified=1 "
                 "AND (p.email_enabled=1 OR p.telegram_enabled=1) "
-                "ORDER BY p.organization_id,p.company_id,s.id "
-                "LIMIT ?",
-                (max(1, min(int(limit), MAX_REMINDERS_PER_CYCLE)),),
+                "ORDER BY p.organization_id,p.company_id,s.id,p.account_id "
+                "LIMIT ? OFFSET ?",
+                (max(1, min(int(limit), SCAN_PAGE_SIZE)), max(0, int(offset))),
             ).fetchall()
         return records
+
+    def _scan_candidates(self, *, start: int, count: int, budget: int):
+        """Fair, bounded paging across saved rows without a fixed first-page trap.
+
+        Rotating the starting page every hour avoids chronic starvation when
+        opt-in users have more saved notices than the per-cycle scan limit.
+        The query is stable per snapshot, but changes during a cycle may cause
+        a row to be visited again or skipped until the next scheduled cycle;
+        deduplicating receipt claims remain the sending source of truth.
+        """
+        cursor = start
+        scanned = 0
+        while scanned < budget:
+            page_limit = min(SCAN_PAGE_SIZE, budget-scanned, count-cursor)
+            if page_limit <= 0:
+                break
+            page = self.candidates(limit=page_limit, offset=cursor)
+            if not page:
+                break
+            for row in page:
+                yield row
+            scanned += len(page)
+            cursor = (cursor+len(page)) % count
 
     def _claim(self, row, deadline: str, lead_hours: int, channel: str) -> bool:
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -222,7 +262,16 @@ class DeadlineAlerts:
         from app.api.schemas import TenderDiscoveryItem
         now = now or datetime.now(timezone.utc)
         examined = delivered = failed = 0
-        for row in self.candidates():
+        candidate_total = self.candidate_count()
+        scan_budget = min(candidate_total, MAX_SCANNED_PER_CYCLE)
+        # A deterministic hourly rotation is shared across independent Worker
+        # invocations, with no extra mutable global state or schema migration.
+        hour = int(now.astimezone(timezone.utc).timestamp() // 3600) if now.tzinfo else 0
+        start = (hour * MAX_SCANNED_PER_CYCLE) % candidate_total if candidate_total else 0
+        for row in self._scan_candidates(start=start, count=candidate_total,
+                                         budget=scan_budget):
+            if delivered + failed >= MAX_REMINDERS_PER_CYCLE:
+                break
             examined += 1
             try:
                 tender = TenderDiscoveryItem.model_validate_json(row["snapshot_json"])
@@ -263,6 +312,13 @@ class DeadlineAlerts:
                 else:
                     delivered += 1
                     self._mark(row, tender.deadline, hours, channel, "sent")
+        self.last_scan = {
+            "eligible_rows": candidate_total,
+            "scanned_rows": examined,
+            "scan_window_start": start,
+            "scan_incomplete": examined < candidate_total,
+            "send_cap_reached": delivered + failed >= MAX_REMINDERS_PER_CYCLE,
+        }
         return {"examined": examined, "sent": delivered, "failed": failed}
 
 
@@ -294,6 +350,9 @@ def main():
         send_telegram=telegram_function if token else None,
     )
     print("DEADLINE_ALERTS=RUN; EXAMINED={examined}; SENT={sent}; FAILED={failed}".format(**result))
+    print("DEADLINE_SCAN_ELIGIBLE={eligible_rows}; SCANNED={scanned_rows}; "
+          "INCOMPLETE={scan_incomplete}; SEND_CAP_REACHED={send_cap_reached}".format(
+              **alerts.last_scan))
     return 1 if result["failed"] else 0
 
 if __name__ == "__main__":

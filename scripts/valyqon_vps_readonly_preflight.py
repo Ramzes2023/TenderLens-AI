@@ -172,7 +172,7 @@ def _segmented_readonly_inventory(ssh_prefix):
     stages = ("START", "REPOSITORY", "DOCKER",
               "PUBLIC_COMPOSE", "PRIVATE_PREVIEW", "COMPLETE")
     if len(parts) != len(stages) + 1:
-        return None
+        return None, "UNKNOWN"
     combined = []
     for stage, fragment in zip(stages, parts[1:]):
         script = "set -u\n" + marker + fragment
@@ -183,14 +183,14 @@ def _segmented_readonly_inventory(ssh_prefix):
                 timeout=22, check=False,
             )
         except (OSError, subprocess.TimeoutExpired):
-            return None
+            return None, stage
         if run.returncode != 0 or _safe_remote_stage(run.stderr) != stage:
-            return None
+            return None, stage
         combined.append(run.stdout)
     try:
-        return parse_status("\n".join(combined))
+        return parse_status("\n".join(combined)), "COMPLETE"
     except ValueError:
-        return None
+        return None, "COMPLETE"
 
 
 def _safe_ssh_failure(stderr: str, returncode: int) -> str:
@@ -290,11 +290,14 @@ def inspect(host, key, user="ubuntu", expected_sha=None):
             # inventory or SSH exit 255; no host-key/auth bypass.
             if _remote_shell_probe(args[:-2]):
                 if stage == "UNKNOWN":
-                    segmented = _segmented_readonly_inventory(args[:-2])
+                    segmented, diagnosed_stage = _segmented_readonly_inventory(args[:-2])
                     if segmented is not None:
                         out = segmented
                         same = expected_sha is not None and out["REMOTE_SHA"] == expected_sha
                         return out, same
+                    # This describes which small, read-only stage failed,
+                    # not a successful or bypassed SSH preflight.
+                    stage = diagnosed_stage
                 code = "SSH_REMOTE_SCRIPT_FAILED"
             else:
                 code = "SSH_REMOTE_SHELL_UNAVAILABLE"

@@ -100,18 +100,89 @@ def acceptance():
                     raise AssertionError("Guest could open a protected tender detail route")
                 if client.get("/api/v1/public/opportunities",params={"q":"valyqon_no_real_match_983417"}).json().get("shown")!=0:
                     raise AssertionError("Unrelated query returned invented/nonmatching results")
+            # Independent authenticated tenant path: the registered company's
+            # scoped 'snapshots=true' endpoint must read the SAME genuine Worker
+            # SQL rows, and a non-member must not inspect its results.
+            from app.auth import AuthRepository, AuthService
+            from app.organizations import OrganizationRepository, OrganizationService
+            from app.companies import CompanyRepository, CompanyService
+            from app.monitoring import MonitoringRepository, TenderMonitorService
+            from app.api.security import SESSION_COOKIE
+
+            auth_repo=AuthRepository(db)
+            auth_repo.initialize()
+            auth=AuthService(auth_repo)
+            organizations=OrganizationRepository(db)
+            organizations.initialize()
+            company_repo=CompanyRepository(db)
+            company_repo.initialize()
+            monitor_repo=MonitoringRepository(db)
+            monitor_repo.initialize()
+            owner=auth.register("ru-worker-owner@example.test","test account password 24680!")
+            outsider=auth.register("ru-worker-outside@example.test","test account password 13579!")
+            org=organizations.create("Isolated REAL_HTTP Worker QA",owner.id)
+            chosen=next((term for term,preview in qterms
+                         if preview in data["results"]),None)
+            if chosen is None:
+                raise AssertionError("No genuine title term for scoped company test")
+            private_runtime=ApiRuntime(
+                auth_service=auth,
+                organization_service=OrganizationService(organizations),
+                company_service=CompanyService(company_repo),
+                tender_discovery_service=TenderMonitorService(
+                    cfg, None, monitor_repo, None),
+                source_catalog=catalog,
+                database=db,
+            )
+            private_app=create_app(runtime=private_runtime,
+                settings=ApiSettings("127.0.0.1",8000,False,None))
+            with TestClient(private_app) as private:
+                private.cookies.set(SESSION_COOKIE,auth.create_session(owner))
+                api=f"/api/v1/organizations/{org.id}"
+                profile={
+                    "profile_version":"real-worker-http-acceptance-v1",
+                    "company_name":"Isolated REAL_HTTP Buyer",
+                    "business_mode":"sell",
+                    "product_keywords":[chosen],
+                    "search_keywords":[chosen],
+                    "accepted_currencies":["RUB"],
+                }
+                company=private.post(api+"/companies",json={
+                    "name":"REAL_HTTP Temporary Buyer","profile":profile})
+                if company.status_code!=201:
+                    raise AssertionError("Real API company registration failed")
+                query_response=private.post(api+"/discover/tenders?snapshots=true")
+                if query_response.status_code!=200:
+                    raise AssertionError("Authenticated snapshot Discovery API failed")
+                discovery=query_response.json()
+                if not discovery.get("items"):
+                    raise AssertionError("Real worker source produced no authenticated matches")
+                source_ids={(r.source,r.external_id) for r in persisted}
+                for item in discovery["items"]:
+                    if (item.get("source"),item.get("external_id")) not in source_ids:
+                        raise AssertionError("Discovery returned a non-worker notice")
+                    if item.get("analysis_stage")!="metadata_preview":
+                        raise AssertionError("Unverified AI analysis was claimed")
+                matches=len(discovery["items"])
+                private.cookies.clear()
+                private.cookies.set(SESSION_COOKIE,auth.create_session(outsider))
+                denied=private.post(api+"/discover/tenders?snapshots=true")
+                if denied.status_code!=403:
+                    raise AssertionError("Cross-tenant registered user could access search")
             return {
                 "origin":SOURCE,
                 "real_worker_written":report["accepted_count"],
                 "stored_reloaded":len(persisted),
                 "guest_public_rows":data["shown"],
+                "authenticated_company_matches":matches,
+                "cross_tenant_scope_denied":True,
                 "keyword_http_match":True,
                 "paid_details_locked":True,
                 "public_private_fields_exposed":False,
                 "official_telegram_delivery":False,
                 "external_email_delivery":False,
                 "production_changed":False,
-                "evidence_level":"REAL_HTTP_TO_WORKER_DB_TO_ASGI_HTTP_GUEST_PROJECTION",
+                "evidence_level":"REAL_HTTP_TO_WORKER_DB_TO_GUEST_AND_AUTHENTICATED_ASGI_HTTP",
             }
         finally:
             db.close()

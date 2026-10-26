@@ -34,4 +34,4 @@ jobs:
           python -m pytest -q tests/test_guest_search_public_gate.py tests/test_ru_mikroton_worker_contract.py
       - name: Real official source → Worker → temporary SQL → actual guest HTTP
         timeout-minutes: 8
-        run: python -B scripts/ci_ru_mikroton_guest_http_acceptance.py
+        run: python -B -m scripts.ci_ru_mikroton_guest_http_acceptance

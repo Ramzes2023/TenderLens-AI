@@ -53,7 +53,7 @@ class TrustedRealPublisherReleaseGate(unittest.TestCase):
             contents = source.read_text(encoding="utf-8")
             ast.parse(contents, filename=str(source))
             self.assertIn("Worker", contents)
-            self.assertIn("SQLite", contents if "SQLite" in contents else "SQLite")
+            self.assertIn("SQLite", contents)
             self.assertNotIn("verify=False", contents)
             self.assertNotIn("follow_redirects=True", contents)
 

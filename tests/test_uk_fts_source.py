@@ -65,9 +65,12 @@ def test_parse_uk_fts_normalizes_realistic_release() -> None:
         ]
     }
 
-    # A 2026-10-21 deadline is legitimately expired after that date.
-    # Freeze the parser clock at the fixture's October 2026 publication window.
-    notices = parse_uk_fts_response(payload, now=datetime(2026, 10, 11, 12, tzinfo=timezone.utc))
+    # This historical fixture's deadline was 2026-10-21. The real parser
+    # must still reject expired opportunities *today*, so pin only this test
+    # to the publication window instead of disabling expiry filtering.
+    notices = parse_uk_fts_response(
+        payload, now=datetime(2026, 10, 11, 12, tzinfo=timezone.utc),
+    )
 
     assert len(notices) == 1
 

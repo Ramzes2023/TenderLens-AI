@@ -85,3 +85,52 @@ Do not copy production `.env`, SSH keys, backups or customer records into
 GitHub/ChatGPT; do not expose private credentials in logs. Do not run
 `docker compose down -v`, enable Worker profiles over an unknown queue,
 restart a Bot token with an existing poller or turn off legal/paid gates.
+
+
+## 26 October — operator's actual external and SSH evidence
+
+The operator provided new read-only terminal output from the separate
+`VALYQON-PUBLIC-DIAG-20261026` checkout, commit `5e79697`
+(before the additional diagnostics below):
+
+- Existing **previously trusted** SSH target `ubuntu@63.189.75.15`,
+  local private key retained exclusively on the operator's Windows host.
+- The long read-only SSH report failed:
+  `FAILURE_CODE=SSH_REMOTE_SCRIPT_FAILED`,
+  `FAILURE_STAGE=UNKNOWN`,
+  `FAILURE_EXIT_CLASS=REMOTE_NONZERO`.
+  The local SSH checker had already observed that a **minimal remote shell**
+  script works. This is not evidence that the full VPS repository exists,
+  the release SHA matches or Docker Compose is running.
+- External HTTPS probe for `https://63-189-75-15.sslip.io/`:
+  `dns=PASS`, HTTPS returned **HTTP 303** with safe redirect
+  classification `login`. This does **not** prove a public premium
+  procurement landing. The old probe prematurely reported `tls=NOT_VERIFIED`
+  because it exited on the 303 before assigning the TLS state.
+- These are two independent blockers. Do not rewrite `/login` to PASS,
+  install a new root, disable SSH host-key verification, reuse an EC2
+  private-preview result or deploy a guessed build.
+
+GitHub follow-up adds strictly read-only diagnostics:
+
+1. Report `tls=PASS` when a real HTTPS response is received under
+   verified Python default TLS, while `homepage` and `public_edge_pass`
+   remain blocked for HTTP 303 or a legacy 200 login body.
+2. When the full SSH script exits nonzero *before the first stage marker*,
+   but a minimal pinned-host-key shell probe succeeds, execute the **same**
+   read-only fixed inventory in six small, independently parsed SSH parts.
+   Fail closed on any missing/invalid output and report the first
+   stage to investigate. No secrets, source, backups or files are uploaded.
+3. When homepage redirects, independently inspect only the same-host
+   public `/health` and `/assets/premium.css` with TLS and without
+   following redirects. Their outcomes are diagnostic and can never make
+   the invalid homepage pass.
+4. The unified `valyqon_public_launch_doctor.py` reports the redacted
+   SSH stage and public stylesheet status.
+
+The **source repository** on main already defines `GET /` as the
+real public `landing_html(...)`, and mounts `/assets/premium.css`.
+Its presence in git is **not** evidence that this version is deployed.
+Only after a trusted inventory identifies the running release and
+approved operator captures a rollback/backup can a staged, reviewed
+deployment fix the old 303 login root. Production remains unchanged.

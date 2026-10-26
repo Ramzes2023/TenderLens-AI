@@ -25,10 +25,10 @@ _STAGE = {
 }
 
 
-def _call(prefix, source: str, *, runner=subprocess.run, timeout=18):
+def _call(prefix, source: str, *, runner=None, timeout=18):
     """One fixed script on stdin; never execute a local shell or print output."""
     try:
-        return runner(
+        return (runner or subprocess.run)(
             prefix + ["sh", "-s"], input=source, capture_output=True,
             text=True, check=False, timeout=timeout,
         )
@@ -36,7 +36,7 @@ def _call(prefix, source: str, *, runner=subprocess.run, timeout=18):
         return None
 
 
-def short_inventory(ssh_prefix, *, runner=subprocess.run):
+def short_inventory(ssh_prefix, *, runner=None):
     """Return (full parsed report, failure stage), or (None, failure stage).
 
     parse_status remains the existing strict, complete, versioned parser.

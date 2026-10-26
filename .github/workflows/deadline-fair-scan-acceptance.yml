@@ -18,6 +18,8 @@ jobs:
       PYTHON_DOTENV_DISABLED: '1'
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -26,7 +28,7 @@ jobs:
       - name: Static compile and changed-file formatting
         run: |
           python -m compileall -q app/launch/deadline_alerts.py tests/test_deadline_alerts_fair_scan.py
-          git diff --check HEAD~3 HEAD
+          git diff --check origin/main...HEAD
       - name: Isolated fairness, opt-in, chronology, and privacy regressions
         run: |
           python -m pytest -q -rs tests/test_deadline_alerts_fair_scan.py tests/test_deadline_alerts_database.py tests/test_deadline_alerts_launch.py tests/test_delivery_journal.py

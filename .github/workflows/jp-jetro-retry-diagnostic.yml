@@ -1,0 +1,42 @@
+name: JP JETRO bounded real queue retry diagnostics
+on:
+  push:
+    branches: [fix/jetro-real-queue-bounded-retry-20261018]
+    paths:
+      - scripts/asia_jetro_bid_worker_acceptance.py
+      - tests/test_jetro_bounded_queue_retry.py
+      - .github/workflows/jp-jetro-retry-diagnostic.yml
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  real-queue-retry-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Reject simulated queue success and unbounded retries
+        run: python -m pytest -q tests/test_jetro_bounded_queue_retry.py
+  real-jetro-queue-sql-search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real JETRO bids through genuine leased SQLite worker and operator search
+        timeout-minutes: 4
+        env:
+          VALYQON_ASIA_JETRO_BID_ENABLED: "1"
+        run: python -B -m scripts.asia_jetro_bid_worker_acceptance

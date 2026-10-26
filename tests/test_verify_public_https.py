@@ -200,3 +200,28 @@ def test_live_health_http_error_identifies_health_phase():
     assert result["http_status"] == 503
     assert result["blocked_at"] == "health"
     assert result["public_edge_pass"] is False
+
+
+@pytest.mark.parametrize(("location","classification"),[
+    ("/login","login"),
+    ("https://example.org/dashboard","dashboard"),
+    ("https://other.example.org/private?secret=abc","other_or_unknown_host"),
+    ("/register?token=secretValue","other_same_host"),
+])
+def test_public_redirect_classification_does_not_leak_location(location,classification):
+    from io import BytesIO
+    from urllib.error import HTTPError
+    err=HTTPError("https://example.org/",303,"See Other",
+                  {"Location":location},BytesIO(b"secretValue"))
+    with (
+        patch("scripts.verify_public_https.socket.getaddrinfo",
+              return_value=[(0,0,0,"",("93.184.216.34",443))]),
+        patch("scripts.verify_public_https._https_client",
+              return_value=MagicMock(open=MagicMock(side_effect=err))),
+    ):
+        result=verify("https://example.org")
+    assert result["redirect_class"]==classification
+    assert result["http_status"]==303
+    assert result["public_edge_pass"] is False
+    assert "secretValue" not in str(result)
+    assert "other.example.org" not in str(result)

@@ -1,0 +1,46 @@
+name: VALYQON Public PostgreSQL Operator Profiles (Offline)
+
+on:
+  pull_request:
+    branches:
+      - integration/valyqon-release-candidate-20261025
+    paths:
+      - "compose.public-operator.yaml"
+      - "compose.public.yaml"
+      - "compose.postgresql.example.yaml"
+      - "scripts/check_public_operator_compose.py"
+      - ".github/workflows/public-operator-compose-contracts.yml"
+  push:
+    branches:
+      - fix/saas-production-worker-optin-20261026
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-optin-services:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Use only synthetic local Compose configuration
+        shell: bash
+        run: |
+          if [ -e .env ]; then
+            echo 'An unexpected environment file exists in this checkout.' >&2
+            exit 2
+          fi
+          printf 'APP_ENV=production\nTELEGRAM_BOT_TOKEN=\n' > .env
+          chmod 600 .env
+      - name: Confirm no bot, connector Worker or private ports activate by default
+        env:
+          TENDERLENS_DOMAIN: stage.example.invalid
+          ACME_EMAIL: ci@example.invalid
+          DATABASE_URL: postgresql://synthetic:synthetic@db.example.invalid:5432/disposable
+        run: python -B scripts/check_public_operator_compose.py
+      - name: Remove synthetic environment file
+        if: always()
+        shell: bash
+        run: rm -f .env

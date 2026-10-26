@@ -4,7 +4,7 @@ name: RU Ingushetia main integration conflict gate
 # deploys source flags, accesses Telegram, or claims live reachability.
 on:
   push:
-    branches: [feat/ru-ingushetia-eis-live-gated-20261019]
+    branches: [feat/ru-ingushetia-eis-live-gated-20261019, fix/ru-ingushetia-main-reconcile-20261026]
   workflow_dispatch:
 
 permissions:

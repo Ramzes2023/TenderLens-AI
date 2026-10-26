@@ -33,7 +33,7 @@ def test_scoped_context_rejects_changed_root(tmp_path):
 
 
 @pytest.mark.parametrize("untrusted", [b"", b"not-a-cert", b"Z" * 1000, b"P" * 65537],
-                         ids=["empty", "invalid-text", "invalid-der", "oversized"])
+                         ids=["empty", "invalid", "short-garbage", "oversized"])
 def test_untrusted_input_cannot_enable_eis_tls(untrusted):
     with pytest.raises(ValueError):
         verify_root(untrusted)
@@ -65,8 +65,7 @@ def test_verified_der_and_pem_transports_resolve_to_same_pinned_root(monkeypatch
 
     # Synthetic bytes test format normalization only, not real X.509 trust.
     der = bytes([0x30, 0x82]) + bytes([0x42]) * 512
-    # Production is the sole authoritative verifier after Docker refactor.
-    # This is synthetic DER formatting coverage, NOT an alternate trusted CA.
+    monkeypatch.setattr(probe, "ROOT_SHA256", hashlib.sha256(der).hexdigest())
     monkeypatch.setattr(trust, "ROOT_SHA256", hashlib.sha256(der).hexdigest())
     pem = ssl.DER_cert_to_PEM_cert(der)
 
@@ -85,8 +84,7 @@ def test_multi_certificate_pem_and_wrong_pin_fail_closed(monkeypatch):
     pem = ssl.DER_cert_to_PEM_cert(der)
     with pytest.raises(ValueError, match="fingerprint mismatch"):
         probe.verify_root(pem.encode("ascii"))
-    # Production is the sole authoritative verifier after Docker refactor.
-    # This is synthetic DER formatting coverage, NOT an alternate trusted CA.
+    monkeypatch.setattr(probe, "ROOT_SHA256", hashlib.sha256(der).hexdigest())
     monkeypatch.setattr(trust, "ROOT_SHA256", hashlib.sha256(der).hexdigest())
     with pytest.raises(ValueError, match="PEM certificate"):
         probe.verify_root((pem + pem).encode("ascii"))

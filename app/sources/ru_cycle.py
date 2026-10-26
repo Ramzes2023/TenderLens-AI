@@ -8,6 +8,13 @@ from __future__ import annotations
 
 from .registry import SourceRegistryError
 
+# Dedicated overlapping EIS 44-FZ regional mirrors. Neither is enabled
+# without a separate operator-approved source registration.
+INGUSHETIA_APPROVED_SOURCES = (
+    "ru_ingushetia_eis44",
+    "ru_ingushetia_fabrikant44",
+)
+
 # Only adapters with a first-party/live buyer list→notice→leased Worker→SQL
 # acceptance previously checked; platform research/blocked PRs are excluded.
 # This is a *publisher-connection* allowlist, not independent procurement
@@ -20,20 +27,9 @@ RU_APPROVED_SOURCES = (
     "south_ural_public",
     "stan_commercial_public",
     "kavkaz_rf_firstparty",
-    # EIS first-party originals passed local real Worker acceptance; the
-    # accredited Fabrikant ETP mirror passed GitHub-hosted real acceptance
-    # on 2026-10-20 (run 39407402210). These are *overlapping* 44-FZ
-    # publications, not two independent procurement inventories. Both
-    # remain individually operator opt-in, default OFF, and cannot enqueue
-    # without explicit configuration.
-    "ru_ingushetia_eis44",
-    "ru_ingushetia_fabrikant44",
-    # Preserve concurrently reviewed regional sources already approved on
-    # main. These keys remain inert unless the merged catalog independently
-    # registers AND the operator explicitly enables each source.
-    # Samara public listing is list-only; do not claim deep-card verification.
+    # Proven native public LIST -> fenced Worker -> SQLite; original deep details not verified.
     "ru_samara_public_list",
-    # Dagestan original details can require login; do not claim deep access.
+    # Official anonymous Dagestan list -> fenced Worker/SQL; deep details login-protected.
     "ru_dagestan_public_list",
 )
 
@@ -41,7 +37,7 @@ RU_APPROVED_SOURCES = (
 def approved_ru_keys(catalog):
     """Return exactly operator-enabled, registered RU sources in fixed order."""
     approved = []
-    for key in RU_APPROVED_SOURCES:
+    for key in RU_APPROVED_SOURCES + INGUSHETIA_APPROVED_SOURCES:
         try:
             item = catalog.registry.get(key)
         except SourceRegistryError:

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from itertools import zip_longest
 import math
 import re
 
@@ -39,11 +40,20 @@ def _date(value):
         raise SourceError("UzEx invalid observed notice date.") from None
 
 
-def parse_uzex_tradelist(data, *, type_id: int):
-    """Require full official list rows; never treat an ID alone as a notice."""
+def parse_uzex_tradelist(data, *, type_id: int, allow_incomplete: bool = False):
+    """Normalize verified official rows; optionally exclude bounded blank titles/buyers.
+
+    A source-published incomplete row is NOT a tender. All IDs, identities,
+    amounts, currencies, dates and remaining rows still fail closed. Direct
+    consumers and parser contract tests use strict mode by default.
+    """
     if type_id not in (1, 2) or type(data) is not list or not 0 < len(data) <= PER_TYPE:
         raise SourceError("UzEx changed public list shape.")
+    if type(allow_incomplete) is not bool:
+        raise SourceError("UzEx invalid missing-row policy.")
     result = {}
+    seen_official_ids = set()
+    incomplete = 0
     for row in data:
         if type(row) is not dict:
             raise SourceError("UzEx malformed public notice row.")
@@ -51,9 +61,22 @@ def parse_uzex_tradelist(data, *, type_id: int):
         if (type(identifier) is not int or not 100 <= identifier <= 999999999999
                 or row.get("type_id") != type_id):
             raise SourceError("UzEx invalid official notice identity.")
+        # Even excluded incomplete rows must have valid native identities and
+        # cannot repeat another record. An attacker cannot smuggle duplicates.
+        if identifier in seen_official_ids:
+            raise SourceError("UzEx duplicate official lot in response.")
+        seen_official_ids.add(identifier)
         title = _nonempty(row, "name")
         customer = _nonempty(row, "seller_name")
         if not title or not customer or len(title) < 8 or len(customer) < 4:
+            # Live official TypeId=1 contained 19 valid rows plus one native
+            # row with missing title/buyer. Persist only real verified records.
+            # More than two per feed means probable upstream schema change.
+            if allow_incomplete:
+                incomplete += 1
+                if incomplete > 2:
+                    raise SourceError("UzEx too many incomplete official rows.")
+                continue
             raise SourceError("UzEx missing procurement title or organization.")
         start = _date(row.get("start_date"))
         end = _date(row.get("end_date"))
@@ -90,6 +113,8 @@ def parse_uzex_tradelist(data, *, type_id: int):
                 raise SourceError("UzEx conflicting duplicate lot.")
             raise SourceError("UzEx duplicate official lot in response.")
         result[notice.external_id] = notice
+    if not result:
+        raise SourceError("UzEx no complete original tender rows.")
     return list(result.values())
 
 
@@ -174,7 +199,9 @@ class UzbekistanUzexSource:
                         raise SourceError("UzEx official response was not JSON.")
                     if len(response.content) > MAX_BODY:
                         raise SourceError("UzEx oversized official response.")
-                    series.append(parse_uzex_current_batch(_uzex_public_rows(response.json()), type_id=type_id))
+                    series.append(parse_uzex_tradelist(
+                        response.json(), type_id=type_id, allow_incomplete=True,
+                    ))
         except (httpx.HTTPError, ConnectorTransportError, OSError) as error:
             if transient_transport(error):
                 raise SourceTransportError("UzEx official HTTPS temporarily unavailable.") from None
@@ -184,8 +211,14 @@ class UzbekistanUzexSource:
         output = []
         # Bound result size while representing both official open tenders and
         # best-offer selections, without fetching from hidden/private routes.
-        for row in zip(*series):
-            output.extend(row)
+        # The two official categories need not contain the same number of
+        # complete rows: a source-owned row with a missing buyer/title may be
+        # rejected within its own category. zip(*series) silently truncated
+        # every remaining valid notice in the longer category. Interleave
+        # using zip_longest so no independently validated original is lost.
+        # No synthetic placeholder is ever accepted as a procurement notice.
+        for pair in zip_longest(*series):
+            output.extend(notice for notice in pair if notice is not None)
             if len(output) >= requested:
                 return output[:requested]
         return output[:requested]

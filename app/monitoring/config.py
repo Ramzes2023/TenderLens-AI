@@ -43,13 +43,8 @@ class MonitoringSettings:
     stan_commercial_public_enabled: bool = False
     south_ural_public_enabled: bool = False
     ru_dagestan_public_list_enabled: bool = False
-    # Preserve main's separately reviewed Samara source switch; never auto-enable.
     ru_samara_public_list_enabled: bool = False
     kavkaz_rf_firstparty_enabled: bool = False
-    ru_ingushetia_eis44_enabled: bool = False
-    ru_ingushetia_fabrikant44_enabled: bool = False
-    ru_ingushetia_worker_sql_alerts_enabled: bool = False
-    ru_ingushetia_eis44_rss_url: str | None = None
     ru_background_catalog_enabled: bool = False
     eis_direct_enabled: bool = False
     eis_system_trust_enabled: bool = False
@@ -57,6 +52,12 @@ class MonitoringSettings:
     cis_md_elicitatie_enabled: bool = False
     cis_az_azeristilik_enabled: bool = False
     cis_az_adif_small_enabled: bool = False
+
+    # Ingushetia is a separate explicit operator-gated group, default OFF.
+    ru_ingushetia_eis44_enabled: bool = False
+    ru_ingushetia_fabrikant44_enabled: bool = False
+    ru_ingushetia_worker_sql_alerts_enabled: bool = False
+    ru_ingushetia_eis44_rss_url: str | None = None
 
     @property
     def eis_223_configured(self) -> bool:
@@ -139,10 +140,6 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         ru_dagestan_public_list_enabled=_bool("RU_DAGESTAN_PUBLIC_LIST_ENABLED", False),
         ru_samara_public_list_enabled=_bool("RU_SAMARA_PUBLIC_LIST_ENABLED", False),
         kavkaz_rf_firstparty_enabled=_bool("KAVKAZ_RF_FIRSTPARTY_ENABLED", False),
-        ru_ingushetia_eis44_enabled=_bool("RU_INGUSHETIA_EIS44_ENABLED", False),
-        ru_ingushetia_fabrikant44_enabled=_bool("RU_INGUSHETIA_FABRIKANT44_ENABLED", False),
-        ru_ingushetia_worker_sql_alerts_enabled=_bool("VALYQON_RU_INGUSHETIA_WORKER_SQL_ALERTS_ENABLED", False),
-        ru_ingushetia_eis44_rss_url=os.environ.get("RU_INGUSHETIA_EIS44_RSS_URL", "").strip() or None,
         ru_background_catalog_enabled=_bool("VALYQON_RU_BACKGROUND_CATALOG_ENABLED", False),
         eis_direct_enabled=_bool("EIS_DIRECT_ENABLED", False),
         eis_system_trust_enabled=_bool("EIS_SYSTEM_TRUST_ENABLED", False),
@@ -150,6 +147,10 @@ def load_monitoring_settings(env_file: Path = ENV_FILE) -> MonitoringSettings:
         cis_md_elicitatie_enabled=_bool("VALYQON_CIS_MD_ELICITATIE_ENABLED", False),
         cis_az_azeristilik_enabled=_bool("VALYQON_CIS_AZ_AZERISTILIK_ENABLED", False),
         cis_az_adif_small_enabled=_bool("VALYQON_CIS_AZ_ADIF_SMALL_ENABLED", False),
+        ru_ingushetia_eis44_enabled=_bool("RU_INGUSHETIA_EIS44_ENABLED", False),
+        ru_ingushetia_fabrikant44_enabled=_bool("RU_INGUSHETIA_FABRIKANT44_ENABLED", False),
+        ru_ingushetia_worker_sql_alerts_enabled=_bool("VALYQON_RU_INGUSHETIA_WORKER_SQL_ALERTS_ENABLED", False),
+        ru_ingushetia_eis44_rss_url=os.environ.get("RU_INGUSHETIA_EIS44_RSS_URL", "").strip() or None,
         eis_223_rss_urls=_urls(os.environ.get("EIS_223_RSS_URLS", "")),
         eis_223_profile_feeds_enabled=_bool("EIS_223_PROFILE_FEEDS_ENABLED", False),
         profile_feeds_enabled=_bool("EIS_PROFILE_FEEDS_ENABLED", True),

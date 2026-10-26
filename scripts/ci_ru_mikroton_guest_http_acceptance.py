@@ -218,6 +218,37 @@ if __name__ == "__main__":
     except Exception as exc:
         print("RU_REAL_GUEST_API=BLOCKED_OR_FAILED")
         print("FAILURE_CLASS="+type(exc).__name__)
+        # All AssertionErrors in this test have short hardcoded diagnostic
+        # messages; never print arbitrary transport exceptions, tokens or URLs.
+        if type(exc) is AssertionError and str(exc) in {
+            "Official source returned no real notices",
+            "Worker did not persist all authentic records",
+            "Real Worker SQL persistence mismatch",
+            "Official source identity mismatch",
+            "Actual public FastAPI endpoint unavailable",
+            "Guest search returned no legitimate locked results",
+            "No safe visible titles in original real notices",
+            "Guest API contains a non-worker/fabricated notice",
+            "Guest API exposed protected details",
+            "No matching search term in real visible notice titles",
+            "Keyword from authentic notice failed public HTTP search",
+            "Public real search is cacheable",
+            "Guest could open a protected tender detail route",
+            "Unrelated query returned invented/nonmatching results",
+            "No genuine title term for scoped company test",
+            "Real API company registration failed",
+            "Authenticated snapshot Discovery API failed",
+            "Real worker source produced no authenticated matches",
+            "Discovery returned a non-worker notice",
+            "Unverified AI analysis was claimed",
+            "Cross-tenant registered user could access search",
+            "Authorized real-notice shortlist save failed",
+            "Saved notice identity changed",
+            "Real saved notice did not persist in account shortlist",
+            "Real saved opportunity is not duplicate-idempotent",
+            "Cross-tenant registered user could read saved genuine tenders",
+        }:
+            print("FAILURE_DETAIL="+str(exc))
         print("PRODUCTION_CHANGED=NO")
         raise SystemExit(2)
     print("RU_REAL_GUEST_API_EVIDENCE="+json.dumps(evidence,sort_keys=True))

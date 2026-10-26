@@ -68,4 +68,5 @@ services:
     healthcheck:
       disable: true
     # No published ports, no source scheduler and no automatic enqueue.
-    # The durable Worker stays idle until a separate operator-approved job.
+    # IMPORTANT: enabling this profile immediately consumes any PREEXISTING
+    # eligible queued connector jobs; inspect/approve the queue first.

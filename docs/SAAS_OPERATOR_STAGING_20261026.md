@@ -19,7 +19,7 @@ With the additional `compose.public-operator.yaml`:
   and production delivery review are complete.
 - **`reviewed-source-worker` profile:** run `app.jobs.worker --connectors`
   against an explicitly supplied external PostgreSQL DSN. It has no host
-  ports. It does not automatically enqueue source jobs, enable any adapter,
+  ports. It does not enqueue new source jobs or automatically enable source adapters,
   notify customers, accept payments or expose the SQLite demo database.
 
 All three application processes require PostgreSQL through the separately
@@ -71,7 +71,7 @@ external alerts, payment acceptance or commercial readiness.
 
 This overlay **does not launch the website**. Default production runs only `api` and `caddy`, with experimental Russian sources, deadline alerts, AI and paid details fail-closed. No legal operator, registered seller, reviewed personal-data consent, verified public canonical HTTPS domain, external deliverable SMTP or merchant subscription entitlement was supplied in this PR. The current `compose.public.yaml` still has SQLite as the base; the operator must include `compose.postgresql.example.yaml` to use a reviewed external PostgreSQL 16 instance.
 
-Only a separate approved operator rollout can activate the optional connector profile **after** specific real-original-source, Worker→DB→authorized user, delivery and backup acceptance. The overlay and CI explicitly deny unreviewed source flags inherited from `.env`, including on the Worker. Adding an opt-in Worker is **not** a substitute for obtaining user consent, running a source job or proving search results.
+Only a separate approved operator rollout can activate the optional connector profile **after** specific real-original-source, Worker→DB→authorized user, delivery and backup acceptance. The overlay and CI explicitly deny unreviewed source flags inherited from `.env`, including on the Worker. **An opt-in Worker can immediately consume previously queued connector jobs** already present in the shared PostgreSQL database; inspect/approve any pending queue before enabling its profile. A disabled background scheduler does not make an existing queue empty. Adding an opt-in Worker is **not** a substitute for obtaining user consent, running a source job or proving search results.
 
 A read-only audit of the exact running image and HTTPS health should precede any changes to the existing VPS. Do not overwrite its `.env`, `docker-compose` project or persistent volumes from these instructions.
 

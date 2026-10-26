@@ -51,6 +51,9 @@ class FetchPolicy:
     max_requests: int
     requests: int = 0
     max_bytes: int = 25 * 1024 * 1024
+    # Explicitly opt in only for statuses the owning source handles as
+    # individual, non-evidence responses. The default rejects every non-2xx.
+    allowed_http_errors: frozenset[int] = frozenset()
 
 
 _policy = ContextVar('connector_fetch_policy', default=None)
@@ -183,7 +186,7 @@ class BoundedClient(_PublicIPClient):
                 status = response.status_code
                 if status == 429 or status == 408 or 500 <= status <= 599:
                     raise ConnectorTransportError(retryable=True, reason='http_transient')
-                if not 200 <= status < 300:
+                if not 200 <= status < 300 and status not in policy.allowed_http_errors:
                     raise ConnectorTransportError(reason='http_status')
                 chunks, size = [], 0
                 async for chunk in response.aiter_bytes():

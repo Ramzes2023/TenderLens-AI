@@ -15,6 +15,7 @@ import math
 import re
 
 import httpx
+import ssl
 
 from .eis_rss import SourceError
 from .http import ConnectorTransportError, FetchPolicy, _policy, bounded_fetch, source_client
@@ -25,6 +26,10 @@ from .transport_errors import SourceTransportError, transient_transport
 SOURCE = "az_azeristilik"
 HOST = "azeristilik.gov.az"
 INDEX_URL = "https://azeristilik.gov.az/az/imkanlar/tender-elanlari"
+# Official same-host language mirror, independently observed to expose the
+# same procurement links. Only a transport-level network failure on /az
+# permits a second bounded listing request; never bypass HTTP/TLS/auth errors.
+INDEX_EN_URL = "https://azeristilik.gov.az/en/imkanlar/tender-elanlari"
 MAX_BODY = 768 * 1024
 MAX_DETAILS = 5
 POST = re.compile(r"^/(?:(?:az|en|ru)/)?post/([a-z0-9-]{12,200})$")
@@ -152,6 +157,35 @@ def parse_public_detail(html, *, url, listed_title):
     return notice
 
 
+def _official_peer_reset(error):
+    """Only a directly observed TCP reset on first-party HTTPS is retryable.
+
+    Keep TLS/certificate errors, resolver/public-IP errors and unknown
+    ConnectErrors permanent. Existing durable Worker retries remain bounded.
+    """
+    # The bounded production HTTP client wraps real ConnectError in its own
+    # policy exception. Only its explicitly retryable "network" classification
+    # is eligible; public-IP, TLS, HTTP status and policy rejections are not.
+    if isinstance(error, ConnectorTransportError):
+        if not error.retryable or error.reason != "network":
+            return False
+    elif not isinstance(error, httpx.ConnectError):
+        return False
+    seen = set()
+    cause = error
+    saw_connect = saw_reset = False
+    while isinstance(cause, BaseException) and id(cause) not in seen:
+        if isinstance(cause, ssl.SSLError):
+            return False
+        if isinstance(cause, httpx.ConnectError):
+            saw_connect = True
+        if type(cause) is ConnectionResetError:
+            saw_reset = True
+        seen.add(id(cause))
+        cause = cause.__cause__
+    return saw_connect and saw_reset
+
+
 @dataclass(frozen=True)
 class AzerbaijanHeatSource:
     timeout: float = 12.0
@@ -163,7 +197,10 @@ class AzerbaijanHeatSource:
 
     async def fetch(self, limit=5):
         if _policy.get() is None:
-            with bounded_fetch(FetchPolicy(frozenset({HOST}), 1+MAX_DETAILS, max_bytes=MAX_BODY)):
+            with bounded_fetch(FetchPolicy(
+                frozenset({HOST}), 2+MAX_DETAILS, max_bytes=MAX_BODY,
+                allowed_http_errors=frozenset({403, 404, 410}),
+            )):
                 return await self._fetch(limit)
         return await self._fetch(limit)
 
@@ -174,18 +211,48 @@ class AzerbaijanHeatSource:
         notices = []
         try:
             async with source_client(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
-                index = await client.get(INDEX_URL, headers={
-                    "Accept": "text/html", "User-Agent": "VALYQON-public-tender-audit/1.0"})
+                headers = {"Accept": "text/html",
+                           "User-Agent": "VALYQON-public-tender-audit/1.0"}
+                try:
+                    index = await client.get(INDEX_URL, headers=headers)
+                except ConnectorTransportError as error:
+                    # No generic fail-open fallback. An ordinary transient
+                    # first-party network failure may use one *official*
+                    # same-host language listing under the Worker request cap.
+                    # No alternate host, redirect, HTTP auth or TLS bypass.
+                    if not (error.retryable and error.reason == "network"):
+                        raise
+                    index = await client.get(INDEX_EN_URL, headers=headers)
                 index.raise_for_status()
                 if "html" not in index.headers.get("content-type", "").lower():
                     raise SourceError("AZ official list not HTML.")
                 cards = discover_official_posts(index.text)
                 for url, title in cards[:count]:
-                    detail = await client.get(url, headers={
-                        "Accept": "text/html", "User-Agent": "VALYQON-public-tender-audit/1.0"})
-                    detail.raise_for_status()
+                    try:
+                        detail = await client.get(url, headers={
+                            "Accept": "text/html", "User-Agent": "VALYQON-public-tender-audit/1.0"})
+                        detail.raise_for_status()
+                    except httpx.HTTPStatusError as error:
+                        # A stale official *individual* detail link can return
+                        # HTTP 404/410 even while the live agency index still
+                        # lists other corroborated purchases. Do not let it
+                        # discard already verified tenders. All other errors
+                        # (including rate limits/auth/network) keep the source
+                        # fail-closed, and zero verified originals stays red.
+                        # A single access-restricted (403), deleted (404)
+                        # or gone (410) detail is NOT public tender evidence.
+                        # Exclude that individual card and require at least one
+                        # independently verified public original to survive.
+                        # Authentication (401), throttling (429), server and
+                        # transport failures still fail the entire batch.
+                        if error.response.status_code in (403, 404, 410):
+                            continue
+                        raise
                     if "html" not in detail.headers.get("content-type", "").lower():
-                        raise SourceError("AZ official detail not HTML.")
+                        # Do not parse a non-HTML card as a tender. Other
+                        # first-party HTML details still require full
+                        # published buyer/date/title corroboration.
+                        continue
                     try:
                         notices.append(parse_public_detail(detail.text, url=url, listed_title=title))
                     except SourceError:
@@ -193,7 +260,7 @@ class AzerbaijanHeatSource:
                         # Fail the batch if no complete notice remains.
                         continue
         except (httpx.HTTPError, ConnectorTransportError, OSError) as exc:
-            if transient_transport(exc):
+            if transient_transport(exc) or _official_peer_reset(exc):
                 raise SourceTransportError("AZ official tenders temporarily unavailable.") from None
             raise SourceError("AZ verified official HTTPS retrieval failed.") from None
         if not notices or len({x.identity for x in notices}) != len(notices):

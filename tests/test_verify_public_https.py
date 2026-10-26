@@ -168,6 +168,7 @@ def test_live_http_error_reports_status_and_phase_without_leaking_upstream_detai
         ):
             result = verify("https://example.org")
         assert result["dns"] == "PASS"
+        assert result["tls"] == "PASS"  # Verified HTTPS already returned an HTTP status.
         assert result["homepage"] == "NOT_VERIFIED"
         assert result["http_status"] == code
         assert result["blocked_at"] == "homepage"
@@ -225,6 +226,8 @@ def test_public_redirect_classification_does_not_leak_location(location,classifi
     ):
         result=verify("https://example.org")
     assert result["redirect_class"]==classification
+    assert result["tls"]=="PASS"
+    assert result["homepage"]=="NOT_VERIFIED"
     assert result["http_status"]==303
     assert result["public_edge_pass"] is False
     assert "secretValue" not in str(result)

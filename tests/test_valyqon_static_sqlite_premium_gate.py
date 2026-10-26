@@ -15,6 +15,8 @@ FILES=(
     "app/api/saas_shell.py",
     "app/api/static/premium.css",
     "app/api/landing.py",
+    "app/api/runtime.py",
+    "app/quotas/synchronous.py",
 )
 
 
@@ -37,6 +39,8 @@ def test_source_architecture_preserves_sqlite_without_postgres_cutover():
     assert evidence["sqlite_backup_restore"]=="NOT_VERIFIED"
     assert evidence["external_live_site"]=="NOT_CHECKED"
     assert evidence["rollback_artefact"]=="NOT_VERIFIED"
+    assert evidence["existing_sqlite_api_startup_can_change_schema"]=="YES"
+    assert evidence["same_sqlite_api_image_upgrade_approved"] is False
     assert evidence["public_deployment_authorized"] is False
     assert evidence["production_changed"] is False
 
@@ -94,3 +98,16 @@ def test_missing_source_is_rejected_without_secret_or_network_access(tmp_path):
     assert result["errors"]==["REQUIRED_SOURCE_FILE_MISSING"]
     assert result["production_changed"] is False
     assert result["sqlite_backup_restore"]=="NOT_VERIFIED"
+
+
+def test_unreviewed_sqlite_initialization_is_not_assumed_safe(tmp_path):
+    root=fixture_tree(tmp_path)
+    quota=root/"app/quotas/synchronous.py"
+    content=quota.read_text(encoding="utf-8")
+    assert "self.repository.database.migrate('synchronous_usage')" in content
+    quota.write_text(content.replace(
+        "self.repository.database.migrate('synchronous_usage')",
+        "pass # unknown schema init"),encoding="utf-8")
+    result=check(root)
+    assert "UNREVIEWED_SQLITE_STARTUP_MUTATION_BEHAVIOR" in result["errors"]
+    assert result["same_sqlite_api_image_upgrade_approved"] is False

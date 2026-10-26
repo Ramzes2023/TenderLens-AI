@@ -185,13 +185,13 @@ def test_remote_script_failure_is_distinguished_from_successful_minimal_ssh_shel
             assert kwargs["input"] == probe.REMOTE
             return SimpleNamespace(
                 returncode=2, stdout="private data MUST NOT LEAK",
-                stderr="SECRET\\nVALYQON_PREFLIGHT_STAGE=DOCKER\\nSSH PRIVATE",
+                stderr="SECRET\nVALYQON_PREFLIGHT_STAGE=DOCKER\nSSH PRIVATE",
             )
         assert args[-3:-1] == ["sh", "-c"]
-        assert args[-1] == "printf '%s\\n' VALYQON_REMOTE_SHELL_OK"
+        assert args[-1] == "printf '%s\n' VALYQON_REMOTE_SHELL_OK"
         assert kwargs["input"] == ""
         return SimpleNamespace(
-            returncode=0, stdout="VALYQON_REMOTE_SHELL_OK\\n",
+            returncode=0, stdout="VALYQON_REMOTE_SHELL_OK\n",
             stderr="private SSH token",
         )
 
@@ -233,12 +233,12 @@ def test_remote_shell_restriction_is_not_misidentified_as_script_failure(
 
 def test_ssh_stage_parser_is_enum_only_and_cannot_echo_private_data():
     assert probe._safe_remote_stage(
-        "token=secret\\nVALYQON_PREFLIGHT_STAGE=REPOSITORY\\n"
-        "VALYQON_PREFLIGHT_STAGE=DOCKER\\n"
+        "token=secret\nVALYQON_PREFLIGHT_STAGE=REPOSITORY\n"
+        "VALYQON_PREFLIGHT_STAGE=DOCKER\n"
         "VALYQON_PREFLIGHT_STAGE=token_private"
     ) == "DOCKER"
     assert probe._safe_remote_stage(
-        "VALYQON_PREFLIGHT_STAGE=UNKNOWN\\nprivate"
+        "VALYQON_PREFLIGHT_STAGE=UNKNOWN\nprivate"
     ) == "UNKNOWN"
 
 

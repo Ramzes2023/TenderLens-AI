@@ -28,19 +28,19 @@ RU_APPROVED_SOURCES = (
 
 
 
-# Regional Ingushetia 44-FZ originals have a second independent opt-in gate.
-# Preserve the exact latest main allowlist (including Samara and Dagestan)
-# without editing its concurrent-review entries. Queue order is not priority.
-# Both additions remain inactive unless their own registration is enabled.
-RU_APPROVED_SOURCES = RU_APPROVED_SOURCES + (
+# Separate small opt-in group. Preserve the exact main-approved source list
+# (and its Samara/Dagestan acceptance policy) unchanged for other workstreams.
+# These two overlapping EIS/ETP mirrors are not independently new notices.
+INGUSHETIA_APPROVED_SOURCES = (
     "ru_ingushetia_eis44",
     "ru_ingushetia_fabrikant44",
 )
 
+
 def approved_ru_keys(catalog):
     """Return exactly operator-enabled, registered RU sources in fixed order."""
     approved = []
-    for key in RU_APPROVED_SOURCES:
+    for key in RU_APPROVED_SOURCES + INGUSHETIA_APPROVED_SOURCES:
         try:
             item = catalog.registry.get(key)
         except SourceRegistryError:

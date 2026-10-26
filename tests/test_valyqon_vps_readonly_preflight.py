@@ -188,7 +188,7 @@ def test_remote_script_failure_is_distinguished_from_successful_minimal_ssh_shel
                 stderr="SECRET\nVALYQON_PREFLIGHT_STAGE=DOCKER\nSSH PRIVATE",
             )
         assert args[-3:-1] == ["sh", "-c"]
-        assert args[-1] == "printf '%s\n' VALYQON_REMOTE_SHELL_OK"
+        assert args[-1] == r"printf '%s\n' VALYQON_REMOTE_SHELL_OK"
         assert kwargs["input"] == ""
         return SimpleNamespace(
             returncode=0, stdout="VALYQON_REMOTE_SHELL_OK\n",

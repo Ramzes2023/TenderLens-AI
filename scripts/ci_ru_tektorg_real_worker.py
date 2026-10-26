@@ -6,16 +6,15 @@ import asyncio
 import json
 import tempfile
 from pathlib import Path
-from types import SimpleNamespace
 
 from app.database.backend import Database
 from app.database.config import DatabaseSettings
-from app.jobs.models import JobScope
 from app.monitoring.config import MonitoringSettings
 from app.sources.catalog import build_source_catalog
-from app.sources.ingestion import ConnectorSyncHandler, connector_version, sync_window
+from app.sources.ingestion import connector_version
 from app.sources.opportunities import OpportunityRepository
 from app.sources.snapshots import snapshot_catalog
+from scripts.ci_ru_leased_connector import run_leased_connector
 
 SOURCE = "tektorg"
 
@@ -35,11 +34,7 @@ def proof():
         try:
             store = OpportunityRepository(db)
             store.initialize()
-            worker = ConnectorSyncHandler(catalog, store, max_records=5)
-            ctx = SimpleNamespace(job=SimpleNamespace(scope=JobScope()), should_stop=False)
-            params = {"schema":1, "source_id":SOURCE,
-                      "sync_window":sync_window(), "connector_version":connector_version(SOURCE)}
-            stats = worker(ctx, params)
+            stats = run_leased_connector(db, catalog, store, SOURCE, max_records=5)
             if not 1 <= stats["fetched_count"] <= 5:
                 raise AssertionError("No independently verified live TEK-Torg notices")
             if (stats["fetched_count"] != stats["accepted_count"]
@@ -77,6 +72,25 @@ def main():
     except Exception as e:
         print("RU_TEKTORG_REAL_WORKER=BLOCKED")
         print("FAILURE_CLASS="+type(e).__name__)
+        # Security-safe diagnostics: whitelisted stage codes only, never raw
+        # source URLs, request bodies, tokens, stack traces or HTTP contents.
+        reason = str(e) if isinstance(e, AssertionError) else ""
+        lease_prefix = "Durable connector job did not succeed: "
+        if reason.startswith(lease_prefix):
+            code = reason[len(lease_prefix):]
+            if code in {"handler_error", "permanent_failure", "lease_expired",
+                        "invalid_result", "missing"}:
+                print("FAILURE_STAGE=LEASE_" + code.upper())
+        elif reason == "No independently verified live TEK-Torg notices":
+            print("FAILURE_STAGE=ZERO_VERIFIED_NOTICES")
+        elif reason == "TEK-Torg durable ingestion incomplete":
+            print("FAILURE_STAGE=INCOMPLETE_INSERT")
+        elif reason == "Missing TEK-Torg SQL rows":
+            print("FAILURE_STAGE=SQL_MISSING")
+        elif reason in {"Noncanonical TEK-Torg detail URL",
+                        "Stored TEK-Torg record not found",
+                        "Duplicate TEK-Torg identity inserted"}:
+            print("FAILURE_STAGE=SQL_IDENTITY_OR_QUERY")
         print("PRODUCTION_CHANGED=NO")
         return 1
     print("RU_TEKTORG_REAL_WORKER_EVIDENCE="+json.dumps(result,sort_keys=True))

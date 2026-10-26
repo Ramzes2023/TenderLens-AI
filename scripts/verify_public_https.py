@@ -52,6 +52,16 @@ def _https_client():
     return build_opener(HTTPSHandler(context=ssl.create_default_context()), _NoRedirect())
 
 
+def _is_public_landing(html: str) -> bool:
+    """Require current public procurement landing, not legacy 200 OK login."""
+    return (
+        "VALYQON" in html.upper()
+        and '<body class="landing premium"' in html
+        and 'id="guestSearchForm"' in html
+        and 'id="guestSearchResults"' in html
+    )
+
+
 def verify(url: str, timeout: float = 8.0) -> dict:
     host, port = validate_target(url)
     result = {
@@ -66,6 +76,7 @@ def verify(url: str, timeout: float = 8.0) -> dict:
         "postgres_backup_restore": "NOT_TESTED",
         "ready_for_commercial_launch": False,
     }
+    phase = "dns"
     try:
         addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
         if not addresses:
@@ -78,28 +89,65 @@ def verify(url: str, timeout: float = 8.0) -> dict:
         # TLS validates the public certificate. Redirects are rejected to
         # prevent a health-probe input from reaching any unrelated host.
         client = _https_client()
+        phase = "homepage"
         with client.open(Request(f"https://{host}/", headers={
                 "User-Agent": "VALYQON-ReleaseReadiness/1.0"
         }), timeout=timeout) as response:
             result["tls"] = "PASS"
             payload = response.read(131072).decode("utf-8",errors="replace")
-            result["homepage"] = ("PASS" if response.status==200
-                                  and "VALYQON" in payload.upper() else "FAIL")
+            result["homepage"] = (
+                "PASS" if response.status == 200 and _is_public_landing(payload)
+                else "FAIL"
+            )
             headers = response.headers
             result["security_headers"] = ("PASS" if "max-age=" in
                 headers.get("Strict-Transport-Security","").lower()
                 and headers.get("X-Content-Type-Options","").lower()=="nosniff"
                 else "FAIL")
+        phase = "health"
         with client.open(Request(f"https://{host}/health", headers={
                 "User-Agent": "VALYQON-ReleaseReadiness/1.0"
         }), timeout=timeout) as response:
             data = response.read(16384)
-            result["health"] = ("PASS" if response.status==200
-                and isinstance(json.loads(data),dict) else "FAIL")
-    except (socket.gaierror,ssl.SSLError,HTTPError,URLError,TimeoutError,
+            health = json.loads(data)
+            # HTTP 200 with any JSON object is not proof the API is ready:
+            # /health deliberately returns "degraded" with 200 when the
+            # database/scoring or cache is unavailable.
+            valid_health = (
+                response.status == 200 and isinstance(health, dict)
+                and health.get("status") == "ok"
+                and health.get("service") == "VALYQON AI"
+                and isinstance(health.get("components"), dict)
+                and health["components"].get("database") == "ready"
+                and health["components"].get("scoring") == "ready"
+                and health["components"].get("cache") != "unavailable"
+            )
+            result["health"] = "PASS" if valid_health else "FAIL"
+    except HTTPError as exc:
+        # An HTTP error means a public response was obtained over verified
+        # HTTPS. Log only its integer status and the endpoint class; never
+        # copy the message, Location header, body or upstream error text.
+        result["blocker_type"] = "HTTPError"
+        result["http_status"] = int(exc.code)
+        result["blocked_at"] = phase
+        if 300 <= int(exc.code) < 400:
+            # Classify safe known same-host routes without emitting Location.
+            # Never report redirect URLs, query strings or auth tokens.
+            location = exc.headers.get("Location", "") if exc.headers else ""
+            dest = urlsplit(location)
+            if dest.scheme in ("", "https") and dest.netloc in ("", host):
+                result["redirect_class"] = (
+                    "login" if dest.path == "/login"
+                    else "dashboard" if dest.path == "/dashboard"
+                    else "other_same_host"
+                )
+            else:
+                result["redirect_class"] = "other_or_unknown_host"
+    except (socket.gaierror,ssl.SSLError,URLError,TimeoutError,
             ConnectionError,OSError,ValueError) as exc:
         # Never leak request headers, cookies, credentials or raw upstream body.
         result["blocker_type"] = type(exc).__name__
+        result["blocked_at"] = phase
     result["public_edge_pass"] = all(result[k]=="PASS" for k in (
         "dns","tls","homepage","health","security_headers"))
     return result

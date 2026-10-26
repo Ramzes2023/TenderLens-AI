@@ -130,6 +130,19 @@ def verify(url: str, timeout: float = 8.0) -> dict:
         result["blocker_type"] = "HTTPError"
         result["http_status"] = int(exc.code)
         result["blocked_at"] = phase
+        if 300 <= int(exc.code) < 400:
+            # Classify safe known same-host routes without emitting Location.
+            # Never report redirect URLs, query strings or auth tokens.
+            location = exc.headers.get("Location", "") if exc.headers else ""
+            dest = urlsplit(location)
+            if dest.scheme in ("", "https") and dest.netloc in ("", host):
+                result["redirect_class"] = (
+                    "login" if dest.path == "/login"
+                    else "dashboard" if dest.path == "/dashboard"
+                    else "other_same_host"
+                )
+            else:
+                result["redirect_class"] = "other_or_unknown_host"
     except (socket.gaierror,ssl.SSLError,URLError,TimeoutError,
             ConnectionError,OSError,ValueError) as exc:
         # Never leak request headers, cookies, credentials or raw upstream body.

@@ -33,10 +33,11 @@ def test_source_directory_is_scoped_to_actual_registry_not_live_health():
     assert result["sources"][1]["enabled"] is True
     assert result["sources"][1]["homepage"]=="https://ted.europa.eu/"
     # Opt-in adapters are discoverable, but are not counted as registered.
-    assert result["optional_count"] == 10
+    assert result["optional_count"] == 12
     assert result["candidate_count"] == 37
     keys = {item["key"] for item in result["optional_sources"]}
-    assert {"lenobl_small_public", "nmck_native_public", "b2b_center"} <= keys
+    assert {"lenobl_small_public", "nmck_native_public", "b2b_center",
+            "ru_ingushetia_eis44", "ru_ingushetia_fabrikant44"} <= keys
     assert all(item["registered"] is False and item["enabled"] is False
                and item["live_status"] == "not_verified"
                for item in result["optional_sources"])
@@ -70,7 +71,7 @@ def test_ru_optional_adapter_not_duplicated_when_registered():
     ))
     result = source_directory(catalog)
     assert result["source_count"] == 3
-    assert result["optional_count"] == 9
+    assert result["optional_count"] == 11
     assert result["candidate_count"] == 37
     assert sum(item["key"] == "lenobl_small_public" for item in
                result["sources"] + result["optional_sources"]) == 1

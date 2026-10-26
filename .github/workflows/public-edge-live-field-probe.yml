@@ -8,6 +8,8 @@ on:
       - fix/release-edge-backup-guard-main-20261026
     paths:
       - .github/workflows/public-edge-live-field-probe.yml
+      - scripts/verify_public_https.py
+      - tests/test_verify_public_https.py
   workflow_dispatch:
 
 permissions:
@@ -24,6 +26,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Negative tests: status-only HTTP errors without leaking upstream data
+        run: |
+          python -m pip install pytest==9.1.1
+          python -m pytest -q tests/test_verify_public_https.py
       - name: Probe public HTTPS, verified TLS, premium landing and health
         run: |
           python -B scripts/verify_public_https.py --timeout 12 --url https://63-189-75-15.sslip.io/

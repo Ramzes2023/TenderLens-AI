@@ -87,6 +87,8 @@ ON_DEMAND_TARGETS = {
     "gpb_new_rss": Target("new.etpgpb.ru", "/procedures.rss", "rss"),
     # Accredited GPB state procurement registry; 44-FZ cross-posts with EIS.
     "gpb_gos44_html": Target("gos.etpgpb.ru", "/44/catalog/procedure"),
+    # Actual first-party 44-FZ current-published registry, mirrored from EIS.
+    "gpb_gos44_published": Target("gos.etpgpb.ru", "/44/catalog/procedure/published"),
     # Official EIS root is a transport/TLS observation only. It does not
     # establish a valid regional RSS feed or any original procurement.
     "eis_official_home": Target("zakupki.gov.ru", "/"),

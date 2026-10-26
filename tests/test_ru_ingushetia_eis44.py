@@ -268,3 +268,56 @@ def test_live_eis_acceptance_worker_only_downloads_rss_once(monkeypatch):
     assert result["isolated_staging_sink_dispatches"] == 2
     assert result["replay_duplicates"] == 0
     assert result["real_user_notifications_sent"] is False
+
+
+
+def test_isolated_eis_worker_recovers_one_transient_network_failure(monkeypatch):
+    """Synthetic offline source failure, real durable Worker and disposable SQL."""
+    from scripts import ci_ru_ingushetia_live_worker as acceptance
+    from app.sources.http import ConnectorTransportError
+
+    numbers = (N, "0114500000826002365")
+    calls = []
+    checked = []
+
+    async def failing_first_fetch(self, limit=20):
+        calls.append(limit)
+        if len(calls) == 1:
+            raise ConnectorTransportError(retryable=True)
+        return [
+            normalize_ingushetia_notice(sample(
+                tender_number=number, external_id=number,
+                url=U.replace(N, number), title="Поставка медицинских товаров",
+            )) for number in numbers
+        ]
+
+    async def verify_originals(notices):
+        checked.append({n.tender_number for n in notices})
+        assert checked[-1] == set(numbers)
+
+    monkeypatch.setattr(IngushetiaEis44Source, "fetch", failing_first_fetch)
+    monkeypatch.setattr(acceptance, "_check_original_links", verify_originals)
+    proof = acceptance.proof()
+    assert calls == [10, 10]
+    assert checked == [set(numbers)]
+    assert proof["leased_worker_state"] == "succeeded"
+    assert proof["stored_and_searchable"] == 2
+    assert proof["isolated_staging_sink_dispatches"] == 2
+    assert proof["replay_duplicates"] == 0
+
+
+def test_eis_worker_failure_never_exposes_untrusted_fields():
+    from types import SimpleNamespace
+    from scripts.ci_ru_ingushetia_live_worker import IngushetiaEisWorkerFailure
+
+    allowed = IngushetiaEisWorkerFailure(SimpleNamespace(
+        state="failed", failure_code="handler_error"
+    ))
+    assert allowed.job_state == "failed"
+    assert allowed.job_failure_code == "handler_error"
+    rejected = IngushetiaEisWorkerFailure(SimpleNamespace(
+        state="secret", failure_code="BOT_TOKEN=SECRET"
+    ))
+    assert rejected.job_state == "UNKNOWN"
+    assert rejected.job_failure_code == "UNKNOWN"
+    assert "SECRET" not in str(rejected)

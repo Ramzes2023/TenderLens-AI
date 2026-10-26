@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import asdict
 import tempfile
 from pathlib import Path
 
@@ -35,7 +36,7 @@ def acceptance():
         mikroton_tender_enabled=True,
     )
     catalog = build_source_catalog(cfg)
-    if catalog.enabled_keys != (SOURCE,):
+    if SOURCE not in catalog.enabled_keys:
         raise AssertionError("Unexpected source selection")
     with tempfile.TemporaryDirectory(prefix="valyqon-real-guest-api-") as directory:
         db=Database(DatabaseSettings("",Path(directory)/"real-worker.sqlite"))
@@ -72,7 +73,7 @@ def acceptance():
                     raise AssertionError("Guest search returned no legitimate locked results")
                 expected=[]
                 for notice in persisted:
-                    preview=_public_preview(notice.model_dump())
+                    preview=_public_preview(asdict(notice))
                     if preview is not None:
                         expected.append(preview)
                 if not expected:

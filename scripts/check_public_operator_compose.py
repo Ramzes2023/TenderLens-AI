@@ -83,6 +83,8 @@ def validate():
         raise RuntimeError("Unreviewed public worker entrypoint")
     if worker.get("profiles") != [SOURCE_PROFILE]:
         raise RuntimeError("Source Worker must be opt-in")
+    if worker.get("depends_on", {}).get("api", {}).get("condition") != "service_healthy":
+        raise RuntimeError("Source Worker must wait for API migration and strict health")
     if services["bot"].get("profiles") != [TELEGRAM_PROFILE]:
         raise RuntimeError("Telegram polling must be opt-in")
     gateway = services["caddy"]

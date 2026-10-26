@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 import ssl
 import tempfile
 from pathlib import Path
@@ -108,11 +109,24 @@ def proof(source):
             handlers = HandlerRegistry()
             handlers.register(JOB_TYPE, ConnectorSyncHandler(cat, records, max_records=3))
             worker = Worker(queue, handlers, job_types=(JOB_TYPE,))
-            if not worker.run_once():
-                raise AssertionError("Worker failed to claim source job")
-            done = queue.get(job.id, scope=JobScope())
+            done = None
+            for attempt in range(3):
+                if not worker.run_once():
+                    raise AssertionError("WORKER_NOT_CLAIMED")
+                done = queue.get(job.id, scope=JobScope())
+                if done is not None and done.state == "succeeded":
+                    break
+                if done is None:
+                    raise AssertionError("WORKER_RESULT_MISSING")
+                if done.state != "queued":
+                    raise AssertionError("WORKER_FINAL_FAILURE")
+                if attempt == 2:
+                    raise AssertionError("WORKER_RETRIES_EXHAUSTED")
+                # Real durable queue retry, not a simulated successful job:
+                # preserve the job identity, lease/fencing and SQL checks.
+                time.sleep((1.25, 2.25)[attempt])
             if done is None or done.state != "succeeded":
-                raise AssertionError("Current publisher notice Worker did not succeed")
+                raise AssertionError("WORKER_NOT_SUCCEEDED")
             saved = records.read(source, limit=3)
             if len(saved) < 2 or len({original_notice_key(n) for n in saved}) != len(saved):
                 raise AssertionError("At least two genuine distinct SQL original IDs required")
@@ -136,11 +150,27 @@ def proof(source):
 
 def main():
     failures=[]
+    known = {
+        "WORKER_NOT_CLAIMED", "WORKER_RESULT_MISSING",
+        "WORKER_FINAL_FAILURE", "WORKER_RETRIES_EXHAUSTED",
+        "WORKER_NOT_SUCCEEDED",
+        "At least two genuine distinct SQL original IDs required",
+        "SQL user title/number search lost original",
+        "Duplicate original reinserted",
+        "EIS original card was not HTML",
+        "EIS original card did not show publisher number",
+        "SQL snapshot did not reach monitor",
+        "Two independent simulated acknowledgements required",
+        "Durable upstream-original acknowledgement missing",
+    }
     for src in (EIS, ETP):
         try:
             result=proof(src)
         except Exception as exc:
-            failures.append(dict(source=src, error_type=type(exc).__name__))
+            # Expose only allowlisted source-owned stages: no exception
+            # payload, HTTP URL, token, customer data or upstream HTML.
+            stage = str(exc) if type(exc) is AssertionError and str(exc) in known else "NETWORK_OR_HANDLER_FAILURE"
+            failures.append(dict(source=src, error_type=type(exc).__name__, stage=stage))
             continue
         print("INGUSHETIA_MAIN_FORWARD_LIVE=" + json.dumps(result, sort_keys=True))
         print("INGUSHETIA_MAIN_FORWARD_ACCEPTANCE=PASS")

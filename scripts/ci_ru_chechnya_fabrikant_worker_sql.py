@@ -108,7 +108,15 @@ def main():
                 "Authentic Chechnya notice not locally searchable": "SEARCH_MISSING",
                 "Chechnya identical notice replay made a duplicate": "DUPLICATE",
             }
-            print("SAFE_ASSERTION_KIND=" + mapping.get(str(error), "WORKER_OR_ASSERTION"))
+            reason = str(error)
+            if reason.startswith("Durable connector job did not succeed: "):
+                code = reason.rsplit(": ", 1)[-1]
+                allowed = {"permanent_failure", "handler_error", "lease_expired",
+                           "invalid_result", "missing"}
+                print("SAFE_WORKER_FAILURE_CODE=" + (code if code in allowed else "OTHER"))
+            elif reason == "No real durable connector job was claimed":
+                print("SAFE_WORKER_FAILURE_CODE=NOT_CLAIMED")
+            print("SAFE_ASSERTION_KIND=" + mapping.get(reason, "WORKER_OR_ASSERTION"))
         print("ACTUAL_TELEGRAM_MESSAGE_DELIVERED=NO")
         print("PRODUCTION_CHANGED=NO")
         return 1

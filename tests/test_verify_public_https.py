@@ -297,3 +297,46 @@ def test_public_edge_rejects_missing_or_wrong_premium_css(asset_result, expected
         assert "private body" not in str(result)
     else:
         assert result["premium_css"] == "FAIL"
+
+
+def test_login_redirect_still_checks_independent_public_health_and_css():
+    """Root may be legacy while same HTTPS host has a healthy API + stale CSS."""
+    from io import BytesIO
+    from urllib.error import HTTPError
+    login = HTTPError("https://example.org/", 303, "See Other",
+                      {"Location": "/login"}, BytesIO(b"PRIVATE"))
+    health = _Response(
+        '{"status":"ok","service":"VALYQON AI","components":'
+        '{"database":"ready","scoring":"ready","cache":"ready"}}'
+    )
+    missing_css = HTTPError("https://example.org/assets/premium.css",
+                            404, "not found", {}, BytesIO(b"PRIVATE"))
+    seen = []
+    items = [login, health, missing_css]
+    def open_url(request, **kwargs):
+        seen.append(request.full_url)
+        result = items.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
+    with (
+        patch("scripts.verify_public_https.socket.getaddrinfo",
+              return_value=[(0,0,0,"",("93.184.216.34",443))]),
+        patch("scripts.verify_public_https._https_client",
+              return_value=MagicMock(open=open_url)),
+    ):
+        result = verify("https://example.org")
+    assert seen == [
+        "https://example.org/",
+        "https://example.org/health",
+        "https://example.org/assets/premium.css",
+    ]
+    assert result["dns"] == "PASS" and result["tls"] == "PASS"
+    assert result["homepage"] == "NOT_VERIFIED"
+    assert result["redirect_class"] == "login" and result["http_status"] == 303
+    assert result["health"] == "PASS"
+    assert result["premium_css"] == "NOT_VERIFIED"
+    assert result["premium_css_http_status"] == 404
+    assert result["public_edge_pass"] is False
+    assert result["ready_for_commercial_launch"] is False
+    assert "PRIVATE" not in str(result)

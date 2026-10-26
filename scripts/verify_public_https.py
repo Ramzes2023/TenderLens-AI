@@ -76,6 +76,7 @@ def verify(url: str, timeout: float = 8.0) -> dict:
         "postgres_backup_restore": "NOT_TESTED",
         "ready_for_commercial_launch": False,
     }
+    phase = "dns"
     try:
         addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
         if not addresses:
@@ -88,6 +89,7 @@ def verify(url: str, timeout: float = 8.0) -> dict:
         # TLS validates the public certificate. Redirects are rejected to
         # prevent a health-probe input from reaching any unrelated host.
         client = _https_client()
+        phase = "homepage"
         with client.open(Request(f"https://{host}/", headers={
                 "User-Agent": "VALYQON-ReleaseReadiness/1.0"
         }), timeout=timeout) as response:
@@ -102,6 +104,7 @@ def verify(url: str, timeout: float = 8.0) -> dict:
                 headers.get("Strict-Transport-Security","").lower()
                 and headers.get("X-Content-Type-Options","").lower()=="nosniff"
                 else "FAIL")
+        phase = "health"
         with client.open(Request(f"https://{host}/health", headers={
                 "User-Agent": "VALYQON-ReleaseReadiness/1.0"
         }), timeout=timeout) as response:
@@ -120,10 +123,18 @@ def verify(url: str, timeout: float = 8.0) -> dict:
                 and health["components"].get("cache") != "unavailable"
             )
             result["health"] = "PASS" if valid_health else "FAIL"
-    except (socket.gaierror,ssl.SSLError,HTTPError,URLError,TimeoutError,
+    except HTTPError as exc:
+        # An HTTP error means a public response was obtained over verified
+        # HTTPS. Log only its integer status and the endpoint class; never
+        # copy the message, Location header, body or upstream error text.
+        result["blocker_type"] = "HTTPError"
+        result["http_status"] = int(exc.code)
+        result["blocked_at"] = phase
+    except (socket.gaierror,ssl.SSLError,URLError,TimeoutError,
             ConnectionError,OSError,ValueError) as exc:
         # Never leak request headers, cookies, credentials or raw upstream body.
         result["blocker_type"] = type(exc).__name__
+        result["blocked_at"] = phase
     result["public_edge_pass"] = all(result[k]=="PASS" for k in (
         "dns","tls","homepage","health","security_headers"))
     return result

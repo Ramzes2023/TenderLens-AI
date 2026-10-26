@@ -87,8 +87,13 @@ def evaluate(*, ssh_host: str, ssh_key: str, hostname: str,
         result["edge_failure_class"]="PROBE_UNAVAILABLE"
     # All internet, SSH and Docker checks are independent. An old image, SSH
     # failure, or a healthy PRIVATE preview can never satisfy production launch.
-    result["technical_staging_edge_pass"] = all(
-        result[k]=="PASS" for k in ("vps_public_tree","vps_exact_sha","vps_api_caddy","external_https")
+    result["technical_staging_edge_pass"] = (
+        result["local_compose"]=="PASS_SYNTHETIC_ONLY"
+        and result["vps_ssh"]=="PASS_READ_ONLY"
+        and all(result[k]=="PASS" for k in (
+            "vps_public_tree","vps_exact_sha","vps_api_caddy","external_https",
+            "external_homepage","external_health",
+        ))
     )
     return result
 

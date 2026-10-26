@@ -83,6 +83,43 @@ echo EXTERNAL_HTTPS=NOT_CHECKED
 echo PRODUCTION_CHANGED=NO
 """
 
+class SSHPreflightError(RuntimeError):
+    """Only a fixed diagnostic category, never private SSH stderr or key data."""
+
+    def __init__(self, category: str):
+        if category not in {
+            "SSH_HOST_KEY_UNVERIFIED", "SSH_AUTH_REJECTED",
+            "SSH_CONNECT_TIMEOUT", "SSH_CONNECTION_REFUSED",
+            "SSH_ROUTE_UNREACHABLE", "SSH_DNS_FAILURE",
+            "SSH_REMOTE_COMMAND_FAILED", "SSH_COMMAND_UNAVAILABLE",
+            "SSH_PROCESS_TIMEOUT", "SSH_UNCLASSIFIED",
+        }:
+            category = "SSH_UNCLASSIFIED"
+        self.failure_code = category
+        super().__init__("SSH preflight failed (private error suppressed)")
+
+
+def _safe_ssh_failure(stderr: str, returncode: int) -> str:
+    """Classify only known SSH errors. No remote stderr ever leaves inspect()."""
+    value = stderr.lower() if type(stderr) is str else ""
+    if ("remote host identification has changed" in value
+            or "host key verification failed" in value
+            or "no matching host key type found" in value):
+        return "SSH_HOST_KEY_UNVERIFIED"
+    if ("permission denied (publickey" in value or "permission denied (publickey," in value
+            or "too many authentication failures" in value):
+        return "SSH_AUTH_REJECTED"
+    if "connection timed out" in value or "operation timed out" in value:
+        return "SSH_CONNECT_TIMEOUT"
+    if "connection refused" in value:
+        return "SSH_CONNECTION_REFUSED"
+    if "no route to host" in value or "network is unreachable" in value:
+        return "SSH_ROUTE_UNREACHABLE"
+    if "could not resolve hostname" in value or "name or service not known" in value:
+        return "SSH_DNS_FAILURE"
+    return "SSH_REMOTE_COMMAND_FAILED" if returncode != 255 else "SSH_UNCLASSIFIED"
+
+
 KEYS = {
     "PREFLIGHT_SCHEMA", "REPO_PRESENT", "REMOTE_SHA", "WORKTREE_CLEAN",
     "DOCKER_USABLE", "PUBLIC_COMPOSE_PRESENT", "APP_ENV_FILE_PRESENT",
@@ -144,11 +181,12 @@ def inspect(host, key, user="ubuntu", expected_sha=None):
     try:
         run = subprocess.run(args, input=REMOTE, capture_output=True, text=True,
                              timeout=45, check=False)
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise RuntimeError("SSH read-only preflight unavailable: " +
-                           type(error).__name__) from None
+    except subprocess.TimeoutExpired:
+        raise SSHPreflightError("SSH_PROCESS_TIMEOUT") from None
+    except OSError:
+        raise SSHPreflightError("SSH_COMMAND_UNAVAILABLE") from None
     if run.returncode != 0:
-        raise RuntimeError("SSH preflight failed (private error suppressed)")
+        raise SSHPreflightError(_safe_ssh_failure(run.stderr, run.returncode))
     out = parse_status(run.stdout)
     same = expected_sha is not None and out["REMOTE_SHA"] == expected_sha
     return out, same
@@ -165,6 +203,7 @@ def main(argv=None):
     except (ValueError, RuntimeError) as err:
         print("VALYQON_VPS_PREFLIGHT=BLOCKED")
         print("FAILURE_CLASS=" + type(err).__name__)
+        print("FAILURE_CODE=" + getattr(err, "failure_code", "VALIDATION_OR_RESPONSE_ERROR"))
         print("PRODUCTION_CHANGED=NO")
         return 2
     for key, val in sorted(results.items()):

@@ -1,0 +1,29 @@
+name: VALYQON public preflight safety (local-only)
+on:
+  pull_request:
+    paths:
+      - scripts/valyqon_vps_readonly_preflight.py
+      - scripts/valyqon_local_compose_preflight.py
+      - tests/test_valyqon_vps_readonly_preflight.py
+      - tests/test_valyqon_local_compose_preflight.py
+      - .github/workflows/public-vps-local-preflight-contracts.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  strict-local-release-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install offline test runner
+        run: python -m pip install 'pytest>=8,<9'
+      - name: Validate redacted SSH preflight and no private file export
+        run: python -m pytest -q tests/test_valyqon_vps_readonly_preflight.py tests/test_valyqon_local_compose_preflight.py
+      - name: Resolve only synthetic local Docker Compose configs (no Docker start)
+        run: python -m scripts.valyqon_local_compose_preflight

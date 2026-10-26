@@ -18,7 +18,7 @@ OVERLAYS = (
     "compose.public-operator.yaml",
 )
 DEFAULT_SERVICES = {"api", "caddy"}
-TELEGRAM_PROFILE = "authorized-telegram"
+TELEGRAM_PROFILE = "verified-bot"
 SOURCE_PROFILE = "reviewed-source-worker"
 
 

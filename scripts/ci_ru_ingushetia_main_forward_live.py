@@ -25,7 +25,6 @@ from app.monitoring.service import TenderMonitorService
 from app.bot.monitoring import monitor_loop
 from app.sources.catalog import build_source_catalog
 from app.sources.eis_pinned_ca import select_verified_eis_ca
-from app.sources.eis_rss import EIS_USER_AGENT
 from app.sources.http import FetchPolicy, bounded_fetch, source_client
 from app.sources.ingestion import JOB_TYPE, ConnectorSyncHandler, ConnectorSyncService, connector_version
 from app.sources.opportunities import OpportunityRepository
@@ -53,7 +52,7 @@ async def _independent_eis_details(notices, ca):
     with bounded_fetch(FetchPolicy(frozenset({"zakupki.gov.ru"}), len(notices), max_bytes=1_800_000)):
         async with source_client(timeout=20, verify=context, trust_env=False,
                                  follow_redirects=False,
-                                 headers={"Accept":"text/html","User-Agent":EIS_USER_AGENT}) as client:
+                                 headers={"Accept":"text/html","User-Agent":"TenderLensAI/0.9 (+RSS monitor)"}) as client:
             for n in notices:
                 response = await client.get(n.url)
                 response.raise_for_status()

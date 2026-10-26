@@ -14,7 +14,7 @@ With the additional `compose.public-operator.yaml`:
 
 - **Default profile:** only private FastAPI and the HTTPS Caddy edge. No bot,
   connector Worker or automatic procurement polling.
-- **`authorized-telegram` profile:** start the Telegram bot **without
+- **`verified-bot` profile:** start the Telegram bot **without
   background notifications** until a separately consented Bot API receipt
   and production delivery review are complete.
 - **`reviewed-source-worker` profile:** run `app.jobs.worker --connectors`

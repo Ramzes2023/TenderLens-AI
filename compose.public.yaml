@@ -9,6 +9,9 @@ services:
       - .env
     environment:
       APP_ENV: production
+      # Public sign-up must remain closed until the real operator and legal
+      # terms/consents have been reviewed and explicitly approved.
+      VALYQON_LEGAL_REQUIRED: "true"
       MONITORING_ENABLED: "false"
       # Explicitly block unaccepted external publisher sources even if .env is stale.
       GPB_ETP_PUBLIC_ENABLED: "false"

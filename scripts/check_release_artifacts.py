@@ -19,7 +19,9 @@ BACKUP_SUFFIXES = (
 
 def disallowed_tracked_path(path: str) -> bool:
     """True if path could be a release evidence directory or DB/backup artifact."""
-    path = path.replace("\\", "/").lstrip("./")
+    path = path.replace("\\", "/")
+    if path.startswith("./"):
+        path = path[2:]
     if not path or "\x00" in path:
         return True
     segments = path.split("/")

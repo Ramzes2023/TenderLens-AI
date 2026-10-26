@@ -95,7 +95,12 @@ def test_saved_due_notice_after_first_hundred_is_not_starved(tmp_path):
         recorded=[]
         result=alerts.run_once(send_email=lambda recipient,msg: recorded.append(msg),now=NOW)
         assert result=={"examined":118,"sent":1,"failed":0}
-        assert len(recorded)==1 and "OFFLINE_FIXTURE_SCAN_00116" in recorded[0]
+        assert len(recorded)==1 and "OFFLINE_FIXTURE scan item 116" in recorded[0]
+        with closing(db.connect()) as conn:
+            identity=conn.execute(
+                "SELECT external_id FROM deadline_alert_receipts WHERE state='sent'"
+            ).fetchone()["external_id"]
+        assert identity=="OFFLINE_FIXTURE_SCAN_00116"
         assert alerts.last_scan["eligible_rows"]==118
         assert alerts.last_scan["scan_incomplete"] is False
         result=alerts.run_once(send_email=lambda recipient,msg: recorded.append(msg),now=NOW)
@@ -146,7 +151,12 @@ def test_rotating_two_hour_windows_cover_more_than_scan_cap(tmp_path):
                                now=NOW+timedelta(hours=1))
         assert first["sent"]+second["sent"]==1
         assert len(sent)==1
-        assert "OFFLINE_FIXTURE_SCAN_02006" in sent[0]
+        assert "OFFLINE_FIXTURE scan item 2006" in sent[0]
+        with closing(db.connect()) as conn:
+            receipt=conn.execute(
+                "SELECT external_id FROM deadline_alert_receipts WHERE state='sent'"
+            ).fetchone()
+        assert receipt["external_id"]=="OFFLINE_FIXTURE_SCAN_02006"
         assert alerts.last_scan["eligible_rows"]==MAX_SCANNED_PER_CYCLE+8
     finally:
         db.close()

@@ -97,3 +97,44 @@ def test_bounded_official_only_live_adapter_contract_offline(monkeypatch):
     notices = asyncio.run(ChechnyaFabrikant44Source().fetch(limit=1))
     assert [n.tender_number for n in notices] == [NUMBER]
     assert seen == [LIST_URL, URL]
+
+
+def test_operator_activates_exact_region_source_without_enabling_other_ru_sources():
+    from dataclasses import replace
+    from app.monitoring.config import MonitoringSettings
+    from app.sources.catalog import build_source_catalog
+    from app.sources.ingestion import HOSTS, connector_version, validate_payload
+    from app.scoring.runs import validate_configuration
+
+    standard = MonitoringSettings(False, 600, 5, 3, 25, (), None,
+                                  profile_feeds_enabled=False)
+    assert SOURCE_ID not in build_source_catalog(standard).enabled_keys
+    catalog = build_source_catalog(replace(
+        standard, ru_chechnya_fabrikant44_enabled=True))
+    registration = catalog.registry.get(SOURCE_ID)
+    assert SOURCE_ID in catalog.enabled_keys
+    assert registration.source.name == SOURCE_ID
+    assert registration.jurisdictions == ("RU",)
+    # Accredited EIS marketplace: never count duplicated 44-FZ publications
+    # as an independent official procurement authority.
+    assert registration.official is False
+    assert HOSTS[SOURCE_ID] == frozenset({"44.fabrikant.ru", "soap4.fabrikant.ru"})
+    assert validate_configuration([SOURCE_ID], 3)["sources"] == [SOURCE_ID]
+    from app.sources.ingestion import sync_window
+    payload = {
+        "schema": 1,
+        "source_id": SOURCE_ID,
+        "sync_window": sync_window(),
+        "connector_version": connector_version(SOURCE_ID),
+    }
+    assert validate_payload(payload, catalog.registry).key == SOURCE_ID
+
+
+def test_fabrikant_source_enabled_only_after_explicit_production_flag(monkeypatch):
+    from app.monitoring.config import load_monitoring_settings
+    from pathlib import Path
+
+    monkeypatch.setenv("RU_CHECHNYA_FABRIKANT44_ENABLED", "false")
+    assert load_monitoring_settings(env_file=Path("/nonexistent/valyqon-ci.env")).ru_chechnya_fabrikant44_enabled is False
+    monkeypatch.setenv("RU_CHECHNYA_FABRIKANT44_ENABLED", "true")
+    assert load_monitoring_settings(env_file=Path("/nonexistent/valyqon-ci.env")).ru_chechnya_fabrikant44_enabled is True

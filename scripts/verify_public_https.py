@@ -94,8 +94,20 @@ def verify(url: str, timeout: float = 8.0) -> dict:
                 "User-Agent": "VALYQON-ReleaseReadiness/1.0"
         }), timeout=timeout) as response:
             data = response.read(16384)
-            result["health"] = ("PASS" if response.status==200
-                and isinstance(json.loads(data),dict) else "FAIL")
+            health = json.loads(data)
+            # HTTP 200 with any JSON object is not proof the API is ready:
+            # /health deliberately returns "degraded" with 200 when the
+            # database/scoring or cache is unavailable.
+            valid_health = (
+                response.status == 200 and isinstance(health, dict)
+                and health.get("status") == "ok"
+                and health.get("service") == "VALYQON AI"
+                and isinstance(health.get("components"), dict)
+                and health["components"].get("database") == "ready"
+                and health["components"].get("scoring") == "ready"
+                and health["components"].get("cache") != "unavailable"
+            )
+            result["health"] = "PASS" if valid_health else "FAIL"
     except (socket.gaierror,ssl.SSLError,HTTPError,URLError,TimeoutError,
             ConnectionError,OSError,ValueError) as exc:
         # Never leak request headers, cookies, credentials or raw upstream body.

@@ -202,18 +202,32 @@ class AzerbaijanAdifSmallSource:
         if type(limit) is not int:
             raise SourceError("AZ ADIF result limit must be integer.")
         if _policy.get() is None:
-            with bounded_fetch(FetchPolicy(frozenset({HOST}), 1, max_bytes=MAX_BYTES)):
+            with bounded_fetch(FetchPolicy(frozenset({HOST}), 2, max_bytes=MAX_BYTES)):
                 return await self._fetch(limit)
         return await self._fetch(limit)
 
     async def _fetch(self, limit):
         try:
             async with source_client(timeout=self.timeout, trust_env=False, follow_redirects=False) as client:
-                response = await client.get(URL)
-                response.raise_for_status()
-                if "html" not in response.headers.get("content-type", "").lower():
-                    raise SourceError("AZ ADIF procurement response not HTML.")
-                return parse_public_articles(response.text)[:max(1, min(MAX_RESULTS, limit))]
+                # The official public listing has intermittently returned a
+                # different HTML layout on the first request while the next
+                # response still passed the strict native article contract.
+                # Permit just one same-origin, no-cookie, budgeted replay for
+                # a *parser* SourceError. Never retry HTTP, TLS, peer-IP,
+                # redirect or authorization failures as schema drift, and
+                # never store a row that the parser failed to verify.
+                for attempt in range(2):
+                    response = await client.get(URL)
+                    response.raise_for_status()
+                    if "html" not in response.headers.get("content-type", "").lower():
+                        raise SourceError("AZ ADIF procurement response not HTML.")
+                    try:
+                        return parse_public_articles(response.text)[:max(1, min(MAX_RESULTS, limit))]
+                    except SourceError:
+                        if attempt:
+                            raise
+                        client.cookies.clear()
+                raise SourceError("AZ ADIF strict public listing not verified.")
         except (httpx.HTTPError, ConnectorTransportError, OSError) as error:
             if transient_transport(error):
                 raise SourceTransportError("AZ ADIF official HTTPS temporarily unavailable.") from None

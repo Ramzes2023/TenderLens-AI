@@ -1454,10 +1454,20 @@ async function refreshAll(){{
   await loadAccount();
   await loadOrganizations();
 
-  await Promise.all([
-    loadHealth(),
-    loadWorkspaceData()
-  ]);
+  // A failed /health request is not evidence that the authenticated company
+  // workspace failed. Keep status scoped to System and load the rest.
+  const health = loadHealth().catch(()=>{{
+    const badge=document.getElementById('healthBadge');
+    if(badge){{
+      badge.textContent='Unavailable';
+      badge.className='chip warn';
+    }}
+    const version=document.getElementById('healthVersion');
+    if(version)version.textContent='—';
+    const components=document.getElementById('components');
+    if(components)components.textContent='System health could not be checked. Retry from Account.';
+  }});
+  await Promise.all([health,loadWorkspaceData()]);
 }}
 async function logout(){{try{{await api('/api/v1/auth/logout',{{method:'POST'}})}}finally{{location.replace('/login')}}}}
 {ORGANIZATION_SCRIPT}

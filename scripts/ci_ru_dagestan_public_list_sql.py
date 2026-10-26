@@ -100,6 +100,9 @@ def proof():
                 if store.upsert(notice, connector_version(SOURCE_ID)):
                     raise AssertionError("Idempotent Dagestan replay inserted a duplicate")
             return {
+                "native_public_amounts_observed": sum(n.initial_price is not None for n in rows),
+                "native_public_deadlines_observed": sum(n.deadline is not None for n in rows),
+                "native_public_posting_dates_observed": sum(n.published_at is not None for n in rows),
                 "live_official_list_rows": len(rows),
                 "lease_fenced_worker_inserted": stats["inserted_count"],
                 "sqlite_user_keyword_matches": len(rows),

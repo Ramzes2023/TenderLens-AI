@@ -14,9 +14,16 @@ on:
           - lenobl
           - vologda
           - gpb_rss
+          - gpb_public_html
+          - gpb_new_public_html
+          - gpb_new_rss
+          - gpb_gos44_html
+          - gpb_gos44_published
           - rzd_eshop
           - tektorg
           - batch_priority
+          - priority_five_network
+          - eis_official_home
           - fabrikant_44_mirror
           - fabrikant_223_mirror
           - tatarstan_trading

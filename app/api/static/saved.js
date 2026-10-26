@@ -12,6 +12,8 @@ const renderer=window.ValyqonDiscovery;
 let records=[];
 let serial=0;
 let context='';
+let pendingPlannerId=null;
+let pendingPlannerScope=null;
 
 const identity=()=>`${state.organizationId}:${state.activeCompanyId??''}:${state.uiEpoch||0}`;
 const currentPage=()=>location.hash.slice(1)||'overview';
@@ -320,6 +322,10 @@ function openDetail(index){
   $('savedDetail').showModal();
  }
  loadWorkflow(index);
+ if(typeof CustomEvent==='function')window.dispatchEvent(new CustomEvent('valyqon-saved-detail-open',{
+  detail:{id:Number(record.id),organizationId:state.organizationId,
+    companyId:state.activeCompanyId}
+ }));
 }
 
 function opportunityKey(item){
@@ -728,6 +734,13 @@ async function loadSaved(){
    );
 
   render();
+  if(pendingPlannerId!==null&&currentPage()==='saved'){
+   const index=records.findIndex(record=>Number(record.id)===pendingPlannerId);
+   pendingPlannerId=null;
+   pendingPlannerScope=null;
+   if(index>=0)openDetail(index);
+   else $('savedMessage').textContent='That tender is not in the active company shortlist.';
+  }
  }
  catch(error){
   if(ticket!==serial||scope!==identity())return;
@@ -856,6 +869,15 @@ $('closeSavedDetail').onclick=()=>{
 };
 $('savedDetail').addEventListener('close',()=>{workflowSerial++;});
 
+window.addEventListener('valyqon-open-saved',event=>{
+ const item=event.detail;
+ if(!item||!Number.isInteger(item.id)||item.id<=0||
+    item.organizationId!==state.organizationId||
+    item.companyId!==state.activeCompanyId)return;
+ pendingPlannerId=item.id;
+ pendingPlannerScope=identity();
+ if(currentPage()==='saved')loadSaved();
+});
 window.addEventListener(
  'workspace-context',
  ()=>{
@@ -863,6 +885,10 @@ window.addEventListener(
 
   if(context!==next){
    context=next;
+   if(pendingPlannerScope!==next){
+    pendingPlannerId=null;
+    pendingPlannerScope=null;
+   }
    serial++;
    clearResults('Open Saved to load the active company shortlist.');
    workflowSerial++;

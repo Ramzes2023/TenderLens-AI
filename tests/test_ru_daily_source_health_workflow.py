@@ -118,3 +118,32 @@ def test_daily_south_ural_buyer_amount_deadline_real_sql_roundtrip():
         assert required in source, required
     for forbidden in ("MockTransport", "continue-on-error", "skip_live", "sqlite:///:memory:"):
         assert forbidden not in source
+
+
+def test_b2b_daily_failure_only_diagnostic_does_not_fake_health_success():
+    x = load()
+    steps = x["jobs"]["b2b-center-public-signal"]["steps"]
+    workers = [i for i, step in enumerate(steps)
+               if step.get("run") == "python -B -m scripts.ci_ru_b2b_real_worker"]
+    diagnostics = [i for i, step in enumerate(steps)
+                   if step.get("run") == "python -B -m scripts.diagnose_ru_b2b_next_market"]
+    scores = [i for i, step in enumerate(steps)
+              if step.get("run") == "python -B scripts/ci_ru_b2b_user_scoring.py"]
+    assert len(workers) == len(diagnostics) == len(scores) == 1
+    assert workers[0] < scores[0] < diagnostics[0]
+    assert steps[diagnostics[0]]["if"] == "failure()"
+    assert steps[diagnostics[0]]["timeout-minutes"] == "2"
+    assert all(step.get("continue-on-error") is None for step in steps)
+
+
+
+def test_b2b_diagnostic_runs_after_both_mandatory_live_steps():
+    steps = load()["jobs"]["b2b-center-public-signal"]["steps"]
+    cmds = [step.get("run") for step in steps]
+    worker = cmds.index("python -B -m scripts.ci_ru_b2b_real_worker")
+    score = cmds.index("python -B scripts/ci_ru_b2b_user_scoring.py")
+    diag = cmds.index("python -B -m scripts.diagnose_ru_b2b_next_market")
+    assert worker < score < diag
+    assert steps[diag]["if"] == "failure()"
+    assert not any(step.get("continue-on-error") for step in steps)
+    assert sum(c == "python -B -m scripts.diagnose_ru_b2b_next_market" for c in cmds) == 1

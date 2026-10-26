@@ -9,6 +9,12 @@ on:
       - .github/workflows/ru-south-ural-metadata.yml
   pull_request:
     branches: [main]
+    paths:
+      - app/sources/south_ural_public.py
+      - tests/test_ru_south_ural_adapter.py
+      - scripts/ci_ru_south_ural_verified_metadata.py
+  workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

@@ -27,7 +27,7 @@ MAX_SOURCES = 5
 MAX_PER_SOURCE = 100
 SCAN_PER_SOURCE = 1000
 MAX_RESULTS = MAX_SOURCES * MAX_PER_SOURCE
-SOURCE_IDS = frozenset({'eis_44_html', 'eis_223', 'b2b_center', 'mikroton_tender', 'tektorg', 'gpb_etp_public', 'lenobl_small_public', 'nmck_native_public', 'stan_commercial_public', 'south_ural_public', 'eis', 'ted', 'sam_gov', 'uk_fts', 'canada_buys', 'austender',
+SOURCE_IDS = frozenset({'eis_44_html', 'eis_223', 'b2b_center', 'mikroton_tender', 'tektorg', 'gpb_etp_public', 'lenobl_small_public', 'nmck_native_public', 'stan_commercial_public', 'south_ural_public', 'ru_samara_public_list', 'ru_dagestan_public_list', 'eis', 'ted', 'sam_gov', 'uk_fts', 'canada_buys', 'austender',
                         'nz_gets', 'india_cppp', 'kz_goszakup', 'za_etenders'})
 
 
@@ -118,7 +118,7 @@ class ScoringRunService:
     def enqueue(self, *, scope, sources=('ted',), limit_per_source=20):
         config = validate_configuration(sources, limit_per_source)
         # Russian adapters must be explicitly enabled in the actual catalog.
-        for source in ('eis_44_html', 'eis_223', 'b2b_center', 'mikroton_tender', 'tektorg', 'gpb_etp_public', 'lenobl_small_public', 'nmck_native_public', 'stan_commercial_public', 'south_ural_public'):
+        for source in ('eis_44_html', 'eis_223', 'b2b_center', 'mikroton_tender', 'tektorg', 'gpb_etp_public', 'lenobl_small_public', 'nmck_native_public', 'stan_commercial_public', 'south_ural_public', 'ru_samara_public_list', 'ru_dagestan_public_list'):
             if source in config['sources'] and (self.catalog is None or source not in self.catalog.enabled_keys):
                 raise ScoringInputError(f'{source} must be explicitly configured.')
         # Short bounded transaction freezes the selected public revisions together.

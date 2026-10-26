@@ -8,14 +8,86 @@ from datetime import datetime
 from html.parser import HTMLParser
 import math
 import re
+import ssl
 
 import httpx
+import httpcore
 
 from .eis_rss import SourceError
 from .transport_errors import SourceTransportError, transient_transport
-from .http import ConnectorTransportError, FetchPolicy, _policy, bounded_fetch, source_client
+from .http import ConnectorTransportError, FetchPolicy, _policy, bounded_fetch, source_client, _is_public_ip_error
 from .models import TenderNotice
 from .opportunities import validate_notice
+
+def _retryable_official_dns_failure(error):
+    """Only the audited resolver's exact HTTPCore DNS failure can retry.
+
+    HTTPX may discard the nested OSError while preserving HTTPCore's exact
+    'DNS resolution failed' marker. Never retry PublicIPError, TLS failures,
+    or unclassified connect errors. No alternate host or insecure fallback.
+    """
+    if _is_public_ip_error(error):
+        return False
+    # BoundedClient intentionally wraps HTTPX transport exceptions into a
+    # retryability-labelled ConnectorTransportError; never blindly trust
+    # that flag or retry an arbitrary policy failure without matching
+    # the exact audited DNS cause inside its exception chain.
+    if isinstance(error, ConnectorTransportError):
+        if not error.retryable:
+            return False
+    elif not isinstance(error, httpx.ConnectError):
+        return False
+    seen, has_httpx_connect, matched_dns = set(), False, False
+    current = error
+    while isinstance(current, BaseException) and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, ssl.SSLError):
+            return False
+        if isinstance(current, ConnectorTransportError) and not current.retryable:
+            return False
+        if isinstance(current, httpx.ConnectError):
+            has_httpx_connect = True
+        if (has_httpx_connect
+                and type(current) is httpcore.ConnectError
+                and str(current) == "DNS resolution failed"):
+            matched_dns = True
+        current = current.__cause__
+    return matched_dns
+
+
+
+def _retryable_official_peer_reset(error):
+    """Retry only observed native first-party TCP resets, never TLS/policy.
+
+    HTTPX/HTTPCore may wrap ConnectionResetError while the bounded client
+    emits a retryable network ConnectorTransportError. Preserve the exact
+    chain provenance: a generic ConnectError or rejected public-IP/TLS
+    attempt is NOT an authorized upstream retry.
+    """
+    if _is_public_ip_error(error):
+        return False
+    if isinstance(error, ConnectorTransportError):
+        if not error.retryable or error.reason != "network":
+            return False
+    elif not isinstance(error, httpx.ConnectError):
+        return False
+    seen = set()
+    current = error
+    observed_httpx = observed_reset = False
+    while isinstance(current, BaseException) and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, ssl.SSLError):
+            return False
+        if isinstance(current, ConnectorTransportError) and (
+                not current.retryable or current.reason != "network"):
+            return False
+        if isinstance(current, httpx.ConnectError):
+            observed_httpx = True
+        if type(current) is ConnectionResetError:
+            observed_reset = True
+        current = current.__cause__
+    return observed_httpx and observed_reset
+
 
 ARMEPS_LISTING_URL = "https://eauction.armeps.am/en/public/tender/"
 ARMEPS_PAGE_TWO_URL = ARMEPS_LISTING_URL + "start/2"
@@ -203,14 +275,29 @@ class ArmeniaArmepsSource:
                         _merge(result, notice)
                     if len(result) >= requested or not rows:
                         break
-                    # Preserve the accepted two-page contract. Additional pages
-                    # require a navigation link in the immediately preceding HTML.
+                    # Every additional request requires navigation observed in
+                    # the immediately preceding official response, including page two.
                     next_url = observed_next_page(response.text, page)
                     if next_url is None:
                         break
                     url = next_url
         except (httpx.HTTPError, ConnectorTransportError, OSError) as error:
-            if transient_transport(error):
+            if (transient_transport(error) or _retryable_official_dns_failure(error)
+                    or _retryable_official_peer_reset(error)):
                 raise SourceTransportError("Temporary source transport failure.") from None
+            # Strictly sanitized transport diagnosis. Do not echo upstream URLs,
+            # exception string, data, TLS contents, or DNS address. Security
+            # policy failures and client 4xx remain permanent, never green.
+            if _is_public_ip_error(error):
+                raise SourceError("ARMEPS verified public-IP policy rejected connection.") from None
+            if isinstance(error, httpx.HTTPStatusError):
+                status = error.response.status_code
+                if status in (408, 429) or 500 <= status <= 599:
+                    raise SourceTransportError("ARMEPS official temporary HTTP failure.") from None
+                raise SourceError("ARMEPS official HTTP client status rejected.") from None
+            if isinstance(error, httpx.ConnectError):
+                raise SourceError("ARMEPS unclassified HTTPS connection failure.") from None
+            if isinstance(error, ConnectorTransportError):
+                raise SourceError("ARMEPS strict transport policy rejected request.") from None
             raise SourceError("ARMEPS bounded HTTPS retrieval failed; live verification unavailable.") from None
         return list(result.values())[:requested]

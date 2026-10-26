@@ -6,7 +6,19 @@ import pytest
 from app.sources.b2b_center import parse_b2b_center_listing
 from app.sources.eis_rss import SourceError
 
-CAPTURE = (Path(__file__).parent / "fixtures" / "ru08" / "b2b_search.html").read_bytes()
+ORIGINAL_AGGREGATE = (Path(__file__).parent / "fixtures" / "ru08" / "b2b_search.html").read_bytes()
+
+# Explicitly synthetic first-party-shaped input for OFFLINE contracts only.
+# The original capture contains foreign aggregate records, never live proof.
+CAPTURE = (b'<html><div class="cards" itemtype="https://schema.org/ListItem">'
+           b'<div itemtype="https://schema.org/Demand">'
+           b'<meta itemprop="businessFunction" content="http://purl.org/goodrelations/v1#Buy">'
+           b'<link itemprop="url" href="https://www.b2b-center.ru/search/number/99999999/">'
+           b'<meta itemprop="name" content="Synthetic offline office supplies">'
+           b'<a href="https://www.b2b-center.ru/market/synthetic/tender-99999999/">'
+           b'&#1047;&#1072;&#1082;&#1091;&#1087;&#1082;&#1072; &#8470;99999999</a>'
+           b'</div></div></html>')
+
 
 
 def extra_card(host, *, duplicate_organization=False):
@@ -41,7 +53,7 @@ def test_known_external_aggregator_cards_never_become_b2b_notices(host, ambiguou
     mixed = parse_b2b_center_listing(
         inject_inside_listing(extra_card(host, duplicate_organization=ambiguous)), limit=100
     )
-    assert len(baseline) == len(mixed) == 10
+    assert len(baseline) == len(mixed) == 1
     assert [notice.identity for notice in baseline] == [notice.identity for notice in mixed]
 
 
@@ -63,15 +75,16 @@ def test_valid_b2b_card_without_optional_organization_is_not_fabricated():
         '<div class="cards" itemtype="https://schema.org/ListItem">'
         '<div itemtype="https://schema.org/Demand">'
         '<meta itemprop="businessFunction" content="http://purl.org/goodrelations/v1#Buy">'
-        '<link itemprop="url" href="https://www.b2b-center.ru/search/number/l99999999-1/">'
+        '<link itemprop="url" href="https://www.b2b-center.ru/search/number/88888888/">'
         '<meta itemprop="name" content="Тестовая поставка: карточка без указанного заказчика">'
-        '</div></div>'
+        '<a href="https://www.b2b-center.ru/market/synthetic/tender-88888888/">'
+        '&#1047;&#1072;&#1082;&#1091;&#1087;&#1082;&#1072; &#8470;88888888</a></div></div>'
     ).encode("utf-8")
     notices = parse_b2b_center_listing(inject_inside_listing(fragment), limit=100)
-    found = [n for n in notices if n.external_id == "l99999999-1"]
+    found = [n for n in notices if n.external_id == "88888888"]
     assert len(found) == 1
     assert found[0].customer is None
-    assert len(notices) == 11
+    assert len(notices) == 2
 
 
 def test_multiple_b2b_organizations_remain_rejected():
@@ -89,23 +102,45 @@ def test_multiple_b2b_organizations_remain_rejected():
         parse_b2b_center_listing(inject_inside_listing(fragment), limit=100)
 
 
-def test_optional_cross_platform_url_fragment_does_not_drop_genuine_b2b_notice():
-    # A third-party URL containing a fragment is not a verified source link.
-    needle = b'?regNumber=0338200012226000019"'
-    assert CAPTURE.count(needle) == 1
-    mutated = CAPTURE.replace(needle, b'?regNumber=0338200012226000019#tracking"', 1)
-    records = parse_b2b_center_listing(mutated, limit=100)
-    assert len(records) == 10
-    notice = next(n for n in records if n.external_id == "l0338200012226000019-1")
-    assert notice.url == (
-        "https://www.b2b-center.ru/search/number/l0338200012226000019-1/"
-    )
-    assert notice.upstream_url is None
-    assert notice.tender_number is None
+def test_original_aggregate_capture_cannot_be_claimed_as_b2b():
+    records = parse_b2b_center_listing(ORIGINAL_AGGREGATE)
+    assert [n.external_id for n in records] == ["l4639392-4-12-1"]
+    assert records[0].origin == "first_party"
+    assert records[0].tender_number == "4639392"
+
+
+@pytest.mark.parametrize('native_url', [
+    b'http://www.b2b-center.ru/market/synthetic/tender-99999999/',
+    b'https://www.b2b-center.ru.evil.invalid/market/synthetic/tender-99999999/',
+    b'https://www.b2b-center.ru/market/synthetic/tender-99999999/?tracking=1',
+    b'https://www.b2b-center.ru/market/synthetic/tender-99999998/',
+    b'https://www.b2b-center.ru/market/synthetic/tender-99999999/#tracking',
+])
+def test_native_ownership_requires_exact_https_procedure_and_matching_number(native_url):
+    payload = CAPTURE.replace(
+        b'https://www.b2b-center.ru/market/synthetic/tender-99999999/', native_url)
+    with pytest.raises(SourceError, match='no usable'):
+        parse_b2b_center_listing(payload)
+
+
+@pytest.mark.parametrize("suffix", ["", "#tracking"])
+def test_optional_foreign_provenance_cannot_be_erased(suffix):
+    reference = ('<a href="https://zakupki.gov.ru/notice' + suffix +
+                 '">&#1047;&#1072;&#1082;&#1091;&#1087;&#1082;&#1072; &#8470;123</a>').encode()
+    start = CAPTURE.index(b'<a '); end = CAPTURE.index(b'</a>', start) + 4
+    payload = CAPTURE[:start] + reference + CAPTURE[end:]
+    with pytest.raises(SourceError, match="no usable"):
+        parse_b2b_center_listing(payload)
+
+
+@pytest.mark.parametrize("external_id", ["l123-1", "l0338200012226000019-1"])
+def test_unproven_aggregate_identity_without_provenance_is_not_native(external_id):
+    with pytest.raises(SourceError, match="no usable"):
+        parse_b2b_center_listing(CAPTURE.replace(b'number/99999999/', b'number/' + external_id.encode() + b'/'))
 
 
 def test_bounded_b2b_office_fallback_is_real_provenance_not_full_coverage(monkeypatch):
-    """Fallback only when unrestricted listing transport fails non-retryably."""
+    """Fallback only for a bounded response-size failure."""
     import asyncio
     import json
     from contextlib import asynccontextmanager
@@ -119,10 +154,12 @@ def test_bounded_b2b_office_fallback_is_real_provenance_not_full_coverage(monkey
     calls = []
 
     class Client:
+        from httpx import Cookies
+        cookies = Cookies()
         async def get(self, url):
             calls.append(url)
             if url == B2B_CENTER_LIST_URL:
-                raise ConnectorTransportError(retryable=False)
+                raise ConnectorTransportError(reason="response_size")
             assert url == B2B_CENTER_OFFICE_LIST_URL
             return SimpleNamespace(content=CAPTURE, status_code=200,
                                    raise_for_status=lambda: None)
@@ -137,10 +174,11 @@ def test_bounded_b2b_office_fallback_is_real_provenance_not_full_coverage(monkey
         yield Client()
 
     monkeypatch.setattr(module, "source_client", client)
-    notices = asyncio.run(B2BCenterSource().fetch(limit=2))
+    notices = asyncio.run(B2BCenterSource(listing_url=B2B_CENTER_LIST_URL).fetch(limit=2))
     assert calls == [B2B_CENTER_LIST_URL, B2B_CENTER_OFFICE_LIST_URL]
-    assert len(notices) == 2
+    assert len(notices) == 1
     for notice in notices:
+        assert notice.listing_url == B2B_CENTER_OFFICE_LIST_URL
         metadata = json.loads(notice.summary)
         assert metadata["listing_url"] == B2B_CENTER_OFFICE_LIST_URL
         assert metadata["coverage_scope"] == "office_only"
@@ -165,7 +203,7 @@ def test_retryable_b2b_error_not_masked_by_fallback(monkeypatch):
 
     monkeypatch.setattr(module, "source_client", client)
     with pytest.raises(ConnectorTransportError) as exc:
-        asyncio.run(B2BCenterSource().fetch(limit=2))
+        asyncio.run(B2BCenterSource(listing_url=B2B_CENTER_LIST_URL).fetch(limit=2))
     assert exc.value.retryable is True
 
 

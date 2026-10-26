@@ -1,0 +1,32 @@
+/* Team decision desk: visually integrated with the authenticated saved modal. */
+body.saas .vq-team-panel{margin-top:20px;border:1px solid #dfe7f6!important;border-radius:17px;background:linear-gradient(145deg,#fff,#f6f8ff);padding:19px}
+body.saas .vq-team-head{display:flex;align-items:start;justify-content:space-between;gap:13px}
+body.saas .vq-team-head h3{font-size:21px;color:#1c3462;letter-spacing:-.03em;margin:7px 0}
+body.saas .vq-team-approval{padding:8px 11px;border-radius:99px;background:#edf2fe;border:1px solid #cfddf6;color:#5268a2;font-size:11px;font-weight:800}
+body.saas .vq-team-panel .fine{font-size:11px;color:#7c8fad;line-height:1.6}
+body.saas .vq-team-fields{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin:19px 0}
+body.saas .vq-team-fields label{font-size:12px;color:#455f99;width:100%}
+body.saas .vq-team-fields select{flex:1;min-width:185px;height:41px;border:1px solid #d2def5;border-radius:10px;background:#fff;color:#2c487f;padding:7px 12px}
+body.saas .vq-team-fields button,body.saas .vq-team-buttons button{min-height:40px;border:1px solid #b9cbef;border-radius:10px;background:#eaf0ff;color:#3853a6;padding:9px 14px;font-size:12px;font-weight:850;cursor:pointer}
+body.saas .vq-team-fields button:hover:not(:disabled),body.saas .vq-team-buttons button:hover:not(:disabled){background:#d9e5ff}
+body.saas .vq-team-panel button:disabled{opacity:.5;cursor:not-allowed}
+body.saas .vq-team-review{background:#fff;border:1px solid #e0e8fa;border-radius:14px;padding:17px}
+body.saas .vq-team-review strong{color:#233a6f}
+body.saas .vq-team-buttons{display:flex;flex-wrap:wrap;gap:9px;margin-top:12px}
+body.saas #approveTenderParticipation{background:#e4f7ed;border-color:#bce6ca;color:#207d5b}
+body.saas #rejectTenderParticipation{background:#fff0ed;border-color:#edc7be;color:#a94d3c}
+body.saas #savedTenderTeamStatus{font-size:12px;color:#536f9f;margin:13px 0}
+body.saas .vq-team-event-list{max-height:210px;overflow-y:auto;padding-left:21px;color:#667aa5;font-size:11px;line-height:1.8}
+@media(max-width:700px){body.saas .vq-team-head{flex-direction:column}body.saas .vq-team-fields{flex-direction:column;align-items:stretch}body.saas .vq-team-fields select{flex:initial;width:100%}}
+
+
+body.saas .vq-source-history-panel{margin-top:19px;padding:19px;border-radius:16px;border:1px solid #dbe6fa;background:#fbfcff}
+body.saas .vq-source-history-panel .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px}
+body.saas .vq-source-history-panel h3{color:#243e73;margin:7px 0;font-size:20px}
+body.saas .vq-source-history-panel button{border:1px solid #d1def8;background:#eaf1ff;border-radius:9px;color:#415db0;min-height:39px;padding:8px 12px;font-weight:800;font-size:11px}
+body.saas .vq-source-history-panel button:disabled{opacity:.5}
+body.saas #savedSourceHistoryStatus{color:#637da9;font-size:11px;line-height:1.65}
+body.saas .vq-source-history-list{display:grid;gap:9px;list-style:none;padding:0;max-height:250px;overflow-y:auto}
+body.saas .vq-source-history-list li{display:grid;gap:4px;background:white;border:1px solid #e5ecfa;border-left:3px solid #597fea;border-radius:8px;padding:11px}
+body.saas .vq-source-history-list li strong{font-size:11px;color:#2c4480}
+body.saas .vq-source-history-list li span{font-size:11px;color:#7282a3;line-height:1.5}

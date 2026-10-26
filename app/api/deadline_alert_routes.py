@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 
 from app.launch.deadline_alerts import DeadlineAlerts
+from app.database.backend import StorageError
 from .organization_workflow_routes import _account, _active_company
 from .security import require_same_origin_browser_request
 
@@ -49,3 +50,20 @@ async def update_preferences(organization_id: int, payload: DeadlinePreferences,
         )
     except PermissionError:
         raise HTTPException(403, "Organization membership required.") from None
+
+
+@router.get("/deadline-alerts/history")
+async def get_deadline_delivery_history(organization_id: int, request: Request):
+    """Actual sender receipts for this account and selected company only."""
+    account, company, service = await _scope(organization_id, request)
+    try:
+        result = await asyncio.to_thread(
+            service.delivery_history, account_id=account.id,
+            organization_id=organization_id, company_id=company.id,
+        )
+    except PermissionError:
+        raise HTTPException(403, "Organization membership required.") from None
+    except (StorageError, ValueError, TypeError):
+        raise HTTPException(503, "Delivery journal unavailable.") from None
+    from fastapi.responses import JSONResponse
+    return JSONResponse(result, headers={"Cache-Control": "private, no-store"})

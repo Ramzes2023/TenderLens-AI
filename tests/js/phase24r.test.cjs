@@ -14,7 +14,8 @@ function element() {
 const nodes = {}, get = id => nodes[id] ||= element();
 const links = [...html.matchAll(/<a href="#([^"]+)" data-nav="([^"]+)">[\s\S]*?<span>([^<]+)<\/span>/g)]
   .map(m => Object.assign(element(), {dataset:{nav:m[2]},textContent:m[3]}));
-assert.equal(links.length,16);
+assert.equal(links.length,17);
+assert(links.some(link=>link.dataset.nav==='tender-planner'));
 const articles = ['companies','companyCreator','tenders','monitoringCenter','organizationCard','telegramCard'].map(get);
 const sections = [...html.matchAll(/data-page="([^"]+)"/g)]
   .map(m => Object.assign(element(), {dataset:{page:m[1]}}));
@@ -31,7 +32,7 @@ for (const link of links) {
   assert.equal(get('pageHeading').textContent,link.textContent);
   assert.equal(theme['command-view'],true);
   assert.equal(link.attributes['aria-current'],'page');
-  const future=['recommended','notifications'].includes(link.dataset.nav);
+  const future=false;
   assert.equal(get('futurePage').hidden,!future);
   if(future) assert.match(get('futureText').textContent,/not available/);
   if(link.dataset.nav==='billing') {
@@ -40,8 +41,18 @@ for (const link of links) {
     assert.match(html,/data-page="billing"/);
     assert.match(html,/id="upgradeBilling" disabled/);
   }
-  if(link.dataset.nav==='recommended') assert.equal(get('futureNext').href,'#discover');
-  if(link.dataset.nav==='notifications') assert.equal(get('futureNext').href,'#settings');
+  if(link.dataset.nav==='recommended') {
+    assert.equal(get('futurePage').hidden,true);
+    assert.equal(get('futureNext').hidden,true);
+    assert.match(html,/data-page="recommended"/);
+    assert.match(html,/id="vqRecommendationsResults"/);
+  }
+  if(link.dataset.nav==='notifications') {
+    assert.equal(get('futurePage').hidden,true);
+    assert.equal(get('futureNext').hidden,true);
+    assert.match(html,/id="vqDeliveryJournal"/);
+    assert.match(html,/data-page="notifications"/);
+  }
 }
 location.hash='#missing-page';events.hashchange();
 assert.equal(get('pageHeading').textContent,'Overview');

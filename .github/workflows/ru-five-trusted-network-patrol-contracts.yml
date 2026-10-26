@@ -1,0 +1,24 @@
+name: RU five blocked publishers automated patrol safety contract
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/ru-five-trusted-network-patrol.yml
+      - .github/workflows/ru-five-trusted-network-patrol-contracts.yml
+      - tests/test_ru_five_main_network_patrol.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ru-five-trusted-main-only-patrol-offline-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check immutable approved origins, no PR execution on trusted runner, no false ingestion
+        run: python -m unittest discover -s tests -p test_ru_five_main_network_patrol.py

@@ -1,0 +1,128 @@
+/* VALYQON WORKSPACE · premium progressive shell, no fabricated records. */
+body.saas{--vq-nav:#0c1c42;--vq-nav-hi:#192f67;--vq-focus:#7ca2ff}
+body.saas .app-nav{background:radial-gradient(circle at 95% 6%,#203a81 0,transparent 38%),linear-gradient(165deg,#132756,#0c1737 75%);width:268px;padding:22px 13px 18px;box-shadow:7px 0 27px #08183518;border-right:1px solid #2b4881;scrollbar-width:thin;transition:width .24s ease}
+body.saas .app-nav .brand{padding:0 14px;font-size:19px;letter-spacing:-.04em;font-weight:900}
+body.saas .app-nav>.fine{padding:0 14px;font-size:10px;color:#a4b7e4}
+body.saas .app-nav nav{display:flex;flex-direction:column;gap:15px;margin-top:21px;min-height:0}
+body.saas .app-nav .nav-group{display:block;border:1px solid #ffffff0a;border-radius:13px;background:#12264a60;padding:6px}
+body.saas .app-nav .nav-group-label{display:block;color:#849ed0;padding:10px 10px 7px;font-size:9px;letter-spacing:.13em}
+body.saas .app-nav .nav-group-toggle{width:100%;padding:10px 9px;display:flex;align-items:center;justify-content:space-between;gap:10px;border:0;background:transparent;color:#9eb6e6;border-radius:9px;font:800 10px system-ui;letter-spacing:.11em;text-align:left;cursor:pointer}
+body.saas .app-nav .nav-group-toggle:hover{background:#ffffff10;color:#fff}
+body.saas .app-nav .nav-group-toggle .vq-chevron{font-size:13px;transition:transform .2s}
+body.saas .app-nav .nav-group-toggle[aria-expanded=false] .vq-chevron{transform:rotate(-90deg)}
+body.saas .app-nav .nav-group-links{display:grid;gap:3px}
+body.saas .app-nav .nav-group-links[hidden]{display:none}
+body.saas .app-nav nav a{font-size:12px;min-height:37px;padding:9px 11px;border:1px solid transparent;border-left:2px solid transparent;border-radius:10px;color:#b9c9e7;gap:12px;transition:background .16s,color .16s,transform .16s,border-color .16s}
+body.saas .app-nav nav a:hover{background:#344c8f7d;color:white;transform:translateX(2px);border-color:#8097ff24}
+body.saas .app-nav nav a svg{width:16px;height:16px}
+body.saas .app-nav nav a[aria-current=page],body.saas.command-view .app-nav nav a[aria-current=page]{background:linear-gradient(105deg,#396aff,#6355e8);color:white;border-left-color:#b2c2ff;box-shadow:0 7px 18px #0a17635e}
+body.saas .sidebar-context{margin-top:22px;border:1px solid #4a6b9d57;background:#1b335c68;padding:15px 12px;border-radius:13px}
+body.saas .sidebar-context strong{line-height:1.35}
+body.saas .sidebar-context a{color:#b8ceff}
+body.saas .vq-sidebar-compact{width:100%;min-height:37px;border:1px solid #5b75ae50;background:#233a7190;color:#dbe6ff;display:flex;align-items:center;justify-content:center;gap:10px;padding:7px 11px;font-size:11px;border-radius:10px;cursor:pointer;margin:12px 0 2px}
+body.saas .vq-sidebar-compact:hover{background:#3451a1}
+body.saas .vq-sidebar-compact span:first-child{font-size:18px;line-height:1}
+body.saas .shell{margin-left:268px;transition:margin-left .24s ease;max-width:1920px;padding-inline:clamp(20px,2.6vw,48px)}
+body.saas .product-topbar{min-height:100px;padding:18px 0;gap:14px}
+body.saas .product-topbar #pageHeading{font-size:clamp(22px,2.1vw,31px)}
+body.saas .command-trigger{border-radius:13px!important;min-height:47px;background:#172d58!important;color:#e3eaff!important;border:1px solid #586da0!important;box-shadow:0 8px 24px #0e1a4133;text-align:left}
+body.saas .command-trigger kbd{float:right;background:#46618b;color:#fff;border-radius:6px}
+body.saas .product-topbar .account-menu summary{border-radius:11px}
+body.saas .vq-workspace-shortcuts{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:-6px 0 19px;padding:12px 16px;background:linear-gradient(105deg,#102248,#203b75);border:1px solid #465f96;border-radius:15px;box-shadow:0 9px 26px #15204418}
+body.saas .vq-shortcut-caption{font-size:9px;letter-spacing:.11em;font-weight:850;color:#95a9d8;margin-right:8px}
+body.saas .vq-workspace-shortcuts a{display:flex;align-items:center;gap:7px;min-height:36px;padding:8px 11px;background:#ffffff0b;color:#dce6ff;text-decoration:none;font-size:11px;font-weight:750;border:1px solid #ffffff16;border-radius:9px;transition:background .16s,transform .16s,color .16s}
+body.saas .vq-workspace-shortcuts a:hover{background:#4359a9;color:#fff;transform:translateY(-2px)}
+body.saas .vq-workspace-shortcuts a[aria-current=page]{color:#fff;background:linear-gradient(115deg,#3d71ed,#6753d9);border-color:#7999ff8c}
+body.saas .vq-workspace-shortcuts a span:first-child{font-size:17px}
+body.saas .vq-action-center{padding:24px 24px 26px;background:linear-gradient(145deg,#111e3c,#192a55);border:1px solid #465887;border-radius:20px;box-shadow:0 18px 40px #0a1e3b32;margin-bottom:23px;color:#fff}
+body.saas .vq-action-heading{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:18px}
+body.saas .vq-card-eyebrow{color:#9db8ff;font-size:10px;letter-spacing:.13em;font-weight:850}
+body.saas .vq-action-heading h2{color:#fff;font-size:clamp(23px,2.4vw,35px);margin:8px 0;letter-spacing:-.04em}
+body.saas .vq-action-heading p{color:#afbfdb;font-size:12px;margin:0;line-height:1.6}
+body.saas .vq-action-command{flex-shrink:0;min-height:40px;background:#304a86;border:1px solid #6d85ba;border-radius:11px;color:white;padding:10px 13px;font-weight:700;font-size:11px;cursor:pointer}
+body.saas .vq-action-command:hover{background:#4163ac}
+body.saas .vq-action-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+body.saas .vq-action-card{min-width:0;background:linear-gradient(160deg,#253a70,#20305d);border:1px solid #607ab34a;border-radius:14px;display:flex;flex-direction:column;padding:19px;min-height:182px;text-decoration:none;color:#eef3ff;gap:9px;transition:transform .18s,box-shadow .18s,background .18s}
+body.saas .vq-action-card:hover{transform:translateY(-4px);background:linear-gradient(145deg,#35519a,#293e73);box-shadow:0 12px 26px #0a153554;color:white}
+body.saas .vq-action-glyph{display:grid;place-items:center;width:41px;height:41px;border-radius:12px;background:#8ca8ff22;border:1px solid #9fbcff3d;font-size:24px;color:#bdd3ff}
+body.saas .vq-action-card strong{color:white;font-size:14px;line-height:1.35}
+body.saas .vq-action-card p{font-size:11px;color:#b9c9ed;line-height:1.55;margin:0;flex:1}
+body.saas .vq-action-card small{color:#bbd3ff;font-size:10px;font-weight:800}
+body.saas .overview-metrics article{border-radius:16px}
+body.saas .p{border-radius:15px}
+body.saas.command-view .vq-workspace-shortcuts{background:linear-gradient(100deg,#14284e,#1b346b)}
+body.saas.command-view .vq-action-center{background:linear-gradient(140deg,#111e3c,#223361)}
+body.saas.command-view .overview-welcome{display:none}
+body.saas.sidebar-compact .app-nav{width:78px;padding:18px 8px}
+body.saas.sidebar-compact .shell{margin-left:78px}
+body.saas.sidebar-compact .app-nav .brand{font-size:13px;letter-spacing:-.03em;padding:0}
+body.saas.sidebar-compact .app-nav .brand span{display:none}
+body.saas.sidebar-compact .app-nav>.fine,body.saas.sidebar-compact .vq-compact-caption,body.saas.sidebar-compact .nav-group-toggle,body.saas.sidebar-compact .nav-group-label,body.saas.sidebar-compact .sidebar-context{display:none}
+body.saas.sidebar-compact .app-nav nav{gap:10px}
+body.saas.sidebar-compact .app-nav .nav-group{padding:6px 2px}
+body.saas.sidebar-compact .app-nav .nav-group-links{display:grid!important}
+body.saas.sidebar-compact .app-nav nav a{justify-content:center;padding:11px 6px}
+body.saas.sidebar-compact .app-nav nav a span{display:none}
+body.saas.sidebar-compact .app-nav nav a svg{width:19px;height:19px}
+body.saas.sidebar-compact .vq-sidebar-compact{margin-top:20px}
+body.saas.sidebar-compact .vq-sidebar-compact span:first-child{transform:rotate(180deg)}
+@media(max-width:1320px){body.saas .vq-action-grid{grid-template-columns:repeat(2,minmax(0,1fr))}body.saas .vq-action-card{min-height:154px}}
+@media(max-width:1050px){body.saas .app-nav{width:248px}body.saas .shell{margin-left:248px}body.saas.sidebar-compact .shell{margin-left:78px}body.saas .vq-shortcut-caption{display:none}body.saas .vq-workspace-shortcuts{gap:6px;padding:9px}}
+@media(max-width:760px){body.saas .app-nav{display:none;top:56px;width:min(330px,95vw)}body.saas .app-nav.open{display:flex;position:fixed;inset:56px auto 0 0;width:min(330px,95vw);height:calc(100vh - 56px);overflow-y:auto}body.saas .shell,body.saas.sidebar-compact .shell{margin-left:0;padding-inline:16px}body.saas .vq-sidebar-compact{display:none}body.saas .vq-workspace-shortcuts{margin-top:0;overflow:auto;flex-wrap:nowrap;white-space:nowrap;scrollbar-width:thin}body.saas .vq-action-center{padding:19px 15px}body.saas .vq-action-heading{align-items:flex-start;flex-direction:column}body.saas .vq-action-grid{gap:9px}body.saas .vq-action-card{padding:15px;min-height:160px}body.saas .vq-action-card strong{font-size:12px}}
+@media(max-width:500px){body.saas .vq-action-grid{grid-template-columns:1fr}body.saas .vq-action-card{min-height:0}body.saas .vq-workspace-shortcuts{margin-bottom:14px}}
+@media(prefers-reduced-motion:reduce){body.saas .app-nav,body.saas .shell,body.saas .vq-action-card,body.saas .vq-workspace-shortcuts a,body.saas .app-nav nav a{transition:none;animation:none}body.saas .vq-action-card:hover,body.saas .vq-workspace-shortcuts a:hover,body.saas .app-nav nav a:hover{transform:none}}
+
+
+/* REVIEW 2026-10-23: avoid bottom company card obscuring long intelligence
+   navigation. The navigation gets its own scroll area; context is a footer,
+   never an overlay on AI Analysis, Notifications, or Organization links. */
+@media (min-width:1051px) {
+  body.saas .app-nav {
+    display:flex;
+    flex-direction:column;
+    height:100vh;
+    height:100dvh;
+    min-height:0;
+    overflow:hidden;
+  }
+  body.saas .app-nav > nav {
+    flex:1 1 auto;
+    min-height:0;
+    overflow-y:auto;
+    overflow-x:hidden;
+    overscroll-behavior-y:contain;
+    scrollbar-width:thin;
+    scrollbar-color:#5973a6 transparent;
+    margin-bottom:0;
+    padding-bottom:10px;
+  }
+  body.saas .app-nav > .sidebar-context {
+    flex:0 0 auto;
+    margin-top:12px;
+    padding:12px;
+    position:static;
+    z-index:auto;
+    max-height:138px;
+    overflow:auto;
+    box-sizing:border-box;
+  }
+  body.saas .app-nav > .sidebar-context strong {
+    margin:7px 0 9px;
+    line-height:1.35;
+  }
+  body.saas .app-nav > .vq-sidebar-compact {flex:0 0 auto;}
+  body.saas.sidebar-compact .app-nav > nav {overflow-y:auto;}
+}
+/* A review site at laptop/tablet width keeps a scrollable menu without
+   stealing the entire viewport or overlapping document content. */
+@media (min-width:761px) and (max-width:1050px) {
+  body.saas .app-nav.open {
+    position:fixed;
+    inset:56px auto 0 0;
+    width:min(330px,90vw);
+    height:calc(100dvh - 56px);
+    overflow:auto;
+    box-shadow:12px 0 40px #030e2670;
+  }
+  body.saas .app-nav.open .sidebar-context {position:static;}
+}

@@ -1,0 +1,64 @@
+name: RU Chechnya completed live acceptance -> refresh exact PR proof
+
+# workflow_run listeners MUST live on the default branch. This small,
+# independently reviewed infrastructure PR is intentionally separate from
+# the still-unmerged Chechnya source PR #236.
+on:
+  workflow_run:
+    workflows:
+      - RU Chechnya EIS 44 regional source gated acceptance
+    types: [completed]
+    branches: [feat/ru-chechnya-eis-rss-20261022]
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/ru-chechnya-completed-live-refresh.yml
+      - scripts/ru_chechnya_completed_live_refresh.py
+      - tests/test_ru_chechnya_completed_live_refresh.py
+
+permissions:
+  contents: read
+
+jobs:
+  unit-contracts:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test exact-SHA and trusted RU-01 runner protections
+        run: python -m unittest discover -s tests -p test_ru_chechnya_completed_live_refresh.py -v
+
+  refresh-after-trusted-ru-live:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'feat/ru-chechnya-eis-rss-20261022' &&
+      github.event.workflow_run.head_repository.full_name == 'Ramzes2023/TenderLens-AI'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    permissions:
+      actions: write
+      pull-requests: read
+      contents: read
+    steps:
+      # Use the TRUSTED default-branch code, not code from the branch which
+      # triggered workflow_run. Extra checks in Python inspect the exact
+      # completed workflow path, actual RU-01 runner/job, and PR head SHA.
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Recheck GitHub proof only after complete verified RU-01 live run
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python -B -m scripts.ru_chechnya_completed_live_refresh

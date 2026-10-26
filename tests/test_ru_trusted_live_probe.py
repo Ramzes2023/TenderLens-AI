@@ -1,9 +1,35 @@
 """Safety and source scope contracts for operator-only trusted RU diagnostics."""
 import unittest
 from unittest.mock import patch
-from scripts.ru_trusted_live_probe import TARGETS, UnsafeAddress, checked_ips, describe, main, read_public, Target
+from scripts.ru_trusted_live_probe import TARGETS, ON_DEMAND_TARGETS, UnsafeAddress, checked_ips, describe, main, read_public, Target
 
 class ProbeSafetyTests(unittest.TestCase):
+    def test_roseltorg_exact_visible_original_links_are_only_unverified_candidates(self):
+        from scripts.ru_trusted_live_probe import roseltorg_visible_original_candidates
+        ident = "0318300120826000550"
+        rt = "RT22042500009"
+        html = (
+            f"<head><title>hidden</title><a href='/procedure/{ident}/1'>hidden</a></head>"
+            f"<template><a href='/procedure/{ident}/1'>hidden</a></template>"
+            f"<script><a href='/procedure/{ident}/1'>hidden</a></script>"
+            f"<body><a href='/procedure/{ident}/1'>first real listing link</a>"
+            f"<a href='https://www.roseltorg.ru/procedure/{rt}'>second link</a>"
+            f"<a href='/procedure/{ident}/1'>duplicate</a>"
+            f"<a href='https://www.roseltorg.ru.evil.invalid/procedure/{ident}/1'>evil</a>"
+            f"<a href='http://www.roseltorg.ru/procedure/{ident}/1'>insecure</a>"
+            f"<a href='/procedure/{rt}?session=x'>unsafe query</a>"
+            f"<a href='/procedure/{rt}%2f'>ambiguous escape</a>"
+            f"<a href='https://www.roseltorg.ru:badport/procedure/{rt}'>malformed</a>"
+            f"<a href='/procedure/NO'>noncanonical short ID</a>"
+            "</body>"
+        ).encode("utf-8")
+        self.assertEqual(roseltorg_visible_original_candidates(html), 2)
+        self.assertEqual(roseltorg_visible_original_candidates(
+            f"<html><template><a href='/procedure/{ident}/1'>no visible</a></template>"
+            "</html>".encode()), 0)
+        with self.assertRaises(ValueError):
+            roseltorg_visible_original_candidates(b"")
+
     def test_fixed_unique_approved_targets(self):
         self.assertEqual(len(TARGETS), 37)
         pairs = {(t.host, t.path) for t in TARGETS.values()}
@@ -61,10 +87,27 @@ class ProbeSafetyTests(unittest.TestCase):
             describe("rss",b"not rss")
 
 
+    def test_rss_rejects_nonfeed_dtd_and_xml_entity_without_false_visibility(self):
+        for payload in (
+            b"<html><body>login</body></html>",
+            b"<errors><error>Not available</error></errors>",
+            b'<!DOCTYPE rss [<!ENTITY leak "secret">]><rss><channel/></rss>',
+            b'<rss><!DOCTYPE fake><channel/></rss>',
+        ):
+            with self.assertRaises(ValueError):
+                describe("rss", payload)
+        self.assertEqual(describe(
+            "rss", b'<feed xmlns="http://www.w3.org/2005/Atom"><entry/></feed>'
+        )["atom_items"], 1)
+
     def test_batch_enforces_real_reachability_and_never_marks_ingestion(self):
         from io import StringIO
         from contextlib import redirect_stdout
-        with patch("scripts.ru_trusted_live_probe.read_public", return_value=("text/html", b"<a href='/proc/123'>test</a>")) as fn:
+        def visible(target):
+            if target.mode == "rss":
+                return ("application/rss+xml", b"<rss><channel><item/></channel></rss>")
+            return ("text/html", b"<a href='/proc/123'>test</a>")
+        with patch("scripts.ru_trusted_live_probe.read_public", side_effect=visible) as fn:
             output = StringIO()
             with redirect_stdout(output):
                 self.assertEqual(main("batch_priority"), 0)
@@ -74,7 +117,7 @@ class ProbeSafetyTests(unittest.TestCase):
         def blocked(target):
             if target.host == "44.fabrikant.ru":
                 raise TimeoutError("no official response")
-            return ("text/html", b"<a href='/proc/123'>test</a>")
+            return visible(target)
         with patch("scripts.ru_trusted_live_probe.read_public", side_effect=blocked):
             with redirect_stdout(StringIO()):
                 self.assertEqual(main("batch_priority"), 2)
@@ -87,6 +130,211 @@ class ProbeSafetyTests(unittest.TestCase):
             self.assertEqual(url.hostname, item.host)
             self.assertEqual(url.scheme, "https")
             self.assertFalse(url.username or url.password or url.query or url.fragment)
+
+    def test_six_operator_only_official_gpb_and_eis_targets_do_not_expand_batch(self):
+        self.assertEqual(len(TARGETS), 37)
+        self.assertEqual(ON_DEMAND_TARGETS, {
+            "gpb_public_html": Target("etpgpb.ru", "/procedures/"),
+            "gpb_new_public_html": Target("new.etpgpb.ru", "/procedures/"),
+            "gpb_new_rss": Target("new.etpgpb.ru", "/procedures.rss", "rss"),
+            "gpb_gos44_html": Target("gos.etpgpb.ru", "/44/catalog/procedure"),
+            "gpb_gos44_published": Target("gos.etpgpb.ru", "/44/catalog/procedure/published"),
+            "eis_official_home": Target("zakupki.gov.ru", "/"),
+        })
+        self.assertFalse(set(TARGETS).intersection(ON_DEMAND_TARGETS))
+        self.assertEqual(len({(z.host, z.path) for z in ON_DEMAND_TARGETS.values()}), 6)
+
+    def test_gpb_official_only_choice_does_not_use_user_supplied_urls(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        with patch("scripts.ru_trusted_live_probe.read_public",
+                   return_value=("text/html", b"<a href='/procedures/'>list</a>")) as reader:
+            with redirect_stdout(StringIO()):
+                self.assertEqual(main("gpb_public_html"), 0)
+                self.assertEqual(main("gpb_new_public_html"), 0)
+            self.assertEqual([x.args[0] for x in reader.call_args_list], [
+                ON_DEMAND_TARGETS["gpb_public_html"],
+                ON_DEMAND_TARGETS["gpb_new_public_html"],
+            ])
+        # The current-published 44-FZ URL is a fixed on-demand route, not
+        # a new unique EIS source or an arbitrary operator-entered URL.
+        with patch("scripts.ru_trusted_live_probe.read_public",
+                   return_value=("text/html", b"<table><tr><td>Published</td></tr></table>")) as get:
+            with redirect_stdout(StringIO()):
+                self.assertEqual(main("gpb_gos44_published"), 0)
+            self.assertEqual(get.call_args.args[0],
+                             ON_DEMAND_TARGETS["gpb_gos44_published"])
+        with patch("scripts.ru_trusted_live_probe.checked_ips") as dns:
+            self.assertEqual(main("gpb_new_rss?ref=private"), 2)
+            self.assertEqual(main("http://new.etpgpb.ru/procedures.rss"), 2)
+            dns.assert_not_called()
+
+    def test_main_only_selfhosted_gpbdetection_cannot_run_on_pr(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1]
+        text = (root / ".github/workflows/ru-trusted-operator-only.yml").read_text(encoding="utf-8")
+        self.assertIn("on:\n  workflow_dispatch:\n", text)
+        self.assertNotIn("  pull_request:", text)
+        for label in ON_DEMAND_TARGETS:
+            self.assertEqual(text.count("          - " + label + "\n"), 1)
+        self.assertIn("if: github.ref == 'refs/heads/main'", text)
+        self.assertIn("runs-on: [self-hosted, Linux, X64]", text)
+        self.assertIn('test "$ACTUAL_RUNNER_NAME" = "VALYQON-RU-01"', text)
+        self.assertIn("persist-credentials: false", text)
+
+    def test_primary_official_gpb_rss_observed_without_accepted_tender_claims(self):
+        from pathlib import Path
+        self.assertEqual(TARGETS["gpb_rss"], Target("etpgpb.ru", "/procedures.rss", "rss"))
+        path = Path(__file__).resolve().parents[1] / ".github/workflows/ru-gpb-alternative-hosts-observation.yml"
+        workflow = path.read_text(encoding="utf-8")
+        self.assertIn("for source in gpb_rss gpb_public_html gpb_new_public_html gpb_new_rss gpb_gos44_html gpb_gos44_published; do", workflow)
+        self.assertIn('python -B -m scripts.ru_trusted_live_probe "$source"', workflow)
+        self.assertIn("persist-credentials: false", workflow)
+        for marker in ("RU_GPB_DETAIL_VERIFIED=NO", "RU_GPB_WORKER_SQL_ACCEPTED=NO",
+                       "RU_GPB_TENANT_NOTIFIED=NO", "PRODUCTION_CHANGED=NO"):
+            self.assertIn(marker, workflow)
+        self.assertNotIn("self-hosted", workflow)
+
+    def test_primary_gpb_rss_proves_feed_structure_not_procurement_detail(self):
+        self.assertEqual(describe("rss", b"<rss version='2.0'><channel><item/></channel></rss>"),
+                         {"rss_items": 1, "atom_items": 0})
+        for payload in (b"<html><body>login</body></html>",
+                        b"<response><error>login</error></response>",
+                        b'<!DOCTYPE rss [<!ENTITY bad "x">]><rss><channel/></rss>'):
+            with self.assertRaises(ValueError):
+                describe("rss", payload)
+
+    def test_hosted_gpb_alternative_routes_are_observation_not_source_acceptance(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1]
+        raw = (root / ".github/workflows/ru-gpb-alternative-hosts-observation.yml").read_text(encoding="utf-8")
+        self.assertIn("on:\n  pull_request:\n    branches: [main]", raw)
+        self.assertIn("      - scripts/ru_trusted_live_probe.py", raw)
+        self.assertIn("      - tests/test_ru_trusted_live_probe.py", raw)
+        self.assertIn("    runs-on: ubuntu-latest", raw)
+        self.assertNotIn("self-hosted", raw)
+        self.assertIn("persist-credentials: false", raw)
+        for key in (item for item in ON_DEMAND_TARGETS if item.startswith("gpb_")):
+            self.assertIn(key, raw)
+        # Separate main-only EIS observation never leaks into hosted GPB tests.
+        self.assertNotIn("eis_official_home", raw)
+        for marker in (
+            "RU_GPB_DETAIL_VERIFIED=NO",
+            "RU_GPB_WORKER_SQL_ACCEPTED=NO",
+            "RU_GPB_TENANT_NOTIFIED=NO",
+            "PRODUCTION_CHANGED=NO",
+        ):
+            self.assertIn(marker, raw)
+        self.assertNotIn("curl -k", raw)
+        self.assertNotIn("verify=False", raw)
+
+
+
+    def test_five_current_blocked_publishers_are_fixed_observation_not_source_acceptance(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from scripts.ru_trusted_live_probe import RECOVERY_FIVE
+        self.assertEqual(set(RECOVERY_FIVE), {
+            "ingushetia", "chechnya", "roseltorg", "gpb", "tektorg"
+        })
+        self.assertEqual(RECOVERY_FIVE["gpb"], ON_DEMAND_TARGETS["gpb_public_html"])
+        self.assertNotEqual(RECOVERY_FIVE["gpb"], TARGETS["gpb_rss"])
+        self.assertEqual(RECOVERY_FIVE["ingushetia"], TARGETS["fabrikant_44_mirror"])
+        self.assertEqual(RECOVERY_FIVE["chechnya"], ON_DEMAND_TARGETS["eis_official_home"])
+        self.assertEqual(len({(v.host, v.path) for v in RECOVERY_FIVE.values()}), 5)
+
+        def official_response(target):
+            if target.mode == "rss":
+                return "application/rss+xml", b"<rss><channel><item/></channel></rss>"
+            return "text/html", b"<html><body>Official list</body></html>"
+
+        with patch("scripts.ru_trusted_live_probe.read_public", side_effect=official_response) as call:
+            output = StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(main("priority_five_network"), 0)
+            self.assertEqual(call.call_count, 5)
+        for marker in (
+            "RU_FIVE_FIRSTPARTY_HTTPS_VISIBLE=5/5",
+            "RU_FIVE_ORIGINAL_DETAIL_VERIFIED=NO",
+            "RU_FIVE_WORKER_SQL_ACCEPTED=NO",
+            "RU_FIVE_REAL_TELEGRAM_ACK=NO",
+            "PRODUCTION_CHANGED=NO",
+        ):
+            self.assertIn(marker, output.getvalue())
+        self.assertNotIn("tender_count", output.getvalue().lower())
+
+        def failed_source(target):
+            if target == TARGETS["roseltorg"]:
+                raise TimeoutError("External publisher unavailable")
+            return official_response(target)
+        with patch("scripts.ru_trusted_live_probe.read_public", side_effect=failed_source):
+            with redirect_stdout(StringIO()):
+                self.assertEqual(main("priority_five_network"), 2)
+
+    def test_non200_firstparty_status_distinguished_from_network_failures(self):
+        from scripts.ru_trusted_live_probe import Non200OfficialResponse
+        from contextlib import redirect_stdout
+        from io import StringIO
+        self.assertEqual(Non200OfficialResponse(301).status, 301)
+        self.assertEqual(Non200OfficialResponse(403).status, 403)
+        for bad in (True, -1, 99, 600, "403"):
+            with self.assertRaises(ValueError):
+                Non200OfficialResponse(bad)
+
+        def denied(target):
+            if target == TARGETS["roseltorg"]:
+                raise Non200OfficialResponse(403)
+            if target.mode == "rss":
+                return "application/rss+xml", b"<rss><channel/></rss>"
+            return "text/html", b"<html>listing page</html>"
+
+        with patch("scripts.ru_trusted_live_probe.read_public", side_effect=denied):
+            output = StringIO()
+            with redirect_stdout(output):
+                self.assertEqual(main("priority_five_network"), 2)
+        self.assertIn('"source": "roseltorg", "status": "HTTP_REACHABLE_NON200"', output.getvalue())
+        self.assertIn('"http_status": 403', output.getvalue())
+        self.assertNotIn('"url":', output.getvalue())
+        self.assertIn("RU_FIVE_WORKER_SQL_ACCEPTED=NO", output.getvalue())
+
+    def test_main_only_trusted_runner_exposes_fixed_five_source_choice(self):
+        from pathlib import Path
+        raw = (Path(__file__).resolve().parents[1] /
+               ".github/workflows/ru-trusted-operator-only.yml").read_text(encoding="utf-8")
+        self.assertIn("          - priority_five_network\n", raw)
+        self.assertIn("          - eis_official_home\n", raw)
+        self.assertIn("if: github.ref == 'refs/heads/main'", raw)
+        self.assertIn("VALYQON-RU-01", raw)
+        self.assertIn("persist-credentials: false", raw)
+        self.assertNotIn("pull_request:", raw)
+
+
+
+    def test_scoped_cert_pinned_russian_eis_tls_without_global_trust_mutation(self):
+        import ssl
+        from scripts.ru_trusted_live_probe import publisher_tls_context
+        # The preinstalled repository EIS root is an immutable local file,
+        # validated against the separately pinned canonical DER SHA-256.
+        verified = publisher_tls_context("zakupki.gov.ru")
+        self.assertTrue(verified.check_hostname)
+        self.assertEqual(verified.verify_mode, ssl.CERT_REQUIRED)
+
+        # Other official sites NEVER receive the EIS-specific CA.
+        with patch("scripts.ru_eis_pinned_tls_probe.verify_root",
+                   side_effect=AssertionError("should not load for another publisher")):
+            for host in ("etpgpb.ru", "44.fabrikant.ru", "www.roseltorg.ru",
+                         "www.tektorg.ru"):
+                context = publisher_tls_context(host)
+                self.assertTrue(context.check_hostname)
+                self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
+
+        # If the pinned EIS root fingerprint differs, reject before TLS
+        # connection; do not silently trust an arbitrary local CA bundle.
+        with patch("scripts.ru_eis_pinned_tls_probe.verify_root",
+                   side_effect=ValueError("Root DER fingerprint mismatch")):
+            with self.assertRaises(ValueError):
+                publisher_tls_context("zakupki.gov.ru")
+
 
 if __name__ == "__main__":
     unittest.main()

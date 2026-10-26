@@ -7,9 +7,11 @@ No data stored. This diagnoses reachability, NOT successful tender ingestion.
 from __future__ import annotations
 
 import http.client
+from html.parser import HTMLParser
 import json
 from concurrent.futures import ThreadPoolExecutor
 import ipaddress
+from pathlib import Path
 import re
 import socket
 import ssl
@@ -74,8 +76,36 @@ TARGETS = {
     "stavropol_rts_small": Target("market26.rts-tender.ru", "/"),
 }
 
+# Extra official GPB endpoints are intentionally NOT in batch_priority:
+# operator must choose one fixed label per approved main-only manual run.
+# Official GPB documentation lists /procedures/ and /procedures.rss;
+# new.etpgpb.ru serves the published page with the same section.
+# Accessibility is not proof of genuine original detail or ingestion.
+ON_DEMAND_TARGETS = {
+    "gpb_public_html": Target("etpgpb.ru", "/procedures/"),
+    "gpb_new_public_html": Target("new.etpgpb.ru", "/procedures/"),
+    "gpb_new_rss": Target("new.etpgpb.ru", "/procedures.rss", "rss"),
+    # Accredited GPB state procurement registry; 44-FZ cross-posts with EIS.
+    "gpb_gos44_html": Target("gos.etpgpb.ru", "/44/catalog/procedure"),
+    # Actual first-party 44-FZ current-published registry, mirrored from EIS.
+    "gpb_gos44_published": Target("gos.etpgpb.ru", "/44/catalog/procedure/published"),
+    # Official EIS root is a transport/TLS observation only. It does not
+    # establish a valid regional RSS feed or any original procurement.
+    "eis_official_home": Target("zakupki.gov.ru", "/"),
+}
+
 class UnsafeAddress(RuntimeError):
     pass
+
+
+class Non200OfficialResponse(ValueError):
+    """Bounded public-source HTTP status, with no response body or URL."""
+
+    def __init__(self, status):
+        if type(status) is not int or not 100 <= status <= 599:
+            raise ValueError("Invalid official HTTP status")
+        super().__init__("Official publisher did not return HTTP 200")
+        self.status = status
 
 def checked_ips(host: str) -> list[str]:
     records = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM, proto=socket.IPPROTO_TCP)
@@ -88,9 +118,26 @@ def checked_ips(host: str) -> list[str]:
     # Prefer IPv4 to avoid relying on IPv6 availability on a WSL runner.
     return sorted(addresses, key=lambda ip: ipaddress.ip_address(ip).version)
 
+def publisher_tls_context(host: str) -> ssl.SSLContext:
+    """Normal verified TLS + one canonical pinned RU CA for official EIS only.
+
+    The checked-in trusted Russian Root is verified by its independent DER
+    SHA-256 fingerprint before it is added to this *one connection* context.
+    No system trust mutation, unsafe response, hostname bypass or custom CA
+    for Fabrikant, GPB, Roseltorg, TEK-Torg or any other publisher.
+    """
+    context = ssl.create_default_context()
+    if host == "zakupki.gov.ru":
+        from scripts.ru_eis_pinned_tls_probe import verify_root
+        path = Path(__file__).resolve().parents[1] / "russian_trusted_root_ca_pem.crt"
+        pinned_pem = verify_root(path.read_bytes())
+        context.load_verify_locations(cadata=pinned_pem)
+    return context
+
+
 class VerifiedIPHTTPSConnection(http.client.HTTPSConnection):
     def __init__(self, host: str, ip: str):
-        super().__init__(host, timeout=TIMEOUT_SECONDS, context=ssl.create_default_context())
+        super().__init__(host, timeout=TIMEOUT_SECONDS, context=publisher_tls_context(host))
         self.pinned_ip = ip
 
     def connect(self):
@@ -122,7 +169,7 @@ def read_public(target: Target) -> tuple[str, bytes]:
             response = conn.getresponse()
             if response.status != 200:
                 print("RU_PROBE_HTTP_STATUS=" + str(response.status))
-                raise ValueError("Non-200 official endpoint")
+                raise Non200OfficialResponse(response.status)
             mime = response.getheader("content-type", "").lower()
             if target.mode == "rss":
                 if not any(s in mime for s in ("xml", "rss")):
@@ -143,7 +190,14 @@ def read_public(target: Target) -> tuple[str, bytes]:
 
 def describe(mode: str, payload: bytes) -> dict[str, int]:
     if mode == "rss":
+        # Even a real HTTP 200 must not qualify a DTD, entity or login XML
+        # document as the official public procurement RSS/Atom channel.
+        upper = payload.upper()
+        if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
+            raise ValueError("Untrusted RSS document declaration")
         root = ET.fromstring(payload)
+        if root.tag not in {"rss", "{http://www.w3.org/2005/Atom}feed"}:
+            raise ValueError("Not an RSS or Atom feed")
         return {"rss_items": len(root.findall("./channel/item")), "atom_items": len(root.findall("{http://www.w3.org/2005/Atom}entry"))}
     raw = payload.decode("utf-8-sig", "replace")
     return {
@@ -151,6 +205,128 @@ def describe(mode: str, payload: bytes) -> dict[str, int]:
         "uuid_tokens": len(set(re.findall(r"[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}", raw, flags=re.I))),
         "procurement_number_tokens": len(set(re.findall(r"(?<!\d)\d{19}(?!\d)", raw))),
     }
+
+
+
+class _RoseltorgVisibleOriginalCandidates(HTMLParser):
+    """Count public listing links, never treat them as verified detail records."""
+    HIDDEN = frozenset({"head", "script", "style", "template", "noscript",
+                        "svg", "iframe", "object"})
+    PATH = re.compile(r"/procedure/([A-Z0-9]{8,24})(?:/1)?/?\Z")
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.hidden = []
+        self.current = None
+        self.ids = set()
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self.HIDDEN:
+            self.hidden.append(tag)
+        if self.hidden:
+            return
+        if tag == "a":
+            href = dict(attrs).get("href")
+            if (type(href) is not str or not href or len(href) > 1500
+                    or "%" in href or "\\" in href
+                    or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in href)):
+                return
+            try:
+                p = urlsplit(href)
+                if (p.scheme not in ("", "https") or
+                        (p.netloc and p.netloc != "www.roseltorg.ru") or
+                        p.query or p.fragment or p.username or p.password or
+                        p.port is not None):
+                    return
+                m = self.PATH.fullmatch(p.path)
+                if m:
+                    self.current = (m.group(1), [])
+            except ValueError:
+                # One malformed external link must not block visible valid
+                # first-party procurement candidates on the same page.
+                return
+
+    def handle_data(self, data):
+        if self.current is not None and not self.hidden:
+            self.current[1].append(data)
+
+    def handle_endtag(self, tag):
+        if self.hidden:
+            if self.hidden[-1] == tag:
+                self.hidden.pop()
+            return
+        if tag == "a" and self.current is not None:
+            identity, title_parts = self.current
+            if any(piece.strip() for piece in title_parts):
+                self.ids.add(identity)
+            self.current = None
+
+
+def roseltorg_visible_original_candidates(body: bytes) -> int:
+    """Potential original links visible in public list, NOT detail verification."""
+    if type(body) is not bytes or not 0 < len(body) <= MAX_BYTES:
+        raise ValueError("Invalid publisher document")
+    parsed = _RoseltorgVisibleOriginalCandidates()
+    parsed.feed(body.decode("utf-8-sig", "replace"))
+    parsed.close()
+    return min(100, len(parsed.ids))
+
+
+# Five independent sources requiring real procurement-release proof; labels
+# map only to published first-party transport targets. Ingushetia's registered
+# Fabrikant mirror is a 44-FZ EIS crosspost; Chechnya's EIS HOME confirms only
+# origin HTTPS, not a region-filtered feed, EIS card or downstream ingestion.
+RECOVERY_FIVE = {
+    "ingushetia": TARGETS["fabrikant_44_mirror"],
+    "chechnya": ON_DEMAND_TARGETS["eis_official_home"],
+    "roseltorg": TARGETS["roseltorg"],
+    # Match the actual Worker HTML list URL; RSS availability is an optional
+    # separate origin observation and must not veto independently verified HTML.
+    "gpb": ON_DEMAND_TARGETS["gpb_public_html"],
+    "tektorg": TARGETS["tektorg"],
+}
+
+
+def priority_five_network() -> int:
+    """Bounded main-only trusted transport evidence, *not* source acceptance."""
+    if set(RECOVERY_FIVE) != {"ingushetia", "chechnya", "roseltorg", "gpb", "tektorg"}:
+        print("RU_FIVE=BLOCKED_ALLOWLIST")
+        return 2
+
+    def once(entry):
+        label, target = entry
+        try:
+            mime, body = read_public(target)
+            observed = describe(target.mode, body)
+            item = {"source": label, "status": "HTTPS_VISIBLE_NOT_INGESTED",
+                    "bytes": len(body), "document_tokens": observed}
+            if label == "roseltorg":
+                item["visible_canonical_candidates_not_verified"] = (
+                    roseltorg_visible_original_candidates(body)
+                )
+            return item
+        except Non200OfficialResponse as error:
+            return {"source": label, "status": "HTTP_REACHABLE_NON200",
+                    "http_status": error.status}
+        except (OSError, ValueError, UnsafeAddress, ET.ParseError, ssl.SSLError) as error:
+            return {"source": label, "status": "BLOCKED",
+                    "failure_class": type(error).__name__}
+
+    # Exactly 5 immutable first-party endpoints, <= 4 concurrent. Each pin
+    # checks ALL DNS IPs as public, retains hostname-verified TLS and refuses
+    # redirects. No PR code, user queries, credentials or subscriber messages.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(once, RECOVERY_FIVE.items()))
+    for item in results:
+        print("RU_FIVE_SOURCE=" + json.dumps(item, sort_keys=True))
+    visible = sum(v["status"] == "HTTPS_VISIBLE_NOT_INGESTED" for v in results)
+    print(f"RU_FIVE_FIRSTPARTY_HTTPS_VISIBLE={visible}/5")
+    print("RU_FIVE_ORIGINAL_DETAIL_VERIFIED=NO")
+    print("RU_FIVE_WORKER_SQL_ACCEPTED=NO")
+    print("RU_FIVE_REAL_TELEGRAM_ACK=NO")
+    print("PRODUCTION_CHANGED=NO")
+    return 0 if visible == len(RECOVERY_FIVE) else 2
+
 
 def batch_priority() -> int:
     # A bounded read-only operator survey, not 24 working procurement connectors.
@@ -184,12 +360,14 @@ def batch_priority() -> int:
 
 
 def main(label: str) -> int:
+    if label == "priority_five_network":
+        return priority_five_network()
     if label == "batch_priority":
         return batch_priority()
-    if label not in TARGETS:
+    if label not in TARGETS and label not in ON_DEMAND_TARGETS:
         print("RU_PROBE=REJECTED_UNKNOWN_SOURCE")
         return 2
-    target = TARGETS[label]
+    target = TARGETS[label] if label in TARGETS else ON_DEMAND_TARGETS[label]
     print("RU_PROBE_SOURCE=" + label)
     try:
         mime, body = read_public(target)

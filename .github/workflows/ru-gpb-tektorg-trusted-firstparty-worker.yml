@@ -1,0 +1,86 @@
+name: RU GPB or TEK-Torg real originals on approved RU network only
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/ru-gpb-tektorg-trusted-firstparty-worker.yml
+      - tests/test_ru_gpb_tektorg_trusted_worker_workflow.py
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Official procurement publisher for real Worker-to-SQL proof
+        required: true
+        type: choice
+        options:
+          - gpb_etp_public
+          - tektorg
+
+permissions:
+  contents: read
+concurrency:
+  group: ru-approved-original-worker-main-only
+  cancel-in-progress: false
+
+jobs:
+  offline-safety-contract:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Review main-only runner identity and exact allowed real Worker modules
+        run: python -m unittest discover -s tests -p test_ru_gpb_tektorg_trusted_worker_workflow.py -v
+
+  current-real-firstparty-worker-to-ephemeral-sql:
+    # This job MUST NEVER execute code from a PR or arbitrary commit.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.repository == 'Ramzes2023/TenderLens-AI'
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 20
+    steps:
+      - name: Refuse non-approved RU runner before any checkout
+        shell: bash
+        env:
+          ACTUAL_RUNNER_NAME: ${{ runner.name }}
+        run: |
+          set -euo pipefail
+          test "$ACTUAL_RUNNER_NAME" = "VALYQON-RU-01"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install reviewed pinned test dependencies
+        timeout-minutes: 9
+        run: python -m pip install -r requirements-dev.txt
+      - name: Require current official first-party original through leased Worker to SQLite and search
+        timeout-minutes: 8
+        shell: bash
+        env:
+          APPROVED_SOURCE: ${{ inputs.source }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          set -euo pipefail
+          case "$APPROVED_SOURCE" in
+            gpb_etp_public)
+              python -B -m scripts.ci_ru_gpb_public_worker
+              ;;
+            tektorg)
+              python -B -m scripts.ci_ru_tektorg_fenced_acceptance
+              ;;
+            *)
+              echo "RU_REAL_SOURCE=REJECTED_UNKNOWN"
+              exit 2
+              ;;
+          esac
+          echo "RU_REAL_USER_TELEGRAM_RECEIPT=NOT_TESTED"
+          echo "PRODUCTION_CHANGED=NO"

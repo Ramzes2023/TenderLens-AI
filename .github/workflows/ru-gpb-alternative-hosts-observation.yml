@@ -1,0 +1,45 @@
+name: RU GPB official alternative public hosts reachability observation
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/ru_trusted_live_probe.py
+      - tests/test_ru_trusted_live_probe.py
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  gpb-official-alternate-hosts-observation-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Bounded public HTTPS-only official-origin observations, not tender ingestion
+        timeout-minutes: 6
+        shell: bash
+        run: |
+          set -uo pipefail
+          ok=0
+          blocked=0
+          for source in gpb_rss gpb_public_html gpb_new_public_html gpb_new_rss gpb_gos44_html gpb_gos44_published; do
+            if python -B -m scripts.ru_trusted_live_probe "$source"; then
+              ok=$((ok + 1))
+            else
+              blocked=$((blocked + 1))
+            fi
+          done
+          echo "RU_GPB_OFFICIAL_HOST_VISIBLE_ONLY=$ok"
+          echo "RU_GPB_OFFICIAL_HOST_BLOCKED=$blocked"
+          echo "RU_GPB_DETAIL_VERIFIED=NO"
+          echo "RU_GPB_WORKER_SQL_ACCEPTED=NO"
+          echo "RU_GPB_TENANT_NOTIFIED=NO"
+          echo "PRODUCTION_CHANGED=NO"
+          # An observation cannot gate procurement ingestion release.
+          # Only strict separate first-party source Worker CI can approve it.
+          exit 0

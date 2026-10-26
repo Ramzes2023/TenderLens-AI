@@ -8,6 +8,7 @@ on:
       - "app/sources/**"
       - "app/jobs/**"
       - "scripts/ci_cis_am_tj_live_acceptance.py"
+      - "tests/test_cis_am_tcp_reset_retry.py"
       - ".github/workflows/cis-am-tj-live-acceptance.yml"
   workflow_dispatch:
 
@@ -31,6 +32,11 @@ jobs:
           cache: pip
       - name: Install test environment
         run: python -m pip install -r requirements-dev.txt
+      - name: Assert reset-only transport recovery without SSL or policy bypass (offline)
+        if: matrix.source == 'am_armeps'
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python -B -m pytest -q tests/test_cis_am_tcp_reset_retry.py
       - name: Verify actual official HTTPS to job to isolated SQLite to snapshot
         timeout-minutes: 4
         env:

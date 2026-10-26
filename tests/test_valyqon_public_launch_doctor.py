@@ -92,6 +92,7 @@ def test_ssh_fail_closed_with_sanitized_category_and_independent_edge(tmp_path):
         local_check=lambda:{"LOCAL_RELEASE_COMPOSE":"PASS"},
         ssh_check=inaccessible,https_check=fake_https)
     assert result["vps_ssh"]=="BLOCKED_SSH_AUTH_REJECTED"
+    assert result["vps_ssh_failure_stage"]=="UNKNOWN"
     assert result["external_https"]=="PASS"
     assert not result["technical_staging_edge_pass"]
 
@@ -133,3 +134,29 @@ def test_cli_redacts_local_key_and_remote_errors(tmp_path,monkeypatch,capsys):
     assert key not in output
     assert "PRIVATE" not in output
     assert "63.189.75.15" not in output
+
+
+def test_launch_doctor_surfaces_only_enum_stage_and_css_on_legacy_redirect(tmp_path):
+    def fail_ssh(*_args, **_kwargs):
+        raise ssh.SSHPreflightError(
+            "SSH_REMOTE_SCRIPT_FAILED", stage="PUBLIC_COMPOSE", exit_code=1
+        )
+    result = doctor.evaluate(
+        **inputs(tmp_path),
+        local_check=lambda: {"LOCAL_RELEASE_COMPOSE": "PASS"},
+        ssh_check=fail_ssh,
+        https_check=lambda _: {
+            "public_edge_pass": False,
+            "homepage": "NOT_VERIFIED",
+            "health": "PASS",
+            "premium_css": "NOT_VERIFIED",
+            "redirect_class": "login",
+        },
+    )
+    assert result["vps_ssh"] == "BLOCKED_SSH_REMOTE_SCRIPT_FAILED"
+    assert result["vps_ssh_failure_stage"] == "PUBLIC_COMPOSE"
+    assert result["external_premium_css"] == "NOT_VERIFIED"
+    assert result["external_health"] == "PASS"
+    assert result["external_homepage"] == "NOT_VERIFIED"
+    assert result["technical_staging_edge_pass"] is False
+    assert result["public_commercial_launch_approved"] is False

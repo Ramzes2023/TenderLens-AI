@@ -1,0 +1,73 @@
+name: VALYQON Staged SaaS Combined Release Gate
+
+# Static/on-runner acceptance only. No deployment, external source polling,
+# payments, production credentials, live PostgreSQL or customer messages.
+on:
+  push:
+    branches:
+      - integration/valyqon-staged-saas-main-20261026
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  combined-release-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install local tests
+        run: python -m pip install -r requirements-dev.txt
+      - name: Compile changed release modules
+        run: |
+          python -m compileall -q scripts/verify_public_https.py scripts/check_public_operator_compose.py scripts/check_release_artifacts.py app/launch/deadline_alerts.py
+      - name: Strict HTTPS, backup custody and bounded deadline scans
+        run: |
+          python -m pytest -q tests/test_verify_public_https.py tests/test_release_evidence_guard.py tests/test_deadline_alerts_fair_scan.py tests/test_public_operator_compose.py tests/test_public_compose_resolved.py tests/test_public_pilot_release_policy.py
+      - name: Preserve old deadline sender tests
+        run: |
+          python -m pytest -q tests/test_deadline_alerts_database.py tests/test_deadline_alerts_launch.py
+
+  operator-compose-actual-resolution:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test real Docker-resolved services with hostile synthetic source flags
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e .env
+          trap 'rm -f .env' EXIT
+          printf 'APP_ENV=production\nTELEGRAM_BOT_TOKEN=\n' > .env
+          chmod 600 .env
+          python -m scripts.check_public_operator_compose
+        env:
+          TENDERLENS_DOMAIN: stage.example.invalid
+          ACME_EMAIL: ci@example.invalid
+          DATABASE_URL: postgresql://synthetic:synthetic@db.example.invalid:5432/disposable
+          GPB_ETP_PUBLIC_ENABLED: 'true'
+          ROSELTORG_PUBLIC_ENABLED: 'true'
+          TEKTORG_PUBLIC_ENABLED: 'true'
+          B2B_CENTER_ENABLED: 'true'
+          EIS_223_ENABLED: 'true'
+          EIS_44_HTML_ENABLED: 'true'
+          MONITORING_ENABLED: 'true'
+          VALYQON_DEADLINE_ALERTS_ENABLED: 'true'
+          VALYQON_PUBLIC_AI_ENABLED: 'true'
+          VALYQON_RU_BACKGROUND_CATALOG_ENABLED: 'true'

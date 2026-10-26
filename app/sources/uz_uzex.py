@@ -118,6 +118,53 @@ def parse_uzex_tradelist(data, *, type_id: int, allow_incomplete: bool = False):
     return list(result.values())
 
 
+def _uzex_public_rows(payload):
+    """Official public TradeList may return a direct list or a data/items list.
+
+    Never interpret an opaque mapping, an error response, or an ID-only record
+    as an actual tender. Only complete first-party rows can survive the
+    independent per-notice validator.
+    """
+    if type(payload) is list:
+        return payload
+    if type(payload) is dict:
+        if payload.get("success") is False or payload.get("ok") is False:
+            raise SourceError("UzEx public API reported failure.")
+        for field in ("data", "items"):
+            if type(payload.get(field)) is list:
+                return payload[field]
+    raise SourceError("UzEx changed public list envelope.")
+
+
+def parse_uzex_current_batch(data, *, type_id: int):
+    """Keep independently valid official current rows; no ID-only acceptance.
+
+    TradeList sometimes includes incomplete individual entries. Reject those
+    entries without losing other strictly verified original tenders. The
+    entire batch still fails when no complete original remains, when the
+    official list shape changes, or when a duplicate original ID appears.
+    """
+    if type_id not in (1, 2) or type(data) is not list or not 0 < len(data) <= PER_TYPE:
+        raise SourceError("UzEx changed public list shape.")
+    accepted = []
+    seen = set()
+    for row in data:
+        try:
+            notices = parse_uzex_tradelist([row], type_id=type_id)
+        except SourceError:
+            # A bad individual row is not a verified original; skipping
+            # does not turn its synthetic/unknown fields into tender data.
+            continue
+        item = notices[0]
+        if item.external_id in seen:
+            raise SourceError("UzEx duplicated official original in current batch.")
+        seen.add(item.external_id)
+        accepted.append(item)
+    if not accepted:
+        raise SourceError("UzEx no independently verified tender rows in current batch.")
+    return accepted
+
+
 @dataclass(frozen=True)
 class UzbekistanUzexSource:
     timeout: float = 12.0

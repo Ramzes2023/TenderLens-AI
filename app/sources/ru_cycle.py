@@ -20,9 +20,20 @@ RU_APPROVED_SOURCES = (
     "south_ural_public",
     "stan_commercial_public",
     "kavkaz_rf_firstparty",
-    # Proven native public LIST -> fenced Worker -> SQLite; original deep details not verified.
+    # EIS first-party originals passed local real Worker acceptance; the
+    # accredited Fabrikant ETP mirror passed GitHub-hosted real acceptance
+    # on 2026-10-20 (run 39407402210). These are *overlapping* 44-FZ
+    # publications, not two independent procurement inventories. Both
+    # remain individually operator opt-in, default OFF, and cannot enqueue
+    # without explicit configuration.
+    "ru_ingushetia_eis44",
+    "ru_ingushetia_fabrikant44",
+    # Preserve concurrently reviewed regional sources already approved on
+    # main. These keys remain inert unless the merged catalog independently
+    # registers AND the operator explicitly enables each source.
+    # Samara public listing is list-only; do not claim deep-card verification.
     "ru_samara_public_list",
-    # Official anonymous Dagestan list -> fenced Worker/SQL; deep details login-protected.
+    # Dagestan original details can require login; do not claim deep access.
     "ru_dagestan_public_list",
 )
 

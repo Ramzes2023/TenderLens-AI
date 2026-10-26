@@ -33,10 +33,11 @@ def test_source_directory_is_scoped_to_actual_registry_not_live_health():
     assert result["sources"][1]["enabled"] is True
     assert result["sources"][1]["homepage"]=="https://ted.europa.eu/"
     # Opt-in adapters are discoverable, but are not counted as registered.
-    assert result["optional_count"] == 10
+    assert result["optional_count"] == 12  # two separately opt-in Ingushetia sources
     assert result["candidate_count"] == 37
     keys = {item["key"] for item in result["optional_sources"]}
-    assert {"lenobl_small_public", "nmck_native_public", "b2b_center"} <= keys
+    assert {"lenobl_small_public", "nmck_native_public", "b2b_center",
+            "ru_ingushetia_eis44", "ru_ingushetia_fabrikant44"} <= keys
     assert all(item["registered"] is False and item["enabled"] is False
                and item["live_status"] == "not_verified"
                for item in result["optional_sources"])
@@ -70,7 +71,7 @@ def test_ru_optional_adapter_not_duplicated_when_registered():
     ))
     result = source_directory(catalog)
     assert result["source_count"] == 3
-    assert result["optional_count"] == 9
+    assert result["optional_count"] == 11  # one registered, two new opt-in regional adapters
     assert result["candidate_count"] == 37
     assert sum(item["key"] == "lenobl_small_public" for item in
                result["sources"] + result["optional_sources"]) == 1
@@ -138,3 +139,18 @@ def test_samara_market_visible_once_as_disabled_optin_not_duplicate_research():
     assert len(entries) == 1
     assert entries[0]["inventory_status"] == "registered"
     assert entries[0]["focus"] == "regional_small"
+
+
+def test_ingushetia_public_directory_never_counts_staged_publishers_as_live_sources():
+    """The two 44-FZ mirrors remain separately optional, not two live sources."""
+    from app.api.ru_source_inventory import RU_REGIONAL_PUBLISHER_FINDINGS
+    directory = source_directory(Catalog())
+    regional = {x["key"]: x for x in directory["optional_sources"]
+                if x["key"] in {"ru_ingushetia_eis44", "ru_ingushetia_fabrikant44"}}
+    assert set(regional) == {"ru_ingushetia_eis44", "ru_ingushetia_fabrikant44"}
+    assert all(x["registered"] is False and x["enabled"] is False
+               and x["live_status"] == "not_verified" for x in regional.values())
+    assert directory["source_count"] == 2
+    assert directory["live_health_verified"] is False
+    assert sum(x["region_code"] == "06" for x in RU_REGIONAL_PUBLISHER_FINDINGS) == 1
+    assert not any(x["production_ingestion_verified"] for x in RU_REGIONAL_PUBLISHER_FINDINGS)

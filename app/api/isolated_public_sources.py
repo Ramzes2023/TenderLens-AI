@@ -51,6 +51,8 @@ def create_public_source_app(*, database_factory=None) -> FastAPI:
         docs_url=None, redoc_url=None, openapi_url=None,
         lifespan=lifespan,
     )
+    # Only this isolated, operator-approved feed hides expired archives.
+    app.state.public_source_active_only = True
     app.state.guest_search_limiter = AuthRateLimiter(
         policies={"guest-search": AuthRatePolicy(24, 24, 60)},
         max_entries=8192,

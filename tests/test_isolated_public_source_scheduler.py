@@ -29,6 +29,10 @@ def test_scheduler_fail_closed_without_exact_isolated_env(monkeypatch):
     monkeypatch.setenv("MIKROTON_TENDER_ENABLED","false")
     with pytest.raises(ValueError,match="not explicitly approved"):
         approved_cycle()
+    monkeypatch.setenv("MIKROTON_TENDER_ENABLED","true")
+    monkeypatch.setenv("STAN_COMMERCIAL_PUBLIC_ENABLED","false")
+    with pytest.raises(ValueError,match="not explicitly approved"):
+        approved_cycle()
 
 
 def test_scheduler_has_no_host_access_and_is_opt_in():

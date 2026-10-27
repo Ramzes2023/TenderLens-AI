@@ -75,3 +75,36 @@ captured previous config. Never use `docker compose down -v`.
 
 **Commerce, sign-up, payment, AI, source-to-user delivery and PostgreSQL
 cutover are still BLOCKED** independently of a successful static landing.
+
+
+## One owner-side read-only topology command
+
+GitHub cannot access the operator's local SSH private key. Run only from
+the already available `VALYQON-PUBLIC-DIAG-20261026` Windows checkout:
+
+```powershell
+$p = "$HOME\VALYQON-PUBLIC-DIAG-20261026"
+$k = "$HOME\.ssh\tenderlens_vps_ed25519"
+git -C $p pull --ff-only origin fix/public-vps-local-preflight-20261026
+if ($LASTEXITCODE -ne 0) { throw "Git fast-forward failed; no server action" }
+Push-Location $p
+try {
+    py -3.12 -B -m scripts.valyqon_public_caddy_topology `
+      --ssh-host 63.189.75.15 --ssh-key $k
+    Write-Host "TOPOLOGY_EXIT_CODE=$LASTEXITCODE"
+} finally {
+    Pop-Location
+}
+```
+
+This checks six short pinned-SSH commands without reading or uploading local
+key bytes, private source, server configuration contents, customer records,
+secrets, SQL data or backups. Only finite status labels are printed; no
+Docker services are changed. The return code is 0 only if the existing Caddy
+looks structurally compatible with the reviewed Compose overlay. **Even
+a topology PASS is not deployment approval or backup/rollback proof**.
+
+A BLOCKED result does not mean the VPS is offline; it may be a different
+legacy Compose root, another Caddy service, non-Docker reverse proxy or
+current shell permissions. Do not blindly use the overlay until the running
+proxy is identified and safe rollback accepted. 

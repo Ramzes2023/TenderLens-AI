@@ -1,4 +1,4 @@
-﻿# Resend readiness audit — 27 October 2026
+# Resend readiness audit — 27 October 2026
 
 Scope: issue #334 and mail gates of #293. Audited current main d9446c0,
 PR #328 (RFC 5322 headers), #331 (Resend-only), #332 (one-shot diagnostic),
@@ -48,7 +48,7 @@ workspace and server backup directory; no credentials were committed.
 
 **Limit:** this is configuration/application recovery evidence, not a live cutover or
 complete ordered-Compose deployment rollback rehearsal. That release gate stays open.
-Backup still lives in temporary off-host storage and needs durable custody before release.
+Encrypted archive and DPAPI-protected key were additionally copied out of temporary storage into a private off-host workspace directory. Windows ACL inheritance is disabled and access is limited to the current user; Git local exclusion verified for both files. Archive SHA256 matched fd4abd7ad7f8259934410cf21804d346dae3d0e1ad70e2f71a3e622cc6e42896. This preserves the existing snapshot; refresh it before any future cutover.
 
 ## Cause and remaining gates
 
@@ -75,3 +75,5 @@ No settings or credentials were changed to work around that restriction.
 Production remains BLOCKED on real recipient receipt, provider evidence, complete
 isolated deployment rollback, fresh backup, bona fide auth-email E2E and separate legal
 approval for public signup. No purchase or ownership of valyqon.ai is assumed.
+
+Final production checks after isolation: all six public HTTPS GET routes returned 200. Read-only comparison of every protected table in the original backup manifest passed, as did SQLite integrity and foreign-key checks. API container identity unchanged.

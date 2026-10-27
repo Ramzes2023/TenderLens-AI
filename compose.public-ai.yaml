@@ -1,0 +1,13 @@
+# Operator-only opt-in overlay for actual public product-help AI.
+#
+# This overlay is never loaded by the default public release command or CI.
+# Apply ONLY after provisioning the server-side GigaChat provider credentials,
+# verifying HTTPS/quotas, and accepting the AI spend/abuse risk.
+# A missing flag still fails closed. Never put API credentials in this file.
+#
+# Usage (on the authorized deployment host):
+#   docker compose -f compose.public.yaml -f compose.public-ai.yaml up -d --no-deps --build api
+services:
+  api:
+    environment:
+      VALYQON_PUBLIC_AI_ENABLED: "${VALYQON_PUBLIC_AI_ENABLED:-false}"

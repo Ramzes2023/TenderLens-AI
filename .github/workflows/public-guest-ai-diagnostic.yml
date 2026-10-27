@@ -1,0 +1,51 @@
+name: VALYQON public guest AI live diagnosis
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/probe_public_guest_ai.py
+      - tests/test_probe_public_guest_ai.py
+      - .github/workflows/public-guest-ai-diagnostic.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-classifier-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prove known 503s are classified and fake HTTP 200 is rejected
+        run: |
+          python -m unittest -v tests.test_probe_public_guest_ai
+          python -m compileall -q scripts/probe_public_guest_ai.py
+
+  actual-public-guest-answer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    needs: offline-classifier-tests
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: One live HTTPS product-only guest request; no credentials or deployment
+        run: python -B -m scripts.probe_public_guest_ai
+      - name: Explain the verification boundary
+        if: always()
+        run: |
+          echo "One status-classified public request only."
+          echo "NO_REMOTE_SHELL=YES"
+          echo "NO_DEPLOY=YES"
+          echo "NO_SECRETS_OR_CUSTOMER_DOCUMENTS=YES"
+          echo "NO_COMMERCE_OR_SOURCE_RELEASE_CLAIM=YES"

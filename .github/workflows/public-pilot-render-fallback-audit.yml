@@ -1,0 +1,50 @@
+name: Public Pilot Render Fallback Audit
+
+on:
+  push:
+    branches:
+      - feat/public-pilot-render-fallback-20261027
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  blueprint-and-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PYTHON_DOTENV_DISABLED: '1'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install YAML parser and pytest in disposable runner
+        run: python -m pip install 'pytest==9.1.1' 'PyYAML==6.0.3'
+      - name: Parse Render blueprint and prohibit unsafe hosting side effects
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+          config=yaml.safe_load(Path("render.yaml").read_text(encoding="utf-8"))
+          assert sorted(config)==["services"]
+          services=config["services"]
+          assert len(services)==1
+          item=services[0]
+          assert item["type"]=="web"
+          assert item["runtime"]=="docker"
+          assert item["plan"]=="free"
+          assert item["autoDeployTrigger"]=="off"
+          assert item["dockerfilePath"]=="./Dockerfile"
+          assert item["dockerCommand"]=="python -m app.public_pilot"
+          assert item["healthCheckPath"]=="/health"
+          assert "envVars" not in item and "disk" not in item
+          assert Path("Dockerfile").is_file()
+          print("RENDER_BLUEPRINT_STATIC_ACCEPTANCE=PASS")
+          print("HOSTED_URL=NOT_DEPLOYED")
+          PY
+      - name: Validate fail-closed public pilot and Render contract tests
+        run: |
+          python -m pytest -q tests/test_public_pilot_render_fallback.py tests/test_public_pilot_release_policy.py

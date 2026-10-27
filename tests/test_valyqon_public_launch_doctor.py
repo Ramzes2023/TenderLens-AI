@@ -160,3 +160,32 @@ def test_launch_doctor_surfaces_only_enum_stage_and_css_on_legacy_redirect(tmp_p
     assert result["external_homepage"] == "NOT_VERIFIED"
     assert result["technical_staging_edge_pass"] is False
     assert result["public_commercial_launch_approved"] is False
+
+
+def test_valid_public_tls_and_legacy_login_still_blocks_release(tmp_path):
+    result = doctor.evaluate(
+        **inputs(tmp_path),
+        local_check=lambda: {"LOCAL_RELEASE_COMPOSE": "PASS"},
+        ssh_check=lambda *a, **kw: ({
+            "REPO_PRESENT": "YES", "PUBLIC_COMPOSE_PRESENT": "YES",
+            "PUBLIC_api_RUNNING": "UNKNOWN",
+            "PUBLIC_caddy_RUNNING": "UNKNOWN",
+            "DOCKER_USABLE": "UNKNOWN",
+        }, False),
+        https_check=lambda _: {
+            "tls": "PASS",
+            "public_edge_pass": False,
+            "homepage": "NOT_VERIFIED",
+            "health": "PASS",
+            "premium_css": "NOT_VERIFIED",
+            "redirect_class": "login",
+        },
+    )
+    assert result["external_tls"] == "PASS"
+    assert result["external_https"] == "BLOCKED"
+    assert result["edge_failure_class"] == "login"
+    assert result["vps_docker"] == "UNKNOWN"
+    assert result["vps_api_caddy"] == "BLOCKED"
+    assert result["vps_exact_sha"] == "BLOCKED"
+    assert result["technical_staging_edge_pass"] is False
+    assert result["public_commercial_launch_approved"] is False

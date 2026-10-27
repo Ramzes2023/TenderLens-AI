@@ -1,0 +1,11 @@
+# Release candidate ONLY; no containers start by committing this file.
+# The existing public Compose stack owns the api and Caddy data volumes.
+# Review image provenance, existing Compose labels, backup/rollback and host
+# routing BEFORE any operator-authorized change.
+# IMPORTANT: `docker compose up -d --no-deps caddy` ONLY after dry-run.
+# This overlay changes Caddy only; no API image/database/source-worker settings.
+services:
+  caddy:
+    volumes:
+      - ./ops/public_landing/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./ops/public_landing/site:/srv/valyqon-public:ro

@@ -1,0 +1,64 @@
+# Separate, explicit operator deployment. DO NOT add this to the five
+# existing public-API Compose descriptors. No production API recreation,
+# SQLite mount, DB credentials, migration, host port, Telegram or worker.
+#
+# Before using this standalone Compose file:
+# - Check that the existing public Caddy is on tenderlens-vps_edge.
+# - Review the private guest-AI-only env file; never commit it.
+# - Supply its full path in VALYQON_GUEST_AI_ENV_FILE.
+# - Apply the exact-path Caddy proxy rule only after isolated acceptance.
+services:
+  guest-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tenderlens-ai:isolated-guest-ai
+    restart: unless-stopped
+    command:
+      - uvicorn
+      - app.api.isolated_guest_ai:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8100"
+      - --workers
+      - "1"
+      - --proxy-headers
+      - --forwarded-allow-ips
+      - 172.30.19.2
+    env_file:
+      - "${VALYQON_GUEST_AI_ENV_FILE:?private guest-only env file required}"
+    environment:
+      VALYQON_PUBLIC_AI_ENABLED: "true"
+      VALYQON_AI_PROVIDER: gigachat
+      VALYQON_AI_FALLBACK_ENABLED: "false"
+      VALYQON_AI_MAX_CONCURRENCY: "2"
+      VALYQON_AI_MAX_ATTEMPTS: "1"
+      VALYQON_AI_REQUEST_TIMEOUT_SECONDS: "12"
+      GIGACHAT_CA_BUNDLE_FILE: /app/certs/russian_trusted_root_ca_pem.crt
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 64
+    mem_limit: 512m
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "from urllib.request import urlopen; urlopen('http://127.0.0.1:8100/_internal/health', timeout=3).close()"
+      start_period: 20s
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - existing_public_edge
+
+networks:
+  existing_public_edge:
+    external: true
+    name: tenderlens-vps_edge

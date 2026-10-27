@@ -218,3 +218,22 @@ html[lang=ru] .landing.premium[data-chart-preview=illustrative] .vqx-product::af
 .landing.premium[data-public-analytics-mode=demo] .vq-pulse-metric{border-color:#d7d0ff;background:#f8f6ff}
 .landing.premium[data-public-analytics-mode=demo] .vqx-product::after{content:"DEMO · NOT REAL DATA";position:absolute;right:16px;top:42px;z-index:5;font-size:9px;font-weight:900;letter-spacing:.08em;color:#3d357e;background:#f5f1ff;border:1px solid #bab2f8;padding:7px 10px;border-radius:7px;box-shadow:0 5px 14px #172b5c22}
 html[lang=ru] .landing.premium[data-public-analytics-mode=demo] .vqx-product::after{content:"ДЕМО · УЧЕБНЫЕ ДАННЫЕ"}
+
+
+/* Public early-access hosting: never disguise an unapproved signup as available. */
+body.landing .public-pilot-notice {
+  margin: 12px auto 0;
+  max-width: 1160px;
+  padding: 13px 18px;
+  border-radius: 12px;
+  color: #e2eaff;
+  background: linear-gradient(100deg, #192d63, #283f89);
+  border: 1px solid #6e8bdb;
+  font-size: 12px;
+  line-height: 1.55;
+  font-weight: 700;
+  text-align: center;
+}
+@media(max-width: 680px) {
+  body.landing .public-pilot-notice {margin: 12px 12px 0;padding: 12px;}
+}

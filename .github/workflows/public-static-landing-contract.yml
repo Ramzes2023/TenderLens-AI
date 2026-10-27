@@ -1,0 +1,84 @@
+name: Public static homepage isolated Caddy acceptance
+
+on:
+  pull_request:
+    paths:
+      - "ops/public_landing/**"
+      - "tests/test_valyqon_public_static_landing.py"
+      - ".github/workflows/public-static-landing-contract.yml"
+  push:
+    branches: [main]
+    paths:
+      - "ops/public_landing/**"
+      - "tests/test_valyqon_public_static_landing.py"
+      - ".github/workflows/public-static-landing-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-static-caddy-routing-isolated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Offline release isolation assertions
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pytest -q tests/test_valyqon_public_static_landing.py
+      - name: Validate Caddy config offline using pinned runtime image
+        run: |
+          docker run --rm \
+            -v "$PWD/ops/public_landing/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -e 'TENDERLENS_DOMAIN=:8090' -e 'ACME_EMAIL=release@example.test' \
+            caddy:2.11.6-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: Test real Caddy homepage, CSS, CSP and unchanged API routes on isolated mock
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker network create valyqon-static-ci
+          mkdir -p "$RUNNER_TEMP/valyqon-ci-mock-api/api/v1/auth"
+          printf 'LEGACY_LOGIN_PROXY_OK\n' > "$RUNNER_TEMP/valyqon-ci-mock-api/login"
+          printf 'LEGACY_HEALTH_PROXY_OK\n' > "$RUNNER_TEMP/valyqon-ci-mock-api/health"
+          printf 'LEGACY_AUTH_PROXY_OK\n' > "$RUNNER_TEMP/valyqon-ci-mock-api/api/v1/auth/me"
+          docker run -d --rm --name api --network valyqon-static-ci \
+            -v "$RUNNER_TEMP/valyqon-ci-mock-api:/srv:ro" -w /srv \
+            python:3.12-alpine python -m http.server 8000 --bind 0.0.0.0
+          docker run -d --rm --name valyqon-static-caddy --network valyqon-static-ci \
+            -p '127.0.0.1:8090:8090' -e 'TENDERLENS_DOMAIN=:8090' \
+            -e 'ACME_EMAIL=release@example.test' \
+            -v "$PWD/ops/public_landing/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -v "$PWD/ops/public_landing/site:/srv/valyqon-public:ro" \
+            caddy:2.11.6-alpine caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+          for n in $(seq 1 25); do
+            if curl --silent --fail http://127.0.0.1:8090/ -o "$RUNNER_TEMP/home.html"; then break; fi
+            sleep 1
+          done
+          grep -F 'See the opportunity.' "$RUNNER_TEMP/home.html"
+          grep -F 'PUBLIC PREVIEW' "$RUNNER_TEMP/home.html"
+          curl --fail --silent --show-error -D "$RUNNER_TEMP/landing-headers" \
+            -o "$RUNNER_TEMP/css" http://127.0.0.1:8090/valyqon-public-landing.css
+          grep -F 'color:' "$RUNNER_TEMP/css"
+          curl --fail --silent --show-error -D "$RUNNER_TEMP/home-headers" \
+            -o "$RUNNER_TEMP/home.html" http://127.0.0.1:8090/
+          grep -i 'content-security-policy:.*default-src' "$RUNNER_TEMP/home-headers"
+          grep -i 'strict-transport-security:' "$RUNNER_TEMP/home-headers"
+          for item in login health api/v1/auth/me; do
+            curl --fail --silent --show-error "http://127.0.0.1:8090/$item" \
+              | grep -F "LEGACY_$(case "$item" in login) echo LOGIN;; health) echo HEALTH;; *) echo AUTH;; esac)_PROXY_OK"
+          done
+          ! grep -F 'LEGACY_LOGIN_PROXY_OK' "$RUNNER_TEMP/home.html"
+          ! grep -F 'user records' "$RUNNER_TEMP/home.html"
+          echo STATIC_EDGE_ISOLATED_ROUTING_PASS=YES
+      - name: Stop isolated CI only
+        if: always()
+        shell: bash
+        run: |
+          docker rm -f valyqon-static-caddy api >/dev/null 2>&1 || true
+          docker network rm valyqon-static-ci >/dev/null 2>&1 || true

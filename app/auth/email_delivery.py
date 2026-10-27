@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 import smtplib
 import ssl
+from datetime import datetime, timezone
 from email.message import EmailMessage
+from email.utils import format_datetime, make_msgid, parseaddr
 from typing import Protocol
 from urllib.parse import urlsplit
 
@@ -114,6 +116,19 @@ def normalize_public_base_url(
     return candidate
 
 
+def _set_delivery_headers(message: EmailMessage, from_address: str) -> None:
+    """Supply RFC 5322 headers omitted by smtplib.send_message()."""
+    address = parseaddr(from_address)[1]
+    domain = address.rpartition("@")[2]
+    if not domain:
+        raise EmailDeliveryConfigurationError(
+            "SMTP from address must contain a valid domain."
+        )
+
+    message["Date"] = format_datetime(datetime.now(timezone.utc))
+    message["Message-ID"] = make_msgid(domain=domain)
+
+
 class SMTPEmailSender:
     def __init__(
         self,
@@ -210,6 +225,7 @@ class SMTPEmailSender:
             self.from_address
         )
         message["To"] = recipient
+        _set_delivery_headers(message, self.from_address)
 
         message.set_content(
             "Verify your VALYQON AI email address.\n\n"
@@ -277,6 +293,7 @@ class SMTPEmailSender:
         message["Subject"] = "Reset your VALYQON AI password"
         message["From"] = self.from_address
         message["To"] = recipient
+        _set_delivery_headers(message, self.from_address)
         message.set_content(
             "Reset your VALYQON AI password.\n\n"
             f"{reset_url}\n\n"
@@ -310,6 +327,7 @@ class SMTPEmailSender:
         message["Subject"] = "VALYQON AI — deadline approaching"
         message["From"] = self.from_address
         message["To"] = recipient
+        _set_delivery_headers(message, self.from_address)
         message.set_content(text)
         try:
             if self.ssl_enabled:

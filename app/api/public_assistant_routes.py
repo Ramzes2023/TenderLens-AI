@@ -66,19 +66,25 @@ async def guest_help_answer(payload: GuestHelpQuestion, request: Request):
     question = payload.question.strip()
     if len(question) < 3:
         raise HTTPException(422, "Please enter a question.")
-    peer = getattr(request.client, "host", None) or "unknown"
-    limiter = request.app.state.guest_ai_limiter
-    retry = limiter.consume("guest-ai", peer, peer)
-    if retry is not None:
-        raise HTTPException(429, "Too many requests. Please try later.",
-                            headers={"Retry-After": str(retry), **PUBLIC_HEADERS})
-    # Public LLM usage has a cost. A provider being configured for signed-in
-    # users must not automatically expose a paid endpoint to anonymous traffic.
-    if os.environ.get("VALYQON_PUBLIC_AI_ENABLED", "false").lower() not in {"1", "true"}:
+    # Public LLM usage has a cost. A provider configured for signed-in users
+    # must never implicitly enable anonymous generation. Do not consume guest
+    # rate-limit budget while the optional feature is disabled or unconfigured.
+    if os.environ.get("VALYQON_PUBLIC_AI_ENABLED", "false").strip().lower() not in {"1", "true"}:
         raise HTTPException(503, "Public AI help is not enabled.", headers=PUBLIC_HEADERS)
     provider = getattr(request.app.state.runtime, "provider", None)
     if provider is None:
         raise HTTPException(503, "Public AI help is not configured.", headers=PUBLIC_HEADERS)
+    peer = getattr(request.client, "host", None) or "unknown"
+    limiter = request.app.state.guest_ai_limiter
+    retry = limiter.consume("guest-ai", peer, peer)
+    if retry is None:
+        # A second, process-wide budget bounds provider expense even if an
+        # attacker rotates client IPs. This is NOT a distributed quota:
+        # the public operator must additionally configure edge/provider caps.
+        retry = limiter.consume("guest-ai-global", "public", "public")
+    if retry is not None:
+        raise HTTPException(429, "Too many requests. Please try later.",
+                            headers={"Retry-After": str(retry), **PUBLIC_HEADERS})
     # No customer context, database connection, search results or model tools.
     prompt = PRODUCT_GUIDE + "\n" + question
     try:

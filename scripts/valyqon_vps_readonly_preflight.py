@@ -36,10 +36,16 @@ else
   echo WORKTREE_CLEAN=UNKNOWN
 fi
 printf '%s\n' VALYQON_PREFLIGHT_STAGE=DOCKER >&2
-if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+# A hung Docker daemon must not stall the entire read-only VPS inventory.
+# A timeout is UNKNOWN, not proof the daemon is unavailable. Never mutate it.
+if ! command -v docker >/dev/null 2>&1; then
+  echo DOCKER_USABLE=NO
+elif ! command -v timeout >/dev/null 2>&1; then
+  echo DOCKER_USABLE=UNKNOWN
+elif timeout 6s docker info >/dev/null 2>&1; then
   echo DOCKER_USABLE=YES
 else
-  echo DOCKER_USABLE=NO
+  echo DOCKER_USABLE=UNKNOWN
 fi
 printf '%s\n' VALYQON_PREFLIGHT_STAGE=PUBLIC_COMPOSE >&2
 if test -f /opt/tenderlens/compose.public.yaml; then
@@ -53,10 +59,11 @@ else
   echo APP_ENV_FILE_PRESENT=NO
 fi
 if test -f /opt/tenderlens/compose.public.yaml &&
-   command -v docker >/dev/null 2>&1; then
+   command -v docker >/dev/null 2>&1 &&
+   command -v timeout >/dev/null 2>&1; then
   # An unavailable Compose query is UNKNOWN, not proof a service is off.
   if services="$(cd /opt/tenderlens &&
-      docker compose -f compose.public.yaml ps --services --status running 2>/dev/null)"; then
+      timeout 6s docker compose -f compose.public.yaml ps --services --status running 2>/dev/null)"; then
     for service in api caddy bot; do
       if printf '%s\n' "$services" | grep -qx "$service"; then
         printf 'PUBLIC_%s_RUNNING=YES\n' "$service"
@@ -83,12 +90,15 @@ if test -d /home/ubuntu/valyqon-personal-preview; then
 else
   echo PRIVATE_PREVIEW_TREE_PRESENT=NO
 fi
-if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-  preview_running="$(docker ps     --filter 'label=com.docker.compose.project=valyqon-private-preview'     --format '{{.ID}}' 2>/dev/null || true)"
-  if test -n "$preview_running"; then
-    echo PRIVATE_PREVIEW_CONTAINERS_RUNNING=YES
+if command -v docker >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1; then
+  if preview_running="$(timeout 6s docker ps --filter 'label=com.docker.compose.project=valyqon-private-preview' --format '{{.ID}}' 2>/dev/null)"; then
+    if test -n "$preview_running"; then
+      echo PRIVATE_PREVIEW_CONTAINERS_RUNNING=YES
+    else
+      echo PRIVATE_PREVIEW_CONTAINERS_RUNNING=NO
+    fi
   else
-    echo PRIVATE_PREVIEW_CONTAINERS_RUNNING=NO
+    echo PRIVATE_PREVIEW_CONTAINERS_RUNNING=UNKNOWN
   fi
 else
   echo PRIVATE_PREVIEW_CONTAINERS_RUNNING=UNKNOWN

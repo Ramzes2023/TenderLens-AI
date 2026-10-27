@@ -1,0 +1,15 @@
+# Optional marketing-only deployment if Railway does not accept new signups.
+# Render Blueprint creates a single disposable web service, never a worker,
+# paid-account service, source collector, database or notification sender.
+# Manual deployment only. Free tier uses ephemeral filesystem and sleeps idle.
+services:
+  - type: web
+    name: valyqon-public-pilot
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: python -m app.public_pilot
+    healthCheckPath: /health
+    autoDeployTrigger: off

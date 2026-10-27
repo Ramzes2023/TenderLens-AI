@@ -119,7 +119,38 @@ services:
     networks:
       - publisher_outbound
 
-  # Manual one-shot operator command ONLY. No scheduled ingestion or surprise sends.
+  # Explicit scheduler opt-in ONLY after official live originals + Worker
+  # receipt + guest API + currently open deadline are all accepted.
+  # It enqueues one idempotent job per UTC hour and makes no network calls.
+  scheduler:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: valyqon-public-sources:staged
+    profiles: ["verified-scheduler"]
+    command: ["python", "-m", "app.sources.isolated_public_scheduler"]
+    restart: unless-stopped
+    environment:
+      <<: *public-source-env
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=16m
+    volumes:
+      - public_source_data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 64
+    mem_limit: 256m
+    depends_on:
+      guest-sources:
+        condition: service_healthy
+    network_mode: none
+    healthcheck:
+      disable: true
+
+  # Manual one-shot operator command ONLY. No surprise sends.
   enqueue:
     build:
       context: ../..

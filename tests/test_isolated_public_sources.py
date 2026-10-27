@@ -59,6 +59,9 @@ def test_isolated_public_service_exposes_only_safe_projection_and_public_aggrega
         add(db, external_id="80", title="Поставка старого оборудования",
             deadline=datetime.now(timezone.utc)-timedelta(days=2))
         assert client.get("/api/v1/public/opportunities?q=старого").json()["shown"]==0
+        add(db, external_id="81", title="Поставка устаревшего оборудования",
+            last_seen=datetime.now(timezone.utc)-timedelta(hours=5))
+        assert client.get("/api/v1/public/opportunities?q=устаревшего").json()["shown"]==0
         add(db)
         reply=client.get("/api/v1/public/opportunities?q=оборудования")
         assert reply.status_code==200
@@ -75,7 +78,7 @@ def test_isolated_public_service_exposes_only_safe_projection_and_public_aggrega
         assert pulse.json()["scope"]=="bounded_persisted_source_observations"
         intelligence=client.get("/api/v1/public/market-intelligence")
         assert intelligence.status_code==200
-        assert intelligence.json()["scanned_recent_rows"]==2
+        assert intelligence.json()["scanned_recent_rows"]==3
         assert "SECRET BUYER" not in intelligence.text
     assert db._closed
 

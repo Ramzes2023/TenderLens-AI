@@ -12,14 +12,37 @@ def landing_html(authenticated: bool = False) -> str:
     # Real-only by default; opt-in marketing demo is always visibly disclosed.
     # Never affects the guest search endpoint or authenticated tenant data.
     demo_attr = ' data-public-analytics-mode="demo"' if os.getenv('VALYQON_PUBLIC_ANALYTICS_MODE', 'real').lower() == 'demo' else ''
-    secondary = 'Open Dashboard' if authenticated else 'Sign In'
-    target = '/dashboard' if authenticated else '/login'
+    pilot_marketing_only = (
+        os.getenv("VALYQON_PUBLIC_MARKETING_ONLY", "").lower() == "true"
+    )
+    secondary = (
+        "Explore the platform" if pilot_marketing_only
+        else ("Open Dashboard" if authenticated else "Sign In")
+    )
+    target = (
+        "/how-it-works" if pilot_marketing_only
+        else ("/dashboard" if authenticated else "/login")
+    )
+    signup_href = "#product" if pilot_marketing_only else "/register"
+    signup_label = "Explore features" if pilot_marketing_only else "Create account"
+    guest_search = GUEST_SEARCH_HTML
+    if pilot_marketing_only:
+        guest_search = guest_search.replace(
+            'class="guest-register-cta" href="/register">Create account →',
+            'class="guest-register-cta" href="#product">Explore features →',
+        )
+    pilot_notice = (
+        '<p class="public-pilot-notice" role="status">'
+        'Public product preview. Account registration, payments and '
+        'customer alerts are not available yet.</p>'
+        if pilot_marketing_only else ""
+    )
     steps = [('Discover', 'Explore official procurement sources.'), ('Match', 'Compare metadata with your company.'), ('Analyze', 'Review documents through supported workflows.'), ('Decide', 'Use evidence, completeness and fit.'), ('Win', 'Pursue the right opportunities. Outcomes are never guaranteed.')]
     workflow = ''.join(f'<article><span class="step-number">0{i}</span><h3>{title}</h3><p>{text}</p></article>' for i, (title, text) in enumerate(steps, 1))
     return public_html(f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VALYQON AI · Global Procurement Intelligence</title><link rel="stylesheet" href="/assets/saas.css"><link rel="stylesheet" href="/assets/premium.css"><link rel="stylesheet" href="/assets/responsive.css?v=phase24q"><link rel="stylesheet" href="/assets/market_depth.css?v=20261017"><link rel="stylesheet" href="/assets/guest_search.css?v=20261023"><link rel="stylesheet" href="/assets/public_showcase.css?v=20261023b"><link rel="stylesheet" href="/assets/public_luxe.css?v=20261023d"></head>
 <body class="landing premium"{review_attr}{demo_attr}><a class="skip-link" href="#content">Skip to content</a>
-<header class="landing-top"><a class="brand" href="/">VALYQON<span> AI</span></a><button class="public-menu" id="publicMenu" type="button" aria-expanded="false" aria-controls="publicNav">Menu</button><nav id="publicNav" aria-label="Product navigation"><a href="#product">Product</a><a href="#market-analytics">Analytics</a><a href="#coverage">Sources</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a>{language_selector()}</nav><div class="toolbar"><a href="{target}">{secondary}</a><a class="cta compact" href="/register">Create account</a></div><div class="mobile-public-locale">{language_selector()}</div></header>
-<main id="content"><div class="vqx-hero-shell"><section class="hero premium-hero" aria-labelledby="vqxHeroHeading">
+<header class="landing-top"><a class="brand" href="/">VALYQON<span> AI</span></a><button class="public-menu" id="publicMenu" type="button" aria-expanded="false" aria-controls="publicNav">Menu</button><nav id="publicNav" aria-label="Product navigation"><a href="#product">Product</a><a href="#market-analytics">Analytics</a><a href="#coverage">Sources</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a>{language_selector()}</nav><div class="toolbar"><a href="{target}">{secondary}</a><a class="cta compact" href="{signup_href}">{signup_label}</a></div><div class="mobile-public-locale">{language_selector()}</div></header>
+<main id="content">{pilot_notice}<div class="vqx-hero-shell"><section class="hero premium-hero" aria-labelledby="vqxHeroHeading">
 <div class="vqx-hero-intro"><span class="vqx-hero-pill">✧ AI-POWERED PROCUREMENT INTELLIGENCE</span><h1 id="vqxHeroHeading">Find every match<br><span>in procurement.</span></h1>
 <p class="hero-position-copy">Discover public procurement notices beyond major platforms. Explore smaller, regional, commercial and international opportunities with transparent source evidence and clear limits.</p>
 <div class="toolbar vqx-hero-ctas"><a class="cta" href="#guest-search">Try real guest search <span aria-hidden="true">↗</span></a><a class="secondary" href="#market-analytics">Explore analytics <span aria-hidden="true">→</span></a></div>
@@ -28,7 +51,7 @@ def landing_html(authenticated: bool = False) -> str:
 {HERO_DASHBOARD_HTML}</section></div>
 <div class="trust-strip"><span>Regional and small purchases</span><span>International procurement</span><span>Transparent scoring criteria</span><span>Evidence-based source status</span></div>
 {ANALYTICS_WALL_HTML}
-{GUEST_SEARCH_HTML}
+{guest_search}
 {MARKET_PULSE_HTML}
 <section class="content-section advantage-section" id="difference"><div class="section-heading"><span class="eyebrow">WHAT MAKES VALYQON DIFFERENT</span><h2>Not just more tenders.<br>Better visibility into the market.</h2><p>Three priorities guide our coverage roadmap and the way we present every opportunity.</p></div><div class="advantage-grid">
 <article><span class="advantage-number">01 / COVERAGE DEPTH</span><h3>Explore the blind spots</h3><p>Go beyond central portals to include small-value purchases, regional marketplaces and commercial notices whenever supported adapters can retrieve them.</p></article>
@@ -66,4 +89,4 @@ def landing_html(authenticated: bool = False) -> str:
 <section id="pricing" class="content-section pricing-teaser"><div><span class="eyebrow">BUILT FOR FOCUSED TEAMS</span><h2>Explore the platform.<br>Commercial plans come later.</h2><p>Billing is not enabled. No payment details or checkout are collected here.</p></div><a class="secondary" href="/dashboard">Open the workspace →</a></section>
 {PUBLIC_SUPPORT_HTML}
 <section class="faq" id="faq"><h2>Clear answers before you begin.</h2><details><summary>Does a high fit score predict a win?</summary><p>No. It is preliminary company compatibility, not a probability of winning. Commercial decisions remain with your team.</p></details><details><summary>Is every tender fully analyzed?</summary><p>No. Discovery is a metadata preview. Full document analysis requires the supported PDF workflow.</p></details><details><summary>Can my team work together?</summary><p>Yes. Shared organizations provide company workspaces, roles and invitations. Viewer access remains read-only for mutations.</p></details><details><summary>Are all procurement sources always live?</summary><p>No. Some require credentials, and individual sources can be unavailable. Discovery reports partial failures explicitly.</p></details></section>
-<section class="final-cta"><span class="eyebrow">VALYQON AI</span><h2>A better starting point<br>for your next opportunity.</h2><a class="cta" href="/register">Create account →</a></section></main><footer><a class="brand" href="/">VALYQON AI</a><span>Find. Analyze. Score. Win.</span><a href="#faq">Questions &amp; answers</a><a href="/how-it-works">How it works</a><a href="/usage-guidelines">Usage guidelines</a></footer><script src="/assets/guest_search.js?v=20261023" defer></script><script src="/assets/public_showcase.js?v=20261023b" defer></script><script src="/assets/public_intelligence.js?v=20261023d" defer></script><script src="/assets/market_directory.js?v=20261017" defer></script></body></html>''')
+<section class="final-cta"><span class="eyebrow">VALYQON AI</span><h2>A better starting point<br>for your next opportunity.</h2><a class="cta" href="{signup_href}">{signup_label} →</a></section></main><footer><a class="brand" href="/">VALYQON AI</a><span>Find. Analyze. Score. Win.</span><a href="#faq">Questions &amp; answers</a><a href="/how-it-works">How it works</a><a href="/usage-guidelines">Usage guidelines</a></footer><script src="/assets/guest_search.js?v=20261023" defer></script><script src="/assets/public_showcase.js?v=20261023b" defer></script><script src="/assets/public_intelligence.js?v=20261023d" defer></script><script src="/assets/market_directory.js?v=20261017" defer></script></body></html>''')

@@ -1,0 +1,106 @@
+name: VALYQON hosted public marketing pilot safety
+
+on:
+  push:
+    branches:
+      - feat/public-web-pilot-hosting-20261027
+  pull_request:
+    branches:
+      - main
+    paths:
+      - app/public_pilot.py
+      - railway.json
+      - app/api/landing.py
+      - app/api/static/public_luxe.css
+      - tests/test_public_pilot_hosting.py
+      - .github/workflows/public-web-pilot-hosting.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-only-public-pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Assert disabled customer signup and real-only public analytics
+        run: |
+          python -m pytest -q tests/test_public_pilot_hosting.py tests/test_public_pilot_release_policy.py tests/test_launch_legal.py tests/test_public_paid_gate.py
+          python -m compileall -q app/public_pilot.py app/api/landing.py
+      - name: Build exact public marketing image
+        run: docker build --pull -t valyqon-public-marketing-pilot:ci .
+      - name: Smoke-test real landing and refused signup in isolated Docker container
+        timeout-minutes: 4
+        run: |
+          set -euo pipefail
+          # No network namespace, no published port, no secrets or mounts.
+          # This is strictly a disposable local CI marketing smoke, not a
+          # deployed URL, production database or authorized registration.
+          docker run -d --name valyqon-public-marketing-ci --network none \
+            -e PORT=8000 valyqon-public-marketing-pilot:ci \
+            python -m app.public_pilot
+          trap 'docker rm -f valyqon-public-marketing-ci >/dev/null 2>&1 || true' EXIT
+          ready=NO
+          for attempt in $(seq 1 45); do
+            if docker exec valyqon-public-marketing-ci python -c \
+                'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/", timeout=2).close()' \
+                >/dev/null 2>&1; then
+              ready=YES
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" = YES
+          docker exec -i valyqon-public-marketing-ci python - <<'PY'
+          import urllib.error
+          import urllib.request
+
+          base = "http://127.0.0.1:8000"
+          def get(path):
+              with urllib.request.urlopen(base + path, timeout=5) as r:
+                  return r.status, r.headers.get("Content-Type", ""), r.read(131072).decode("utf-8", "replace")
+
+          status, _, homepage = get("/")
+          assert status == 200 and '<body class="landing premium"' in homepage
+          assert "Public product preview." in homepage
+          assert 'href="/register"' not in homepage
+          css_status, mime, css = get("/assets/premium.css")
+          assert css_status == 200 and mime.startswith("text/css")
+          assert ".landing.premium" in css
+          health_status, _, _ = get("/health")
+          assert health_status == 200
+          req = urllib.request.Request(
+              base + "/api/v1/auth/register",
+              data=b'{"email":"preview@example.invalid","password":"SyntheticSafe123!"}',
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          try:
+              urllib.request.urlopen(req, timeout=5)
+          except urllib.error.HTTPError as exc:
+              assert exc.code in (401, 403, 422, 503)
+          else:
+              raise AssertionError("Marketing preview must never register users")
+          print("ISOLATED_PUBLIC_LANDING_HTTP=PASS")
+          print("PREMIUM_CSS=PASS")
+          print("SIGNUP_REJECTED=YES")
+          print("REAL_SOURCE_TO_USER=NOT_TESTED")
+          print("PRODUCTION_CHANGED=NO")
+          PY
+      - name: Deployment evidence boundary
+        run: |
+          echo "PUBLIC_DOCKER_IMAGE=BUILT_AND_ISOLATED_HTTP_CHECKED"
+          echo "EXTERNAL_PUBLIC_URL=NOT_CONFIGURED"
+          echo "REGISTRATION_AND_BILLING=BLOCKED_BY_DESIGN"
+          echo "CUSTOMER_PRODUCTION_LAUNCH=NOT_PERFORMED"

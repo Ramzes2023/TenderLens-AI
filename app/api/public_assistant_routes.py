@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.llm.base import LLMError
 from .guest_search_routes import PUBLIC_HEADERS
+from .guest_language import output_language_for, answer_uses_question_script
 from .security import require_same_origin_browser_request
 
 router = APIRouter(tags=["public-product-help"], include_in_schema=False)
@@ -85,15 +86,42 @@ async def guest_help_answer(payload: GuestHelpQuestion, request: Request):
     if retry is not None:
         raise HTTPException(429, "Too many requests. Please try later.",
                             headers={"Retry-After": str(retry), **PUBLIC_HEADERS})
-    # No customer context, database connection, search results or model tools.
-    prompt = PRODUCT_GUIDE + "\n" + question
+    # The policy is in English, but the actual answer must follow the user's
+    # language. Reinforce this near the user question and at the *end* of the
+    # prompt so that Russian requests cannot be dominated by English policy.
+    language = output_language_for(question)
+    prompt = ("STRICT RESPONSE LANGUAGE RULE: " + language.reminder +
+              "\n\n" + PRODUCT_GUIDE + "\n" + question +
+              "\n\nFINAL ANSWER LANGUAGE: " + language.reminder)
     try:
         reply = await asyncio.wait_for(provider.generate(prompt, max_tokens=260), timeout=15)
+        answer = str(getattr(reply, "text", "") or "").strip()
+        if answer and not answer_uses_question_script(answer, language):
+            # One controlled second attempt; both LLM calls count against the
+            # process-wide spend budget. Never expose the wrong-language first
+            # reply or user data to a translation API or an outside service.
+            retry = limiter.consume("guest-ai-global", "public", "public")
+            if retry is not None:
+                raise HTTPException(429, "Too many requests. Please try later.",
+                                    headers={"Retry-After": str(retry), **PUBLIC_HEADERS})
+            prompt = (
+                "The previous completion violated the required response language. "
+                "Re-answer the original product question from scratch, with no English "
+                "explanatory sentences. " + language.reminder +
+                "\n\n" + PRODUCT_GUIDE + "\n" + question +
+                "\n\nREQUIRED OUTPUT: " + language.reminder
+            )
+            reply = await asyncio.wait_for(provider.generate(prompt, max_tokens=260), timeout=15)
+            answer = str(getattr(reply, "text", "") or "").strip()
+    except HTTPException:
+        raise
     except (LLMError, asyncio.TimeoutError, OSError, ValueError):
         raise HTTPException(503, "Public AI help is temporarily unavailable.",
                             headers=PUBLIC_HEADERS) from None
-    answer = str(getattr(reply, "text", "") or "").strip()
-    if not answer:
+    if not answer or not answer_uses_question_script(answer, language):
+        # Fail closed rather than showing the wrong language or claiming a
+        # translation succeeded. English/Latin questions rely on the explicit
+        # prompt rule; no reliable language ID exists for every short phrase.
         raise HTTPException(503, "Public AI help is temporarily unavailable.",
                             headers=PUBLIC_HEADERS)
     return JSONResponse({"answer": answer[:1500], "scope": "public_product_only"}, headers=PUBLIC_HEADERS)

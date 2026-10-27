@@ -110,8 +110,11 @@ def test_cyrillic_script_language_distinction_is_not_russian_only():
     assert output_language_for("Як працює пошук закупівель?").name == "Ukrainian"
     assert output_language_for("Как работает поиск?").name == "Russian"
     assert output_language_for("გამარჯობა როგორ ხართ?").name == "Georgian"
-    assert output_language_for("How does search work?").script is None
-    assert output_language_for("Nasıl çalışır?").script is None
+    assert output_language_for("How does search work?").script == "latin"
+    assert output_language_for("How does guest search work?").name == "English"
+    assert output_language_for("Nasıl çalışır?").script == "latin"
+    assert output_language_for("Nasıl çalışır?").name == "Turkish"
+    assert output_language_for("Come funziona la ricerca?").name == "Italian"
     assert answer_uses_question_script(
         "Гостевой поиск использует сохранённые извещения.",
         output_language_for("Как работает поиск?")

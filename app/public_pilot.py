@@ -44,6 +44,7 @@ def main() -> int:
         print("PUBLIC_PILOT_PORT_INVALID", file=sys.stderr)
         return 2
     os.environ["API_PORT"] = public_port
+    os.environ["TENDERLENS_HEALTHCHECK_URL"] = f"http://127.0.0.1:{public_port}/health"
 
     from app.api.__main__ import main as serve_api
     return serve_api()

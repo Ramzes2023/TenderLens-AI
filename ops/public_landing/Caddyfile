@@ -1,0 +1,45 @@
+{
+    admin off
+    email {$ACME_EMAIL}
+}
+
+{$TENDERLENS_DOMAIN} {
+    encode zstd gzip
+
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
+    }
+
+    # Only the public homepage and its isolated stylesheet are static.
+    # Existing /login, /health, /api/v1/*, assets and every authenticated
+    # route retain their existing upstream handling.
+    @public_home path /
+    handle @public_home {
+        root * /srv/valyqon-public
+        rewrite * /index.html
+        header Content-Security-Policy "default-src 'none'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+        header Cache-Control "no-cache, no-store, must-revalidate"
+        file_server
+    }
+
+    @public_css path /valyqon-public-landing.css
+    handle @public_css {
+        root * /srv/valyqon-public
+        header Cache-Control "public, max-age=300"
+        file_server
+    }
+
+    handle {
+        reverse_proxy api:8000
+    }
+
+    log {
+        output stdout
+        format json
+    }
+}

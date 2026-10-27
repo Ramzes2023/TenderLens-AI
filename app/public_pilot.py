@@ -31,11 +31,10 @@ PUBLIC_PILOT_BLOCKED_FLAGS = {
 
 
 def main() -> int:
-    # A pilot release cannot be elevated by externally inherited environment
-    # switches. Full operator/onboarding rollout is a separately reviewed step.
-    os.environ.update(PUBLIC_PILOT_BLOCKED_FLAGS)
-    os.environ["API_HOST"] = "0.0.0.0"
-    os.environ["API_RELOAD"] = "false"
+    # Reject invalid deployment configuration BEFORE changing any global
+    # runtime flags. Failed start attempts must never leave this process in
+    # a sticky production/paid-feature-locked state (especially in test or
+    # supervisor re-entry). Once validated, explicitly fail closed.
     public_port = os.environ.get("PORT", "8000")
     try:
         if str(int(public_port)) != public_port or not 1 <= int(public_port) <= 65535:
@@ -43,6 +42,11 @@ def main() -> int:
     except (ValueError, OverflowError):
         print("PUBLIC_PILOT_PORT_INVALID", file=sys.stderr)
         return 2
+    # A pilot release cannot be elevated by externally inherited environment
+    # switches. Full operator/onboarding rollout is a separately reviewed step.
+    os.environ.update(PUBLIC_PILOT_BLOCKED_FLAGS)
+    os.environ["API_HOST"] = "0.0.0.0"
+    os.environ["API_RELOAD"] = "false"
     os.environ["API_PORT"] = public_port
     os.environ["TENDERLENS_HEALTHCHECK_URL"] = f"http://127.0.0.1:{public_port}/health"
 

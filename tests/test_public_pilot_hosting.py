@@ -43,7 +43,9 @@ def test_public_preview_landing_does_not_offer_disabled_registration(monkeypatch
     assert "Public product preview." in html
     assert "payments" in html
     assert 'href="/register"' not in html
-    assert "Create account" not in html
+    # Locale translation dictionaries may retain inactive phrases;
+    # verify actual UI links and the guest-search CTA instead.
+    assert 'class="guest-register-cta" href="#product"' in html
     assert "Explore features" in html
     assert 'href="/how-it-works"' in html
     assert 'id="guestSearchForm"' in html

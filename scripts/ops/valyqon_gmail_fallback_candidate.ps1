@@ -19,7 +19,7 @@ if ($TestRecipient -notmatch '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]{2,}$'
     throw "INVALID_TEST_RECIPIENT"
 }
 
-Write-Host "VALYQON GMAIL SMTP CANDIDATE — NO PRODUCTION CUTOVER" -ForegroundColor Cyan
+Write-Host "VALYQON GMAIL SMTP CANDIDATE - NO PRODUCTION CUTOVER" -ForegroundColor Cyan
 Write-Host "The Gmail From address must be an account you own; app passwords require Google 2-Step Verification."
 Write-Host "An app password gives broad account access. Prefer an independent service Gmail account."
 Write-Host "This script does NOT enable signup, customer emails, or password reset on production."
@@ -41,7 +41,7 @@ try {
     $password = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
     # Google sometimes groups the 16 characters as four groups separated by spaces.
     $password = $password -replace '\s', ''
-    if ($password -cnotmatch '^[A-Za-z]{16}$') {
+    if ($password -cnotmatch '^[A-Za-z0-9]{16}$') {
         throw "GOOGLE_APP_PASSWORD_FORMAT_INVALID"
     }
     $candidateConfig = @(
@@ -146,7 +146,7 @@ $pythonProbe = $pythonProbe.Replace("__RECIPIENT__", $TestRecipient)
 $pythonProbe | & ssh.exe @sshArgs "python3 -"
 $exitCode = $LASTEXITCODE
 Write-Host "FINAL_PROBE_EXIT=$exitCode"
-if ($exitCode -ne 0) { throw "GMAIL_CANDIDATE_NOT_READY — leave production unchanged" }
+if ($exitCode -ne 0) { throw "GMAIL_CANDIDATE_NOT_READY - leave production unchanged" }
 
 Write-Host "Protected candidate validated. Production API email remains disabled." -ForegroundColor Green
 Write-Host "Next gates: real inbox receipt, off-server backup and isolated rollback, reviewed exact Compose overlay, live app auth E2E."

@@ -81,4 +81,4 @@ jobs:
       - run: python -m pip install -r requirements-dev.txt
       - name: Genuine HTTPS MikroTon original to fenced Worker, SQLite and guest HTTP
         timeout-minutes: 7
-        run: python -B scripts/ci_ru_mikroton_guest_http_acceptance.py
+        run: PYTHONPATH=. python -B scripts/ci_ru_mikroton_guest_http_acceptance.py

@@ -82,3 +82,6 @@ jobs:
       - name: Genuine HTTPS MikroTon original to fenced Worker, SQLite and guest HTTP
         timeout-minutes: 7
         run: PYTHONPATH=. python -B scripts/ci_ru_mikroton_guest_http_acceptance.py
+      - name: Live independent non-EIS STAN commercial originals to fenced Worker and SQL
+        timeout-minutes: 7
+        run: PYTHONPATH=. python -B -m scripts.ci_ru_stan_real_worker

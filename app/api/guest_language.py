@@ -152,7 +152,15 @@ def answer_uses_question_script(answer: str, lang: OutputLanguage) -> bool:
                               for pattern in _SCRIPT_PATTERNS.values())
         # A few stray non-Latin symbols may appear in product names, but a
         # Chinese/Cyrillic/etc explanation is never acceptable for English.
-        return latin_letters >= 3 and foreign_letters <= 2
+        if latin_letters < 3 or foreign_letters > 2:
+            return False
+        # When both texts contain strong, unambiguous Latin-language clues,
+        # reject a clear switch between (for example) English and Italian.
+        # Unknown or short replies are not classified by guesswork.
+        identified = _latin_language(answer)
+        if lang.name in _LATIN_REMINDERS and identified in _LATIN_REMINDERS:
+            return identified == lang.name
+        return True
 
     pattern = _SCRIPT_PATTERNS[lang.script]
     script_letters = len(pattern.findall(answer))

@@ -56,10 +56,26 @@ def classify(status: int, body: bytes) -> str:
     }.get(status, "UNEXPECTED_HTTP_STATUS")
 
 
+def classify_health(status: int, body: bytes) -> str:
+    """Configuration presence only; this never proves the provider can answer."""
+    if status != 200:
+        return "HEALTH_UNAVAILABLE"
+    try:
+        payload = json.loads(body[:8192].decode("utf-8"))
+        value = payload.get("components", {}).get("llm")
+    except (ValueError, UnicodeError, AttributeError, TypeError):
+        return "HEALTH_UNAVAILABLE"
+    return {
+        "ready": "CONFIGURED_NOT_LIVE_VERIFIED",
+        "unavailable": "PROVIDER_NOT_CONFIGURED",
+    }.get(value, "UNKNOWN")
+
+
 def diagnose() -> dict:
     result = {
         "target": HOST, "endpoint": "/api/v1/public/help/ask",
         "classification": "NOT_VERIFIED", "http_status": None,
+        "server_llm": "NOT_VERIFIED",
         "live_generated_answer": False, "production_changed": False,
         "real_tender_data_exposed": False,
     }
@@ -71,6 +87,14 @@ def diagnose() -> dict:
         client = build_opener(
             HTTPSHandler(context=ssl.create_default_context()), _NoRedirect()
         )
+        # Separate read-only /health component check: the configured-model
+        # state helps distinguish "just disabled" from missing credentials.
+        # Never log the raw health body, version, URLs or private settings.
+        try:
+            with client.open(Request(f"https://{HOST}/health"), timeout=8) as health:
+                result["server_llm"] = classify_health(health.status, health.read(8193))
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError):
+            result["server_llm"] = "HEALTH_UNAVAILABLE"
         req = Request(
             URL, method="POST",
             data=json.dumps({"question": QUESTION}, ensure_ascii=False).encode("utf-8"),

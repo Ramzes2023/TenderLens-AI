@@ -1,0 +1,52 @@
+name: VALYQON release image SHA provenance (local CI only)
+
+# No image registry push, no VPS/SSH, no production volumes, no billing.
+on:
+  push:
+    branches:
+      - audit/release-ci-image-provenance-20261027
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-image-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    env:
+      PYTHON_DOTENV_DISABLED: "1"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Offline falsification tests for SHA and local Docker identity
+        run: |
+          python -m pip install 'pytest>=8,<9'
+          python -m pytest -q tests/test_valyqon_ci_image_provenance.py
+          python -m compileall -q scripts/valyqon_ci_image_provenance.py
+      - name: Build new local-only CI image with source revision labels
+        run: |
+          docker build \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.source=https://github.com/Ramzes2023/TenderLens-AI" \
+            --label "com.valyqon.build.kind=isolated-ci-audit-only" \
+            --tag tenderlens-ai:provenance-audit \
+            .
+      - name: Verify checked-out SHA matches only the newly built image
+        run: |
+          python -m scripts.valyqon_ci_image_provenance \
+            --expected-sha "$GITHUB_SHA" \
+            --output "$RUNNER_TEMP/valyqon-local-image-identity.json"
+          cat "$RUNNER_TEMP/valyqon-local-image-identity.json"
+      - name: Preserve redacted local build identity evidence for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: valyqon-local-image-identity
+          path: ${{ runner.temp }}/valyqon-local-image-identity.json
+          if-no-files-found: error
+          retention-days: 14

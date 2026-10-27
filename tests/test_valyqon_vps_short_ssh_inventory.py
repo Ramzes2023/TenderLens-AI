@@ -183,7 +183,8 @@ def test_ssh_transport_255_on_docker_command_never_returns_inventory():
         return run_fixed(args, **kwargs)
 
     report, stage = tiny.short_inventory(
-        ["ssh", "-o", "StrictHostKeyChecking=yes", "host"],
+        ["ssh", "-o", "StrictHostKeyChecking=yes",
+         "-o", "IdentitiesOnly=yes", "host"],
         runner=auth_revoked,
     )
     assert report is None and stage == "DOCKER"

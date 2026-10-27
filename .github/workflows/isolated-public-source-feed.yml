@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker compose --profile operator -p valyqon-public-sources \
+          docker compose --profile operator --profile verified-scheduler -p valyqon-public-sources \
             -f ops/public_sources/compose.yaml config --format json > /tmp/source-feed-resolved.json
           python - <<'PY'
           import json

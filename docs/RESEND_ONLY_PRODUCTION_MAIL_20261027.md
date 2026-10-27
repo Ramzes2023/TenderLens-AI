@@ -98,3 +98,40 @@ References:
 
 Tracked in GitHub issue #293. Owner's actual support response documents
 the two specific bounce event URLs; do not publish API keys.
+
+## Resend-only controlled diagnostic in PR #332
+
+The new script path is scripts/ops/valyqon_resend_diagnose.ps1.
+Run from an up-to-date trusted working copy:
+
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\ops\valyqon_resend_diagnose.ps1
+
+The default mode is NO-SEND. It checks DMARC, DKIM and the two Resend
+sending CNAMEs against both 1.1.1.1 and 8.8.8.8, and validates the
+protected AWS resend.env without logging its API key. It never modifies
+the live VALYQON API, database, demo or Caddy.
+
+Resend Support specifically advised a single spaced plain-text test
+without any links to distinguish message-content filtering from
+sender-domain reputation. No earlier than 2026-10-28 18:00 UTC, the
+operator may explicitly approve ONE probe:
+
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\ops\valyqon_resend_diagnose.ps1 -SendOneResendTest
+
+After the required typed SEND_ONE_RESEND_TEST confirmation, the script
+sends hello world FROM team@valyqon.dns.army via Resend TO the owner's
+authorized Gmail address as a recipient only. An atomic 0600 marker on
+AWS permanently blocks unreviewed repeat attempts, even if Gmail bounces.
+
+Decision path: If this minimal link-free message arrives, investigate
+earlier message contents and linked DuckDNS URL reputation with a
+separate authorized template test only after security rollback proof.
+If it again bounces with Gmail 550 5.7.1, stop repetitive testing and
+prefer an operator-owned branded domain verified inside Resend, with
+gradual genuine opt-in sending. A new branded domain is NOT an instant
+reputation fix. One recipient receiving one test is NOT proof of broad
+deliverability. Synthetic delivered@resend.dev is only integration proof.
+
+Google Postmaster Tools can be useful once domain DNS ownership is
+verified and there is sufficient traffic. Low-volume domains can have
+no visible telemetry: https://support.google.com/mail/answer/9981691.

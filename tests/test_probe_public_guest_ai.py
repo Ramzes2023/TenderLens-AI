@@ -2,7 +2,7 @@
 import json
 import unittest
 
-from scripts.probe_public_guest_ai import classify, URL, HOST, QUESTION
+from scripts.probe_public_guest_ai import classify, classify_health, URL, HOST, QUESTION
 
 
 class PublicAIDiagnosticTests(unittest.TestCase):
@@ -29,6 +29,14 @@ class PublicAIDiagnosticTests(unittest.TestCase):
         for detail, expected in cases.items():
             self.assertEqual(classify(503, json.dumps({"detail": detail}).encode()), expected)
         self.assertEqual(classify(503, b"hidden failure"), "SERVICE_UNAVAILABLE_UNKNOWN")
+
+    def test_health_only_claims_configured_not_live_inference(self):
+        configured = json.dumps({"components": {"llm": "ready"}}).encode()
+        absent = json.dumps({"components": {"llm": "unavailable"}}).encode()
+        self.assertEqual(classify_health(200, configured), "CONFIGURED_NOT_LIVE_VERIFIED")
+        self.assertEqual(classify_health(200, absent), "PROVIDER_NOT_CONFIGURED")
+        self.assertEqual(classify_health(200, b"not json"), "HEALTH_UNAVAILABLE")
+        self.assertEqual(classify_health(503, configured), "HEALTH_UNAVAILABLE")
 
     def test_legacy_route_abuse_and_proxy_statuses(self):
         cases = {

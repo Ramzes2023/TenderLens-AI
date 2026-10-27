@@ -45,9 +45,11 @@ def evaluate(*, ssh_host: str, ssh_key: str, hostname: str,
         "vps_ssh_failure_stage": "NOT_VERIFIED",
         "vps_public_tree": "NOT_VERIFIED",
         "vps_exact_sha": "NOT_VERIFIED",
+        "vps_docker": "NOT_VERIFIED",
         "vps_api_caddy": "NOT_VERIFIED",
         "private_preview_not_counted": True,
         "external_https": "NOT_VERIFIED",
+        "external_tls": "NOT_VERIFIED",
         "external_homepage": "NOT_VERIFIED",
         "external_health": "NOT_VERIFIED",
         "external_premium_css": "NOT_VERIFIED",
@@ -71,6 +73,7 @@ def evaluate(*, ssh_host: str, ssh_key: str, hostname: str,
             status.get("REPO_PRESENT")=="YES"
             and status.get("PUBLIC_COMPOSE_PRESENT")=="YES") else "BLOCKED"
         result["vps_exact_sha"]="PASS" if same else "BLOCKED"
+        result["vps_docker"]=status.get("DOCKER_USABLE", "UNKNOWN")
         result["vps_api_caddy"]="PASS" if all(
             status.get(f"PUBLIC_{service}_RUNNING")=="YES"
             for service in ("api","caddy")) else "BLOCKED"
@@ -83,6 +86,7 @@ def evaluate(*, ssh_host: str, ssh_key: str, hostname: str,
     try:
         status=https_check("https://"+hostname)
         result["external_https"]="PASS" if status.get("public_edge_pass") is True else "BLOCKED"
+        result["external_tls"]=status.get("tls", "NOT_VERIFIED")
         result["external_homepage"]=status.get("homepage","NOT_VERIFIED")
         result["external_health"]=status.get("health","NOT_VERIFIED")
         result["external_premium_css"]=status.get("premium_css","NOT_VERIFIED")

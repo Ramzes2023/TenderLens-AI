@@ -52,13 +52,17 @@ import sys
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from email.utils import format_datetime, make_msgid
+from email.utils import parseaddr
 
 mode = "__MODE__"
 secret = pathlib.Path("/home/ubuntu/.config/valyqon/resend.env")
 one_time_marker = pathlib.Path("/home/ubuntu/.config/valyqon/resend-gmail-hello-once.marker")
 earliest = datetime(2026, 10, 28, 18, 0, tzinfo=timezone.utc)
 try:
-    if stat.S_IMODE(secret.stat().st_mode) != 0o600:
+    secret_stat = secret.lstat()
+    if (not stat.S_ISREG(secret_stat.st_mode)
+            or stat.S_IMODE(secret_stat.st_mode) != 0o600
+            or secret_stat.st_uid != os.getuid()):
         raise ValueError("Unsafe email-secret file permissions")
     cfg = {}
     for line in secret.read_text(encoding="utf-8-sig").splitlines():
@@ -74,12 +78,18 @@ try:
         and cfg.get("VALYQON_SMTP_USERNAME") == "resend"
         and cfg.get("VALYQON_SMTP_SSL") == "true"
         and cfg.get("VALYQON_SMTP_STARTTLS") == "false"
+        and parseaddr(cfg.get("VALYQON_SMTP_FROM", ""))[1] in {
+            "team@valyqon.dns.army", "noreply@valyqon.dns.army"
+        }
         and cfg.get("VALYQON_PUBLIC_BASE_URL") == "https://valyqon.duckdns.org"
         and cfg.get("VALYQON_SMTP_PASSWORD", "").startswith("re_")
     ):
         raise ValueError("Protected Resend candidate config invalid")
 
     print("AWS_RESEND_CONFIG=PASS", flush=True)
+    print("CONTROLLED_FROM_MATCHES_CONFIG=" + (
+        "YES" if parseaddr(cfg["VALYQON_SMTP_FROM"])[1] == "team@valyqon.dns.army" else "NO"
+    ), flush=True)
     if mode == "audit":
         print("EMAIL_SENT=NO", flush=True)
         print("LIVE_API_AND_SQLITE_CHANGED=NO", flush=True)

@@ -37,7 +37,7 @@ def test_cooldown_one_time_real_inbox_gate_and_redaction():
     assert "resend-gmail-hello-once.marker" in data
     assert "StrictHostKeyChecking=yes" in data
     assert "IdentitiesOnly=yes" in data
-    assert "stat.S_IMODE(secret.stat().st_mode) != 0o600" in data
+    assert "stat.S_IMODE(secret_stat.st_mode) != 0o600" in data
     assert "REAL_GMAIL_DELIVERY=NOT_YET_VERIFIED" in data
     assert "LIVE_API_AND_SQLITE_CHANGED=NO" in data
     assert "docker compose" not in data.lower()

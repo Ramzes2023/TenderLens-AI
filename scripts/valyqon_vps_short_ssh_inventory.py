@@ -90,9 +90,21 @@ def short_inventory(ssh_prefix, *, runner=None):
         else:
             report.update(REMOTE_SHA="UNKNOWN", WORKTREE_CLEAN="UNKNOWN")
 
-        docker = request("DOCKER_USABLE", "docker info >/dev/null 2>&1\n",
-                         allow_nonzero=True)
-        report["DOCKER_USABLE"] = "YES" if docker.returncode == 0 else "NO"
+        # Docker may be installed but unresponsive. Treat daemon/SSH timeout
+        # as UNKNOWN, preserving all other independently verified VPS fields.
+        # An SSH authentication/transport failure (255) still fails closed.
+        docker = _call(
+            ssh_prefix,
+            "command -v timeout >/dev/null 2>&1 && timeout 6s docker info >/dev/null 2>&1\n",
+            runner=runner, timeout=18,
+        )
+        if docker is not None and getattr(docker, "returncode", None) == 255:
+            raise _Blocked("DOCKER")
+        report["DOCKER_USABLE"] = (
+            "UNKNOWN" if docker is None else
+            "YES" if docker.returncode == 0 else
+            "NO" if docker.returncode == 1 else "UNKNOWN"
+        )
 
         compose = request(
             "PUBLIC_COMPOSE_PRESENT",
@@ -106,12 +118,16 @@ def short_inventory(ssh_prefix, *, runner=None):
         report["APP_ENV_FILE_PRESENT"] = "YES" if env.returncode == 0 else "NO"
 
         if report["DOCKER_USABLE"] == "YES" and report["PUBLIC_COMPOSE_PRESENT"] == "YES":
-            services = request(
-                "PUBLIC_SERVICES",
-                "cd /opt/tenderlens && docker compose -f compose.public.yaml ps --services --status running 2>/dev/null\n",
-                allow_nonzero=True, timeout=22,
+            services = _call(
+                ssh_prefix,
+                "cd /opt/tenderlens && timeout 6s docker compose -f compose.public.yaml ps --services --status running 2>/dev/null\n",
+                runner=runner, timeout=22,
             )
-            if services.returncode:
+            if services is not None and getattr(services, "returncode", None) == 255:
+                raise _Blocked("PUBLIC_COMPOSE")
+            if (services is None or services.returncode != 0
+                    or not isinstance(services.stdout, str)
+                    or len(services.stdout) > 8192):
                 for name in ("api", "caddy", "bot"):
                     report[f"PUBLIC_{name}_RUNNING"] = "UNKNOWN"
             else:
@@ -134,14 +150,18 @@ def short_inventory(ssh_prefix, *, runner=None):
         report["PRIVATE_PREVIEW_TREE_PRESENT"] = "YES" if preview.returncode == 0 else "NO"
 
         if report["DOCKER_USABLE"] == "YES":
-            containers = request(
-                "PRIVATE_PREVIEW_CONTAINERS_RUNNING",
-                "docker ps --filter label=com.docker.compose.project=valyqon-private-preview --format '{{.ID}}' 2>/dev/null\n",
-                allow_nonzero=True,
+            containers = _call(
+                ssh_prefix,
+                "timeout 6s docker ps --filter label=com.docker.compose.project=valyqon-private-preview --format '{{.ID}}' 2>/dev/null\n",
+                runner=runner, timeout=18,
             )
+            if containers is not None and getattr(containers, "returncode", None) == 255:
+                raise _Blocked("PRIVATE_PREVIEW")
             report["PRIVATE_PREVIEW_CONTAINERS_RUNNING"] = (
-                "UNKNOWN" if containers.returncode else
-                "YES" if containers.stdout.strip() else "NO"
+                "UNKNOWN" if containers is None or containers.returncode != 0
+                or not isinstance(containers.stdout, str)
+                or len(containers.stdout) > 8192
+                else "YES" if containers.stdout.strip() else "NO"
             )
         else:
             report["PRIVATE_PREVIEW_CONTAINERS_RUNNING"] = "UNKNOWN"

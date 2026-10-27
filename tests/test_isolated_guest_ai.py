@@ -26,7 +26,7 @@ def test_standalone_has_only_product_help_and_local_health(monkeypatch):
     with TestClient(create_isolated_guest_app(lambda: provider)) as client:
         assert not hasattr(client.app.state.runtime, "database")
         assert not hasattr(client.app.state.runtime, "tender_repository")
-        assert {route.path for route in client.app.routes} == {
+        assert {route.path for route in client.app.routes if hasattr(route, "path")} == {
             "/api/v1/public/help/ask", "/_internal/health"
         }
         for endpoint in ("/login", "/api/v1/tenders", "/api/v1/companies",

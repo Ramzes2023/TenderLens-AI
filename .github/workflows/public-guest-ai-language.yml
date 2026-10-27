@@ -1,0 +1,31 @@
+name: Public Guest AI answer-language contract
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/api/guest_language.py
+      - app/api/public_assistant_routes.py
+      - tests/test_guest_ai_language.py
+      - .github/workflows/public-guest-ai-language.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guest-ai-language:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Exercise actual HTTP endpoint, Russian, Georgian and budget
+        run: python -m pytest -q tests/test_guest_ai_language.py tests/test_public_guest_ai.py tests/test_isolated_guest_ai.py

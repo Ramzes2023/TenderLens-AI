@@ -30,7 +30,7 @@ def test_only_genuinely_proven_mikroton_is_enabled_in_staging():
     assert catalog.registry.get("eis").enabled is False
     for blocked in ("tektorg", "gpb_etp_public", "ru_samara_public_list",
                     "ru_dagestan_public_list", "b2b_center"):
-        assert not catalog.registry.get(blocked).enabled
+        assert blocked not in catalog.enabled_keys
     assert 'MIKROTON_TENDER_ENABLED: "true"' in compose
     for key in (
         "EIS_PROFILE_FEEDS_ENABLED", "EIS_DIRECT_ENABLED", "EIS_223_ENABLED",
@@ -73,4 +73,4 @@ def test_source_activation_comes_from_operator_choice_not_public_review():
     preview = (ROOT / "ops/website_preview/compose.yaml").read_text(encoding="utf-8")
     assert 'MIKROTON_TENDER_ENABLED: "true"' not in preview
     assert "ready_source_data" not in preview
-    assert 'MIKROTON_TENDER_ENABLED: "false"' in (ROOT / ".env.example").read_text(encoding="utf-8")
+    assert "MIKROTON_TENDER_ENABLED=false" in (ROOT / ".env.example").read_text(encoding="utf-8")

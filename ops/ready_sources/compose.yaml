@@ -1,0 +1,139 @@
+# Isolated opt-in integration of a live-verified Russian procurement source.
+# No production data volumes, bot token, external mail, or customer notification.
+# Proof: PR #311 original MikroTon -> leased Worker -> SQLite -> authenticated search.
+x-ready-environment: &ready-environment
+  PYTHON_DOTENV_DISABLED: "1"
+  APP_ENV: development
+  LOG_LEVEL: WARNING
+  DATABASE_URL: sqlite:////app/data/ready-sources.sqlite
+  VALYQON_DATABASE_REQUIRE_POSTGRES: "false"
+  DATA_DIR: /app/data
+  COMPANY_PROFILE_FILE: /app/config/company_profile.example.json
+  API_RELOAD: "false"
+  RAG_ENABLED: "false"
+  MONITORING_ENABLED: "false"
+  EIS_RSS_URLS: ""
+  EIS_PROFILE_FEEDS_ENABLED: "false"
+  EIS_DIRECT_ENABLED: "false"
+  EIS_223_ENABLED: "false"
+  EIS_44_HTML_ENABLED: "false"
+  B2B_CENTER_ENABLED: "false"
+  TEKTORG_PUBLIC_ENABLED: "false"
+  GPB_ETP_PUBLIC_ENABLED: "false"
+  RU_SAMARA_PUBLIC_LIST_ENABLED: "false"
+  RU_DAGESTAN_PUBLIC_LIST_ENABLED: "false"
+  LENOBL_SMALL_PUBLIC_ENABLED: "false"
+  NMCK_NATIVE_PUBLIC_ENABLED: "false"
+  STAN_COMMERCIAL_PUBLIC_ENABLED: "false"
+  SOUTH_URAL_PUBLIC_ENABLED: "false"
+  KAVKAZ_RF_FIRSTPARTY_ENABLED: "false"
+  VALYQON_CIS_MD_ELICITATIE_ENABLED: "false"
+  VALYQON_CIS_AZ_AZERISTILIK_ENABLED: "false"
+  VALYQON_CIS_AZ_ADIF_SMALL_ENABLED: "false"
+  # First source with live source -> Worker -> DB -> authorized HTTP proof.
+  MIKROTON_TENDER_ENABLED: "true"
+  VALYQON_RU_BACKGROUND_CATALOG_ENABLED: "false"
+  VALYQON_PUBLIC_ANALYTICS_MODE: real
+  VALYQON_RESTRICT_PAID_SOURCE_DETAILS: "true"
+  VALYQON_WEBSITE_REVIEW_ONLY: "0"
+  VALYQON_PUBLIC_AI_ENABLED: "false"
+  VALYQON_AI_FALLBACK_ENABLED: "false"
+  GIGACHAT_CREDENTIALS: ""
+  GROQ_API_KEY: ""
+  YANDEX_API_KEY: ""
+  TELEGRAM_BOT_TOKEN: ""
+  VALYQON_EMAIL_MODE: smtp
+  VALYQON_SMTP_HOST: mailpit
+  VALYQON_SMTP_PORT: "1025"
+  VALYQON_SMTP_FROM: ready-sources@valyqon.example.test
+  VALYQON_SMTP_STARTTLS: "false"
+  VALYQON_SMTP_SSL: "false"
+  VALYQON_PUBLIC_BASE_URL: http://127.0.0.1:18965
+  OUTBOUND_PROXY_URL: ""
+  VALYQON_WORKER_COUNT: "1"
+  VALYQON_JOB_DEFAULT_MAX_ATTEMPTS: "2"
+
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: valyqon-ready-sources:local
+    restart: "no"
+    init: true
+    ports:
+      - "127.0.0.1:18965:8000"
+    environment:
+      <<: *ready-environment
+      API_HOST: 0.0.0.0
+      API_PORT: "8000"
+      TENDERLENS_HEALTHCHECK_URL: http://127.0.0.1:8000/health
+    depends_on:
+      mailpit:
+        condition: service_started
+    volumes:
+      - ready_source_data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 20s
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: valyqon-ready-sources:local
+    restart: "no"
+    init: true
+    command: ["python", "-m", "app.jobs.worker", "--connectors"]
+    environment:
+      <<: *ready-environment
+    depends_on:
+      - api
+    volumes:
+      - ready_source_data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      disable: true
+    stop_grace_period: 30s
+
+  # Run explicitly once via docker compose run --rm enqueue.
+  # The reviewed key allowlist and enabled flags are checked before opening DB.
+  enqueue:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: valyqon-ready-sources:local
+    profiles: ["operator"]
+    restart: "no"
+    command: ["python", "-m", "app.sources.enqueue", "--ru-approved"]
+    environment:
+      <<: *ready-environment
+    volumes:
+      - ready_source_data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    network_mode: none
+    healthcheck:
+      disable: true
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: "no"
+    ports:
+      - "127.0.0.1:18966:8025"
+    environment:
+      MP_MAX_MESSAGES: "100"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  ready_source_data:

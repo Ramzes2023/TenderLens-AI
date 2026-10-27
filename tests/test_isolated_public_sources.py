@@ -20,7 +20,7 @@ def make_db(tmp_path):
 
 def add(db, *, external_id="84", title="Поставка электрического оборудования",
         now=None, deadline=None, last_seen=None, source="mikroton_tender"):
-    now = now or datetime(2026,10,27,12,0,tzinfo=timezone.utc)
+    now = now or datetime.now(timezone.utc)
     deadline = deadline or (now+timedelta(days=3))
     last_seen = last_seen or now
     notice = {
@@ -55,6 +55,9 @@ def test_isolated_public_service_exposes_only_safe_projection_and_public_aggrega
                           "/api/v1/public/opportunities/84"):
             assert client.get(forbidden).status_code==404
         assert client.get("/api/v1/public/opportunities?q=оборудования").json()["shown"]==0
+        add(db, external_id="80", title="Поставка старого оборудования",
+            deadline=datetime.now(timezone.utc)-timedelta(days=2))
+        assert client.get("/api/v1/public/opportunities?q=старого").json()["shown"]==0
         add(db)
         reply=client.get("/api/v1/public/opportunities?q=оборудования")
         assert reply.status_code==200
@@ -71,7 +74,7 @@ def test_isolated_public_service_exposes_only_safe_projection_and_public_aggrega
         assert pulse.json()["scope"]=="bounded_persisted_source_observations"
         intelligence=client.get("/api/v1/public/market-intelligence")
         assert intelligence.status_code==200
-        assert intelligence.json()["scanned_recent_rows"]==1
+        assert intelligence.json()["scanned_recent_rows"]==2
         assert "SECRET BUYER" not in intelligence.text
     assert db._closed
 

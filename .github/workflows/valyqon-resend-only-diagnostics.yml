@@ -1,0 +1,54 @@
+name: VALYQON Resend-only controlled diagnostics
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/ops/valyqon_resend_diagnose.ps1
+      - tests/test_valyqon_resend_diagnose.py
+      - .github/workflows/valyqon-resend-only-diagnostics.yml
+
+permissions:
+  contents: read
+
+jobs:
+  offline-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install pytest==9.1.1
+      - run: python -m pytest -q tests/test_valyqon_resend_diagnose.py
+      - run: |
+          echo "REAL_AWS_CONTACT=NO"
+          echo "RESEND_KEY_USED=NO"
+          echo "MESSAGE_SENT=NO"
+  windows-parser:
+    runs-on: windows-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Parse PowerShell script without SSH/network/send
+        shell: powershell
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          $file = (Resolve-Path 'scripts/ops/valyqon_resend_diagnose.ps1').Path
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            $file, [ref]$tokens, [ref]$parseErrors
+          ) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object {
+              Write-Output ("ERROR_LINE={0};MESSAGE={1}" -f $_.Extent.StartLineNumber, $_.Message)
+            }
+            exit 1
+          }
+          Write-Output 'POWERSHELL_SYNTAX=PASS'
+          Write-Output 'PRODUCTION_CONTACT=NO'

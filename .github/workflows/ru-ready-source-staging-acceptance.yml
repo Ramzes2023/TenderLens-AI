@@ -1,0 +1,76 @@
+name: RU Ready Source Real Integration
+
+# Exact-branch tests; no production deployment, release promotion or credentials.
+on:
+  push:
+    branches:
+      - integration/approved-source-staging-main-20261027
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  staging-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Source allowlist, queue, safe env and adapter contracts
+        run: |
+          python -m pytest -q tests/test_approved_source_staging.py tests/test_ru_approved_operator_cycle.py tests/test_mikroton_tender.py
+          python -m compileall -q app/sources tests/test_approved_source_staging.py
+      - name: Validate actual isolated Docker Compose and no external volumes
+        run: |
+          docker compose -p valyqon-ready-sources -f ops/ready_sources/compose.yaml config --quiet
+          docker compose -p valyqon-ready-sources -f ops/ready_sources/compose.yaml config --format json > /tmp/ready-sources-compose.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          obj=json.loads(Path('/tmp/ready-sources-compose.json').read_text())
+          services=obj['services']
+          assert {'api','worker','enqueue','mailpit'} <= set(services)
+          ports=services['api']['ports']
+          assert ports and all(row.get('host_ip')=='127.0.0.1' for row in ports)
+          assert all(row.get('host_ip')=='127.0.0.1' for row in services['mailpit']['ports'])
+          for svc in ('api','worker','enqueue'):
+              env=services[svc]['environment']
+              assert env['MIKROTON_TENDER_ENABLED']=='true'
+              assert env['EIS_PROFILE_FEEDS_ENABLED']=='false'
+              assert env['TELEGRAM_BOT_TOKEN']==''
+              assert env['VALYQON_PUBLIC_ANALYTICS_MODE']=='real'
+              assert env['VALYQON_RESTRICT_PAID_SOURCE_DETAILS']=='true'
+          assert services['enqueue']['network_mode']=='none'
+          assert all(not config.get('external',False) for config in obj.get('volumes',{}).values())
+          print('READY_SOURCE_COMPOSE_ISOLATION=PASS')
+          PY
+
+  real-worker-to-user-search:
+    runs-on: ubuntu-latest
+    timeout-minutes: 23
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+      MONITORING_ENABLED: 'false'
+      TELEGRAM_BOT_TOKEN: ''
+      OUTBOUND_PROXY_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Genuine original source through Worker and guest/authenticated API
+        run: |
+          python -B scripts/ci_ru_mikroton_guest_http_acceptance.py

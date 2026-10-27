@@ -1,5 +1,6 @@
 # Operator-activated SAFE candidate for live, published procurement notices.
 # Entirely separate project/volume from tenderlens-vps (production website).
+# Exactly two reviewed RU sources: MikroTon and non-EIS STAN commercial originals.
 # NO automatic production routing, paid detail access, Telegram or email sends.
 x-public-source-env: &public-source-env
   PYTHON_DOTENV_DISABLED: "1"
@@ -30,7 +31,7 @@ x-public-source-env: &public-source-env
   LENOBL_SMALL_PUBLIC_ENABLED: "false"
   NMCK_NATIVE_PUBLIC_ENABLED: "false"
   SOUTH_URAL_PUBLIC_ENABLED: "false"
-  STAN_COMMERCIAL_PUBLIC_ENABLED: "false"
+  STAN_COMMERCIAL_PUBLIC_ENABLED: "true"
   VALYQON_CIS_MD_ELICITATIE_ENABLED: "false"
   VALYQON_CIS_AZ_AZERISTILIK_ENABLED: "false"
   VALYQON_CIS_AZ_ADIF_SMALL_ENABLED: "false"
@@ -121,7 +122,7 @@ services:
 
   # Explicit scheduler opt-in ONLY after official live originals + Worker
   # receipt + guest API + currently open deadline are all accepted.
-  # It enqueues one idempotent job per UTC hour and makes no network calls.
+  # It enqueues one idempotent job per source per UTC hour; no network calls.
   scheduler:
     build:
       context: ../..

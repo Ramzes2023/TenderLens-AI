@@ -44,6 +44,20 @@ source, payment, Telegram and API exposure gates untouched.
    The opt-in overlay overrides the public default **without** requiring
    `VALYQON_PUBLIC_AI_ENABLED=true` in `.env`. Never change provider secrets
    or print them while testing.
+
+   **Mandatory old-image safety check:** inspect the running API image,
+   not merely the current GitHub checkout. The following read-only check
+   must print `GUEST_AI_GLOBAL_BUDGET_PRESENT=YES` before public AI
+   activation. A legacy image can expose the guest route but omit the
+   48/day process-wide budget; do NOT enable on that image.
+
+   ```bash
+   docker compose -f compose.public.yaml exec -T api sh -c 'grep -q "guest-ai-global" /app/app/api/main.py && grep -q "guest-ai-global" /app/app/api/public_assistant_routes.py && echo GUEST_AI_GLOBAL_BUDGET_PRESENT=YES'
+   ```
+
+   If it fails, **STOP** and independently release a reviewed image with
+   backup/restore and rollback evidence. Never use a no-build activation
+   on an older image.
 4. **Only after** verifying the running image and backup, apply the opt-in
    configuration to the existing API image on the trusted host:
 

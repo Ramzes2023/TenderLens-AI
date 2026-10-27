@@ -11,7 +11,7 @@ def test_render_blueprint_is_single_opt_in_public_pilot_service():
         "runtime: docker", "plan: free", "region: frankfurt",
         "dockerfilePath: ./Dockerfile", "dockerContext: .",
         "dockerCommand: python -m app.public_pilot",
-        "healthCheckPath: /health", "autoDeployTrigger: off",
+        "healthCheckPath: /health", "autoDeployTrigger: 'off'",
     ]
     for term in required:
         assert term in source,term

@@ -27,7 +27,8 @@ def add(db, *, external_id="84", title="Поставка электрическ�
         "source": source,
         "external_id": external_id,
         "title": title,
-        "url": f"https://tender.mt52.ru/tenders/{external_id}",
+        "url": (f"https://tender.mt52.ru/tenders/{external_id}" if source=="mikroton_tender"
+                else "https://stantorgi.ru/etp/RJvFVqJX"),
         "customer": "SECRET BUYER INSIDE WORKER STORAGE",
         "summary": "INTERNAL DETAIL NOT GUEST",
         "initial_price": 77000.0,
@@ -93,6 +94,12 @@ def test_promotion_gate_rejects_archive_and_old_observations(tmp_path):
         gate=eligible_public_previews(db,now=now)
         assert gate["promotion_ready"] is True
         assert gate["fresh_open_originals"]==1
+        add(db,external_id="ЗК-2026-000020",source="stan_commercial_public",
+            title="Поставка пожарных шкафов",now=now,deadline=now+timedelta(days=1))
+        gate=eligible_public_previews(db,now=now)
+        assert gate["fresh_open_originals"]==2
+        assert gate["by_source"]=={"mikroton_tender":1,"stan_commercial_public":1}
+
 
 
 def test_isolated_service_requires_explicit_db_and_flag(monkeypatch):

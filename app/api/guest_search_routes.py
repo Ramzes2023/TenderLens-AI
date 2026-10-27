@@ -13,6 +13,7 @@ import math
 import re
 import sqlite3
 from contextlib import closing
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -73,7 +74,8 @@ def _public_preview(notice):
     }
 
 
-def search_persisted_notices(database, query: str, *, limit: int = MAX_PREVIEWS):
+def search_persisted_notices(database, query: str, *, limit: int = MAX_PREVIEWS,
+                             active_only: bool = False, now=None):
     """Read a bounded snapshot of the shared, real connector storage.
 
     Do not search saved_opportunities, discovery_search_history or tenant data.
@@ -84,12 +86,17 @@ def search_persisted_notices(database, query: str, *, limit: int = MAX_PREVIEWS)
     keywords = query.casefold().split()[:12]
     with closing(database.connect()) as conn:
         rows = conn.execute(
-            "SELECT notice_json FROM source_opportunities "
+            "SELECT notice_json, last_seen FROM source_opportunities "
             "ORDER BY last_seen DESC LIMIT ?",
             (MAX_CANDIDATES,),
         ).fetchall()
 
     results = []
+    if active_only:
+        now = now or datetime.now(timezone.utc)
+        if now.tzinfo is None:
+            raise ValueError("Active-only snapshot requires UTC-aware time.")
+        now = now.astimezone(timezone.utc)
     for row in rows:
         try:
             notice = json.loads(row["notice_json"])
@@ -97,6 +104,26 @@ def search_persisted_notices(database, query: str, *, limit: int = MAX_PREVIEWS)
             continue
         if not isinstance(notice, dict) or not isinstance(notice.get("source"), str):
             continue
+        # Isolated live-source preview must never advertise expired archive
+        # procurements as currently actionable. Production's existing guest
+        # handler keeps its historical storage/search semantics unchanged.
+        if active_only:
+            try:
+                observed = datetime.fromisoformat(
+                    str(row["last_seen"]).replace("Z", "+00:00")
+                )
+                deadline = datetime.fromisoformat(
+                    str(notice.get("deadline") or "").replace("Z", "+00:00")
+                )
+                if observed.tzinfo is None or deadline.tzinfo is None:
+                    continue
+                age = (now - observed.astimezone(timezone.utc)).total_seconds()
+                if not 0 <= age <= 7200:
+                    continue
+                if deadline.astimezone(timezone.utc) <= now:
+                    continue
+            except (ValueError, TypeError, OverflowError):
+                continue
         # Only the visible title is searchable in guest mode. Searching hidden
         # buyer/URL/source/summary fields creates an information-disclosure oracle.
         public = _public_preview(notice)
@@ -146,7 +173,10 @@ async def guest_opportunity_search(
         raise HTTPException(503, "Real tender search is temporarily unavailable.",
                             headers=PUBLIC_HEADERS)
     try:
-        result = await asyncio.to_thread(search_persisted_notices, database, query)
+        result = await asyncio.to_thread(
+            search_persisted_notices, database, query,
+            active_only=(getattr(request.app.state, "public_source_active_only", False) is True),
+        )
     except (sqlite3.Error, StorageError, ValueError, TypeError, OSError):
         raise HTTPException(503, "Real tender search is temporarily unavailable.",
                             headers=PUBLIC_HEADERS) from None

@@ -1,0 +1,186 @@
+# Operator-activated SAFE candidate for live, published procurement notices.
+# Entirely separate project/volume from tenderlens-vps (production website).
+# Exactly two reviewed RU sources: MikroTon and non-EIS STAN commercial originals.
+# NO automatic production routing, paid detail access, Telegram or email sends.
+x-public-source-env: &public-source-env
+  PYTHON_DOTENV_DISABLED: "1"
+  APP_ENV: development
+  LOG_LEVEL: WARNING
+  DATABASE_URL: sqlite:////app/data/isolated-public-sources.sqlite3
+  VALYQON_DATABASE_REQUIRE_POSTGRES: "false"
+  VALYQON_ISOLATED_PUBLIC_SOURCES_ENABLED: "true"
+  DATA_DIR: /app/data
+  VALYQON_PUBLIC_ANALYTICS_MODE: real
+  VALYQON_RESTRICT_PAID_SOURCE_DETAILS: "true"
+  VALYQON_PUBLIC_AI_ENABLED: "false"
+  VALYQON_AI_FALLBACK_ENABLED: "false"
+  RAG_ENABLED: "false"
+  MONITORING_ENABLED: "false"
+  EIS_RSS_URLS: ""
+  EIS_PROFILE_FEEDS_ENABLED: "false"
+  EIS_223_ENABLED: "false"
+  EIS_44_HTML_ENABLED: "false"
+  EIS_DIRECT_ENABLED: "false"
+  B2B_CENTER_ENABLED: "false"
+  GPB_ETP_PUBLIC_ENABLED: "false"
+  TEKTORG_PUBLIC_ENABLED: "false"
+  ROSELTORG_PUBLIC_ENABLED: "false"
+  RU_SAMARA_PUBLIC_LIST_ENABLED: "false"
+  RU_DAGESTAN_PUBLIC_LIST_ENABLED: "false"
+  KAVKAZ_RF_FIRSTPARTY_ENABLED: "false"
+  LENOBL_SMALL_PUBLIC_ENABLED: "false"
+  NMCK_NATIVE_PUBLIC_ENABLED: "false"
+  SOUTH_URAL_PUBLIC_ENABLED: "false"
+  STAN_COMMERCIAL_PUBLIC_ENABLED: "true"
+  VALYQON_CIS_MD_ELICITATIE_ENABLED: "false"
+  VALYQON_CIS_AZ_AZERISTILIK_ENABLED: "false"
+  VALYQON_CIS_AZ_ADIF_SMALL_ENABLED: "false"
+  MIKROTON_TENDER_ENABLED: "true"
+  VALYQON_RU_BACKGROUND_CATALOG_ENABLED: "false"
+  VALYQON_CONNECTOR_MAX_RECORDS: "8"
+  VALYQON_WORKER_COUNT: "1"
+  VALYQON_JOB_DEFAULT_MAX_ATTEMPTS: "2"
+  EIS_SYSTEM_TRUST_ENABLED: "false"
+  OUTBOUND_PROXY_URL: ""
+  GIGACHAT_CREDENTIALS: ""
+  GROQ_API_KEY: ""
+  TELEGRAM_BOT_TOKEN: ""
+  VALYQON_EMAIL_MODE: disabled
+
+services:
+  guest-sources:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: valyqon-public-sources:staged
+    command:
+      - uvicorn
+      - app.api.isolated_public_sources:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8101"
+      - --workers
+      - "1"
+      - --proxy-headers
+      - --forwarded-allow-ips
+      - 172.30.19.2
+    restart: unless-stopped
+    environment:
+      <<: *public-source-env
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=16m
+    volumes:
+      - public_source_data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 80
+    mem_limit: 512m
+    networks:
+      - public_edge
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "from urllib.request import urlopen; urlopen('http://127.0.0.1:8101/_internal/health',timeout=3).close()"
+      start_period: 20s
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: valyqon-public-sources:staged
+    command: ["python", "-m", "app.jobs.worker", "--connectors"]
+    restart: unless-stopped
+    environment:
+      <<: *public-source-env
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=16m
+    volumes:
+      - public_source_data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 80
+    mem_limit: 512m
+    healthcheck:
+      disable: true
+    depends_on:
+      guest-sources:
+        condition: service_healthy
+    networks:
+      - publisher_outbound
+
+  # Explicit scheduler opt-in ONLY after official live originals + Worker
+  # receipt + guest API + currently open deadline are all accepted.
+  # It enqueues one idempotent job per source per UTC hour; no network calls.
+  scheduler:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: valyqon-public-sources:staged
+    profiles: ["verified-scheduler"]
+    command: ["python", "-m", "app.sources.isolated_public_scheduler"]
+    restart: unless-stopped
+    environment:
+      <<: *public-source-env
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=16m
+    volumes:
+      - public_source_data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 64
+    mem_limit: 256m
+    depends_on:
+      guest-sources:
+        condition: service_healthy
+    network_mode: none
+    healthcheck:
+      disable: true
+
+  # Manual one-shot operator command ONLY. No surprise sends.
+  enqueue:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: valyqon-public-sources:staged
+    profiles: ["operator"]
+    command: ["python", "-m", "app.sources.enqueue", "--ru-approved"]
+    restart: "no"
+    environment:
+      <<: *public-source-env
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=16m
+    volumes:
+      - public_source_data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    network_mode: none
+    healthcheck:
+      disable: true
+
+networks:
+  public_edge:
+    external: true
+    name: tenderlens-vps_edge
+  publisher_outbound:
+    driver: bridge
+
+volumes:
+  public_source_data:

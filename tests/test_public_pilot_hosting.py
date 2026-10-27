@@ -23,6 +23,7 @@ def test_marketing_pilot_prevents_unaccepted_features_and_uses_host_port(monkeyp
     assert entered==[True]
     assert __import__("os").environ["API_PORT"]=="13749"
     assert __import__("os").environ["API_HOST"]=="0.0.0.0"
+    assert __import__("os").environ["TENDERLENS_HEALTHCHECK_URL"]=="http://127.0.0.1:13749/health"
     for key,value in PUBLIC_PILOT_BLOCKED_FLAGS.items():
         assert __import__("os").environ[key]==value
     assert PUBLIC_PILOT_BLOCKED_FLAGS["VALYQON_LEGAL_APPROVED"]=="false"

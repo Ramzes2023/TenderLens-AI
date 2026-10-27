@@ -1,7 +1,7 @@
 """Opt-in single-source queue scheduler; no upstream HTTP or notifications.
 
 A healthy Docker Worker fetches the publicly published original; this process
-only enqueues at most once per UTC hour. It is disabled unless an operator
+only enqueues at most once per UTC hour per source. It is disabled unless an operator
 explicitly starts the verified-scheduler Compose profile.
 """
 from __future__ import annotations
@@ -24,7 +24,8 @@ def next_utc_hour(now: datetime) -> datetime:
 def approved_cycle():
     if (os.environ.get("VALYQON_ISOLATED_PUBLIC_SOURCES_ENABLED") != "true" or
             os.environ.get("DATABASE_URL") != ISOLATED_SQLITE_URL or
-            os.environ.get("MIKROTON_TENDER_ENABLED") != "true"):
+            os.environ.get("MIKROTON_TENDER_ENABLED") != "true" or
+            os.environ.get("STAN_COMMERCIAL_PUBLIC_ENABLED") != "true"):
         raise ValueError("Isolated source scheduler not explicitly approved")
     from app.database.backend import Database
     from app.database.config import load_database_settings
@@ -35,7 +36,7 @@ def approved_cycle():
     from app.sources.ru_cycle import approved_ru_keys
 
     catalog = build_source_catalog(load_monitoring_settings())
-    if approved_ru_keys(catalog) != ("mikroton_tender",):
+    if set(approved_ru_keys(catalog)) != {"mikroton_tender", "stan_commercial_public"}:
         raise ValueError("Unexpected enabled RU source in scheduler")
 
     database = Database(load_database_settings())
@@ -43,7 +44,8 @@ def approved_cycle():
         repo = JobRepository(database, load_job_settings())
         repo.initialize()
         service = ConnectorSyncService(JobService(repo), catalog)
-        service.enqueue("mikroton_tender")
+        for source_id in ("mikroton_tender", "stan_commercial_public"):
+            service.enqueue(source_id)
     finally:
         database.close()
 

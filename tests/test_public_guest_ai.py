@@ -87,3 +87,32 @@ def test_public_ai_requires_explicit_opt_in(monkeypatch):
         assert response.status_code == 503
         assert "not enabled" in response.json()["detail"]
         assert provider.calls == []
+
+
+def test_disabled_or_unconfigured_guest_ai_does_not_spend_request_budget(monkeypatch):
+    monkeypatch.delenv("VALYQON_PUBLIC_AI_ENABLED", raising=False)
+    with TestClient(create_app(runtime=ApiRuntime(provider=FakeProvider()))) as client:
+        for _ in range(5):
+            response = client.post("/api/v1/public/help/ask", json={"question": "How to register?"})
+            assert response.status_code == 503
+        assert not client.app.state.guest_ai_limiter._events
+
+    monkeypatch.setenv("VALYQON_PUBLIC_AI_ENABLED", "true")
+    with TestClient(create_app(runtime=ApiRuntime())) as client:
+        assert client.post("/api/v1/public/help/ask",
+                           json={"question": "How to register?"}).status_code == 503
+        assert not client.app.state.guest_ai_limiter._events
+
+
+def test_global_provider_cost_cap_blocks_even_a_fresh_ip(monkeypatch):
+    monkeypatch.setenv("VALYQON_PUBLIC_AI_ENABLED", "true")
+    provider = FakeProvider()
+    with TestClient(create_app(runtime=ApiRuntime(provider=provider))) as client:
+        limiter = client.app.state.guest_ai_limiter
+        for _ in range(48):
+            assert limiter.consume("guest-ai-global", "public", "public") is None
+        limited = client.post("/api/v1/public/help/ask",
+                              json={"question": "Explain how guest search works?"})
+        assert limited.status_code == 429
+        assert int(limited.headers["retry-after"]) >= 1
+        assert provider.calls == []

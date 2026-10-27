@@ -37,3 +37,10 @@ def test_public_release_gate_still_rejects_unreviewed_activation():
                            'VALYQON_PUBLIC_AI_ENABLED: "true"', 1)
     assert any("VALYQON_PUBLIC_AI_ENABLED" in problem
                for problem in public_pilot_failures(changed, TEMPLATE))
+
+def test_operator_runbook_requires_global_model_budget_from_running_image():
+    document = (ROOT / "docs/PUBLIC_GUEST_AI_ACTIVATION.md").read_text(encoding="utf-8")
+    assert "GUEST_AI_GLOBAL_BUDGET_PRESENT=YES" in document
+    assert "guest-ai-global" in document
+    assert "no-build activation" in document
+    assert "--no-build --pull never api" in document

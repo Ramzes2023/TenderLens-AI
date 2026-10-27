@@ -86,7 +86,7 @@ def search_persisted_notices(database, query: str, *, limit: int = MAX_PREVIEWS,
     keywords = query.casefold().split()[:12]
     with closing(database.connect()) as conn:
         rows = conn.execute(
-            "SELECT notice_json FROM source_opportunities "
+            "SELECT notice_json, last_seen FROM source_opportunities "
             "ORDER BY last_seen DESC LIMIT ?",
             (MAX_CANDIDATES,),
         ).fetchall()
@@ -109,10 +109,18 @@ def search_persisted_notices(database, query: str, *, limit: int = MAX_PREVIEWS,
         # handler keeps its historical storage/search semantics unchanged.
         if active_only:
             try:
+                observed = datetime.fromisoformat(
+                    str(row["last_seen"]).replace("Z", "+00:00")
+                )
                 deadline = datetime.fromisoformat(
                     str(notice.get("deadline") or "").replace("Z", "+00:00")
                 )
-                if deadline.tzinfo is None or deadline.astimezone(timezone.utc) <= now:
+                if observed.tzinfo is None or deadline.tzinfo is None:
+                    continue
+                age = (now - observed.astimezone(timezone.utc)).total_seconds()
+                if not 0 <= age <= 7200:
+                    continue
+                if deadline.astimezone(timezone.utc) <= now:
                     continue
             except (ValueError, TypeError, OverflowError):
                 continue

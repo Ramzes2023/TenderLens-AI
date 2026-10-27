@@ -1,0 +1,56 @@
+name: VALYQON isolated guest AI (no production SQLite)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/api/isolated_guest_ai.py
+      - compose.isolated-guest-ai.yaml
+      - tests/test_isolated_guest_ai.py
+      - docs/ISOLATED_GUEST_AI_RELEASE.md
+      - .github/workflows/isolated-guest-ai-contract.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-api-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install project dependencies for actual product-only route tests
+        run: python -m pip install -r requirements-dev.txt
+      - name: Reject database and paid endpoint exposure
+        run: python -m pytest -q tests/test_isolated_guest_ai.py tests/test_public_guest_ai.py
+      - name: Resolve the standalone Docker project using fake keys only
+        env:
+          VALYQON_GUEST_AI_ENV_FILE: /tmp/guest-ai-fake-env
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e .env
+          printf 'GIGACHAT_CREDENTIALS=synthetic-no-network\nGIGACHAT_MODEL=GigaChat\n' > /tmp/guest-ai-fake-env
+          trap 'rm -f /tmp/guest-ai-fake-env' EXIT
+          docker compose -f compose.isolated-guest-ai.yaml config --format json > "${RUNNER_TEMP}/guest-ai-resolved.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          data=json.loads((Path(os.environ["RUNNER_TEMP"])/"guest-ai-resolved.json").read_text())
+          assert set(data["services"])=={"guest-ai"}, "Must not recreate production API/Caddy/bot"
+          service=data["services"]["guest-ai"]
+          assert not service.get("ports") and not service.get("volumes")
+          assert service["read_only"] is True
+          assert service["environment"]["VALYQON_PUBLIC_AI_ENABLED"]=="true"
+          assert service["environment"]["VALYQON_AI_FALLBACK_ENABLED"]=="false"
+          assert "tenderlens-vps_edge" in str(data["networks"])
+          print("STANDALONE_COMPOSE=PASS")
+          print("PRODUCTION_API_OR_DATABASE_RECREATED=NO")
+          PY

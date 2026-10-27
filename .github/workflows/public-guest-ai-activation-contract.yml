@@ -1,0 +1,59 @@
+name: VALYQON guest AI operator-only opt-in safety
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - compose.public-ai.yaml
+      - tests/test_public_ai_activation.py
+      - .github/workflows/public-guest-ai-activation-contract.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  resolved-operator-opt-in:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Synthetic environment only; no production secrets or service start
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e .env
+          trap 'rm -f .env' EXIT
+          cp .env.example .env
+          printf '\nTENDERLENS_DOMAIN=ci.example.invalid\nACME_EMAIL=ci@example.invalid\n' >> .env
+          docker compose -f compose.public.yaml config --format json > "${RUNNER_TEMP}/base.json"
+          docker compose -f compose.public.yaml -f compose.public-ai.yaml config --format json > "${RUNNER_TEMP}/optin.json"
+          python - <<'PY'
+          import copy
+          import json
+          import os
+          from pathlib import Path
+          root=Path(os.environ["RUNNER_TEMP"])
+          before=json.loads((root/"base.json").read_text())
+          after=json.loads((root/"optin.json").read_text())
+          assert set(before["services"]) == set(after["services"]) == {"api", "caddy"}
+          assert before["services"]["api"]["environment"]["VALYQON_PUBLIC_AI_ENABLED"] == "false"
+          assert after["services"]["api"]["environment"]["VALYQON_PUBLIC_AI_ENABLED"] == "true"
+          x=copy.deepcopy(after)
+          x["services"]["api"]["environment"]["VALYQON_PUBLIC_AI_ENABLED"] = "false"
+          assert x == before, "Overlay changed more than the single public AI opt-in flag"
+          assert after["services"]["api"]["environment"]["VALYQON_RESTRICT_PAID_SOURCE_DETAILS"] == "true"
+          print("DEFAULT_GUEST_AI=OFF")
+          print("EXPLICIT_OPERATOR_OVERLAY_GUEST_AI=ON")
+          print("OTHER_COMPOSE_SETTINGS_UNCHANGED=YES")
+          print("NO_SERVICES_STARTED_OR_PRODUCTION_CHANGED=YES")
+          PY
+      - name: Static negative tests (no network)
+        run: |
+          python -m pip install pytest==9.1.1
+          python -m pytest -q tests/test_public_ai_activation.py tests/test_public_pilot_release_policy.py

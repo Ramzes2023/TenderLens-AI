@@ -3,11 +3,12 @@
 # This overlay is never loaded by the default public release command or CI.
 # Apply ONLY after provisioning the server-side GigaChat provider credentials,
 # verifying HTTPS/quotas, and accepting the AI spend/abuse risk.
-# A missing flag still fails closed. Never put API credentials in this file.
+# Inclusion of this separate file is the explicit opt-in. Default Compose
+# remains false, even when .env says true. Never put credentials here.
 #
 # Usage (on the authorized deployment host):
-#   docker compose -f compose.public.yaml -f compose.public-ai.yaml up -d --no-deps --build api
+#   docker compose -f compose.public.yaml -f compose.public-ai.yaml up -d --no-deps --no-build --pull never api
 services:
   api:
     environment:
-      VALYQON_PUBLIC_AI_ENABLED: "${VALYQON_PUBLIC_AI_ENABLED:-false}"
+      VALYQON_PUBLIC_AI_ENABLED: "true"

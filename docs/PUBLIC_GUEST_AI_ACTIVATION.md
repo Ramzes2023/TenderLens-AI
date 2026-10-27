@@ -16,9 +16,10 @@ deployment. This is intentional fail-closed behavior, not a frontend bug.
 ## Activation path (authorized production operator only)
 
 The optional `compose.public-ai.yaml` is an explicit **operator-only**
-overlay; it is not included in default startup and does not turn the AI on by
-itself. It leaves the normal source, payment, Telegram and API exposure gates
-untouched.
+overlay. Selecting it enables only the guest product-help AI. The regular
+`compose.public.yaml` still forces it off. Nothing in this GitHub change
+deploys it or changes running containers. This overlay leaves the normal
+source, payment, Telegram and API exposure gates untouched.
 
 1. Confirm **a real server-side GigaChat account and budget**, a trusted TLS
    certificate and the provider's terms/privacy requirements. The current
@@ -34,19 +35,42 @@ untouched.
    controls at the reverse proxy. Built-in limits are three queries per IP per
    ten minutes and 48 queries total per process per 24 hours. These counters
    reset on restart and are not shared across replicas.
-3. In the private server `.env` (or secure server injection), set
-   `VALYQON_PUBLIC_AI_ENABLED=true`. Verify that this is *not* enabled in
-   website review or other public services.
-4. After review and merge of this PR, run from the exact deployed revision
-   on the trusted host:
+3. On the authorized VPS, independently inspect the running Docker
+   Compose project, image ID/tag, mounted persistent volumes and effective
+   `DATABASE_URL`. Confirm the intended API service is the one actually
+   serving this site. Rehearse a **tested backup and rollback** before any
+   container recreation. A current `/health` report of `llm: ready`
+   confirms only the model gateway initialized, not successful inference.
+   The opt-in overlay overrides the public default **without** requiring
+   `VALYQON_PUBLIC_AI_ENABLED=true` in `.env`. Never change provider secrets
+   or print them while testing.
+
+   **Mandatory old-image safety check:** inspect the running API image,
+   not merely the current GitHub checkout. The following read-only check
+   must print `GUEST_AI_GLOBAL_BUDGET_PRESENT=YES` before public AI
+   activation. A legacy image can expose the guest route but omit the
+   48/day process-wide budget; do NOT enable on that image.
 
    ```bash
-   docker compose -f compose.public.yaml -f compose.public-ai.yaml up -d --no-deps --build api
+   docker compose -f compose.public.yaml exec -T api sh -c 'grep -q "guest-ai-global" /app/app/api/main.py && grep -q "guest-ai-global" /app/app/api/public_assistant_routes.py && echo GUEST_AI_GLOBAL_BUDGET_PRESENT=YES'
    ```
 
-   This recreates **only the API** using the explicit overlay. It must not be
-   run by CI or on a VPS whose deployment layout/configuration hasn't been
-   inspected first. Do not delete containers' data volumes or change
+   If it fails, **STOP** and independently release a reviewed image with
+   backup/restore and rollback evidence. Never use a no-build activation
+   on an older image.
+4. **Only after** verifying the running image and backup, apply the opt-in
+   configuration to the existing API image on the trusted host:
+
+   ```bash
+   docker compose -f compose.public.yaml -f compose.public-ai.yaml config --services
+   docker compose -f compose.public.yaml -f compose.public-ai.yaml up -d --no-deps --no-build --pull never api
+   ```
+
+   This recreates **only the API** with the explicit opt-in and avoids
+   rebuilding or pulling an unreviewed new image. If the actual site uses a
+   different Docker project, file set, container image or reverse proxy,
+   **STOP**: do not run these commands blindly. This script is not executed
+   by CI or ChatGPT. Do not delete containers' data volumes or change
    `DATABASE_URL`.
 
 5. Test a *single real answer* from an external browser or trusted host:
@@ -77,7 +101,7 @@ Remove the operator-only overlay from the running API deployment and recreate
 the API using *only* the default public Compose:
 
 ```bash
-docker compose -f compose.public.yaml up -d --no-deps api
+docker compose -f compose.public.yaml up -d --no-deps --no-build --pull never api
 ```
 
 The original public Compose forces `VALYQON_PUBLIC_AI_ENABLED=false`.

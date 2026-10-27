@@ -18,11 +18,12 @@ def test_default_public_deployment_remains_fail_closed():
 
 
 def test_operator_overlay_is_explicit_opt_in_only_for_api():
-    assert 'VALYQON_PUBLIC_AI_ENABLED: "${VALYQON_PUBLIC_AI_ENABLED:-false}"' in OVERLAY
+    assert 'VALYQON_PUBLIC_AI_ENABLED: "true"' in OVERLAY
     assert OVERLAY.count("  api:") == 1
     assert "  bot:" not in OVERLAY
     assert "  connector-worker:" not in OVERLAY
     assert "  caddy:" not in OVERLAY
+    assert "${VALYQON_PUBLIC_AI_ENABLED" not in OVERLAY
     assert "    ports:" not in OVERLAY
     assert "    volumes:" not in OVERLAY
     assert "GIGACHAT_CREDENTIALS:" not in OVERLAY
@@ -36,3 +37,10 @@ def test_public_release_gate_still_rejects_unreviewed_activation():
                            'VALYQON_PUBLIC_AI_ENABLED: "true"', 1)
     assert any("VALYQON_PUBLIC_AI_ENABLED" in problem
                for problem in public_pilot_failures(changed, TEMPLATE))
+
+def test_operator_runbook_requires_global_model_budget_from_running_image():
+    document = (ROOT / "docs/PUBLIC_GUEST_AI_ACTIVATION.md").read_text(encoding="utf-8")
+    assert "GUEST_AI_GLOBAL_BUDGET_PRESENT=YES" in document
+    assert "guest-ai-global" in document
+    assert "no-build activation" in document
+    assert "--no-build --pull never api" in document

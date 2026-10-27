@@ -5,12 +5,16 @@ on:
     paths:
       - "ops/public_landing/**"
       - "tests/test_valyqon_public_static_landing.py"
+      - "scripts/valyqon_public_caddy_topology.py"
+      - "tests/test_valyqon_public_caddy_topology.py"
       - ".github/workflows/public-static-landing-contract.yml"
   push:
     branches: [main]
     paths:
       - "ops/public_landing/**"
       - "tests/test_valyqon_public_static_landing.py"
+      - "scripts/valyqon_public_caddy_topology.py"
+      - "tests/test_valyqon_public_caddy_topology.py"
       - ".github/workflows/public-static-landing-contract.yml"
   workflow_dispatch:
 
@@ -31,7 +35,7 @@ jobs:
       - name: Offline release isolation assertions
         run: |
           python -m pip install -r requirements-dev.txt
-          python -m pytest -q tests/test_valyqon_public_static_landing.py
+          python -m pytest -q tests/test_valyqon_public_static_landing.py tests/test_valyqon_public_caddy_topology.py
       - name: Validate Caddy config offline using pinned runtime image
         run: |
           docker run --rm \

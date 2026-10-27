@@ -123,6 +123,7 @@ def test_source_compose_never_attaches_prod_db_or_publishes_public_port():
     assert "tenderlens_data" not in raw
     assert "sqlite:////app/data/isolated-public-sources.sqlite3" in raw
     assert 'MIKROTON_TENDER_ENABLED: "true"' in raw
+    assert 'STAN_COMMERCIAL_PUBLIC_ENABLED: "true"' in raw
     assert "    api:" not in raw and "    caddy:" not in raw and "    bot:" not in raw
     assert "    network_mode: none" in raw
     assert "VALYQON_RU_BACKGROUND_CATALOG_ENABLED: \"false\"" in raw

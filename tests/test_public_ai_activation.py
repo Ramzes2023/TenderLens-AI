@@ -18,11 +18,12 @@ def test_default_public_deployment_remains_fail_closed():
 
 
 def test_operator_overlay_is_explicit_opt_in_only_for_api():
-    assert 'VALYQON_PUBLIC_AI_ENABLED: "${VALYQON_PUBLIC_AI_ENABLED:-false}"' in OVERLAY
+    assert 'VALYQON_PUBLIC_AI_ENABLED: "true"' in OVERLAY
     assert OVERLAY.count("  api:") == 1
     assert "  bot:" not in OVERLAY
     assert "  connector-worker:" not in OVERLAY
     assert "  caddy:" not in OVERLAY
+    assert "${VALYQON_PUBLIC_AI_ENABLED" not in OVERLAY
     assert "    ports:" not in OVERLAY
     assert "    volumes:" not in OVERLAY
     assert "GIGACHAT_CREDENTIALS:" not in OVERLAY

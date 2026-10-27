@@ -12,4 +12,4 @@ services:
     dockerContext: .
     dockerCommand: python -m app.public_pilot
     healthCheckPath: /health
-    autoDeployTrigger: off
+    autoDeployTrigger: 'off'

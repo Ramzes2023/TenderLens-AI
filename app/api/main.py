@@ -83,7 +83,13 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
         policies={"guest-search": AuthRatePolicy(24, 24, 60)}, max_entries=8192
     )
     app.state.guest_ai_limiter = AuthRateLimiter(
-        policies={"guest-ai": AuthRatePolicy(3, 3, 600)}, max_entries=8192
+        policies={
+            "guest-ai": AuthRatePolicy(3, 3, 600),
+            # Per-process daily cap for anonymous provider cost. Deployments
+            # with multiple API workers also need shared edge/provider quotas.
+            "guest-ai-global": AuthRatePolicy(48, 48, 86400),
+        },
+        max_entries=8192,
     )
     app.include_router(auth_router)
     app.include_router(support_router)

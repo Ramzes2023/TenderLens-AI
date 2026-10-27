@@ -106,8 +106,9 @@ async def guest_help_answer(payload: GuestHelpQuestion, request: Request):
                                     headers={"Retry-After": str(retry), **PUBLIC_HEADERS})
             prompt = (
                 "The previous completion violated the required response language. "
-                "Re-answer the original product question from scratch, with no English "
-                "explanatory sentences. " + language.reminder +
+                "Re-answer the original product question from scratch. "
+                "All explanatory sentences MUST be in the question's original "
+                "language, not a different language. " + language.reminder +
                 "\n\n" + PRODUCT_GUIDE + "\n" + question +
                 "\n\nREQUIRED OUTPUT: " + language.reminder
             )
@@ -119,9 +120,9 @@ async def guest_help_answer(payload: GuestHelpQuestion, request: Request):
         raise HTTPException(503, "Public AI help is temporarily unavailable.",
                             headers=PUBLIC_HEADERS) from None
     if not answer or not answer_uses_question_script(answer, language):
-        # Fail closed rather than showing the wrong language or claiming a
-        # translation succeeded. English/Latin questions rely on the explicit
-        # prompt rule; no reliable language ID exists for every short phrase.
+        # Fail closed rather than showing the wrong script or falsely
+        # claiming correct language. Latin checks also reject Chinese, but
+        # cannot distinguish two different Latin-alphabet languages.
         raise HTTPException(503, "Public AI help is temporarily unavailable.",
                             headers=PUBLIC_HEADERS)
     return JSONResponse({"answer": answer[:1500], "scope": "public_product_only"}, headers=PUBLIC_HEADERS)

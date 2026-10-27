@@ -36,7 +36,7 @@ def run_fixed(args, **kwargs):
         output = SHA + "\n"
     elif "GIT_OPTIONAL_LOCKS=0 git" in script:
         pass
-    elif script == "docker info >/dev/null 2>&1\n":
+    elif script == "command -v timeout >/dev/null 2>&1 && timeout 6s docker info >/dev/null 2>&1\n":
         pass
     elif script == "test -f /opt/tenderlens/compose.public.yaml\n":
         pass
@@ -96,7 +96,7 @@ def test_tiny_inventory_refuses_failed_or_incomplete_first_probe():
 def test_do_not_mark_failed_docker_as_working():
     def cannot_docker(args, **kwargs):
         r = run_fixed(args, **kwargs)
-        if kwargs["input"] == "docker info >/dev/null 2>&1\n":
+        if kwargs["input"] == "command -v timeout >/dev/null 2>&1 && timeout 6s docker info >/dev/null 2>&1\n":
             r.returncode = 1
         return r
 
@@ -151,3 +151,39 @@ def test_original_inspect_does_not_claim_success_on_tiny_failure(tmp_path, monke
     assert exc.value.failure_code == "SSH_REMOTE_SCRIPT_FAILED"
     assert exc.value.stage == "START"
     assert "PRIVATE" not in str(exc.value)
+
+
+def test_timeout_of_docker_daemon_preserves_complete_read_only_inventory():
+    """A stuck Docker daemon blocks readiness, not the whole SSH inventory."""
+    import subprocess
+
+    def docker_hangs(args, **kwargs):
+        if kwargs["input"].startswith("command -v timeout") and "docker info" in kwargs["input"]:
+            raise subprocess.TimeoutExpired(args, kwargs["timeout"])
+        return run_fixed(args, **kwargs)
+
+    report, stage = tiny.short_inventory(
+        ["ssh", "-o", "StrictHostKeyChecking=yes",
+         "-o", "IdentitiesOnly=yes", "host"],
+        runner=docker_hangs,
+    )
+    assert stage == "COMPLETE"
+    assert report["REPO_PRESENT"] == "YES"
+    assert report["REMOTE_SHA"] == SHA
+    assert report["DOCKER_USABLE"] == "UNKNOWN"
+    assert report["PUBLIC_api_RUNNING"] == "UNKNOWN"
+    assert report["PUBLIC_caddy_RUNNING"] == "UNKNOWN"
+    assert report["PRODUCTION_CHANGED"] == "NO"
+
+
+def test_ssh_transport_255_on_docker_command_never_returns_inventory():
+    def auth_revoked(args, **kwargs):
+        if "docker info" in kwargs["input"]:
+            return SimpleNamespace(returncode=255, stdout="", stderr="private key")
+        return run_fixed(args, **kwargs)
+
+    report, stage = tiny.short_inventory(
+        ["ssh", "-o", "StrictHostKeyChecking=yes", "host"],
+        runner=auth_revoked,
+    )
+    assert report is None and stage == "DOCKER"

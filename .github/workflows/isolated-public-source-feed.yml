@@ -5,9 +5,13 @@ on:
     branches: [main]
     paths:
       - app/api/isolated_public_sources.py
+      - app/api/guest_search_routes.py
+      - app/sources/isolated_public_scheduler.py
       - ops/public_sources/**
       - scripts/verify_isolated_public_source_release.py
       - tests/test_isolated_public_sources.py
+      - tests/test_isolated_public_source_scheduler.py
+      - docs/sources/isolated_public_source_site_rollout.md
       - .github/workflows/isolated-public-source-feed.yml
   workflow_dispatch:
 
@@ -28,7 +32,7 @@ jobs:
           cache: pip
       - run: python -m pip install -r requirements-dev.txt
       - name: Anonymous HTTP + isolated storage + expired/archived release gates
-        run: python -m pytest -q tests/test_isolated_public_sources.py tests/test_guest_search_public_gate.py
+        run: python -m pytest -q tests/test_isolated_public_sources.py tests/test_isolated_public_source_scheduler.py tests/test_guest_search_public_gate.py
       - name: Docker Compose contract — cannot recreate original Caddy/API or mount prod SQLite
         shell: bash
         run: |
@@ -39,7 +43,7 @@ jobs:
           import json
           data=json.load(open('/tmp/source-feed-resolved.json'))
           services=data['services']
-          assert set(services)=={'guest-sources','worker','enqueue'}
+          assert set(services)=={'guest-sources','worker','enqueue','scheduler'}
           assert all(not svc.get('ports') for svc in services.values())
           assert all(svc.get('read_only') is True for svc in services.values())
           assert all(svc.get('environment',{}).get('VALYQON_ISOLATED_PUBLIC_SOURCES_ENABLED')=='true' for svc in services.values())
@@ -47,6 +51,8 @@ jobs:
           assert all(svc['environment'].get('MONITORING_ENABLED')=='false' for svc in services.values())
           assert all(svc['environment'].get('TELEGRAM_BOT_TOKEN')=='' for svc in services.values())
           assert services['enqueue']['network_mode']=='none'
+          assert services['scheduler']['network_mode']=='none'
+          assert 'verified-scheduler' in services['scheduler']['profiles']
           assert not services['guest-sources'].get('depends_on')
           assert all(not config.get('external') for config in data['volumes'].values())
           assert len(data['volumes'])==1

@@ -119,3 +119,210 @@ def test_preview_inventory_missing_or_secret_output_is_rejected():
     ):
         with pytest.raises(ValueError):
             probe.parse_status(bad)
+
+
+
+@pytest.mark.parametrize("message,code", [
+    ("Host key verification failed.", "SSH_HOST_KEY_UNVERIFIED"),
+    ("WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!", "SSH_HOST_KEY_UNVERIFIED"),
+    ("Permission denied (publickey).", "SSH_AUTH_REJECTED"),
+    ("ssh: connect to host 203.0.113.7 port 22: Connection timed out", "SSH_CONNECT_TIMEOUT"),
+    ("ssh: connect to host 203.0.113.7 port 22: Connection refused", "SSH_CONNECTION_REFUSED"),
+    ("ssh: connect to host 203.0.113.7 port 22: No route to host", "SSH_ROUTE_UNREACHABLE"),
+    ("Could not resolve hostname example.invalid", "SSH_DNS_FAILURE"),
+    ("token=PRIVATE no useful details", "SSH_UNCLASSIFIED"),
+])
+def test_ssh_stderr_is_reported_as_enum_only(tmp_path, monkeypatch, message, code):
+    key = tmp_path / "key"
+    key.write_text("synthetic key not a credential")
+    monkeypatch.setattr(probe.subprocess, "run", lambda *_a, **_kw: SimpleNamespace(
+        returncode=255, stdout="", stderr=message,
+    ))
+    with pytest.raises(probe.SSHPreflightError) as result:
+        probe.inspect("63.189.75.15", key)
+    assert result.value.failure_code == code
+    assert message not in str(result.value)
+    assert "PRIVATE" not in str(result.value)
+
+
+def test_subprocess_timeout_safe_code_not_private_stderr(tmp_path, monkeypatch):
+    import subprocess
+    key = tmp_path / "key"
+    key.write_text("synthetic")
+    def timeout(*a, **kw):
+        raise subprocess.TimeoutExpired(cmd="ssh PRIVATE", timeout=45,
+                                        stderr=b"SECRET")
+    monkeypatch.setattr(probe.subprocess, "run", timeout)
+    with pytest.raises(probe.SSHPreflightError) as e:
+        probe.inspect("63.189.75.15", key)
+    assert e.value.failure_code == "SSH_PROCESS_TIMEOUT"
+    assert "SECRET" not in str(e.value)
+
+
+def test_main_emits_only_sanitized_failure_code(monkeypatch, capsys):
+    monkeypatch.setattr(probe, "inspect", lambda *_a, **_kw: (
+        (_ for _ in ()).throw(probe.SSHPreflightError("SSH_AUTH_REJECTED"))
+    ))
+    rc = probe.main(["--host", "63.189.75.15", "--key", "/dummy"])
+    printed = capsys.readouterr().out
+    assert rc == 2
+    assert "FAILURE_CODE=SSH_AUTH_REJECTED" in printed
+    assert "PRODUCTION_CHANGED=NO" in printed
+    assert "token" not in printed.lower()
+
+
+def test_remote_script_failure_is_distinguished_from_successful_minimal_ssh_shell(
+    tmp_path, monkeypatch,
+):
+    key = tmp_path / "test"
+    key.write_text("synthetic")
+    calls = []
+
+    def fake_runner(args, **kwargs):
+        calls.append((args, kwargs))
+        if len(calls) == 1:
+            assert args[-2:] == ["sh", "-s"]
+            assert kwargs["input"] == probe.REMOTE
+            return SimpleNamespace(
+                returncode=2, stdout="private data MUST NOT LEAK",
+                stderr="SECRET\nVALYQON_PREFLIGHT_STAGE=DOCKER\nSSH PRIVATE",
+            )
+        assert args[-2:] == ["sh", "-s"]
+        assert kwargs["input"] == "echo VALYQON_REMOTE_SHELL_OK\n"
+        return SimpleNamespace(
+            returncode=0, stdout="VALYQON_REMOTE_SHELL_OK\n",
+            stderr="private SSH token",
+        )
+
+    monkeypatch.setattr(probe.subprocess, "run", fake_runner)
+    with pytest.raises(probe.SSHPreflightError) as caught:
+        probe.inspect("63.189.75.15", key)
+    assert caught.value.failure_code == "SSH_REMOTE_SCRIPT_FAILED"
+    assert caught.value.stage == "DOCKER"
+    assert caught.value.exit_class == "REMOTE_NONZERO"
+    assert "SECRET" not in str(caught.value)
+    assert len(calls) == 2
+    assert all("StrictHostKeyChecking=yes" in args
+               and "IdentitiesOnly=yes" in args for args, _ in calls)
+
+
+def test_remote_shell_restriction_is_not_misidentified_as_script_failure(
+    tmp_path, monkeypatch,
+):
+    key = tmp_path / "test"
+    key.write_text("synthetic")
+    attempts = []
+
+    def denied(args, **kwargs):
+        attempts.append(args)
+        if len(attempts) == 1:
+            return SimpleNamespace(returncode=127, stdout="",
+                                   stderr="SECRET; inaccessible shell")
+        return SimpleNamespace(returncode=127, stdout="",
+                               stderr="SECRET; sh missing")
+
+    monkeypatch.setattr(probe.subprocess, "run", denied)
+    with pytest.raises(probe.SSHPreflightError) as caught:
+        probe.inspect("63.189.75.15", key)
+    assert caught.value.failure_code == "SSH_REMOTE_SHELL_UNAVAILABLE"
+    assert caught.value.stage == "UNKNOWN"
+    assert caught.value.exit_class == "REMOTE_NONZERO"
+    assert len(attempts) == 2
+
+
+def test_ssh_stage_parser_is_enum_only_and_cannot_echo_private_data():
+    assert probe._safe_remote_stage(
+        "token=secret\nVALYQON_PREFLIGHT_STAGE=REPOSITORY\n"
+        "VALYQON_PREFLIGHT_STAGE=DOCKER\n"
+        "VALYQON_PREFLIGHT_STAGE=token_private"
+    ) == "DOCKER"
+    assert probe._safe_remote_stage(
+        "VALYQON_PREFLIGHT_STAGE=UNKNOWN\nprivate"
+    ) == "UNKNOWN"
+
+
+def test_remote_failure_cli_reports_only_enum_and_exit_class(monkeypatch, capsys):
+    def blocked(*_args, **_kwargs):
+        raise probe.SSHPreflightError(
+            "SSH_REMOTE_SCRIPT_FAILED", stage="PUBLIC_COMPOSE", exit_code=127
+        )
+    monkeypatch.setattr(probe, "inspect", blocked)
+    assert probe.main(["--host", "63.189.75.15", "--key", "dummy"]) == 2
+    output = capsys.readouterr().out
+    assert "FAILURE_CODE=SSH_REMOTE_SCRIPT_FAILED" in output
+    assert "FAILURE_STAGE=PUBLIC_COMPOSE" in output
+    assert "FAILURE_EXIT_CLASS=REMOTE_NONZERO" in output
+    assert "PRODUCTION_CHANGED=NO" in output
+
+
+def test_short_fixed_inventory_recovers_only_full_verified_ssh_report(tmp_path, monkeypatch):
+    """Local fake SSH: full long stdin rejected before START, short stages work."""
+    key = tmp_path / "test-key"
+    key.write_text("synthetic not a secret")
+    stages = ("START", "REPOSITORY", "DOCKER",
+              "PUBLIC_COMPOSE", "PRIVATE_PREVIEW", "COMPLETE")
+    data = dict(line.split("=", 1) for line in response().splitlines())
+    owners = {
+        "START": ("PREFLIGHT_SCHEMA",),
+        "REPOSITORY": ("REPO_PRESENT", "REMOTE_SHA", "WORKTREE_CLEAN"),
+        "DOCKER": ("DOCKER_USABLE",),
+        "PUBLIC_COMPOSE": (
+            "PUBLIC_COMPOSE_PRESENT", "APP_ENV_FILE_PRESENT",
+            "PUBLIC_api_RUNNING", "PUBLIC_caddy_RUNNING", "PUBLIC_bot_RUNNING",
+        ),
+        "PRIVATE_PREVIEW": (
+            "PRIVATE_PREVIEW_TREE_PRESENT", "PRIVATE_PREVIEW_CONTAINERS_RUNNING",
+        ),
+        "COMPLETE": (
+            "TELEGRAM_BOT_API_ACK", "LIVE_TENDER_DB",
+            "EXTERNAL_HTTPS", "PRODUCTION_CHANGED",
+        ),
+    }
+    calls = []
+    def mocked_ssh(argv, **kw):
+        calls.append((argv, kw))
+        assert argv[-2:] == ["sh", "-s"]
+        assert "StrictHostKeyChecking=yes" in argv
+        assert "IdentitiesOnly=yes" in argv
+        assert argv[argv.index("-i") + 1] == str(key)
+        assert kw["check"] is False and kw["capture_output"]
+        if len(calls) == 1:
+            assert kw["input"] == probe.REMOTE
+            return SimpleNamespace(returncode=2, stdout="SECRET", stderr="private failure")
+        if len(calls) == 2:
+            assert kw["input"] == "echo VALYQON_REMOTE_SHELL_OK\n"
+            return SimpleNamespace(returncode=0, stdout="VALYQON_REMOTE_SHELL_OK\n", stderr="")
+        stage = stages[len(calls) - 3]
+        assert kw["input"].startswith("set -u\nprintf '%s\\n' VALYQON_PREFLIGHT_STAGE=" + stage)
+        assert "docker compose up" not in kw["input"]
+        output = "\n".join(f"{k}={data[k]}" for k in owners[stage]) + "\n"
+        return SimpleNamespace(returncode=0, stdout=output,
+                               stderr="VALYQON_PREFLIGHT_STAGE=" + stage + "\n")
+    monkeypatch.setattr(probe.subprocess, "run", mocked_ssh)
+    report, same = probe.inspect("63.189.75.15", key, expected_sha="a" * 40)
+    assert same and report["REPO_PRESENT"] == "YES"
+    assert report["WORKTREE_CLEAN"] == "YES"
+    assert report["PRODUCTION_CHANGED"] == "NO"
+    assert len(calls) == 8
+
+
+def test_short_inventory_never_accepts_partial_response(tmp_path, monkeypatch):
+    key = tmp_path / "test"
+    key.write_text("synthetic")
+    count = 0
+    def fake_run(argv, **kw):
+        nonlocal count
+        count += 1
+        if count == 1:
+            return SimpleNamespace(returncode=2, stdout="", stderr="without stage")
+        if count == 2:
+            return SimpleNamespace(returncode=0, stdout="VALYQON_REMOTE_SHELL_OK\n", stderr="")
+        # Deliberately give only one stage; never a complete report.
+        return SimpleNamespace(returncode=0, stdout="PREFLIGHT_SCHEMA=2\n",
+                               stderr="VALYQON_PREFLIGHT_STAGE=START\n")
+    monkeypatch.setattr(probe.subprocess, "run", fake_run)
+    with pytest.raises(probe.SSHPreflightError) as raised:
+        probe.inspect("63.189.75.15", key, expected_sha="a" * 40)
+    assert raised.value.failure_code == "SSH_REMOTE_SCRIPT_FAILED"
+    assert raised.value.stage == "REPOSITORY"
+    assert count >= 4

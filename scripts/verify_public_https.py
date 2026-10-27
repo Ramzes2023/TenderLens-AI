@@ -69,6 +69,7 @@ def verify(url: str, timeout: float = 8.0) -> dict:
         "checked_utc": datetime.now(timezone.utc).isoformat(),
         "host": host, "dns": "NOT_VERIFIED", "tls": "NOT_VERIFIED",
         "homepage": "NOT_VERIFIED", "health": "NOT_VERIFIED",
+        "premium_css": "NOT_VERIFIED",
         "security_headers": "NOT_VERIFIED",
         "real_source_worker_to_user": "NOT_TESTED",
         "billing_entitlements": "NOT_TESTED",
@@ -123,10 +124,30 @@ def verify(url: str, timeout: float = 8.0) -> dict:
                 and health["components"].get("cache") != "unavailable"
             )
             result["health"] = "PASS" if valid_health else "FAIL"
+        # A stale image can serve the new branded landing HTML and report
+        # /health ready while its premium stylesheet is still 404. Exact
+        # same-origin, strict TLS, no redirects, bounded bytes or auth.
+        if result["homepage"] == "PASS" and result["health"] == "PASS":
+            phase = "premium_css"
+            with client.open(Request(f"https://{host}/assets/premium.css", headers={
+                    "User-Agent": "VALYQON-ReleaseReadiness/1.0"
+            }), timeout=timeout) as response:
+                css = response.read(131072).decode("utf-8", errors="replace")
+                content_type = response.headers.get("Content-Type", "").lower()
+                result["premium_css"] = (
+                    "PASS" if response.status == 200
+                    and content_type.startswith("text/css")
+                    and ".landing.premium" in css
+                    else "FAIL"
+                )
     except HTTPError as exc:
-        # An HTTP error means a public response was obtained over verified
-        # HTTPS. Log only its integer status and the endpoint class; never
-        # copy the message, Location header, body or upstream error text.
+        # urllib's HTTPSHandler uses ssl.create_default_context(): an actual
+        # HTTP status (including a legacy 303 -> /login) is received only
+        # AFTER certificate and hostname verification succeeded. Mark TLS
+        # observed, but never claim homepage, health, or public launch.
+        result["tls"] = "PASS"
+        # Emit only the integer status and endpoint class; never reveal
+        # Location URLs, response bodies, credentials or error text.
         result["blocker_type"] = "HTTPError"
         result["http_status"] = int(exc.code)
         result["blocked_at"] = phase
@@ -143,13 +164,55 @@ def verify(url: str, timeout: float = 8.0) -> dict:
                 )
             else:
                 result["redirect_class"] = "other_or_unknown_host"
+        if phase == "homepage" and result["tls"] == "PASS":
+            # Diagnose the PUBLIC same-origin health and branded stylesheet
+            # independently of a legacy / -> /login redirect. This only
+            # identifies what is installed on this edge; it can never turn
+            # a non-public homepage into a PASS.
+            try:
+                with client.open(Request(f"https://{host}/health", headers={
+                        "User-Agent": "VALYQON-ReleaseReadiness/1.0"
+                }), timeout=timeout) as health_response:
+                    health = json.loads(health_response.read(16384))
+                    good = (
+                        health_response.status == 200 and isinstance(health, dict)
+                        and health.get("status") == "ok"
+                        and health.get("service") == "VALYQON AI"
+                        and isinstance(health.get("components"), dict)
+                        and health["components"].get("database") == "ready"
+                        and health["components"].get("scoring") == "ready"
+                        and health["components"].get("cache") != "unavailable"
+                    )
+                    result["health"] = "PASS" if good else "FAIL"
+            except HTTPError as check_error:
+                result["health_http_status"] = int(check_error.code)
+            except (socket.gaierror, ssl.SSLError, URLError, TimeoutError,
+                    ConnectionError, OSError, ValueError):
+                pass
+            try:
+                with client.open(Request(f"https://{host}/assets/premium.css", headers={
+                        "User-Agent": "VALYQON-ReleaseReadiness/1.0"
+                }), timeout=timeout) as css_response:
+                    css = css_response.read(131072).decode("utf-8", errors="replace")
+                    mime = css_response.headers.get("Content-Type", "").lower()
+                    result["premium_css"] = (
+                        "PASS" if css_response.status == 200
+                        and mime.startswith("text/css")
+                        and ".landing.premium" in css
+                        else "FAIL"
+                    )
+            except HTTPError as check_error:
+                result["premium_css_http_status"] = int(check_error.code)
+            except (socket.gaierror, ssl.SSLError, URLError, TimeoutError,
+                    ConnectionError, OSError, ValueError):
+                pass
     except (socket.gaierror,ssl.SSLError,URLError,TimeoutError,
             ConnectionError,OSError,ValueError) as exc:
         # Never leak request headers, cookies, credentials or raw upstream body.
         result["blocker_type"] = type(exc).__name__
         result["blocked_at"] = phase
     result["public_edge_pass"] = all(result[k]=="PASS" for k in (
-        "dns","tls","homepage","health","security_headers"))
+        "dns","tls","homepage","health","premium_css","security_headers"))
     return result
 
 

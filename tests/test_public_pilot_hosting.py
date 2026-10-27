@@ -16,6 +16,10 @@ def test_marketing_pilot_prevents_unaccepted_features_and_uses_host_port(monkeyp
     monkeypatch.setenv("PORT", "13749")
     for key in PUBLIC_PILOT_BLOCKED_FLAGS:
         monkeypatch.setenv(key, "true" if key.endswith("ENABLED") else "demo")
+    # Track keys written by main() too, so test success does not poison
+    # subsequent integration tests through os.environ assignment.
+    for key in ("API_HOST", "API_RELOAD", "API_PORT", "TENDERLENS_HEALTHCHECK_URL"):
+        monkeypatch.setenv(key, "synthetic-before")
     entered=[]
     from app.api import __main__ as api_launcher
     monkeypatch.setattr(api_launcher, "main", lambda: entered.append(True) or 0)
@@ -34,8 +38,14 @@ def test_marketing_pilot_prevents_unaccepted_features_and_uses_host_port(monkeyp
 
 @pytest.mark.parametrize("port",["", "0", "-1", "65536", "not-an-integer", "8080;rm", " 8000"])
 def test_public_pilot_refuses_untrusted_bind_ports(monkeypatch,port):
+    import os
     monkeypatch.setenv("PORT",port)
+    guard_keys = (*PUBLIC_PILOT_BLOCKED_FLAGS,
+                  "API_HOST", "API_RELOAD", "API_PORT",
+                  "TENDERLENS_HEALTHCHECK_URL")
+    before = {key: os.environ.get(key) for key in guard_keys}
     assert main()==2
+    assert {key: os.environ.get(key) for key in guard_keys} == before
 
 
 def test_public_preview_landing_does_not_offer_disabled_registration(monkeypatch):

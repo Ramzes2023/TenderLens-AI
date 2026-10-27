@@ -13,9 +13,13 @@ the old production API container/image. The **only** shared resource is the
 already-existing, explicitly checked Caddy edge bridge network; the isolated
 source services have no published host ports.
 
-Current initial adapter: `mikroton_tender` ONLY. It represents a separate
-commercial public procurement source, not EIS. Its documented public HTTPS API
+Initial RU sources: `mikroton_tender` and `stan_commercial_public` ONLY.
+MikroTon is a commercial public procurement portal, not EIS; its API
 has active and archived endpoints: https://tender.mt52.ru/api-docs .
+STAN has published, separately verified **non-EIS commercial** originals
+with actual bidding deadlines: https://stantorgi.ru/etp .
+STAN's adapter expressly skips its 223-FZ / EIS-mirror items to avoid
+double-counting those tenders as independent listings.
 **An official site showing no active tenders must lead to a blocked cutover,
 not sample/demo records or re-labeled archived procurement.**
 
@@ -44,7 +48,7 @@ pass. Never enable them as a blanket group.
      -f ops/public_sources/compose.yaml run --rm --no-deps enqueue
    ```
 
-   The `enqueue` runs only the approved, enabled MikroTon connector; it
+   The `enqueue` runs only the two operator-enabled, approved RU connectors; it
    makes **no upstream network fetch**. The long-running Worker performs
    the actual bounded, first-party fetch and fenced durable SQL write.
 
@@ -56,8 +60,9 @@ pass. Never enable them as a blanket group.
    `docker ps` or from an empty market chart.
 5. In the **isolated** guest API's container run
    `python -m scripts.verify_isolated_public_source_release`. The gate
-   requires a recently fetched MikroTon source identity, a public original
-   URL, a future submission deadline, and at least one source preview.
+   requires a recently fetched MikroTon or non-EIS STAN source identity,
+   a canonical first-party URL, a future submission deadline, and a
+   nonempty visible preview for at least one approved source.
    A successful gate reports `PUBLIC_SOURCE_PROMOTION=CANDIDATE_ONLY`,
    not permission to skip an independent official-source Worker receipt.
    If `BLOCKED_NO_FRESH_ORIGINALS`, do not promote this source; it may
@@ -98,7 +103,7 @@ pass. Never enable them as a blanket group.
 
 Only after a live source is proven, explicitly start the separate
 `verified-scheduler` profile. Scheduler has `network_mode:none` and
-**only enqueues** the MikroTon job once per UTC hour with durable same-hour
+**only enqueues** the two explicitly approved jobs once per UTC hour each with durable same-hour
 idempotency; the isolated Worker fetches the actual public source. It does
 not send email, Telegram, customer reminders or paid source details.
 

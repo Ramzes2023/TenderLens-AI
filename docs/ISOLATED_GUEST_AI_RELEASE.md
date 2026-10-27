@@ -76,14 +76,11 @@ configuration derived from the **actual** running Caddyfile, replacing
 only the old default application proxy handler with routing equivalent to:
 
 ```caddy
-route {
-    @public_ai path /api/v1/public/help/ask
-    handle @public_ai {
-        reverse_proxy guest-ai:8100
-    }
-    handle {
-        reverse_proxy api:8000
-    }
+handle /api/v1/public/help/ask {
+    reverse_proxy guest-ai:8100
+}
+handle {
+    reverse_proxy api:8000
 }
 ```
 

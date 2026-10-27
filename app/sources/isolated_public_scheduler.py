@@ -32,10 +32,11 @@ def approved_cycle():
     from app.monitoring.config import load_monitoring_settings
     from app.sources.catalog import build_source_catalog
     from app.sources.ingestion import ConnectorSyncService
+    from app.sources.ru_cycle import approved_ru_keys
 
     catalog = build_source_catalog(load_monitoring_settings())
-    if set(catalog.enabled_keys) != {"mikroton_tender"}:
-        raise ValueError("Unexpected enabled source in scheduler")
+    if approved_ru_keys(catalog) != ("mikroton_tender",):
+        raise ValueError("Unexpected enabled RU source in scheduler")
 
     database = Database(load_database_settings())
     try:

@@ -25,6 +25,12 @@ def landing_html(authenticated: bool = False) -> str:
     )
     signup_href = "#product" if pilot_marketing_only else "/register"
     signup_label = "Explore features" if pilot_marketing_only else "Create account"
+    guest_search = GUEST_SEARCH_HTML
+    if pilot_marketing_only:
+        guest_search = guest_search.replace(
+            'class="guest-register-cta" href="/register">Create account →',
+            'class="guest-register-cta" href="#product">Explore features →',
+        )
     pilot_notice = (
         '<p class="public-pilot-notice" role="status">'
         'Public product preview. Account registration, payments and '
@@ -45,7 +51,7 @@ def landing_html(authenticated: bool = False) -> str:
 {HERO_DASHBOARD_HTML}</section></div>
 <div class="trust-strip"><span>Regional and small purchases</span><span>International procurement</span><span>Transparent scoring criteria</span><span>Evidence-based source status</span></div>
 {ANALYTICS_WALL_HTML}
-{GUEST_SEARCH_HTML}
+{guest_search}
 {MARKET_PULSE_HTML}
 <section class="content-section advantage-section" id="difference"><div class="section-heading"><span class="eyebrow">WHAT MAKES VALYQON DIFFERENT</span><h2>Not just more tenders.<br>Better visibility into the market.</h2><p>Three priorities guide our coverage roadmap and the way we present every opportunity.</p></div><div class="advantage-grid">
 <article><span class="advantage-number">01 / COVERAGE DEPTH</span><h3>Explore the blind spots</h3><p>Go beyond central portals to include small-value purchases, regional marketplaces and commercial notices whenever supported adapters can retrieve them.</p></article>

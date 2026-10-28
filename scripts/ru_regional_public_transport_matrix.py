@@ -7,6 +7,8 @@ official original. No account, production DB, email, Telegram or bot access.
 It exists because #313, #300, #191 report opaque connector failures.
 Each target is fixed in source and requested as a bounded, verified HTTPS GET
 with pinned public DNS IP, hostname-verified TLS and no redirects.
+The strict shared reader forbids query parameters, so these tests establish
+only generic publisher-host transport; they DO NOT prove region filtering.
 """
 from __future__ import annotations
 
@@ -21,28 +23,29 @@ from scripts.ru_trusted_live_probe import (
 # The regional Fabrikant catalogue is a MIRROR of EIS notices, NOT a second
 # source for counting unique publications. Both hostnames appear in official
 # Fabrikant pages and are probed only to understand the broken transport.
-# Only English-ASCII, fixed percent-encoded query and path values are used.
+# Only literal, immutable, query-free public paths are used. The real adapters'
+region-filtered list queries must still pass their own strict live tests.
 TARGETS = {
     "ingushetia_eis_rss": Target(
         "zakupki.gov.ru",
-        "/epz/order/extendedsearch/rss.html?fz44=on&searchString=%D0%98%D0%BD%D0%B3%D1%83%D1%88%D0%B5%D1%82%D0%B8%D1%8F&morphology=on&pageNumber=1",
+        "/epz/order/extendedsearch/rss.html",
         "rss",
     ),
     "ingushetia_fabrikant_44": Target(
         "44.fabrikant.ru",
-        "/44/catalog/procedure/published?placer_search_str=0608058533&order=publication_datetime&dir=desc",
+        "/44/catalog/procedure/published",
     ),
     "ingushetia_fabrikant_soap4": Target(
         "soap4.fabrikant.ru",
-        "/44/catalog/procedure/published?placer_search_str=0608058533&order=publication_datetime&dir=desc",
+        "/44/catalog/procedure/published",
     ),
     "chechnya_fabrikant_44": Target(
         "44.fabrikant.ru",
-        "/44/catalog/procedure/published?placer_search_str=2016014690&order=publication_datetime&dir=desc",
+        "/44/catalog/procedure/published",
     ),
     "chechnya_fabrikant_soap4": Target(
         "soap4.fabrikant.ru",
-        "/44/catalog/procedure/published?placer_search_str=2016014690&order=publication_datetime&dir=desc",
+        "/44/catalog/procedure/published",
     ),
     "samara_firstparty_grid": Target(
         "webtorgi.samregion.ru", "/smallpurchases/GzwSP/NoticesGrid",
@@ -81,6 +84,7 @@ def main() -> int:
     visible = sum(r["classification"] == "HTTPS_VISIBLE_NOT_ORIGINAL_VERIFIED"
                   for r in results)
     print(f"OFFICIAL_HTTPS_VISIBLE={visible}/{len(results)}")
+    print("REGION_FILTER_APPLIED=NO")
     print("CURRENT_OPEN_TENDER_ORIGINALS_CONFIRMED=0")
     print("WORKER_SQL_SEARCH_CONFIRMED=NO")
     print("EIS_MIRRORS_COUNTED_AS_DISTINCT=NO")

@@ -9,6 +9,7 @@ No persistent DB, Caddy, user data, credentials, alerts, or test fixtures.
 A PASS is not proof that a VPS Worker or public HTTPS search is deployed.
 """
 import asyncio
+import json
 from datetime import datetime, timezone
 
 from app.api.public_source_deadline import eligible_published_deadline
@@ -16,8 +17,8 @@ from app.sources.lenobl_small_public import LenoblSmallPublicSource, SOURCE_ID
 
 
 def acceptance():
-    notices=asyncio.run(LenoblSmallPublicSource(timeout=25).fetch(3))
-    if not 1 <= len(notices) <= 3 or len({n.external_id for n in notices}) != len(notices):
+    notices=asyncio.run(LenoblSmallPublicSource(timeout=25).fetch(6))
+    if not 1 <= len(notices) <= 6 or len({n.external_id for n in notices}) != len(notices):
         raise AssertionError("Unverified or duplicated official Lenobl original")
     now=datetime.now(timezone.utc)
     current=[]
@@ -28,7 +29,7 @@ def acceptance():
         if eligible_published_deadline(SOURCE_ID,notice.deadline,now=now):
             current.append(notice.external_id)
     print("RU_LENOBL_REAL_ORIGINAL_DETAILS="+str(len(notices)))
-    print("RU_LENOBL_PUBLISHED_CALENDAR_DATES="+str(
+    print("RU_LENOBL_OFFICIAL_PUBLISHED_DATES="+json.dumps([n.deadline for n in notices]))\n    print("RU_LENOBL_PUBLISHED_CALENDAR_DATES="+str(
         sum(n.deadline is not None for n in notices)))
     print("RU_LENOBL_SAFELY_FUTURE_ORIGINALS="+str(len(current)))
     if not current:

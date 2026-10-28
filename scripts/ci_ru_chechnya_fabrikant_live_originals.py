@@ -4,6 +4,7 @@ This is discovery ONLY; it does NOT register/enable the publisher in
 production, claim EIS-independent notices or send Telegram messages.
 """
 from __future__ import annotations
+from scripts.source_failure_diagnostics import transport_category
 import asyncio
 import json
 import re
@@ -45,7 +46,8 @@ def main() -> int:
     try:
         result = asyncio.run(real())
     except Exception as exc:
-        print("RU_CHECHNYA_FABRIKANT_REAL=BLOCKED")
+        print('TRANSPORT_CATEGORY=' + transport_category(exc))
+        print('RU_CHECHNYA_FABRIKANT_REAL=BLOCKED')
         print("FAILURE_CLASS=" + type(exc).__name__[:70])
         # Only fixed transport classifications. Never reveal upstream raw
         # errors, request URLs, cookies, tokens, supplier names or IPs.

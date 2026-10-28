@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - scripts/research_ru_lenobl_official_deadline.py
+      - scripts/ci_ru_lenobl_current_open.py
+      - app/sources/lenobl_small_public.py
+      - app/api/public_source_deadline.py
+      - tests/test_ru_lenobl_small_public.py
       - tests/test_research_ru_lenobl_official_deadline.py
       - .github/workflows/ru-lenobl-public-deadline-research.yml
   workflow_dispatch:
@@ -34,6 +38,12 @@ jobs:
       - name: Strict read-only live original list/detail to bounded date diagnostic
         timeout-minutes: 4
         run: python -B -m scripts.research_ru_lenobl_official_deadline
+      - name: Require genuine current open original deadlines (no calendar fabrication)
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_lenobl_current_open
+      - name: Genuine original to leased Worker to disposable SQL
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_lenobl_real_worker
       - name: This research does not enable or deploy this source
         run: |
           echo "RU_LENOBL_INGESTION_NOT_CHANGED=YES"

@@ -81,7 +81,7 @@ def _public_preview(notice):
 
 
 def search_persisted_notices(database, query: str, *, limit: int = MAX_PREVIEWS,
-                             active_only: bool = False, now=None):
+                             active_only: bool = False, now=None, allowed_sources=None):
     """Read a bounded snapshot of the shared, real connector storage.
 
     Do not search saved_opportunities, discovery_search_history or tenant data.
@@ -109,6 +109,8 @@ def search_persisted_notices(database, query: str, *, limit: int = MAX_PREVIEWS,
         except (ValueError, TypeError, KeyError):
             continue
         if not isinstance(notice, dict) or not isinstance(notice.get("source"), str):
+            continue
+        if allowed_sources is not None and notice["source"] not in allowed_sources:
             continue
         # Isolated live-source preview must never advertise expired archive
         # procurements as currently actionable. Production's existing guest
@@ -215,6 +217,7 @@ async def guest_opportunity_search(
         result = await asyncio.to_thread(
             search_persisted_notices, database, query,
             active_only=(getattr(request.app.state, "public_source_active_only", False) is True),
+            allowed_sources=getattr(request.app.state, "public_source_allowed_keys", None),
         )
     except (sqlite3.Error, StorageError, ValueError, TypeError, OSError):
         raise HTTPException(503, "Real tender search is temporarily unavailable.",

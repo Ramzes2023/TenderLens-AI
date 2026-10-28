@@ -13,6 +13,7 @@ from app import __version__
 
 from .config import ApiSettings, load_api_settings
 from .auth_routes import router as auth_router
+from .resend_webhook_routes import router as resend_webhook_router
 from .support_routes import router as support_router
 from .operator_routes import router as operator_router
 from .billing_routes import router as billing_router
@@ -92,6 +93,7 @@ def create_app(runtime: ApiRuntime | None = None, settings: ApiSettings | None =
         max_entries=8192,
     )
     app.include_router(auth_router)
+    app.include_router(resend_webhook_router)
     app.include_router(support_router)
     app.include_router(operator_router)
     app.include_router(billing_router)

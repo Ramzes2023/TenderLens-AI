@@ -90,7 +90,8 @@ async def resend_outcome(request: Request) -> dict[str, bool]:
     event_type = event.get("type")
     data = event.get("data")
     if event_type in _TYPES and isinstance(data, dict):
-        kind = _SUBJECT_KINDS.get(data.get("subject"))
+        subject = data.get("subject")
+        kind = _SUBJECT_KINDS.get(subject) if isinstance(subject, str) else None
         if kind:
             # Never log recipient, message ID, subject, token-bearing URL or bounce text.
             level = logging.WARNING if event_type in {

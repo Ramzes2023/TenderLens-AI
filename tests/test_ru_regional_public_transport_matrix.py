@@ -14,8 +14,9 @@ def test_only_known_public_publisher_origins_and_fixed_queries():
     assert all(not p.path.startswith("http") and "@" not in p.path and
                "\\" not in p.path and "//" not in p.path for p in TARGETS.values())
     assert TARGETS["ingushetia_eis_rss"].mode=="rss"
-    assert TARGETS["chechnya_fabrikant_44"].path.endswith("dir=desc")
-    assert TARGETS["chechnya_fabrikant_soap4"].path.endswith("dir=desc")
+    assert all("?" not in t.path for t in TARGETS.values())
+    assert TARGETS["chechnya_fabrikant_44"].path=="/44/catalog/procedure/published"
+    assert TARGETS["chechnya_fabrikant_soap4"].path=="/44/catalog/procedure/published"
 
 
 def test_live_probe_classifies_html_as_visible_not_verified_original():

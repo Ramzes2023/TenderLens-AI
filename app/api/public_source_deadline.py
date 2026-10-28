@@ -31,8 +31,8 @@ def eligible_published_deadline(source: str, raw: object, *, now: datetime) -> b
         # at the official publisher. Require strictly later.
         return due > (now + timedelta(hours=14)).date()
     if (source in NAIVE_CLOCK_ALLOWED and re.fullmatch(
-            r"20\\d{2}-\\d{2}-\\d{2}T(?:[01]\\d|2[0-3]):[0-5]\\d"
-            r"(?::[0-5]\\d)?", raw)):
+            r"20\d{2}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d"
+            r"(?::[0-5]\d)?", raw)):
         try:
             local_clock = datetime.fromisoformat(raw)
         except ValueError:
@@ -43,6 +43,10 @@ def eligible_published_deadline(source: str, raw: object, *, now: datetime) -> b
             now + timedelta(hours=14)
         ).replace(tzinfo=None)
         return local_clock > latest_possible_local_clock
+    if source in NAIVE_CLOCK_ALLOWED:
+        # This portal never supplied a timezone, nor a bare date-only
+        # deadline: refuse any unsupported date/clock representation.
+        return False
     try:
         timestamp = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError:

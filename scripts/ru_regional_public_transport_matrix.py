@@ -24,7 +24,7 @@ from scripts.ru_trusted_live_probe import (
 # source for counting unique publications. Both hostnames appear in official
 # Fabrikant pages and are probed only to understand the broken transport.
 # Only literal, immutable, query-free public paths are used. The real adapters'
-region-filtered list queries must still pass their own strict live tests.
+# Region-filtered list queries must still pass their own strict live tests.
 TARGETS = {
     "ingushetia_eis_rss": Target(
         "zakupki.gov.ru",

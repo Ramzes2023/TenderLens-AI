@@ -11,12 +11,12 @@ correctly concealed all such records as unverified.
 The official detail now has a visible field `Срок окончания подачи оферт`
 with text `DD <Russian month> YYYY г. HH:MM:SS`. It does **not**
 independently establish a timezone. The new source parser validates the
-calendar/time syntax but saves only the publisher's actual **calendar date**
-(`YYYY-MM-DD`), never guesses Moscow midnight or invents UTC. The
-source-specific active-only rule accepts a date only when strictly later
-than today's civil day at UTC+14 (conservative worldwide bound). The
-public guest response still supplies **only** title, published calendar
-date, price=null and currency=null, no buyer, originals or tenant data.
+calendar/time syntax and saves the publisher's actual **local date plus clock time**
+(`YYYY-MM-DDTHH:MM:SS`, no timezone), never guesses Moscow or UTC. The
+source-specific active-only rule accepts a date only only when the published local clock is strictly later
+than the current clock at UTC+14 (conservative worldwide bound). The
+public guest response still supplies **only** title, publisher local date and clock
+without a claimed timezone, price=null and currency=null, no buyer, originals or tenant data.
 
 ## Release proof
 
@@ -40,7 +40,7 @@ date, price=null and currency=null, no buyer, originals or tenant data.
    HTTPS guest endpoint, after new fenced Worker receipt, with previous
    STAN/Kavkaz/South Ural and separate GigaChat still working, may justify
    `RESULT=WORKING`. Test exact API/SQLite hashes and rollback.
-7. If the new official list shows only historic dates, **STOP/STAGED_ONLY**:
+7. If the new official list shows only expired local closing times, **STOP/STAGED_ONLY**:
    no fifth source is activated and the four-source site stays working.
 
 No email, Telegram, account/billing, Caddy or main production database change

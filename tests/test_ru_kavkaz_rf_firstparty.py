@@ -139,3 +139,23 @@ def test_synthetic_mock_transport_cannot_imply_real_availability(monkeypatch):
     assert len(requests) == 3
     assert all(method == "GET" and url.startswith("https://" + HOST + "/") for method, url in requests)
     # Fixture-only proof: live acceptance and fenced-worker acceptance are separate.
+
+
+def test_current_official_publisher_slug_has_single_dot_but_not_path_traversal():
+    # The actual 2026-10-22 publisher link contains 'tekhniche.skogo'.
+    # It was previously rejected, making the live Worker permanently fail.
+    official = (
+        "/purchases_sales/zakupki/tekushchie-/"
+        "zapros-kotirovok-v-elektronnoy-forme/"
+        "pravo-zaklyucheniya-dogovora-na-tekhniche.skogo-obsluzhivaniya/"
+    )
+    assert _canonical(official) == "https://" + HOST + official
+    for bad in (
+        official.replace("tekhniche.skogo", "tekhniche..skogo"),
+        official.replace("tekhniche.skogo", "%2etekhniche-skogo"),
+        official.replace("tekhniche.skogo", "../tekhniche-skogo"),
+        official + "?auth=1",
+        "//evil.example" + official,
+    ):
+        assert _canonical(bad) is None
+

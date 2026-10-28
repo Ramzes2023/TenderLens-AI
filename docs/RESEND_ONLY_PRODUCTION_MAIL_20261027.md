@@ -135,3 +135,59 @@ deliverability. Synthetic delivered@resend.dev is only integration proof.
 Google Postmaster Tools can be useful once domain DNS ownership is
 verified and there is sufficient traffic. Low-volume domains can have
 no visible telemetry: https://support.google.com/mail/answer/9981691.
+
+
+## Update: Resend engineering response, 2026-10-28 19:54 UTC
+
+Resend Customer Success Engineer Brian reviewed the two original recipient
+bounces and confirmed Gmail — not Resend — classified the messages as suspected
+unsolicited email. Resend cannot override Google's classification. His explicit
+recommendations: use a domain that the operator actually owns and controls
+(rather than a shared-domain namespace), and prefer account-email links whose
+hostname matches the sending domain. The original no-link probe also bounced,
+so the URL mismatch is a deliverability risk, **not** an established sole cause.
+
+Current operational mismatch:
+- Sender mailbox domain: `valyqon.dns.army`.
+- Canonical account-verification and reset links: `valyqon.duckdns.org`.
+- Neither an entry for `valyqon.ai` in Resend nor a historical DNS record
+  proves operator ownership of `valyqon.ai`.
+- The old two probes still do **not** prove current app templates deliver.
+- Resend MCP excluded recipient suppression (get 404, list empty).
+- No provider-supported bypass, sender allowlist or SMTP code-only fix has
+  been identified.
+
+The read-only exact Compose preflight now reports
+`sender_link_host_alignment=DIFFERENT_HOST` and
+`sender_link_review_required=true` for the existing candidate. This is
+**an advisory review gate**, not proof of SPF/DKIM/DMARC failure and not an
+automatic DNS ownership check. An exact hostname match is a conservative
+criterion; sibling subdomains on a legitimately owned parent may also be
+acceptable once separately reviewed.
+
+### Production-safe next path (no action authorized here)
+
+1. Establish that the owner legitimately controls a branded domain's DNS.
+   If `valyqon.ai` is not owned, obtaining a domain requires a separate
+   explicit user purchase/ownership decision. Do not assume or buy one.
+2. Set up the operator-controlled public app hostname with a valid certificate
+   and intact existing HTTPS/legacy redirect, and a Resend sender domain or
+   subdomain under the same legitimately owned brand. The website hostname and
+   sending subdomain need not literally be identical if the provider confirms
+   their branded-domain relationship meets its URL guidance; preserve the
+   explicit review warning until confirmed.
+3. Verify the exact records Resend provides for the selected sender, including
+   DKIM, SPF/bounce Return-Path and DMARC. Keep secrets in server-protected
+   configuration and do not alter existing production Compose/Caddy for
+   read-only diagnosis.
+4. Prepare a strictly limited auth-mail-only candidate with approved URL
+   and `From` values, independent real verification and reset acceptance
+   with specific user consent, recipient Inbox/Spam receipt and Resend event
+   evidence. Maintain one-time controls. Mail provider acceptance alone is not
+   recipient acceptance.
+5. Obtain explicit approval for a fresh sensitive backup/restore operation,
+   verify immutable image+volume rollback, and preserve the legal readiness
+   gate before any public signup or production release.
+
+Resend case: existing owner support thread, 28 October 2026. Its final message
+provides advice, not a Gmail delivery guarantee.

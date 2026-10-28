@@ -1,12 +1,10 @@
-"""Conservative current-date-only rule for first-party Kavkaz.RF originals.
+"""Conservative current dates for verified first-party Kavkaz.RF and Lenobl.
 
-A published deadline may have a calendar date but no clock time or timezone.
-Never invent a UTC timestamp or pretend a time of day was published. To
-safely call such a tender still open, require its date to be strictly after
-the latest currently existing civil date on earth (UTC+14). This can omit
-legitimate near-deadline tenders, but can never admit an expired local date.
-Date-only support is deliberately source-specific and disabled for other
-adapters, which must supply timezone-aware timestamps.
+The Kavkaz.RF original provides only a civil DATE. Lenobl provides an
+exact native DATE+TIME but no independently documented timezone. Never
+invent a UTC instant. An original local-clock deadline is safely open only
+if it is later than current time even in the maximum legal UTC+14 offset.
+All other adapters continue requiring timezone-aware ISO timestamps.
 """
 from __future__ import annotations
 
@@ -14,6 +12,7 @@ from datetime import date, datetime, timedelta, timezone
 import re
 
 DATE_ONLY_ALLOWED = frozenset({"kavkaz_rf_firstparty"})
+NAIVE_CLOCK_ALLOWED = frozenset({"lenobl_small_public"})
 
 
 def eligible_published_deadline(source: str, raw: object, *, now: datetime) -> bool:
@@ -31,6 +30,23 @@ def eligible_published_deadline(source: str, raw: object, *, now: datetime) -> b
         # A date tomorrow in UTC+14 is NOT safe: it could already be today
         # at the official publisher. Require strictly later.
         return due > (now + timedelta(hours=14)).date()
+    if (source in NAIVE_CLOCK_ALLOWED and re.fullmatch(
+            r"20\d{2}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d"
+            r"(?::[0-5]\d)?", raw)):
+        try:
+            local_clock = datetime.fromisoformat(raw)
+        except ValueError:
+            return False
+        # Without documented timezone, no possible UTC+14 locality
+        # may have passed the official displayed closing clock already.
+        latest_possible_local_clock = (
+            now + timedelta(hours=14)
+        ).replace(tzinfo=None)
+        return local_clock > latest_possible_local_clock
+    if source in NAIVE_CLOCK_ALLOWED:
+        # This portal never supplied a timezone, nor a bare date-only
+        # deadline: refuse any unsupported date/clock representation.
+        return False
     try:
         timestamp = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError:

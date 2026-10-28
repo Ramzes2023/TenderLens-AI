@@ -3,12 +3,13 @@
 A candidate is accepted only when discovered via /Search/NewRequests and its
 individual exact-host detail shows the same numeric request-group ID and a
 strong lexical corroboration of the listing's title in the official H1.
-No guessed tender law, EIS regNumber, prices, buyer or deadline.
+No guessed tender law, EIS regNumber, prices, buyer or deadline timezone.
 """
 from __future__ import annotations
 
 from contextlib import nullcontext
 from dataclasses import dataclass
+from datetime import datetime
 from html.parser import HTMLParser
 import math
 import re
@@ -24,7 +25,7 @@ SOURCE_ID = "lenobl_small_public"
 HOST = "zakupki.lenreg.ru"
 LIST_URL = "https://" + HOST + "/Search/NewRequests"
 MAX_BYTES = 1_200_000
-MAX_DETAILS = 3
+MAX_DETAILS = 6
 DETAIL_PATH = re.compile(r"/ProductRequestGroup/Index/([0-9]{4,16})/?")
 
 
@@ -149,6 +150,52 @@ def parse_lenobl_listing(payload, *, limit=MAX_DETAILS):
     return records
 
 
+_RU_MONTH = {
+    "января": 1, "февраля": 2, "марта": 3, "апреля": 4,
+    "мая": 5, "июня": 6, "июля": 7, "августа": 8,
+    "сентября": 9, "октября": 10, "ноября": 11, "декабря": 12,
+}
+_OFFER_DEADLINE = re.compile(
+    r"срок\s+окончания\s+подачи\s+оферт\s*:?\s*"
+    r"(?P<day>[0-3]?[0-9])\s+(?P<month>[А-Яа-яЁё]+)\s+"
+    r"(?P<year>20[0-9]{2})\s*г\.?\s+"
+    r"(?P<hour>[0-2][0-9]):(?P<minute>[0-5][0-9])"
+    r"(?::(?P<second>[0-5][0-9]))?(?![0-9])",
+    re.I,
+)
+
+
+def parse_official_offer_local_datetime(visible: str) -> str | None:
+    """Preserve the publisher's actual wall clock, without making up a timezone.
+
+    The date, hour, minute, and optional second come from a single visible
+    'Срок окончания подачи оферт' field. A separate public-only predicate
+    checks if it is safely in the future for ANY legal UTC offset.
+    """
+    if type(visible) is not str:
+        raise ValueError("Invalid Lenobl visible detail")
+    matches = list(_OFFER_DEADLINE.finditer(visible))
+    if not matches:
+        return None
+    parsed = set()
+    for match in matches:
+        month = _RU_MONTH.get(match.group("month").casefold().replace("ё", "е"))
+        hour = int(match.group("hour"))
+        if month is None or hour > 23:
+            return None
+        second = match.group("second")
+        try:
+            due = datetime(
+                int(match.group("year")), month, int(match.group("day")),
+                hour, int(match.group("minute")), int(second or "0"),
+            )
+        except ValueError:
+            return None
+        parsed.add(due.isoformat(timespec="seconds" if second is not None else "minutes"))
+    # Different closing times on the same page are conflicting, not safe.
+    return next(iter(parsed)) if len(parsed) == 1 else None
+
+
 def parse_lenobl_detail(payload, *, identity, url, listing_title):
     if (type(identity) is not str or type(url) is not str
             or _canonical(url) != (identity, url) or type(listing_title) is not str
@@ -166,7 +213,8 @@ def parse_lenobl_detail(payload, *, identity, url, listing_title):
     listed, actual = _tokens(listing_title), _tokens(heading)
     if len(listed) < 2 or len(listed & actual) / len(listed) < 0.75:
         raise ValueError("Lenobl official listing/detail titles do not corroborate")
-    notice = TenderNotice(source=SOURCE_ID, external_id=identity, title=heading, url=url)
+    notice = TenderNotice(source=SOURCE_ID, external_id=identity, title=heading, url=url,
+                          deadline=parse_official_offer_local_datetime(visible))
     validate_notice(notice, SOURCE_ID)
     return notice
 

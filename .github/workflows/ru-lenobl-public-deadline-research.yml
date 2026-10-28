@@ -1,0 +1,87 @@
+name: RU Lenobl fifth public-site original and real offer deadline gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/research_ru_lenobl_official_deadline.py
+      - scripts/ci_ru_lenobl_current_open.py
+      - app/sources/lenobl_small_public.py
+      - app/api/public_source_deadline.py
+      - app/api/guest_search_routes.py
+      - app/sources/isolated_public_scheduler.py
+      - scripts/verify_lenobl_public_site_candidate.py
+      - ops/public_sources/compose.lenobl.yaml
+      - tests/test_ru_lenobl_public_site_candidate.py
+      - docs/sources/ru_lenobl_fifth_public_site_rollout.md
+      - tests/test_ru_lenobl_small_public.py
+      - tests/test_research_ru_lenobl_official_deadline.py
+      - .github/workflows/ru-lenobl-public-deadline-research.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-date-label-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHON_DOTENV_DISABLED: '1'
+      TELEGRAM_BOT_TOKEN: ''
+      OUTBOUND_PROXY_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Offline date-label and hidden-value safeguards
+        run: python -m pytest -q tests/test_research_ru_lenobl_official_deadline.py tests/test_ru_lenobl_small_public.py tests/test_ru_lenobl_public_site_candidate.py tests/test_isolated_public_sources.py
+      - name: Validate optional fifth-source Docker Compose isolation
+        run: |
+          set -euo pipefail
+          docker compose --profile operator --profile verified-scheduler \
+            -p valyqon-public-sources \
+            -f ops/public_sources/compose.yaml \
+            -f ops/public_sources/compose.south-ural.yaml \
+            -f ops/public_sources/compose.kavkaz-rf.yaml \
+            -f ops/public_sources/compose.lenobl.yaml \
+            config --format json > /tmp/fifth.json
+          python - <<'PY'
+          import json
+          j=json.load(open('/tmp/fifth.json'))
+          svc=j['services']
+          assert set(svc)=={'guest-sources','worker','scheduler','enqueue'}
+          assert len(j['volumes'])==1
+          assert all(not v.get('external') for v in j['volumes'].values())
+          for name,item in svc.items():
+              assert item['read_only'] and not item.get('ports')
+              env=item['environment']
+              assert env['LENOBL_SMALL_PUBLIC_ENABLED']=='true'
+              assert env['SOUTH_URAL_PUBLIC_ENABLED']=='true'
+              assert env['KAVKAZ_RF_FIRSTPARTY_ENABLED']=='true'
+              assert env['DATABASE_URL']=='sqlite:////app/data/isolated-public-sources.sqlite3'
+              assert env['TELEGRAM_BOT_TOKEN']==''
+          assert svc['scheduler']['network_mode']=='none'
+          assert svc['enqueue']['network_mode']=='none'
+          print('FIFTH_SOURCE_COMPOSE=ISOLATED')
+          print('PRODUCTION_UNTOUCHED=YES')
+          PY
+      - name: Strict read-only live original list/detail to bounded date diagnostic
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_lenobl_official_deadline
+      - name: Require genuine current open original deadlines (no calendar fabrication)
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_lenobl_current_open
+      - name: Genuine original to leased Worker to disposable SQL
+        timeout-minutes: 4
+        run: python -B -m scripts.ci_ru_lenobl_real_worker
+      - name: This research does not enable or deploy this source
+        run: |
+          echo "RU_LENOBL_INGESTION_NOT_CHANGED=YES"
+          echo "PUBLIC_SOURCE_CUTOVER=NO"
+          echo "PRODUCTION_CUTOVER_STILL_REQUIRES_VPS_LIVE_EVIDENCE=YES"

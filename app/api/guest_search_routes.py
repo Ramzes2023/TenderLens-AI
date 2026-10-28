@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from app.database.backend import StorageError
+from app.sources.lenobl_small_public import _canonical as _official_lenobl_url
 from .public_source_deadline import eligible_published_deadline
 
 router = APIRouter(tags=["guest-search"], include_in_schema=False)
@@ -123,6 +124,18 @@ def search_persisted_notices(database, query: str, *, limit: int = MAX_PREVIEWS,
                 ):
                     continue
             except (ValueError, TypeError, OverflowError):
+                continue
+        # Newly staged Lenobl notices must retain the exact official
+        # list-discovered canonical identity. Do not expose imported or
+        # malformed rows merely because they contain a future-looking date.
+        if active_only and notice["source"] == "lenobl_small_public":
+            identity = notice.get("external_id")
+            original = notice.get("url")
+            if (type(identity) is not str or type(original) is not str
+                    or _official_lenobl_url(original) != (identity, original)
+                    or notice.get("initial_price") is not None
+                    or notice.get("currency") is not None
+                    or notice.get("tender_number") is not None):
                 continue
         # Only the visible title is searchable in guest mode. Searching hidden
         # buyer/URL/source/summary fields creates an information-disclosure oracle.

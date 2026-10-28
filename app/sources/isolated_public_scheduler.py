@@ -48,6 +48,13 @@ def approved_cycle():
             # layering a fourth-source release atop the installed stack.
             raise ValueError("Kavkaz.RF requires the approved South Ural overlay.")
         approved += ("kavkaz_rf_firstparty",)
+    northwest = os.environ.get("LENOBL_SMALL_PUBLIC_ENABLED", "false").strip().lower()
+    if northwest not in {"true", "false"}:
+        raise ValueError("Invalid Lenobl source opt-in.")
+    if northwest == "true":
+        if extension != "true" or north_caucasus != "true":
+            raise ValueError("Lenobl requires the existing four-source overlays.")
+        approved += ("lenobl_small_public",)
     catalog = build_source_catalog(load_monitoring_settings())
     if set(approved_ru_keys(catalog)) != set(approved):
         raise ValueError("Unexpected enabled RU source in scheduler")

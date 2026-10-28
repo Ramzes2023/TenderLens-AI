@@ -28,11 +28,12 @@ def queue(tmp_path, cat):
     return db, repo, ConnectorSyncService(JobService(repo), cat)
 
 
-def test_only_nine_explicitly_verified_operator_sources_and_no_side_effects(tmp_path):
+def test_only_eleven_explicitly_verified_operator_sources_and_no_side_effects(tmp_path):
     assert RU_APPROVED_SOURCES == (
         "b2b_center", "lenobl_small_public", "nmck_native_public",
         "mikroton_tender", "south_ural_public", "stan_commercial_public",
-        "kavkaz_rf_firstparty", "ru_samara_public_list",
+        "kavkaz_rf_firstparty", "ru_ingushetia_eis44",
+        "ru_ingushetia_fabrikant44", "ru_samara_public_list",
         "ru_dagestan_public_list",
     )
     cat = catalog()
@@ -56,6 +57,8 @@ def test_only_nine_explicitly_verified_operator_sources_and_no_side_effects(tmp_
     ("south_ural_public_enabled", "south_ural_public"),
     ("stan_commercial_public_enabled", "stan_commercial_public"),
     ("kavkaz_rf_firstparty_enabled", "kavkaz_rf_firstparty"),
+    ("ru_ingushetia_eis44_enabled", "ru_ingushetia_eis44"),
+    ("ru_ingushetia_fabrikant44_enabled", "ru_ingushetia_fabrikant44"),
     ("ru_samara_public_list_enabled", "ru_samara_public_list"),
     ("ru_dagestan_public_list_enabled", "ru_dagestan_public_list"),
 ])
@@ -83,6 +86,8 @@ def test_ru_cycle_hourly_repeat_is_idempotent_then_next_hour_unique(tmp_path):
                   nmck_native_public_enabled=True, mikroton_tender_enabled=True,
                   south_ural_public_enabled=True, stan_commercial_public_enabled=True,
                   kavkaz_rf_firstparty_enabled=True,
+                  ru_ingushetia_eis44_enabled=True,
+                  ru_ingushetia_fabrikant44_enabled=True,
                   ru_samara_public_list_enabled=True,
                   ru_dagestan_public_list_enabled=True)
     db, jobs, service = queue(tmp_path, cat)
@@ -98,7 +103,7 @@ def test_ru_cycle_hourly_repeat_is_idempotent_then_next_hour_unique(tmp_path):
         assert all(first[key]["job_id"] != next_hour[key]["job_id"]
                    for key in RU_APPROVED_SOURCES)
         with db.connect() as conn:
-            assert conn.execute("SELECT COUNT(*) FROM durable_jobs").fetchone()[0] == 18
+            assert conn.execute("SELECT COUNT(*) FROM durable_jobs").fetchone()[0] == 22
             ids = {json.loads(row[0])["source_id"] for row in conn.execute(
                 "SELECT payload_json FROM durable_jobs"
             )}

@@ -20,6 +20,10 @@ RU_APPROVED_SOURCES = (
     "south_ural_public",
     "stan_commercial_public",
     "kavkaz_rf_firstparty",
+    # Real first-party EIS originals and accredited same-publication mirror.
+    # No new job without an individually enabled operator flag.
+    "ru_ingushetia_eis44",
+    "ru_ingushetia_fabrikant44",
     # Proven native public LIST -> fenced Worker -> SQLite; original deep details not verified.
     "ru_samara_public_list",
     # Official anonymous Dagestan list -> fenced Worker/SQL; deep details login-protected.

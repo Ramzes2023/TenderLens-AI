@@ -3,13 +3,13 @@
 A candidate is accepted only when discovered via /Search/NewRequests and its
 individual exact-host detail shows the same numeric request-group ID and a
 strong lexical corroboration of the listing's title in the official H1.
-No guessed tender law, EIS regNumber, prices, buyer or deadline.
+No guessed tender law, EIS regNumber, prices, buyer or deadline timezone.
 """
 from __future__ import annotations
 
 from contextlib import nullcontext
 from dataclasses import dataclass
-from datetime import date
+from datetime import datetime
 from html.parser import HTMLParser
 import math
 import re
@@ -165,13 +165,12 @@ _OFFER_DEADLINE = re.compile(
 )
 
 
-def parse_official_offer_calendar_date(visible: str) -> str | None:
-    """Return only the publisher's actual civil DATE, never invent a timezone.
+def parse_official_offer_local_datetime(visible: str) -> str | None:
+    """Preserve the publisher's actual wall clock, without making up a timezone.
 
-    The public original exposes a Russian month name and a local clock, but
-    without documented timezone. An active guest preview therefore requires
-    the confirmed calendar date to be safely beyond the worldwide latest
-    civil day (checked separately); it never invents a UTC/Moscow instant.
+    The date, hour, minute, and optional second come from a single visible
+    'Срок окончания подачи оферт' field. A separate public-only predicate
+    checks if it is safely in the future for ANY legal UTC offset.
     """
     if type(visible) is not str:
         raise ValueError("Invalid Lenobl visible detail")
@@ -184,12 +183,16 @@ def parse_official_offer_calendar_date(visible: str) -> str | None:
         hour = int(match.group("hour"))
         if month is None or hour > 23:
             return None
+        second = match.group("second")
         try:
-            due = date(int(match.group("year")), month, int(match.group("day")))
+            due = datetime(
+                int(match.group("year")), month, int(match.group("day")),
+                hour, int(match.group("minute")), int(second or "0"),
+            )
         except ValueError:
             return None
-        parsed.add(due.isoformat())
-    # Conflicting dates on a published original must never be called open.
+        parsed.add(due.isoformat(timespec="seconds" if second is not None else "minutes"))
+    # Different closing times on the same page are conflicting, not safe.
     return next(iter(parsed)) if len(parsed) == 1 else None
 
 
@@ -211,7 +214,7 @@ def parse_lenobl_detail(payload, *, identity, url, listing_title):
     if len(listed) < 2 or len(listed & actual) / len(listed) < 0.75:
         raise ValueError("Lenobl official listing/detail titles do not corroborate")
     notice = TenderNotice(source=SOURCE_ID, external_id=identity, title=heading, url=url,
-                          deadline=parse_official_offer_calendar_date(visible))
+                          deadline=parse_official_offer_local_datetime(visible))
     validate_notice(notice, SOURCE_ID)
     return notice
 

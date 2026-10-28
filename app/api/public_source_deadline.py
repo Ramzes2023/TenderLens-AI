@@ -1,11 +1,12 @@
 """Conservative current-date-only rule for first-party Kavkaz.RF originals.
 
-A published deadline may have a calendar date but no clock time or timezone.
+A published deadline may have a calendar date but no documented timezone.
 Never invent a UTC timestamp or pretend a time of day was published. To
 safely call such a tender still open, require its date to be strictly after
 the latest currently existing civil date on earth (UTC+14). This can omit
 legitimate near-deadline tenders, but can never admit an expired local date.
-Date-only support is deliberately source-specific and disabled for other
+Date-only support applies only to Kavkaz.RF and verified Lenobl originals;
+other
 adapters, which must supply timezone-aware timestamps.
 """
 from __future__ import annotations
@@ -13,7 +14,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 import re
 
-DATE_ONLY_ALLOWED = frozenset({"kavkaz_rf_firstparty"})
+DATE_ONLY_ALLOWED = frozenset({"kavkaz_rf_firstparty", "lenobl_small_public"})
 
 
 def eligible_published_deadline(source: str, raw: object, *, now: datetime) -> bool:

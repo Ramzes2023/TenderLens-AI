@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - scripts/probe_public_source_routes.py
+      - app/sources/isolated_public_inventory.py
+      - tests/test_isolated_public_source_inventory.py
       - .github/workflows/public-source-live-route-audit.yml
   workflow_dispatch:
 
@@ -26,6 +28,10 @@ jobs:
         run: |
           python -m py_compile scripts/probe_public_source_routes.py
           python -B scripts/probe_public_source_routes.py --self-test
+      - name: Verify isolated per-source inventory is safe and read-only
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pytest -q tests/test_isolated_public_source_inventory.py
       - name: Verify actual public HTTPS saved-source routes (not source activation)
         timeout-minutes: 2
         run: python -B scripts/probe_public_source_routes.py --live

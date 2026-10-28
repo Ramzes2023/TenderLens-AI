@@ -12,7 +12,9 @@ from app.database.config import DatabaseSettings
 from app.sources.opportunities import OpportunityRepository
 from scripts.verify_kavkaz_public_site_candidate import verify_kavkaz_candidate
 
-NOW = datetime(2026, 10, 28, 9, 30, tzinfo=timezone.utc)
+# At noon UTC, UTC+14 is already 29 October: a 29 October
+# date-only deadline is ambiguous, so it MUST be rejected.
+NOW = datetime(2026, 10, 28, 12, 0, tzinfo=timezone.utc)
 SOURCE = "kavkaz_rf_firstparty"
 NUMBER = "ЗКЭФ-ДЭУК-1519"
 ORIGINAL = (

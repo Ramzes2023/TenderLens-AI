@@ -145,3 +145,27 @@ def test_missing_signature_headers_are_rejected(
     response = app_client.post(_PATH, content=raw, headers=headers)
     assert response.status_code == 401
     assert "resend_account_mail_event" not in caplog.text
+
+
+def test_failed_event_never_logs_provider_reason(app_client, monkeypatch, caplog):
+    """Official email.failed carries data.failed.reason and recipient metadata."""
+    monkeypatch.setenv("VALYQON_RESEND_WEBHOOK_SECRET", _SECRET)
+    raw = json.dumps({
+        "type": "email.failed",
+        "data": {
+            "email_id": "private-failure-message-id",
+            "to": ["private-failure-recipient@example.test"],
+            "subject": "Reset your VALYQON AI password",
+            "failed": {"reason": "private-failure-provider-reason"},
+        },
+    }).encode()
+    caplog.set_level(logging.INFO, logger="valyqon.resend.outcomes")
+    response = app_client.post(_PATH, content=raw, headers=signed_request(raw))
+    assert response.status_code == 200
+    assert "kind=password_reset outcome=email.failed" in caplog.text
+    for secret in (
+        "private-failure-message-id",
+        "private-failure-recipient",
+        "private-failure-provider-reason",
+    ):
+        assert secret not in caplog.text

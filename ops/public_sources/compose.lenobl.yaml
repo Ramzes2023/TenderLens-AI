@@ -1,0 +1,16 @@
+# Fifth source ONLY when LIVE original+deadline+Worker gates are green.
+# Layer after compose.yaml, compose.south-ural.yaml and compose.kavkaz-rf.yaml.
+# Never use the tenderlens-vps production Compose project.
+services:
+  guest-sources:
+    environment:
+      LENOBL_SMALL_PUBLIC_ENABLED: "true"
+  worker:
+    environment:
+      LENOBL_SMALL_PUBLIC_ENABLED: "true"
+  scheduler:
+    environment:
+      LENOBL_SMALL_PUBLIC_ENABLED: "true"
+  enqueue:
+    environment:
+      LENOBL_SMALL_PUBLIC_ENABLED: "true"

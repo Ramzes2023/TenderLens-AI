@@ -1,0 +1,38 @@
+name: RU six-source isolated runtime audit contract
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/isolated_runtime_audit.py
+      - tests/test_isolated_runtime_audit.py
+      - .github/workflows/ru-six-public-runtime-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safe-readonly-runtime-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Compile and test operator's six-source SQL/Worker audit
+        run: |
+          python -m py_compile app/sources/isolated_runtime_audit.py
+          python -m pytest -q tests/test_isolated_runtime_audit.py tests/test_isolated_public_source_scheduler.py
+      - name: Check isolated Docker image actually bundles the audit module
+        run: |
+          set -euo pipefail
+          grep -q 'COPY app /app/app' Dockerfile
+          test -f app/sources/isolated_runtime_audit.py
+          echo "ISOLATED_RUNTIME_AUDIT_AVAILABLE_IN_DOCKER=YES"
+          echo "REAL_PRODUCTION_ACTIVATION=NOT_DONE"

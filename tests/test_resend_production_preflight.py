@@ -43,3 +43,38 @@ def test_unsafe_candidate_rejected(change):
     if change == 'extra_env': api['environment']['UNREVIEWED'] = 'true'
     if change == 'credential': api['environment']['VALYQON_SMTP_PASSWORD'] = ''
     with pytest.raises(AssertionError): module.validate_diff(a, b)
+
+
+
+def test_current_sender_and_duckdns_link_hosts_require_review():
+    _, candidate = configs()
+    env = candidate['services']['api']['environment']
+    assert module.sender_link_host_status(env) == 'DIFFERENT_HOST'
+
+
+def test_future_same_host_alignment_without_sending_any_email():
+    _, candidate = configs()
+    env = candidate['services']['api']['environment']
+    env['VALYQON_SMTP_FROM'] = 'VALYQON AI <team@auth.valyqon.example>'
+    env['VALYQON_PUBLIC_BASE_URL'] = 'https://AUTH.valyqon.example'
+    assert module.sender_link_host_status(env) == 'EXACT_MATCH'
+
+
+@pytest.mark.parametrize('mail_from,public_base', [
+    ('bad-address', 'https://auth.valyqon.example'),
+    ('team@auth.valyqon.example', 'http://auth.valyqon.example'),
+    ('team@auth.valyqon.example', 'https://[unclosed'),
+    ('team@auth.valyqon.example', ''),
+])
+def test_link_host_audit_uncertain_config_never_claims_match(mail_from, public_base):
+    assert module.sender_link_host_status({
+        'VALYQON_SMTP_FROM': mail_from,
+        'VALYQON_PUBLIC_BASE_URL': public_base,
+    }) == 'UNKNOWN'
+
+
+def test_different_subdomains_are_not_claimed_identical():
+    assert module.sender_link_host_status({
+        'VALYQON_SMTP_FROM': 'team@auth.valyqon.example',
+        'VALYQON_PUBLIC_BASE_URL': 'https://app.valyqon.example',
+    }) == 'DIFFERENT_HOST'

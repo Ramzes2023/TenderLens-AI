@@ -5,8 +5,10 @@ on:
     branches: [main]
     paths:
       - scripts/research_ru_fabrikant_soap4_original_host.py
+      - scripts/research_ru_fabrikant_soap4_catalogue.py
+      - tests/test_research_ru_fabrikant_soap4_catalogue.py
       - scripts/research_ru_chechnya_soap4_firstparty_details.py
-      - tests/test_research_ru_chechnya_soap4_firstparty_details.py
+      - tests/test_research_ru_chechnya_soap4_firstparty_details.py tests/test_research_ru_fabrikant_soap4_catalogue.py
       - tests/test_research_ru_fabrikant_soap4_original_host.py
       - .github/workflows/ru-fabrikant-soap4-original-host.yml
   workflow_dispatch:
@@ -38,6 +40,9 @@ jobs:
       - name: Two current Chechnya publisher detail hypotheses, never source discovery
         timeout-minutes: 4
         run: python -B -m scripts.research_ru_chechnya_soap4_firstparty_details
+      - name: Bounded two official catalogues, verify firstparty links to current regional IDs
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_fabrikant_soap4_catalogue
       - name: Never mark regional source as verified from individual HTML only
         run: |
           echo "SOURCE_LIST_DISCOVERY=NOT_PROVED"

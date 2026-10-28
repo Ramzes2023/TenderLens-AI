@@ -44,12 +44,12 @@ jobs:
       - name: Validate optional fifth-source Docker Compose isolation
         run: |
           set -euo pipefail
-          docker compose --profile operator --profile verified-scheduler \\
-            -p valyqon-public-sources \\
-            -f ops/public_sources/compose.yaml \\
-            -f ops/public_sources/compose.south-ural.yaml \\
-            -f ops/public_sources/compose.kavkaz-rf.yaml \\
-            -f ops/public_sources/compose.lenobl.yaml \\
+          docker compose --profile operator --profile verified-scheduler \
+            -p valyqon-public-sources \
+            -f ops/public_sources/compose.yaml \
+            -f ops/public_sources/compose.south-ural.yaml \
+            -f ops/public_sources/compose.kavkaz-rf.yaml \
+            -f ops/public_sources/compose.lenobl.yaml \
             config --format json > /tmp/fifth.json
           python - <<'PY'
           import json

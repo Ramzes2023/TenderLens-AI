@@ -94,10 +94,8 @@ def test_unsigned_stale_or_tampered_rejected(
     monkeypatch.setenv("VALYQON_RESEND_WEBHOOK_SECRET", _SECRET)
     raw = payload()
     headers = signed_request(raw)
-    if bad_headers is not None:
+    if bad_headers:
         headers.update(bad_headers)
-    else:
-        headers.pop("svix-signature")
     caplog.set_level(logging.DEBUG)
     response = app_client.post(_PATH, content=raw if raw_override is None else raw_override, headers=headers)
     assert response.status_code == expected

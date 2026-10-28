@@ -149,3 +149,49 @@ def test_visible_native_detail_keeps_verified_number_even_with_hidden_metadata()
                f"<h1>Закупка: {TITLE}</h1></body>").encode("utf-8")
     notice = parse_lenobl_detail(payload, identity=IDENT, url=URL, listing_title=TITLE)
     assert notice.external_id == IDENT and notice.url == URL
+
+
+def test_official_russian_month_offer_deadline_is_source_date_only():
+    from app.sources.lenobl_small_public import parse_official_offer_calendar_date
+    number, url, title = IDENT, URL, TITLE
+    payload=(
+        "<html><body><h1>Закупка: "+title+"</h1>"
+        "<p>Группа закупок № "+number+"</p>"
+        "<p>Дата создания: 28 октября 2026 г. 10:00:00</p>"
+        "<dl><dt>Срок окончания подачи оферт:</dt>"
+        "<dd>11 ноября 2026 г. 10:30:00</dd></dl>"
+        "</body></html>"
+    ).encode("utf8")
+    notice=parse_lenobl_detail(payload,identity=number,url=url,listing_title=title)
+    assert notice.deadline=="2026-11-11"
+    assert parse_official_offer_calendar_date(
+        "Срок окончания подачи оферт: 11 ноября 2026 г. 10:30:00"
+    )=="2026-11-11"
+    assert notice.initial_price is None
+    assert notice.customer is None
+
+
+def test_official_date_parser_rejects_hidden_conflicts_unknown_and_invalids():
+    from app.sources.lenobl_small_public import parse_official_offer_calendar_date
+    assert parse_official_offer_calendar_date(
+        "Срок окончания подачи оферт: 31 февраля 2026 г. 10:30:00"
+    ) is None
+    assert parse_official_offer_calendar_date(
+        "Срок окончания подачи оферт: 11 unknown 2026 г. 10:30:00"
+    ) is None
+    assert parse_official_offer_calendar_date(
+        "Срок окончания подачи оферт: 11 ноября 2026 г. 26:30:00"
+    ) is None
+    assert parse_official_offer_calendar_date(
+        "Срок окончания подачи оферт: 11 ноября 2026 г. 10:30:00 "
+        "Срок окончания подачи оферт: 12 ноября 2026 г. 10:30:00"
+    ) is None
+    assert parse_official_offer_calendar_date("28 октября 2026 г. 10:30:00") is None
+    hidden=(
+        "<html><script>Срок окончания подачи оферт: 31 декабря 2099 г. 12:00:00</script>"
+        "<template>Срок окончания подачи оферт: 31 декабря 2099 г. 12:00:00</template>"
+        "<h1>Закупка: "+TITLE+"</h1><p>Группа закупок № "+IDENT+"</p>"
+        "<p>Срок окончания подачи оферт: 29 октября 2026 г. 12:30:00</p></html>"
+    ).encode("utf8")
+    notice=parse_lenobl_detail(hidden,identity=IDENT,url=URL,listing_title=TITLE)
+    assert notice.deadline=="2026-10-29"

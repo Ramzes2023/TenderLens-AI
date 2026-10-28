@@ -1,6 +1,6 @@
 """Official Lenobl independently verified open-offer date-only gate.
 
-This is a genuine first-party GET list + up to three independently
+This is a genuine first-party GET list + up to six independently
 verified details. The parser preserves only the published calendar DATE;
 its clock has no independently documented timezone. Same/ambiguous
 civil days are excluded by the shared source-specific conservative gate.
@@ -29,7 +29,8 @@ def acceptance():
         if eligible_published_deadline(SOURCE_ID,notice.deadline,now=now):
             current.append(notice.external_id)
     print("RU_LENOBL_REAL_ORIGINAL_DETAILS="+str(len(notices)))
-    print("RU_LENOBL_OFFICIAL_PUBLISHED_DATES="+json.dumps([n.deadline for n in notices]))\n    print("RU_LENOBL_PUBLISHED_CALENDAR_DATES="+str(
+    print("RU_LENOBL_OFFICIAL_PUBLISHED_DATES="+json.dumps([n.deadline for n in notices]))
+    print("RU_LENOBL_PUBLISHED_CALENDAR_DATES="+str(
         sum(n.deadline is not None for n in notices)))
     print("RU_LENOBL_SAFELY_FUTURE_ORIGINALS="+str(len(current)))
     if not current:

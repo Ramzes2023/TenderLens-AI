@@ -54,7 +54,13 @@ def classify_visible_deadline(html: bytes) -> dict:
         # same page can appear. Do not turn a regex into a real deadline.
         window = visible[position+len(label): position+len(label)+110]
         parsed = DATE.findall(window)
-        candidates.append({"field":label,"nearby_dates":parsed[:2]})
+        # Mask literal text/IDs entirely; only the *format* of the next
+        # visible characters is logged so a developer can distinguish
+        # alphabetic month names, placeholders and split date fields.
+        shape = "".join("D" if ch.isdigit() else "A" if ch.isalpha()
+                        else ch for ch in window[:85])
+        candidates.append({"field":label,"nearby_dates":parsed[:2],
+                           "nearby_format_shape":shape})
     return {
         "visible_label_count":len(candidates),
         "date_field_candidates":candidates[:8],

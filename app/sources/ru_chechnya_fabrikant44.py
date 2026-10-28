@@ -19,6 +19,7 @@ from urllib.parse import urljoin, urlsplit
 from .http import ConnectorTransportError, FetchPolicy, _policy, bounded_fetch, source_client
 from .models import TenderNotice
 from .opportunities import validate_notice
+from .fabrikant_public_detail_terms import original_terms
 
 SOURCE_ID = "ru_chechnya_fabrikant44"
 REGION = "Чеченская Республика"
@@ -200,9 +201,12 @@ def verified_fabrikant_notice(payload, *, number, url, title):
             or ORGANIZER not in organizer_area
             or INN not in organizer_area):
         raise ValueError("Independent original detail fails Chechnya publisher/identity/title checks")
+    terms = original_terms(payload)
     notice = TenderNotice(
         source=SOURCE_ID, external_id=number, tender_number=number,
         title=title, url=url, customer=ORGANIZER, region=REGION,
+        deadline=terms["deadline"], initial_price=terms["initial_price"],
+        currency=terms["currency"],
     )
     validate_notice(notice, SOURCE_ID)
     return notice

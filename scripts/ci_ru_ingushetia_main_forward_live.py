@@ -7,6 +7,7 @@ already checks every independent original inside its adapter.
 """
 from __future__ import annotations
 
+from scripts.source_failure_diagnostics import worker_failure_code
 import asyncio
 import json
 import time
@@ -119,7 +120,8 @@ def proof(source):
                 if done is None:
                     raise AssertionError("WORKER_RESULT_MISSING")
                 if done.state != "queued":
-                    raise AssertionError("WORKER_FINAL_FAILURE")
+                    print('INGUSHETIA_WORKER_FAILURE_CODE=' + worker_failure_code(done.failure_code))
+                    raise AssertionError('WORKER_FINAL_FAILURE')
                 if attempt == 2:
                     raise AssertionError("WORKER_RETRIES_EXHAUSTED")
                 # Real durable queue retry, not a simulated successful job:

@@ -20,8 +20,9 @@ def listing(title="Поставка стали", link="/223-fz/procedures/200005
 
 
 def detail(title="Поставка стали", identity="20000521"):
-    return (f"<html><title>Извещение о процедуре {identity}</title>"
-            f"<h1><span>{title}</span></h1></html>").encode()
+    return (f"<html><head><title>Извещение о процедуре {identity}</title></head>"
+            f"<body><p>Номер процедуры {identity}</p>"
+            f"<h1><span>{title}</span></h1></body></html>").encode()
 
 
 def settings(**changes):
@@ -155,3 +156,204 @@ def test_all_stale_tektorg_details_fail_closed(monkeypatch):
     monkeypatch.setattr(module, "source_client", client)
     with pytest.raises(ValueError, match="No independently verified"):
         asyncio.run(TekTorgPublicSource(timeout=15).fetch(1))
+
+
+@pytest.mark.parametrize("payload", [
+    b"<html><head><title>20000521</title></head><body><h1>Real title</h1></body></html>",
+    b"<html><body><script>window.proc='20000521'</script><h1>Real title</h1></body></html>",
+    b"<html><body><style>.id:after{content:'20000521'}</style><h1>Real title</h1></body></html>",
+    b"<html><body><template>20000521</template><h1>Real title</h1></body></html>",
+    b"<html><body><p>200005219</p><h1>Real title</h1></body></html>",
+    b"<html><body><p>120000521</p><h1>Real title</h1></body></html>",
+])
+def test_hidden_or_embedded_native_detail_id_is_not_firstparty_identity(payload):
+    with pytest.raises(ValueError, match="title/identity mismatch"):
+        validate_public_detail(payload, identity="20000521", title="Real title")
+
+
+def test_valid_native_id_in_real_visible_detail_with_unrelated_head_number():
+    payload = (
+        b"<html><head><title>Different page metadata</title></head>"
+        b"<body><p>Official procurement number 20000521</p>"
+        b"<h1>Real title</h1></body></html>"
+    )
+    validate_public_detail(payload, identity="20000521", title="Real title")
+
+
+def test_hidden_markup_inside_heading_never_evidences_native_id():
+    payload = (
+        b"<html><head><title>20000521</title></head><body>"
+        b"<h1>Real title<script>20000521</script></h1></body></html>"
+    )
+    with pytest.raises(ValueError, match="title/identity mismatch"):
+        validate_public_detail(payload, identity="20000521", title="Real title")
+
+
+def test_publisher_native_zp_procurement_id_is_independently_visible_on_original_detail():
+    # Official TEK-Torg 223-FZ cards show /223-fz/procedures/<internal ID>
+    # and a *different* human-readable procurement number such as ZP409589.
+    # This is a synthetic reproduction of the publisher-visible structure,
+    # not a fresh network success claim.
+    actual = (
+        "<html><head><title>Сайт закупок</title></head><body>"
+        "<nav>223-ФЗ Извещение о процедуре ЗП409589</nav>"
+        "<section><p>Общие сведения</p><p>№ ЗП409589</p></section>"
+        "<h1>Поставка стали</h1></body></html>"
+    ).encode("utf-8")
+    result = validate_public_detail(actual, identity="20000521", title="Поставка стали")
+    assert result == "ЗП409589"
+
+
+@pytest.mark.parametrize("invalid", [
+    # Published ID occurs only in metadata or scripted text.
+    "<head><title>Извещение о процедуре ЗП409589</title></head><body>"
+    "<p>№ ЗП409589</p><h1>Поставка стали</h1></body>",
+    "<body><script>Извещение о процедуре ЗП409589</script>"
+    "<p>№ ЗП409589</p><h1>Поставка стали</h1></body>",
+    # Native IDs disagree across two independently visible official fields.
+    "<body><nav>Извещение о процедуре ЗП409589</nav>"
+    "<p>№ ЗП409588</p><h1>Поставка стали</h1></body>",
+    # Procedure ID exists only as a substring of a longer native number.
+    "<body><nav>Извещение о процедуре ЗП409589</nav>"
+    "<p>№ ЗП4095899</p><h1>Поставка стали</h1></body>",
+    # Browser HTML heading is not actually the first-party notice title.
+    "<body><nav>Извещение о процедуре ЗП409589</nav>"
+    "<p>№ ЗП409589</p><h1>Товары другого заказчика</h1></body>",
+])
+def test_publisher_native_number_requires_two_matching_visible_fields_and_title(invalid):
+    with pytest.raises(ValueError, match="title/identity mismatch"):
+        validate_public_detail(invalid.encode("utf-8"), identity="20000521",
+                               title="Поставка стали")
+
+
+def test_native_publisher_zp_number_persists_in_actual_fetch_result(monkeypatch):
+    from types import SimpleNamespace
+    from contextlib import asynccontextmanager
+    import asyncio
+    import app.sources.tektorg_public_html as module
+
+    actual = (
+        "<body><nav>Извещение о процедуре ЗП409589</nav>"
+        "<p>№ ЗП409589</p><h1>Поставка стали</h1></body>"
+    ).encode()
+    requests = []
+
+    class Client:
+        async def get(self, url):
+            requests.append(url)
+            return SimpleNamespace(
+                content=listing() if url == LIST_URL else actual,
+                headers={"content-type": "text/html"},
+                raise_for_status=lambda: None,
+            )
+
+    @asynccontextmanager
+    async def client(**kwargs):
+        assert kwargs["trust_env"] is False
+        assert kwargs["follow_redirects"] is False
+        yield Client()
+
+    monkeypatch.setattr(module, "source_client", client)
+    result = asyncio.run(TekTorgPublicSource().fetch(1))
+    assert result[0].external_id == "20000521"
+    assert result[0].tender_number == "ЗП409589"
+    assert result[0].title == "Поставка стали"
+    assert requests == [LIST_URL, "https://www.tektorg.ru/223-fz/procedures/20000521"]
+
+
+def test_transient_first_tektorg_detail_get_does_not_block_next_original(monkeypatch):
+    from app.sources.http import ConnectorTransportError
+    first = f"https://{HOST}/223-fz/procedures/20000521"
+    second = f"https://{HOST}/223-fz/procedures/20000522"
+    source_index = listing() + listing(
+        title="Поставка кабелей", link="/223-fz/procedures/20000522",
+    )
+    calls = []
+
+    class Reply:
+        def __init__(self, content):
+            self.content, self.headers = content, {"content-type": "text/html"}
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        async def get(self, url):
+            calls.append(url)
+            if url == LIST_URL:
+                return Reply(source_index)
+            if url == first:
+                raise ConnectorTransportError(retryable=True, reason="network")
+            if url == second:
+                return Reply(detail(title="Поставка кабелей", identity="20000522"))
+            raise AssertionError("Unexpected external or unbounded GET")
+
+    @asynccontextmanager
+    async def client(**kw):
+        assert kw["trust_env"] is False
+        assert kw["follow_redirects"] is False
+        yield Client()
+
+    import app.sources.tektorg_public_html as module
+    monkeypatch.setattr(module, "source_client", client)
+    rows = asyncio.run(TekTorgPublicSource().fetch(2))
+    assert [x.external_id for x in rows] == ["20000522"]
+    assert calls == [LIST_URL, first, second]
+
+
+@pytest.mark.parametrize("reason", ["tls_certificate", "public_ip", "policy"])
+def test_tektorg_disallowed_transport_exception_never_hidden(monkeypatch, reason):
+    from app.sources.http import ConnectorTransportError
+    first = f"https://{HOST}/223-fz/procedures/20000521"
+    seen = []
+
+    class Reply:
+        content, headers = listing(), {"content-type": "text/html"}
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        async def get(self, url):
+            seen.append(url)
+            if url == LIST_URL:
+                return Reply()
+            raise ConnectorTransportError(retryable=False, reason=reason)
+
+    @asynccontextmanager
+    async def client(**kw):
+        yield Client()
+
+    import app.sources.tektorg_public_html as module
+    monkeypatch.setattr(module, "source_client", client)
+    with pytest.raises(ConnectorTransportError):
+        asyncio.run(TekTorgPublicSource().fetch(1))
+    assert seen == [LIST_URL, first]
+
+
+@pytest.mark.parametrize("tag", ["head", "script", "style", "template",
+                                  "noscript", "svg", "iframe", "object"])
+def test_hidden_official_page_link_is_not_a_real_published_tektorg_card(tag):
+    hidden = (f"<html><{tag}><a href='/223-fz/procedures/20000521'>"
+              f"Hidden prototype</a></{tag}><main>No tenders</main></html>").encode()
+    with pytest.raises(ValueError, match="No public TEK-Torg"):
+        parse_public_listing(hidden)
+
+
+def test_hidden_prototype_cannot_replace_real_firstparty_link():
+    fake = (b"<template><a href='/223-fz/procedures/20000521'>"
+            b"Unpublished original</a></template>")
+    assert parse_public_listing(fake + listing()) == [
+        ("20000521", f"https://{HOST}/223-fz/procedures/20000521", "Поставка стали")
+    ]
+
+
+@pytest.mark.parametrize("href", [
+    "https://www.tektorg.ru/223-fz/procedures/20000521/%0a",
+    "https://www.tektorg.ru/223-fz/procedures/20000521/\r\n",
+    "https://www.tektorg.ru/223-fz/procedures/20000521/\x7f",
+    "https://www.tektorg.ru/223-fz/procedures/20000521/\t",
+    "https://www.tektorg.ru/223-fz/procedures/20000521/\\evil",
+    "http://[broken/223-fz/procedures/20000521",
+])
+def test_unsafe_or_malformed_tektorg_urls_never_become_candidates(href):
+    with pytest.raises(ValueError, match="No public TEK-Torg"):
+        parse_public_listing(listing(link=href))

@@ -12,7 +12,7 @@ import httpx
 import re
 from urllib.parse import urljoin, urlsplit
 
-from .http import FetchPolicy, bounded_fetch, _policy, source_client
+from .http import ConnectorTransportError, FetchPolicy, bounded_fetch, _policy, source_client
 from .models import TenderNotice
 from .opportunities import validate_notice
 
@@ -29,59 +29,93 @@ def _text(parts):
 
 
 class _PublicListing(HTMLParser):
+    """Only visible, independently linked first-party procurement candidates."""
+
+    _HIDDEN = frozenset({"head", "script", "style", "iframe",
+                         "svg", "object", "template", "noscript"})
+
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.current = None
         self.records = []
-    
+        self.hidden = []
+
     def handle_starttag(self, tag, attrs):
         if self.current is not None:
-            if tag.lower() in {"script", "style", "iframe", "svg", "object", "template"}:
+            # Active markup inside a first-party candidate is suspicious;
+            # fail closed instead of silently repairing an invalid title.
+            if tag in self._HIDDEN:
                 raise ValueError("Active markup inside public procurement title")
             return
-        if tag != "a":
+        if tag in self._HIDDEN:
+            self.hidden.append(tag)
+            return
+        if self.hidden or tag != "a":
             return
         raw = dict(attrs).get("href", "")
-        if type(raw) is not str or len(raw) > 2000:
+        if (type(raw) is not str or not raw or len(raw) > 2000
+                or chr(92) in raw or "%" in raw
+                or any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in raw)):
             return
-        p = urlsplit(urljoin(LIST_URL, raw))
+        try:
+            p = urlsplit(urljoin(LIST_URL, raw))
+        except ValueError:
+            return
         m = _PATH.fullmatch(p.path)
         if (m and p.scheme == "https" and p.netloc == HOST
                 and not p.query and not p.fragment and not p.username
                 and not p.password and p.port is None):
             self.current = [m.group(1), p.geturl(), []]
-    
+
     def handle_data(self, data):
-        if self.current is not None:
+        if self.current is not None and not self.hidden:
             self.current[2].append(data)
 
     def handle_endtag(self, tag):
-        if self.current is None:
+        if self.hidden:
+            if self.hidden[-1] == tag:
+                self.hidden.pop()
             return
-        if tag == 'a':
+        if tag == "a" and self.current is not None:
             identity, url, parts = self.current
             self.records.append((identity, url, _text(parts)))
             self.current = None
 
 
 class _DetailHeading(HTMLParser):
+    """Independently verify visible official detail, not script/header metadata."""
+
+    _HIDDEN = frozenset({"head", "script", "style", "noscript",
+                         "template", "svg", "iframe", "object"})
+
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.active = False
         self.parts = []
         self.headings = []
+        self.visible = []
+        self.hidden = 0
 
     def handle_starttag(self, tag, attrs):
-        if tag == "h1" and not self.active:
+        if tag in self._HIDDEN:
+            self.hidden += 1
+            return
+        if tag == "h1" and not self.hidden and not self.active:
             self.active = True
             self.parts = []
 
     def handle_data(self, data):
+        if self.hidden:
+            return
+        self.visible.append(data)
         if self.active:
             self.parts.append(data)
 
     def handle_endtag(self, tag):
-        if tag == "h1" and self.active:
+        if tag in self._HIDDEN:
+            self.hidden = max(0, self.hidden - 1)
+            return
+        if tag == "h1" and self.active and not self.hidden:
             self.headings.append(_text(self.parts))
             self.active = False
 
@@ -126,8 +160,29 @@ def validate_public_detail(payload, *, identity, title):
     if (type(identity) is not str or not _PATH.fullmatch(f"/223-fz/procedures/{identity}")
             or type(title) is not str or not title):
         raise ValueError("Invalid TEK-Torg detail request")
-    if identity not in body or title not in reader.headings:
+    # The URL ends with an internal platform ID (e.g. 11993106), while the
+    # official visible notice can identify the actual procurement as
+    # "Извещение о процедуре ЗП409589" and separately "№ ЗП409589".
+    # Both must be first-party visible (not <head>, script, template, etc.).
+    # A second detail on the exact discovered URL still has to corroborate
+    # the independently observed listing H1; never invent an external ID.
+    visible = " ".join(" ".join(reader.visible).split())
+    identity_pattern = r"(?<![0-9])" + re.escape(identity) + r"(?![0-9])"
+    internal_visible = bool(re.search(identity_pattern, visible))
+    published = re.findall(
+        r"Извещение\s+о\s+процедуре\s+([А-ЯЁA-Z]{1,6}[0-9]{3,12})(?![А-ЯЁA-Z0-9])",
+        visible, flags=re.IGNORECASE,
+    )
+    native = published[0].upper() if len(set(x.upper() for x in published)) == 1 and published else None
+    # The official "Общие сведения: № <native>" must match the breadcrumb.
+    native_confirmed = (native is not None and bool(re.search(
+        r"(?<![А-ЯЁA-Z0-9])№\s*" + re.escape(native) + r"(?![А-ЯЁA-Z0-9])",
+        visible, flags=re.IGNORECASE,
+    )))
+    if (title not in reader.headings or len(reader.headings) != 1
+            or not (internal_visible or native_confirmed)):
         raise ValueError("TEK-Torg detail title/identity mismatch")
+    return native if native_confirmed else None
 
 
 @dataclass(frozen=True)
@@ -168,14 +223,21 @@ class TekTorgPublicSource:
                         detail.raise_for_status()
                         if "html" not in detail.headers.get("content-type", "").lower():
                             raise ValueError("TEK-Torg detail not HTML")
-                        validate_public_detail(detail.content, identity=identity, title=title)
+                        published_number = validate_public_detail(detail.content, identity=identity, title=title)
                     except (ValueError, httpx.HTTPStatusError):
                         # A changed/removed public card is not reliable tender data.
                         # Drop only that card; do not ingest it or bypass redirects.
                         continue
+                    except ConnectorTransportError as error:
+                        # Only a transient single original DETAIL failure may
+                        # be skipped to inspect later independent originals.
+                        # Policy, public-IP and TLS failure must not be hidden.
+                        if not error.retryable:
+                            raise
+                        continue
                     notice = TenderNotice(
                         source=SOURCE_ID, external_id=identity,
-                        title=title, url=url,
+                        tender_number=published_number, title=title, url=url,
                     )
                     validate_notice(notice, SOURCE_ID)
                     notices.append(notice)

@@ -1,6 +1,7 @@
 """Real Samara public list -> per-user keyword -> Telegram rendering + dedup.
 
-READ-ONLY CI. Two first-party public HTTPS calls are real upstream evidence.
+READ-ONLY CI. One first-party public fetch produces the genuine notice data.
+The failed-send and retry loops reuse exactly those real captured rows.
 Telegram transport is a local in-memory fake: this NEVER sends to subscribers
 or external chat accounts, nor proves live Telegram credentials/delivery.
 """
@@ -11,6 +12,7 @@ import re
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from app.bot.monitoring import format_match, monitor_loop, enabled_ru_catalog_keys
 from app.monitoring.config import MonitoringSettings
@@ -75,6 +77,14 @@ async def acceptance():
     if len(rows) != 2 or len({n.external_id for n in rows}) != 2:
         raise AssertionError("No two independently numbered public Samara items")
 
+    # Capture only the real notices obtained from the official first-party
+    # listing. The local failed-send/retry exercise must not depend on two
+    # further unrelated upstream network calls, which can time out.
+    async def captured_real_notices(_source, limit=20):
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("Invalid bounded live capture limit")
+        return list(rows[:limit])
+
     words = re.findall(r"[А-Яа-яЁёA-Za-z]{6,}", rows[0].title)
     if not words:
         raise AssertionError("No real long search term in public title")
@@ -101,10 +111,11 @@ async def acceptance():
         # must not claim a genuine notice as seen before a retry succeeds.
         failed_stop = asyncio.Event()
         failed_bot = LocalCaptureBot(failed_stop, fail_delivery=True)
-        await asyncio.wait_for(
-            monitor_loop(failed_bot, service, failed_stop, source_catalog=catalog),
-            timeout=55,
-        )
+        with patch.object(type(source), "fetch", captured_real_notices):
+            await asyncio.wait_for(
+                monitor_loop(failed_bot, service, failed_stop, source_catalog=catalog),
+                timeout=10,
+            )
         if not failed_bot.attempted or failed_bot.delivered:
             raise AssertionError("Local failed-send boundary was not exercised")
         failed_matches = [MonitorMatch(n, (term,)) for n in rows
@@ -113,12 +124,14 @@ async def acceptance():
             raise AssertionError("Failed local delivery suppressed a real retry")
         stop = asyncio.Event()
         bot = LocalCaptureBot(stop)
-        # Actual API source is queried again through production
-        # monitor_loop; fake send_message is the only substituted boundary.
-        await asyncio.wait_for(
-            monitor_loop(bot, service, stop, source_catalog=catalog),
-            timeout=55,
-        )
+        # The real monitor_loop checks subscriptions, keywords, failed-send
+        # retry, acknowledgements and dedup with the captured real notices.
+        # Only re-fetch and external Telegram I/O are stubbed in this test.
+        with patch.object(type(source), "fetch", captured_real_notices):
+            await asyncio.wait_for(
+                monitor_loop(bot, service, stop, source_catalog=catalog),
+                timeout=10,
+            )
         if not bot.delivered:
             raise AssertionError("Real Samara query emitted no local message")
         if not any(("Номер: " + m.notice.tender_number) in message

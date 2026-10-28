@@ -27,7 +27,7 @@ MAX_BYTES = 1_800_000
 MAX_DETAILS = 2
 NATIVE_NUMBER = re.compile(r"[А-ЯЁA-Z]{1,5}-[А-ЯЁA-Z]{2,8}-[0-9]{2,6}[А-ЯЁA-Z]{0,3}\Z")
 DETAIL_PATH = re.compile(
-    r"/purchases_sales/zakupki/tekushchie-/[a-z0-9-]+/[a-z0-9_%\-]+/\Z"
+    r"/purchases_sales/zakupki/tekushchie-/[a-z0-9-]+/[a-z0-9_%\-.]+/\Z"
 )
 
 
@@ -104,6 +104,7 @@ def _parse_html(data):
 
 def _canonical(href):
     if (type(href) is not str or not 0 < len(href) <= 1300 or "\\" in href
+            or ".." in href or re.search(r"%(?:2e|2f|5c|00)", href, re.I)
             or any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in href)):
         return None
     try:

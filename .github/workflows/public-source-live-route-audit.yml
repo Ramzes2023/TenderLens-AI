@@ -1,0 +1,31 @@
+name: VALYQON live public source route audit (read only)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/probe_public_source_routes.py
+      - .github/workflows/public-source-live-route-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-source-live-routes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate safe public-only response parser offline
+        run: |
+          python -m py_compile scripts/probe_public_source_routes.py
+          python -B scripts/probe_public_source_routes.py --self-test
+      - name: Verify actual public HTTPS saved-source routes (not source activation)
+        timeout-minutes: 2
+        run: python -B scripts/probe_public_source_routes.py --live

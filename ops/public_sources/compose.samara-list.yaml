@@ -1,0 +1,21 @@
+# Optional SIXTH Russian source: verified OFFICIAL PUBLIC LIST ONLY.
+# Do not claim independent detailed individual cards are available.
+# Layer ONLY after compose.yaml, compose.south-ural.yaml,
+# compose.kavkaz-rf.yaml and compose.lenobl.yaml.
+# Disabled until real publisher fresh future closing deadline and worker pass.
+services:
+  guest-sources:
+    environment:
+      RU_SAMARA_PUBLIC_LIST_ENABLED: "true"
+  worker:
+    environment:
+      RU_SAMARA_PUBLIC_LIST_ENABLED: "true"
+      # Three bounded official native pages (max 30 records); old service
+      # was limited to eight and could miss actual current deadlines.
+      VALYQON_CONNECTOR_MAX_RECORDS: "30"
+  scheduler:
+    environment:
+      RU_SAMARA_PUBLIC_LIST_ENABLED: "true"
+  enqueue:
+    environment:
+      RU_SAMARA_PUBLIC_LIST_ENABLED: "true"

@@ -1,0 +1,102 @@
+name: RU Samara opt-in sixth public LIST-only source live gate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/api/public_source_deadline.py
+      - app/api/guest_search_routes.py
+      - app/sources/isolated_public_scheduler.py
+      - ops/public_sources/compose.samara-list.yaml
+      - scripts/verify_samara_list_sixth_candidate.py
+      - scripts/ci_ru_samara_list_sixth_current.py
+      - tests/test_ru_samara_sixth_public_site.py
+      - .github/workflows/ru-samara-sixth-public-list.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  list-only-expiry-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      PYTHON_DOTENV_DISABLED: "1"
+      TELEGRAM_BOT_TOKEN: ""
+      OUTBOUND_PROXY_URL: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Future first-party local clock, hostile original, hidden fields and baseline
+        run: >
+          python -m pytest -q
+          tests/test_ru_samara_sixth_public_site.py
+          tests/test_ru_samara_public_list.py
+          tests/test_isolated_public_sources.py
+          tests/test_ru_lenobl_public_site_candidate.py
+      - name: Resolve exactly six optional isolated services and read-only volume
+        run: |
+          set -euo pipefail
+          docker compose --profile operator --profile verified-scheduler \
+            -p valyqon-public-sources \
+            -f ops/public_sources/compose.yaml \
+            -f ops/public_sources/compose.south-ural.yaml \
+            -f ops/public_sources/compose.kavkaz-rf.yaml \
+            -f ops/public_sources/compose.lenobl.yaml \
+            -f ops/public_sources/compose.samara-list.yaml \
+            config --format json > /tmp/sixth-ru.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/sixth-ru.json'))
+          assert set(d['services'])=={'guest-sources','worker','scheduler','enqueue'}
+          assert len(d['volumes'])==1
+          assert all(not v.get('external') for v in d['volumes'].values())
+          for name,item in d['services'].items():
+              e=item['environment']
+              assert item['read_only'] and not item.get('ports')
+              assert e['DATABASE_URL']=='sqlite:////app/data/isolated-public-sources.sqlite3'
+              assert e['RU_SAMARA_PUBLIC_LIST_ENABLED']=='true'
+              assert e['LENOBL_SMALL_PUBLIC_ENABLED']=='true'
+              assert e['KAVKAZ_RF_FIRSTPARTY_ENABLED']=='true'
+              assert e['SOUTH_URAL_PUBLIC_ENABLED']=='true'
+              assert e['TELEGRAM_BOT_TOKEN']==''
+              assert e['VALYQON_EMAIL_MODE']=='disabled'
+          assert d['services']['worker']['environment']['VALYQON_CONNECTOR_MAX_RECORDS']=='30'
+          assert d['services']['scheduler']['network_mode']=='none'
+          assert d['services']['enqueue']['network_mode']=='none'
+          print('SAMARA_SIXTH_ISOLATED_COMPOSE=PASS')
+          print('PRODUCTION_UNCHANGED=YES')
+          PY
+
+  real-current-publisher-list-worker-guest:
+    runs-on: ubuntu-latest
+    needs: list-only-expiry-isolation
+    timeout-minutes: 16
+    env:
+      PYTHON_DOTENV_DISABLED: "1"
+      TELEGRAM_BOT_TOKEN: ""
+      OUTBOUND_PROXY_URL: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Real public first-party native JSON → leased Worker → isolated SQL → guest
+        timeout-minutes: 8
+        run: python -B -m scripts.ci_ru_samara_list_sixth_current
+      - name: Public-list provenance is not a verified individual original detail
+        run: |
+          echo "SAMARA_INDIVIDUAL_DETAIL_VERIFIED=NO"
+          echo "SAMARA_PUBLIC_LIST_VERIFIED_BY_PUBLISHER=YES"
+          echo "PRODUCTION_CUTOVER_REQUIRES_VPS_TRIAL=YES"

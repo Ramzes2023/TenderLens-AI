@@ -55,6 +55,13 @@ def approved_cycle():
         if extension != "true" or north_caucasus != "true":
             raise ValueError("Lenobl requires the existing four-source overlays.")
         approved += ("lenobl_small_public",)
+    samara = os.environ.get("RU_SAMARA_PUBLIC_LIST_ENABLED", "false").strip().lower()
+    if samara not in {"true", "false"}:
+        raise ValueError("Invalid official Samara list-only opt-in.")
+    if samara == "true":
+        if northwest != "true" or north_caucasus != "true" or extension != "true":
+            raise ValueError("Samara list-only requires all five previous sources enabled.")
+        approved += ("ru_samara_public_list",)
     catalog = build_source_catalog(load_monitoring_settings())
     if set(approved_ru_keys(catalog)) != set(approved):
         raise ValueError("Unexpected enabled RU source in scheduler")

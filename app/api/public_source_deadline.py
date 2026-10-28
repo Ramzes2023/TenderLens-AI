@@ -13,6 +13,17 @@ import re
 
 DATE_ONLY_ALLOWED = frozenset({"kavkaz_rf_firstparty"})
 NAIVE_CLOCK_ALLOWED = frozenset({"lenobl_small_public"})
+SAMARA_LIST_ONLY_SOURCE = "ru_samara_public_list"
+_SAMARA_DATE = re.compile(r"(?:0[1-9]|[12][0-9]|3[01])\.(?:0[1-9]|1[0-2])\.20[0-9]{2}")
+_SAMARA_CLOCK = re.compile(
+    r"(?:0[1-9]|[12][0-9]|3[01])\.(?:0[1-9]|1[0-2])\.20[0-9]{2} "
+    r"(?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9])?"
+)
+_SAMARA_ISO_SECONDS = re.compile(
+    r"20[0-9]{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T"
+    r"(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]"
+)
+
 
 
 def eligible_published_deadline(source: str, raw: object, *, now: datetime) -> bool:
@@ -20,6 +31,25 @@ def eligible_published_deadline(source: str, raw: object, *, now: datetime) -> b
         raise ValueError("Timezone-aware verification time required")
     now = now.astimezone(timezone.utc)
     if not isinstance(raw, str) or len(raw) > 48:
+        return False
+    if source == SAMARA_LIST_ONLY_SOURCE:
+        # Authentic first-party native JSON LIST fields, not a deep detail
+        # page. Source uses Russian day.month.year, optionally a local clock
+        # without publisher-attested time zone. Preserve that original
+        # precision; never manufacture midnight, UTC or Moscow offset.
+        max_local_now = now + timedelta(hours=14)
+        try:
+            if _SAMARA_DATE.fullmatch(raw):
+                return datetime.strptime(raw, "%d.%m.%Y").date() > max_local_now.date()
+            if _SAMARA_CLOCK.fullmatch(raw):
+                fmt = "%d.%m.%Y %H:%M:%S" if raw.count(":") == 2 else "%d.%m.%Y %H:%M"
+                closing = datetime.strptime(raw, fmt)
+                return closing > max_local_now.replace(tzinfo=None)
+            if _SAMARA_ISO_SECONDS.fullmatch(raw):
+                closing = datetime.fromisoformat(raw)
+                return closing > max_local_now.replace(tzinfo=None)
+        except ValueError:
+            return False
         return False
     if (source in DATE_ONLY_ALLOWED and
             re.fullmatch(r"20\d{2}-\d{2}-\d{2}", raw)):

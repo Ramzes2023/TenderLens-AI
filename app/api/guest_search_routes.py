@@ -20,6 +20,10 @@ from fastapi.responses import JSONResponse
 
 from app.database.backend import StorageError
 from app.sources.lenobl_small_public import _canonical as _official_lenobl_url
+from app.sources.ru_samara_public_list import (
+    GRID as _official_samara_grid, NATIVE_NUMBER as _samara_native_number,
+    SOURCE_ID as _samara_source,
+)
 from .public_source_deadline import eligible_published_deadline
 
 router = APIRouter(tags=["guest-search"], include_in_schema=False)
@@ -136,6 +140,28 @@ def search_persisted_notices(database, query: str, *, limit: int = MAX_PREVIEWS,
                     or notice.get("initial_price") is not None
                     or notice.get("currency") is not None
                     or notice.get("tender_number") is not None):
+                continue
+        if active_only and notice["source"] == _samara_source:
+            # First-party Samara native JSON gives original LIST fields only.
+            # Its individual deep-detail cards remain unavailable. Never
+            # assert that those fields have independently verified deep URLs.
+            ident = notice.get("external_id")
+            number = notice.get("tender_number")
+            price = notice.get("initial_price")
+            currency = notice.get("currency")
+            if (type(ident) is not str
+                    or not re.fullmatch(r"[0-9]{6,12}", ident)
+                    or type(number) is not str
+                    or _samara_native_number.fullmatch(number) is None
+                    or notice.get("url") != _official_samara_grid
+                    or notice.get("region") != "Самарская область"
+                    or type(notice.get("customer")) is not str
+                    or not notice["customer"].strip()
+                    or ((price is None and currency is not None)
+                        or (price is not None and (
+                            type(price) not in (int, float)
+                            or not math.isfinite(price) or price <= 0
+                            or currency != "RUB")))):
                 continue
         # Only the visible title is searchable in guest mode. Searching hidden
         # buyer/URL/source/summary fields creates an information-disclosure oracle.

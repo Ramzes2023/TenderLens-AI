@@ -5,7 +5,9 @@ on:
     branches: [main]
     paths:
       - scripts/research_ru_samara_firstparty_native_transport.py
-      - tests/test_research_ru_samara_firstparty_native_transport.py
+      - scripts/research_ru_samara_firstparty_original_details.py
+      - tests/test_research_ru_samara_firstparty_original_details.py
+      - tests/test_research_ru_samara_firstparty_native_transport.py tests/test_research_ru_samara_firstparty_original_details.py
       - .github/workflows/ru-samara-native-transport-diagnostic.yml
   workflow_dispatch:
 
@@ -35,6 +37,9 @@ jobs:
       - name: Real publisher GET/token/POST read-only diagnostics, not release
         timeout-minutes: 4
         run: python -B -m scripts.research_ru_samara_firstparty_native_transport
+      - name: Attempt two genuine first-party original detail GETs, never claim deploy
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_samara_firstparty_original_details
       - name: Retain strict block on production integration
         run: |
           echo "SAMARA_ORIGINAL_VERIFIED=NO"

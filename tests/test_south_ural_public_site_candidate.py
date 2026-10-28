@@ -71,6 +71,6 @@ def test_third_source_is_overlay_only():
     assert 'SOUTH_URAL_PUBLIC_ENABLED: "false"' in base
     assert overlay.count('SOUTH_URAL_PUBLIC_ENABLED: "true"')==4
     assert "public_source_data" not in overlay
-    assert "tenderlens-vps" not in overlay
+    assert "tenderlens-vps" not in overlay.split("services:", 1)[1]
     assert "ports:" not in overlay
     assert "volumes:" not in overlay

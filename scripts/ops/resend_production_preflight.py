@@ -19,6 +19,33 @@ MAIL_KEYS = {
 }
 
 
+
+def sender_link_host_status(mail_env):
+    """Classify the conservative From-domain vs account-link hostname check.
+
+    Domain-name similarity does NOT prove DNS ownership or Gmail acceptance.
+    A different hostname warrants an operator review, not a DMARC diagnosis.
+    No secrets or recipient data are returned.
+    """
+    from email.utils import parseaddr
+    from urllib.parse import urlsplit
+
+    address = parseaddr(str(mail_env.get('VALYQON_SMTP_FROM', '')))[1]
+    if address.count('@') != 1:
+        return 'UNKNOWN'
+    from_domain = address.rsplit('@', 1)[1].lower().rstrip('.')
+    try:
+        target = urlsplit(str(mail_env.get('VALYQON_PUBLIC_BASE_URL', '')))
+        link_host = (target.hostname or '').lower().rstrip('.')
+    except ValueError:
+        return 'UNKNOWN'
+    if target.scheme != 'https' or not link_host or not from_domain:
+        return 'UNKNOWN'
+    if from_domain == link_host:
+        return 'EXACT_MATCH'
+    return 'DIFFERENT_HOST'
+
+
 def validate_diff(original, candidate):
     """Reject every change outside the API's explicit mail settings."""
     left, right = copy.deepcopy(original), copy.deepcopy(candidate)
@@ -86,6 +113,7 @@ def preflight():
         os.chmod(overlay, 0o600)
         candidate = json.loads(run(command + ['-f', str(overlay), 'config', '--format', 'json']))
     validate_diff(original, candidate)
+    link_host_status = sender_link_host_status(candidate['services']['api']['environment'])
     live = dict(v.split('=', 1) for v in before['Config']['Env'])
     assert live.get('VALYQON_EMAIL_MODE', 'disabled') == 'disabled'
     assert live.get('VALYQON_LEGAL_REQUIRED') == 'true'
@@ -108,7 +136,11 @@ def preflight():
                 live_container_identity='PASS', live_email_mode='disabled',
                 legal_required=True, email_sent=False, production_changed=False,
                 compose_files=[Path(f).name for f in files],
-                live_cutover_rehearsed=False)
+                live_cutover_rehearsed=False,
+                sender_link_host_alignment=link_host_status,
+                sender_link_review_required=(link_host_status != 'EXACT_MATCH'),
+                recipient_delivery_verified=False,
+                production_mail_release_authorized=False)
 
 
 if __name__ == '__main__':

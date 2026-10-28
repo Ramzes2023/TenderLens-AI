@@ -36,11 +36,18 @@ def approved_cycle():
     from app.sources.ru_cycle import approved_ru_keys
 
     extension = os.environ.get("SOUTH_URAL_PUBLIC_ENABLED", "false").strip().lower()
-    if extension not in {"true", "false"}:
-        raise ValueError("Invalid South Ural opt-in.")
+    north_caucasus = os.environ.get("KAVKAZ_RF_FIRSTPARTY_ENABLED", "false").strip().lower()
+    if extension not in {"true", "false"} or north_caucasus not in {"true", "false"}:
+        raise ValueError("Invalid regional public-source opt-in.")
     approved = ("mikroton_tender", "stan_commercial_public")
     if extension == "true":
         approved += ("south_ural_public",)
+    if north_caucasus == "true":
+        if extension != "true":
+            # Prevent accidentally reverting the live third source when
+            # layering a fourth-source release atop the installed stack.
+            raise ValueError("Kavkaz.RF requires the approved South Ural overlay.")
+        approved += ("kavkaz_rf_firstparty",)
     catalog = build_source_catalog(load_monitoring_settings())
     if set(approved_ru_keys(catalog)) != set(approved):
         raise ValueError("Unexpected enabled RU source in scheduler")

@@ -1,0 +1,97 @@
+name: RU Kavkaz.RF optional fourth public-site source
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/api/public_source_deadline.py
+      - app/sources/kavkaz_rf_firstparty.py
+      - tests/test_ru_kavkaz_rf_firstparty.py
+      - app/api/guest_search_routes.py
+      - app/sources/isolated_public_scheduler.py
+      - ops/public_sources/compose.kavkaz-rf.yaml
+      - scripts/verify_kavkaz_public_site_candidate.py
+      - scripts/ci_ru_kavkaz_current_open.py
+      - tests/test_ru_kavkaz_public_site_candidate.py
+      - .github/workflows/ru-kavkaz-fourth-public-site.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 13
+    env:
+      PYTHON_DOTENV_DISABLED: '1'
+      TELEGRAM_BOT_TOKEN: ''
+      OUTBOUND_PROXY_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Conservative calendar deadline and isolated HTTP search contract
+        run: python -m pytest -q tests/test_ru_kavkaz_public_site_candidate.py tests/test_ru_kavkaz_rf_firstparty.py tests/test_isolated_public_sources.py tests/test_south_ural_public_site_candidate.py
+      - name: Resolve 4-source Compose overlays without production access
+        run: |
+          set -euo pipefail
+          docker compose --profile operator --profile verified-scheduler \
+            -p valyqon-public-sources \
+            -f ops/public_sources/compose.yaml \
+            -f ops/public_sources/compose.south-ural.yaml \
+            -f ops/public_sources/compose.kavkaz-rf.yaml \
+            config --format json > /tmp/kavkaz-staged.json
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/kavkaz-staged.json'))
+          s=d['services']
+          assert set(s)=={'guest-sources','worker','scheduler','enqueue'}
+          assert len(d['volumes'])==1
+          assert all(not v.get('external') for v in d['volumes'].values())
+          for name,svc in s.items():
+              assert svc['read_only'] is True
+              assert not svc.get('ports')
+              env=svc['environment']
+              assert env['DATABASE_URL']=='sqlite:////app/data/isolated-public-sources.sqlite3'
+              assert env['KAVKAZ_RF_FIRSTPARTY_ENABLED']=='true'
+              assert env['SOUTH_URAL_PUBLIC_ENABLED']=='true'
+              assert env['TELEGRAM_BOT_TOKEN']==''
+              assert env['VALYQON_ISOLATED_PUBLIC_SOURCES_ENABLED']=='true'
+          assert s['scheduler']['network_mode']=='none'
+          assert s['enqueue']['network_mode']=='none'
+          print('FOUR_SOURCE_ISOLATED_COMPOSE=PASS')
+          print('PRODUCTION_DB_AND_CADDY_UNTOUCHED=YES')
+          PY
+
+  firstparty-worker-current-open:
+    runs-on: ubuntu-latest
+    needs: offline-contract
+    timeout-minutes: 17
+    env:
+      PYTHON_DOTENV_DISABLED: '1'
+      TELEGRAM_BOT_TOKEN: ''
+      OUTBOUND_PROXY_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Verify exact current original listing and detail parsing before Worker
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_kavkaz_live
+      - name: Real publisher originals → fenced Worker → disposable SQL and ID query
+        timeout-minutes: 6
+        run: python -B -m scripts.ci_ru_kavkaz_real_worker
+      - name: Current real originals must have safely future published date
+        timeout-minutes: 5
+        run: python -B -m scripts.ci_ru_kavkaz_current_open

@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from app.database.backend import StorageError
+from .public_source_deadline import eligible_published_deadline
 
 router = APIRouter(tags=["guest-search"], include_in_schema=False)
 
@@ -112,15 +113,14 @@ def search_persisted_notices(database, query: str, *, limit: int = MAX_PREVIEWS,
                 observed = datetime.fromisoformat(
                     str(row["last_seen"]).replace("Z", "+00:00")
                 )
-                deadline = datetime.fromisoformat(
-                    str(notice.get("deadline") or "").replace("Z", "+00:00")
-                )
-                if observed.tzinfo is None or deadline.tzinfo is None:
+                if observed.tzinfo is None:
                     continue
                 age = (now - observed.astimezone(timezone.utc)).total_seconds()
                 if not 0 <= age <= 7200:
                     continue
-                if deadline.astimezone(timezone.utc) <= now:
+                if not eligible_published_deadline(
+                    notice.get("source"), notice.get("deadline"), now=now,
+                ):
                     continue
             except (ValueError, TypeError, OverflowError):
                 continue

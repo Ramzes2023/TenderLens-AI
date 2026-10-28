@@ -1,0 +1,17 @@
+# Optional FOURTH Russian/North Caucasus source.
+# Supply this file AFTER compose.yaml and compose.south-ural.yaml.
+# Never add to tenderlens-vps production Compose files.
+# No new host ports, volumes, API routes, cookies, secrets or Caddy changes.
+services:
+  guest-sources:
+    environment:
+      KAVKAZ_RF_FIRSTPARTY_ENABLED: "true"
+  worker:
+    environment:
+      KAVKAZ_RF_FIRSTPARTY_ENABLED: "true"
+  scheduler:
+    environment:
+      KAVKAZ_RF_FIRSTPARTY_ENABLED: "true"
+  enqueue:
+    environment:
+      KAVKAZ_RF_FIRSTPARTY_ENABLED: "true"

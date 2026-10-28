@@ -23,7 +23,7 @@ MAX_OBSERVED = 5000
 WINDOW_DAYS = 14
 
 
-def market_pulse_snapshot(database, *, today=None):
+def market_pulse_snapshot(database, *, today=None, allowed_sources=None):
     today = today or datetime.now(timezone.utc).date()
     start = today - timedelta(days=WINDOW_DAYS - 1)
     daily = {start + timedelta(days=i): 0 for i in range(WINDOW_DAYS)}
@@ -31,9 +31,11 @@ def market_pulse_snapshot(database, *, today=None):
     # procurement IDs, buyer details, URLs, or per-user analytics leave this route.
     with closing(database.connect()) as conn:
         rows = conn.execute(
-            "SELECT first_seen FROM source_opportunities "
+            "SELECT source_id, first_seen FROM source_opportunities "
             "ORDER BY last_seen DESC LIMIT ?", (MAX_OBSERVED,)
         ).fetchall()
+    if allowed_sources is not None:
+        rows = [row for row in rows if row["source_id"] in allowed_sources]
     for row in rows:
         raw = row["first_seen"]
         if not isinstance(raw, str):
@@ -73,7 +75,10 @@ async def public_market_pulse(request: Request):
     if database is None:
         raise HTTPException(503, "Market snapshot unavailable.", headers=PUBLIC_HEADERS)
     try:
-        snapshot = await asyncio.to_thread(market_pulse_snapshot, database)
+        snapshot = await asyncio.to_thread(
+            market_pulse_snapshot, database,
+            allowed_sources=getattr(request.app.state, "public_source_allowed_keys", None),
+        )
     except (sqlite3.Error, StorageError, ValueError, TypeError, OSError):
         raise HTTPException(503, "Market snapshot unavailable.", headers=PUBLIC_HEADERS) from None
     return JSONResponse(snapshot, headers=PUBLIC_HEADERS)

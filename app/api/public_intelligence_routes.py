@@ -38,7 +38,7 @@ def _utc_date(raw):
         return None
 
 
-def market_intelligence_snapshot(database, *, today=None):
+def market_intelligence_snapshot(database, *, today=None, allowed_sources=None):
     today = today or datetime.now(timezone.utc).date()
     start = today - timedelta(days=13)
     observed = {start + timedelta(days=i): {"total": 0, "priced": 0}
@@ -55,10 +55,12 @@ def market_intelligence_snapshot(database, *, today=None):
     # saved opportunities or organization search history.
     with closing(database.connect()) as conn:
         rows = conn.execute(
-            "SELECT notice_json, first_seen FROM source_opportunities "
+            "SELECT source_id, notice_json, first_seen FROM source_opportunities "
             "ORDER BY last_seen DESC LIMIT ?", (MAX_OBSERVED,)
         ).fetchall()
 
+    if allowed_sources is not None:
+        rows = [row for row in rows if row["source_id"] in allowed_sources]
     for row in rows:
         try:
             notice = json.loads(row["notice_json"])
@@ -146,7 +148,10 @@ async def public_market_intelligence(request: Request):
     if database is None:
         raise HTTPException(503, "Market intelligence unavailable.", headers=PUBLIC_HEADERS)
     try:
-        report = await asyncio.to_thread(market_intelligence_snapshot, database)
+        report = await asyncio.to_thread(
+            market_intelligence_snapshot, database,
+            allowed_sources=getattr(request.app.state, "public_source_allowed_keys", None),
+        )
     except (sqlite3.Error, StorageError, ValueError, TypeError, OSError):
         raise HTTPException(503, "Market intelligence unavailable.", headers=PUBLIC_HEADERS) from None
     return JSONResponse(report, headers=PUBLIC_HEADERS)

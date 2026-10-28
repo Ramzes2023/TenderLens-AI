@@ -25,8 +25,33 @@ from .security import AuthRateLimiter, AuthRatePolicy
 
 ISOLATED_SQLITE_URL = "sqlite:////app/data/isolated-public-sources.sqlite3"
 
+# Public source flags are separate from the legacy main API's registry.
+# A source disabled after a failed staged run must not remain discoverable
+# merely because its isolated SQLite rows have not been deleted.
+ISOLATED_SOURCES = (
+    ("mikroton_tender", "MIKROTON_TENDER_ENABLED"),
+    ("stan_commercial_public", "STAN_COMMERCIAL_PUBLIC_ENABLED"),
+    ("south_ural_public", "SOUTH_URAL_PUBLIC_ENABLED"),
+    ("kavkaz_rf_firstparty", "KAVKAZ_RF_FIRSTPARTY_ENABLED"),
+    ("lenobl_small_public", "LENOBL_SMALL_PUBLIC_ENABLED"),
+    ("ru_samara_public_list", "RU_SAMARA_PUBLIC_LIST_ENABLED"),
+)
 
-def create_public_source_app(*, database_factory=None) -> FastAPI:
+
+def approved_public_source_keys(environment):
+    enabled = set()
+    for source, flag in ISOLATED_SOURCES:
+        value = environment.get(flag, "false")
+        if value not in {"true", "false"}:
+            raise RuntimeError("Invalid isolated source opt-in flag")
+        if value == "true":
+            enabled.add(source)
+    if not {"mikroton_tender", "stan_commercial_public"}.issubset(enabled):
+        raise RuntimeError("Mandatory base public source flags unavailable")
+    return frozenset(enabled)
+
+
+def create_public_source_app(*, database_factory=None, allowed_sources_for_tests=None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         if database_factory is None:
@@ -34,10 +59,12 @@ def create_public_source_app(*, database_factory=None) -> FastAPI:
                 raise RuntimeError("Isolated public sources not explicitly enabled.")
             if os.environ.get("DATABASE_URL") != ISOLATED_SQLITE_URL:
                 raise RuntimeError("Isolated public source database location mismatch.")
+            application.state.public_source_allowed_keys = approved_public_source_keys(os.environ)
             database = Database(parse_database_settings(ISOLATED_SQLITE_URL))
         else:
             # Only used by offline tests with a disposable injected DB.
             database = database_factory()
+            application.state.public_source_allowed_keys = allowed_sources_for_tests
         try:
             OpportunityRepository(database).initialize()
             application.state.runtime = SimpleNamespace(database=database)
@@ -45,6 +72,7 @@ def create_public_source_app(*, database_factory=None) -> FastAPI:
         finally:
             database.close()
             application.state.runtime = SimpleNamespace(database=None)
+            application.state.public_source_allowed_keys = None
 
     app = FastAPI(
         title="VALYQON isolated public source previews",

@@ -131,3 +131,51 @@ def test_source_compose_never_attaches_prod_db_or_publishes_public_port():
     assert "    network_mode: none" in raw
     assert "VALYQON_RU_BACKGROUND_CATALOG_ENABLED: \"false\"" in raw
     assert "    external: true" in raw
+
+
+
+def test_disabled_source_rows_cannot_appear_in_isolated_guest_or_aggregates(tmp_path):
+    db = make_db(tmp_path)
+    # Keep an authentic-looking saved row after removing its operator flag:
+    # merely restoring five-source Compose must not republish that row.
+    with TestClient(create_public_source_app(
+        database_factory=lambda: db,
+        allowed_sources_for_tests=frozenset({"mikroton_tender"}),
+    )) as client:
+        now = datetime.now(timezone.utc)
+        add(db, external_id="101", title="Утвержденные кабельные закупки",
+            source="mikroton_tender", now=now)
+        add(db, external_id="102", title="Отключенные кабельные закупки",
+            source="south_ural_public", now=now)
+        yes = client.get("/api/v1/public/opportunities?q=кабельные")
+        assert yes.status_code == 200
+        assert yes.json()["shown"] == 1
+        assert yes.json()["results"][0]["title"] == "Утвержденные кабельные закупки"
+        denied = client.get("/api/v1/public/opportunities?q=Отключенные")
+        assert denied.status_code == 200
+        assert denied.json()["shown"] == 0
+        pulse = client.get("/api/v1/public/market-pulse")
+        intelligence = client.get("/api/v1/public/market-intelligence")
+        assert pulse.json()["scanned_recent_rows"] == 1
+        assert intelligence.json()["scanned_recent_rows"] == 1
+        assert intelligence.json()["valid_records_in_sample"] == 1
+    assert db._closed
+
+
+def test_only_exact_operator_enabled_sources_are_visible():
+    from app.api.isolated_public_sources import approved_public_source_keys
+    good = {"MIKROTON_TENDER_ENABLED": "true",
+            "STAN_COMMERCIAL_PUBLIC_ENABLED": "true",
+            "RU_SAMARA_PUBLIC_LIST_ENABLED": "false"}
+    assert approved_public_source_keys(good) == frozenset({
+        "mikroton_tender", "stan_commercial_public",
+    })
+    good["RU_SAMARA_PUBLIC_LIST_ENABLED"] = "true"
+    assert "ru_samara_public_list" in approved_public_source_keys(good)
+    good["RU_SAMARA_PUBLIC_LIST_ENABLED"] = "garbage"
+    with pytest.raises(RuntimeError, match="Invalid isolated source"):
+        approved_public_source_keys(good)
+    good["RU_SAMARA_PUBLIC_LIST_ENABLED"] = "false"
+    good["MIKROTON_TENDER_ENABLED"] = "false"
+    with pytest.raises(RuntimeError, match="Mandatory base"):
+        approved_public_source_keys(good)

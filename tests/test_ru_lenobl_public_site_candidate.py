@@ -90,5 +90,5 @@ def test_untzoned_local_clock_exact_global_boundary_without_time_guess():
     assert verify("2026-10-29T14:30:00")
     assert not verify("2026-10-29")
     assert verify("2026-10-29T14:30")
-    assert verify("2026-10-29T14:30:00Z")  # independently zoned timestamp is unambiguous
+    assert not verify("2026-10-29T14:30:00Z")  # official portal does not supply a timezone
     assert not eligible_published_deadline("other_source","2026-10-29T14:30:00",now=NOW)

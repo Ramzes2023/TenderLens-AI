@@ -64,6 +64,8 @@ def test_disabled_by_default_and_no_log(app_client, monkeypatch, caplog):
     ("email.bounced", "verification"),
     ("email.suppressed", "verification"),
     ("email.complained", "verification"),
+    ("email.failed", "verification"),
+    ("email.failed", "password_reset"),
     ("email.delivered", "password_reset"),
     ("email.delivery_delayed", "password_reset"),
 ])

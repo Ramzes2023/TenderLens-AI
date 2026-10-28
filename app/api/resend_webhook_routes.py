@@ -23,6 +23,7 @@ _TOLERANCE_SECONDS = 300
 _TYPES = frozenset({
     "email.sent", "email.delivered", "email.delivery_delayed",
     "email.bounced", "email.suppressed", "email.complained",
+    "email.failed",
 })
 _SUBJECT_KINDS = {
     "Verify your VALYQON AI email": "verification",
@@ -96,6 +97,7 @@ async def resend_outcome(request: Request) -> dict[str, bool]:
             # Never log recipient, message ID, subject, token-bearing URL or bounce text.
             level = logging.WARNING if event_type in {
                 "email.bounced", "email.suppressed", "email.complained",
+                "email.failed",
             } else logging.INFO
             _LOG.log(level, "resend_account_mail_event kind=%s outcome=%s", kind, event_type)
     return {"accepted": True}

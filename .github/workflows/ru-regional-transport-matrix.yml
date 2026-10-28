@@ -1,0 +1,41 @@
+name: RU Stalled Regional Publisher Transport Diagnostics
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/ru_regional_public_transport_matrix.py
+      - tests/test_ru_regional_public_transport_matrix.py
+      - .github/workflows/ru-regional-transport-matrix.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  official-transport-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHON_DOTENV_DISABLED: "1"
+      TELEGRAM_BOT_TOKEN: ""
+      OUTBOUND_PROXY_URL: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Source contract and mock-only behavior
+        run: |
+          python -m pip install pytest
+          PYTHONPATH=. python -m pytest -q tests/test_ru_regional_public_transport_matrix.py
+      - name: Actual strict HTTPS-only original publisher transport matrix
+        run: |
+          timeout 135s python -B -m scripts.ru_regional_public_transport_matrix
+      - name: This research workflow is NOT an ingestion or deploy release gate
+        run: |
+          echo "WORKER_SQL_SEARCH_CONFIRMED=NO"
+          echo "PUBLIC_DEPLOYMENT_CHANGED=NO"
+          echo "RED_LIVE_SOURCE_PRS_MUST_REMAIN_UNMERGED=YES"

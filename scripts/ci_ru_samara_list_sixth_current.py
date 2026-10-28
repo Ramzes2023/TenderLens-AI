@@ -110,6 +110,12 @@ def main():
     except Exception as exc:
         print("RU_SAMARA_SIXTH_CURRENT_LIST=BLOCKED")
         print("BLOCKER_CLASS="+type(exc).__name__)
+        permitted=["Official Samara source not operator-enabled in ephemeral catalog","Actual Samara Worker did not claim source job","Official Samara list Worker was not successful","No two first-party native list rows available","Duplicate first-party list IDs in SQL","Duplicate first-party list numbers in SQL","Untrusted first-party public-list provenance","No safely current native public-list deadlines","SQL candidate gate failed actual Worker current rows","Live notice title does not admit searchable keyword","Source-owned live deadline/title not found by guest","Guest preview leaked private or deep detail fields","Native list source produced duplicate on replay"]
+        print("BLOCKER_STAGE="+(
+            str(exc).replace(" ","_").upper()
+            if type(exc) is AssertionError and str(exc) in permitted
+            else "REDACTED_UNEXPECTED_FAILURE"
+        ))
         print("PUBLISHER_DEEP_DETAILS_VERIFIED=NO")
         print("PRODUCTION_CHANGED=NO")
         return 2

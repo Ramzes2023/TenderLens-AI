@@ -1,0 +1,42 @@
+name: RU Samara First-Party Native JSON Transport Diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/research_ru_samara_firstparty_native_transport.py
+      - tests/test_research_ru_samara_firstparty_native_transport.py
+      - .github/workflows/ru-samara-native-transport-diagnostic.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bounded-research-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHON_DOTENV_DISABLED: '1'
+      TELEGRAM_BOT_TOKEN: ''
+      OUTBOUND_PROXY_URL: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install strict connector test dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: GET/token/POST stages, known failures and no-secret tests
+        run: python -m pytest -q tests/test_research_ru_samara_firstparty_native_transport.py
+      - name: Real publisher GET/token/POST read-only diagnostics, not release
+        timeout-minutes: 4
+        run: python -B -m scripts.research_ru_samara_firstparty_native_transport
+      - name: Retain strict block on production integration
+        run: |
+          echo "SAMARA_ORIGINAL_VERIFIED=NO"
+          echo "SAMARA_WORKER_SQL_VERIFIED=NO"
+          echo "PUBLIC_SOURCE_DEPLOYMENT=NONE"

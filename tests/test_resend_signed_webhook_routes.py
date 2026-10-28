@@ -81,7 +81,7 @@ def test_verified_event_redacts_identifiers(app_client, monkeypatch, caplog, typ
 
 
 @pytest.mark.parametrize("bad_headers,raw_override,expected", [
-    ({}, None, 401),
+    ({"svix-signature": ""}, None, 401),
     ({"svix-signature": "v1,bad"}, None, 401),
     ({"svix-timestamp": "0"}, None, 401),
     ({"svix-timestamp": "9000000000"}, None, 401),
@@ -127,3 +127,19 @@ def test_raw_body_signature_rejects_serialization_changes():
     headers = signed_request(raw)
     assert _verify(_SECRET, raw, headers)
     assert not _verify(_SECRET, json.dumps(json.loads(raw), indent=2).encode(), headers)
+
+
+@pytest.mark.parametrize("missing_header", [
+    "svix-id", "svix-timestamp", "svix-signature",
+])
+def test_missing_signature_headers_are_rejected(
+    app_client, monkeypatch, caplog, missing_header,
+):
+    monkeypatch.setenv("VALYQON_RESEND_WEBHOOK_SECRET", _SECRET)
+    raw = payload()
+    headers = signed_request(raw)
+    headers.pop(missing_header)
+    caplog.set_level(logging.DEBUG)
+    response = app_client.post(_PATH, content=raw, headers=headers)
+    assert response.status_code == 401
+    assert "resend_account_mail_event" not in caplog.text

@@ -82,20 +82,31 @@ async def diagnose() -> list[dict]:
                 raise ValueError("Publisher public list not HTML")
             rows=parse_lenobl_listing(response.content,limit=MAX_DETAILS)
             diagnostics=[]
+            skipped=0
             for identity,url,title in rows:
-                reply=await client.get(url)
-                reply.raise_for_status()
-                if "html" not in reply.headers.get("content-type","").lower():
-                    raise ValueError("Publisher individual detail not HTML")
-                verified=parse_lenobl_detail(reply.content,identity=identity,
-                                             url=url,listing_title=title)
-                record=classify_visible_deadline(reply.content)
+                try:
+                    reply=await client.get(url)
+                    reply.raise_for_status()
+                    if "html" not in reply.headers.get("content-type","").lower():
+                        raise ValueError("Publisher individual detail not HTML")
+                    verified=parse_lenobl_detail(reply.content,identity=identity,
+                                                 url=url,listing_title=title)
+                    record=classify_visible_deadline(reply.content)
+                except ValueError:
+                    # Some published list cards may be inconsistent or
+                    # withdraw their details. Mirror the actual connector:
+                    # skip unverified originals, never synthesize an identity.
+                    skipped+=1
+                    continue
                 diagnostics.append({
                     "native_original_verified":verified.external_id==identity,
                     "official_host":HOST,
                     "deadline_details":record,
                     "source_active_ready":False,
                 })
+            if not diagnostics:
+                raise ValueError("No independently verified original details")
+            print("RU_LENOBL_UNVERIFIED_DETAIL_COUNT="+str(skipped))
             return diagnostics
 
 

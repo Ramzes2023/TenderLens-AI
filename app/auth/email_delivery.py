@@ -248,9 +248,8 @@ class SMTPEmailSender:
                             self.password,
                         )
 
-                    client.send_message(
-                        message
-                    )
+                    if client.send_message(message):
+                        raise EmailDeliveryError("Verification SMTP recipient rejected.")
 
                 return
 
@@ -273,9 +272,8 @@ class SMTPEmailSender:
                         self.password,
                     )
 
-                client.send_message(
-                    message
-                )
+                if client.send_message(message):
+                    raise EmailDeliveryError("Verification SMTP recipient rejected.")
 
         except (
             OSError,
@@ -308,7 +306,8 @@ class SMTPEmailSender:
                 ) as client:
                     if self.username:
                         client.login(self.username, self.password)
-                    client.send_message(message)
+                    if client.send_message(message):
+                        raise EmailDeliveryError("Password reset SMTP recipient rejected.")
                 return
             with smtplib.SMTP(self.host, self.port, timeout=self.timeout_seconds) as client:
                 client.ehlo()
@@ -317,7 +316,8 @@ class SMTPEmailSender:
                     client.ehlo()
                 if self.username:
                     client.login(self.username, self.password)
-                client.send_message(message)
+                if client.send_message(message):
+                    raise EmailDeliveryError("Password reset SMTP recipient rejected.")
         except (OSError, smtplib.SMTPException):
             raise EmailDeliveryError("Password reset email delivery failed.") from None
 
@@ -337,7 +337,8 @@ class SMTPEmailSender:
                 ) as client:
                     if self.username:
                         client.login(self.username, self.password)
-                    client.send_message(message)
+                    if client.send_message(message):
+                        raise EmailDeliveryError("Deadline reminder SMTP recipient rejected.")
                 return
             with smtplib.SMTP(self.host, self.port, timeout=self.timeout_seconds) as client:
                 client.ehlo()
@@ -346,7 +347,8 @@ class SMTPEmailSender:
                     client.ehlo()
                 if self.username:
                     client.login(self.username, self.password)
-                client.send_message(message)
+                if client.send_message(message):
+                    raise EmailDeliveryError("Deadline reminder SMTP recipient rejected.")
         except (OSError, smtplib.SMTPException):
             raise EmailDeliveryError("Deadline email delivery failed.") from None
 

@@ -1,0 +1,17 @@
+# Optional third independently checked Russian procurement source.
+# This file MUST be used together with ops/public_sources/compose.yaml.
+# Do not use it in the production tenderlens-vps Compose stack.
+# Without this overlay, the first two working sources remain unchanged.
+services:
+  guest-sources:
+    environment:
+      SOUTH_URAL_PUBLIC_ENABLED: "true"
+  worker:
+    environment:
+      SOUTH_URAL_PUBLIC_ENABLED: "true"
+  scheduler:
+    environment:
+      SOUTH_URAL_PUBLIC_ENABLED: "true"
+  enqueue:
+    environment:
+      SOUTH_URAL_PUBLIC_ENABLED: "true"

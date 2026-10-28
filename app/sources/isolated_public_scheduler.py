@@ -1,4 +1,4 @@
-"""Opt-in single-source queue scheduler; no upstream HTTP or notifications.
+"""Opt-in fixed Russian-source queue scheduler; no upstream HTTP or notifications.
 
 A healthy Docker Worker fetches the publicly published original; this process
 only enqueues at most once per UTC hour per source. It is disabled unless an operator
@@ -35,8 +35,14 @@ def approved_cycle():
     from app.sources.ingestion import ConnectorSyncService
     from app.sources.ru_cycle import approved_ru_keys
 
+    extension = os.environ.get("SOUTH_URAL_PUBLIC_ENABLED", "false").strip().lower()
+    if extension not in {"true", "false"}:
+        raise ValueError("Invalid South Ural opt-in.")
+    approved = ("mikroton_tender", "stan_commercial_public")
+    if extension == "true":
+        approved += ("south_ural_public",)
     catalog = build_source_catalog(load_monitoring_settings())
-    if set(approved_ru_keys(catalog)) != {"mikroton_tender", "stan_commercial_public"}:
+    if set(approved_ru_keys(catalog)) != set(approved):
         raise ValueError("Unexpected enabled RU source in scheduler")
 
     database = Database(load_database_settings())
@@ -44,7 +50,7 @@ def approved_cycle():
         repo = JobRepository(database, load_job_settings())
         repo.initialize()
         service = ConnectorSyncService(JobService(repo), catalog)
-        for source_id in ("mikroton_tender", "stan_commercial_public"):
+        for source_id in approved:
             service.enqueue(source_id)
     finally:
         database.close()

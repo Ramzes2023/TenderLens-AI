@@ -25,7 +25,7 @@ SOURCE_ID = "lenobl_small_public"
 HOST = "zakupki.lenreg.ru"
 LIST_URL = "https://" + HOST + "/Search/NewRequests"
 MAX_BYTES = 1_200_000
-MAX_DETAILS = 3
+MAX_DETAILS = 6
 DETAIL_PATH = re.compile(r"/ProductRequestGroup/Index/([0-9]{4,16})/?")
 
 

@@ -17,6 +17,7 @@ PATHS = (
     "/api/v1/public/opportunities",
     "/api/v1/public/market-pulse",
     "/api/v1/public/market-intelligence",
+    "/public/source-directory.json",
 )
 ALLOWED_NOTICE = frozenset({"title", "initial_price", "currency", "deadline"})
 MAX_BYTES = 256_000
@@ -30,6 +31,27 @@ class RejectRedirects(HTTPRedirectHandler):
 def validate(path: str, data: object) -> tuple[str, int]:
     if not isinstance(data, dict):
         return ("INVALID_JSON_SHAPE", 0)
+    if path.endswith("source-directory.json"):
+        rows = data.get("sources")
+        count = data.get("enabled_count")
+        if (data.get("scope") != "runtime_registry_plus_separately_labeled_ru_inventory"
+                or data.get("live_health_verified") is not False
+                or not isinstance(rows, list) or type(count) is not int):
+            return ("INVALID_DIRECTORY_SCOPE", 0)
+        allowed = set()
+        for item in rows:
+            if not isinstance(item, dict) or type(item.get("enabled")) is not bool:
+                return ("INVALID_DIRECTORY_ENTRY", 0)
+            key = item.get("key")
+            if not isinstance(key, str) or not key or len(key) > 64 or not all(
+                ch in "abcdefghijklmnopqrstuvwxyz0123456789_-" for ch in key
+            ) or key in allowed:
+                return ("INVALID_DIRECTORY_KEY", 0)
+            allowed.add(key)
+        actual = sum(row["enabled"] for row in rows)
+        if count != actual:
+            return ("INVALID_DIRECTORY_COUNT", 0)
+        return ("REGISTRY_FLAGS_NOT_LIVE_HEALTH", count)
     if path.endswith("opportunities"):
         if data.get("source") != "stored_connector_notices":
             return ("NOT_CONNECTOR_GUEST_API", 0)
@@ -90,7 +112,12 @@ def probe(path: str) -> tuple[str, int]:
         value = json.loads(body)
     except (ValueError, UnicodeDecodeError):
         return ("JSON_PARSE_FAILED", 0)
-    return validate(path, value)
+    result = validate(path, value)
+    if path.endswith("source-directory.json") and result[0] == "REGISTRY_FLAGS_NOT_LIVE_HEALTH":
+        keys = sorted(row["key"] for row in value["sources"] if row["enabled"])
+        print("PUBLIC_RUNTIME_ENABLED_REGISTRY_KEYS=" + ",".join(keys))
+        print("PUBLIC_RUNTIME_REGISTERED_SOURCE_COUNT=" + str(len(value["sources"])))
+    return result
 
 
 def self_test() -> None:
@@ -104,6 +131,12 @@ def self_test() -> None:
     assert validate(PATHS[0], {**valid, "results": [], "shown": 0}) == ("PUBLIC_GUEST_EMPTY", 0)
     assert validate(PATHS[1], {"scope": "bounded_persisted_source_observations", "scanned_recent_rows": 0}) == ("MARKET_PULSE_READY", 0)
     assert validate(PATHS[2], {"scope": "bounded_persisted_source_observations", "scanned_recent_rows": 4}) == ("MARKET_INTELLIGENCE_READY", 4)
+    example = {"scope": "runtime_registry_plus_separately_labeled_ru_inventory",
+               "live_health_verified": False, "sources": [
+                   {"key": "mikroton_tender", "enabled": True},
+                   {"key": "stan_commercial_public", "enabled": False}], "enabled_count": 1}
+    assert validate(PATHS[3], example) == ("REGISTRY_FLAGS_NOT_LIVE_HEALTH", 1)
+    assert validate(PATHS[3], {**example, "enabled_count": 2})[0] == "INVALID_DIRECTORY_COUNT"
     print("PUBLIC_SOURCE_AUDIT_SELF_TEST=PASS")
 
 
@@ -124,12 +157,14 @@ def main() -> int:
         print(f"PUBLIC_{label}_COUNT_OR_HTTP={count}")
     visible = statuses[0][0] == "PUBLIC_SAVED_PREVIEWS_VISIBLE"
     routes_ok = all(state in ("PUBLIC_SAVED_PREVIEWS_VISIBLE", "PUBLIC_GUEST_EMPTY",
-                               "MARKET_PULSE_READY", "MARKET_INTELLIGENCE_READY")
+                               "MARKET_PULSE_READY", "MARKET_INTELLIGENCE_READY",
+                               "REGISTRY_FLAGS_NOT_LIVE_HEALTH")
                     for state, _ in statuses)
     print("PUBLIC_GUEST_API_REACHABLE=" + ("YES" if routes_ok else "NO"))
     print("PUBLIC_REAL_PREVIEWS_VISIBLE=" + ("YES" if visible else "NO"))
     print("INDIVIDUAL_SOURCE_ACTIVATION_VERIFIED=NO")
     print("DEPLOYED_SOURCE_SET_VERIFIED=NO")
+    print("RUNTIME_REGISTRY_FLAGS_ARE_NOT_WORKER_DELIVERY=YES")
     print("PRODUCTION_CHANGED=NO")
     # Failure is deliberate: a green workflow must not mean the hosted website
     # serves fresh public previews when routes are broken or no rows exist.

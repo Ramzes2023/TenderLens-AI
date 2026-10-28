@@ -9,6 +9,7 @@ remain mandatory. Disabled in production.
 """
 from __future__ import annotations
 
+from scripts.source_failure_diagnostics import transport_category
 import asyncio
 import json
 import re
@@ -105,7 +106,8 @@ def main() -> int:
         found = asyncio.run(proof(stage=stage))
     except (ValueError, TypeError, ConnectorTransportError, httpx.HTTPError,
             OSError, TimeoutError, json.JSONDecodeError) as error:
-        print("RU_SAMARA_DECLARED_DETAILS=BLOCKED_" + type(error).__name__)
+        print('RU_SAMARA_TRANSPORT_CATEGORY=' + transport_category(error))
+        print('RU_SAMARA_DECLARED_DETAILS=BLOCKED_' + type(error).__name__)
         print("RU_SAMARA_DECLARED_FAILURE_STAGE=" + stage.get("step", "START"))
         if isinstance(error, ConnectorTransportError):
             print("RU_SAMARA_DECLARED_RETRYABLE=" + str(error.retryable))

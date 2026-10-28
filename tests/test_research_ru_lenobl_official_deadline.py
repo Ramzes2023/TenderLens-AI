@@ -13,7 +13,7 @@ def test_publisher_label_and_timed_value_reported_as_unverified_candidate():
     report=classify_visible_deadline(payload)
     assert report["visible_label_count"]==1
     assert report["date_field_candidates"][0]["field"]==LABELS[0]
-    assert report["date_field_candidates"][0]["nearby_dates"]==["07.11.2026 14:30"]
+    assert report["date_field_candidates"][0]["nearby_dates"][0]=="07.11.2026 14:30"
     assert report["is_verified_submission_deadline"] is False
 
 

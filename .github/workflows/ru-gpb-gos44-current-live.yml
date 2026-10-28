@@ -1,0 +1,56 @@
+name: RU GPB Gos44 current published index to independently verified EIS originals
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/research_ru_gpb_gos44_published_current.py
+      - tests/test_ru_gpb_gos44_published_current.py
+      - .github/workflows/ru-gpb-gos44-current-live.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  gpb-gos44-raw-offline-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Exact gos.etpgpb.ru list UUID, visible current EIS originals, no hidden links or redirects
+        run: python -m pytest -q tests/test_ru_gpb_gos44_published_current.py
+
+  gpb-gos44-live-current-firstparty-windows:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require current official 44FZ public list and two independent exact-original detail pages
+        timeout-minutes: 6
+        run: python -B -m scripts.research_ru_gpb_gos44_published_current
+
+  gpb-gos44-live-current-firstparty-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Require genuine current Gos44 index -> 2 EIS-correlated first-party details
+        timeout-minutes: 6
+        run: python -B -m scripts.research_ru_gpb_gos44_published_current

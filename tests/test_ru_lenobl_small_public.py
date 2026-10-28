@@ -105,7 +105,7 @@ def test_fetch_only_expected_two_https_urls(monkeypatch):
     assert calls == [LIST_URL, URL]
 
 
-@pytest.mark.parametrize("limit", [0, 4, True, "3"])
+@pytest.mark.parametrize("limit", [0, 7, True, "3"])
 def test_listing_limit_strict(limit):
     with pytest.raises(ValueError):
         parse_lenobl_listing(listing(), limit=limit)

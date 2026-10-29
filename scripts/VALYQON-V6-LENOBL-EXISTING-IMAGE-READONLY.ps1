@@ -16,10 +16,15 @@ $remote = @'
 set -eu
 # Only the reviewed isolated V6 Worker; do not fall back to an arbitrary
 # container, V5, production API or the stopped Telegram bot.
-ids="$(docker ps --filter 'label=com.docker.compose.project=valyqon-public-sources' --filter 'label=com.docker.compose.service=worker-v6' --format '{{.ID}}')"
+ids="$(docker ps --filter 'label=com.docker.compose.project=valyqon-public-sources' --filter 'label=com.docker.compose.service=worker' --format '{{.ID}}')"
 count="$(printf '%s\n' "$ids" | awk 'NF{n++} END{print n+0}')"
 if [ "$count" -ne 1 ]; then
   printf 'V6_EXACT_WORKER=BLOCKED_NOT_UNIQUE\nPRODUCTION_CHANGED=NO\n'
+  exit 2
+fi
+image="$(docker inspect --format '{{.Config.Image}}' "$ids")"
+if [ "$image" != "valyqon-public-sources:v6-fe4c66bbd553" ]; then
+  printf 'V6_EXACT_WORKER=BLOCKED_IMAGE_NOT_VERIFIED\nPRODUCTION_CHANGED=NO\n'
   exit 2
 fi
 docker exec -i "$ids" python - <<'PY'
@@ -145,7 +150,36 @@ print("TELEGRAM_SEND_AUTHORIZED=NO", flush=True)
 print("PRODUCTION_CHANGED=NO", flush=True)
 PY
 '@
-$remote | & $ssh -T -i $IdentityFile -o 'BatchMode=yes' -o 'IdentitiesOnly=yes' -o 'StrictHostKeyChecking=yes' -o 'ConnectTimeout=10' $Target 'sh -s'
-if ($LASTEXITCODE -ne 0) {
-    throw "READONLY_V6_DIAGNOSTIC_EXIT=$LASTEXITCODE (no deployment performed)"
+# Windows PowerShell pipes add CRLF; dash/sh treats CR as an invalid option.
+# Send exact LF-only ASCII script over process stdin, not a native pipeline.
+$remoteLf = $remote.Replace("`r`n", "`n").Replace("`r", "`n") + "`n"
+if ($remoteLf.Contains("`r") -or -not $remoteLf.StartsWith("set -eu`n") -or
+    -not $remoteLf.EndsWith("`nPY`n")) {
+    throw "READONLY_V6_DIAGNOSTIC=BLOCKED_UNSAFE_SHELL_STREAM"
+}
+if ($IdentityFile.Contains('"')) {
+    throw "READONLY_V6_DIAGNOSTIC=BLOCKED_UNSAFE_IDENTITY_PATH"
+}
+$start = New-Object System.Diagnostics.ProcessStartInfo
+$start.FileName = $ssh
+$start.Arguments = '-T -i "' + $IdentityFile + '" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10 ' + $Target + ' sh -s'
+$start.UseShellExecute = $false
+$start.RedirectStandardInput = $true
+$start.CreateNoWindow = $true
+$process = New-Object System.Diagnostics.Process
+$process.StartInfo = $start
+try {
+    if (-not $process.Start()) { throw "READONLY_V6_DIAGNOSTIC=SSH_START_FAILED" }
+    try {
+        $process.StandardInput.Write($remoteLf)
+    } finally {
+        $process.StandardInput.Close()
+    }
+    $process.WaitForExit()
+    $status = $process.ExitCode
+} finally {
+    $process.Dispose()
+}
+if ($status -ne 0) {
+    throw "READONLY_V6_DIAGNOSTIC_EXIT=$status (no deployment performed)"
 }

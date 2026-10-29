@@ -6,7 +6,7 @@ import sqlite3
 import pytest
 
 from app.sources.isolated_runtime_audit import (
-    SOURCE_FLAGS, audit_connection, isolated_environment_valid,
+    SOURCE_FLAGS, _job_age_minutes, audit_connection, isolated_environment_valid,
 )
 
 
@@ -28,7 +28,7 @@ def fixture_conn():
                  "(source_id TEXT, notice_json TEXT, last_seen TEXT)")
     conn.execute("CREATE TABLE durable_jobs "
                  "(job_type TEXT, payload_json TEXT, state TEXT, "
-                 "finished_at TEXT, result_json TEXT, created_at TEXT)")
+                 "finished_at BIGINT, result_json TEXT, created_at TEXT)")
     return conn
 
 
@@ -50,7 +50,7 @@ def test_six_sources_actual_sql_and_worker_status_without_exposing_notices():
                   now.isoformat()))
     conn.execute("INSERT INTO durable_jobs VALUES(?,?,?,?,?,?)",
                  ("connector.sync.v1", json.dumps({"source_id": "mikroton_tender"}),
-                  "succeeded", now.isoformat(), json.dumps({"accepted_count": 1}),
+                  "succeeded", int(now.timestamp() * 1_000_000), json.dumps({"accepted_count": 1}),
                   now.isoformat()))
     data = audit_connection(conn, environment=environment(), now=now)
     assert len(data["sources"]) == 6
@@ -58,6 +58,7 @@ def test_six_sources_actual_sql_and_worker_status_without_exposing_notices():
     assert data["stored_open_preview_count"] == 1
     assert data["sources"]["mikroton_tender"]["last_worker_job"] == "succeeded"
     assert data["sources"]["mikroton_tender"]["last_worker_accepted_count"] == 1
+    assert data["sources"]["mikroton_tender"]["last_worker_age_minutes"] == 0.0
     assert data["sources"]["stan_commercial_public"]["recent_future_deadline_previews"] == 0
     encoded = json.dumps(data)
     assert "PRIVATE TEST BUYER CONTRACT" not in encoded
@@ -98,4 +99,32 @@ def test_false_source_switch_and_invalid_datetime_are_rejected():
     with pytest.raises(ValueError):
         audit_connection(conn, environment=environment(),
                          now=datetime(2026, 10, 28, 18))
+    conn.close()
+
+
+def test_worker_age_is_real_microseconds_not_an_iso_text_clock():
+    now = datetime(2026, 10, 29, 14, 0, tzinfo=timezone.utc)
+    stamp = int(now.timestamp() * 1_000_000)
+    assert _job_age_minutes(stamp - 300_000_000, now) == 5.0
+    assert _job_age_minutes(stamp - 7_200_000_000, now) == 120.0
+    for invalid in (None, True, 0, -5, 2**63, now.isoformat(),
+                    str(stamp), stamp + 1_000_000):
+        assert _job_age_minutes(invalid, now) is None
+
+
+def test_real_sql_worker_clock_uses_integer_without_data_leakage():
+    now = datetime(2026, 10, 29, 14, 0, tzinfo=timezone.utc)
+    conn = fixture_conn()
+    finished = int(now.timestamp() * 1_000_000) - 180_000_000
+    conn.execute("INSERT INTO durable_jobs VALUES(?,?,?,?,?,?)", (
+        "connector.sync.v1", json.dumps({"source_id": "lenobl_small_public"}),
+        "failed", finished, None, now.isoformat(),
+    ))
+    data = audit_connection(conn, environment=environment(), now=now)
+    record = data["sources"]["lenobl_small_public"]
+    assert record["last_worker_job"] == "failed"
+    assert record["last_worker_age_minutes"] == 3.0
+    assert record["last_worker_accepted_count"] is None
+    assert data["publisher_live_acceptance_proved_by_this_audit"] is False
+    assert data["production_changed"] is False
     conn.close()

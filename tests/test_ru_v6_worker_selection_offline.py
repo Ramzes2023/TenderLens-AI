@@ -1,8 +1,7 @@
-"""Pure offline test of the shell V6 worker selection; never calls real Docker."""
+"""Offline V6 inventory-grounded selection: fake Docker only, zero network."""
 import os
 import pathlib
 import subprocess
-import sys
 import tempfile
 import unittest
 
@@ -18,118 +17,93 @@ case = os.environ["V6_FAKE_CASE"]
 args = sys.argv[1:]
 log = pathlib.Path(os.environ["V6_FAKE_LOG"])
 with log.open("a") as file:
-    file.write(args[0] + "\\n")
+    file.write(" ".join(args) + "\\n")
 if case == "docker_error":
     sys.exit(11)
-images = {
-    "iso1": "valyqon-public-sources:v6-fe4c66bbd553",
-    "iso2": "valyqon-public-sources:v6-fe4c66bbd553",
-    "alt1": "valyqon-public-sources:v6-fe4c66bbd553",
-    "alt2": "valyqon-public-sources:v6-fe4c66bbd553",
-    "prod_tag": "valyqon-public-sources:v6-fe4c66bbd553",
-    "prod1": "tenderlens-vps:prod",
-    "bad1": "valyqon-public-sources:v6-other",
-}
-owners = {
-    "iso1": "valyqon-public-sources",
-    "iso2": "valyqon-public-sources",
-    "alt1": "six-live-sources-v6",
-    "alt2": "six-live-sources-v6",
-    "prod_tag": "tenderlens-vps",
-    "prod1": "tenderlens-vps",
-    "bad1": "valyqon-public-sources",
-}
 if args[0] == "ps":
-    primary = any("com.docker.compose.project=valyqon-public-sources" in arg for arg in args)
-    if primary:
-        values = {
-            "exact": ["iso1"],
-            "primary_multiple": ["iso1", "iso2"],
-            "bad_image": ["bad1"],
-        }.get(case, [])
-    else:
-        values = {
-            "alternate": ["alt1", "prod1"],
-            "multiple_alt": ["alt1", "alt2"],
-            "no_match": ["prod1"],
-            "production_only": ["prod_tag"],
-            "exact": ["iso1", "prod1"],
-        }.get(case, [])
+    # Only the 29 October operator-inventoried project+service labels are valid.
+    if "label=com.docker.compose.project=valyqon-public-sources" not in args:
+        sys.exit(12)
+    if "label=com.docker.compose.service=worker-v6" not in args:
+        sys.exit(13)
+    values = {
+        "actual_worker_v6": ["v6"],
+        "duplicate_v6": ["v6", "v6b"],
+        "wrong_image": ["v5"],
+        "exited_v6": [],
+        "only_legacy_worker": [],
+        "only_production_worker": [],
+        "no_v6": [],
+    }.get(case, [])
     print("\\n".join(values))
 elif args[0] == "inspect":
-    ident = args[-1]
-    if "{{.Config.Image}}" in args:
-        print(images[ident])
-    elif any("com.docker.compose.project" in arg for arg in args):
-        print(owners[ident])
+    if args[-1] == "v5":
+        print("valyqon-public-sources:f6a75d355a49")
+    elif args[-1] in ("v6", "v6b"):
+        print("valyqon-public-sources:v6-fe4c66bbd553")
     else:
-        sys.exit(12)
+        sys.exit(14)
 elif args[0] == "exec":
     print("V6_LENOBL_EXISTING_IMAGE=READONLY_DIAGNOSED")
     print("TELEGRAM_SEND_AUTHORIZED=NO")
     print("PRODUCTION_CHANGED=NO")
 else:
-    sys.exit(13)
+    sys.exit(15)
 """
 
-def embedded_shell():
+def shell_source():
     content = PS1.read_text(encoding="utf-8-sig")
-    head, sep, remainder = content.partition("$remote = @'\n")
-    if not sep:
-        raise AssertionError("Missing pinned operator shell here-string")
-    shell, sep, tail = remainder.partition("\n'@\n")
-    if not sep or not shell.startswith("set -eu\n") or not shell.endswith("\nPY"):
-        raise AssertionError("Missing strict bounded shell or Python here-doc")
+    _, marker, rest = content.partition("$remote = @'\n")
+    if not marker:
+        raise AssertionError("No operator POSIX remote shell")
+    shell, marker, _ = rest.partition("\n'@\n")
+    if not marker or not shell.startswith("set -eu\n") or not shell.endswith("\nPY"):
+        raise AssertionError("Bounded POSIX/Python heredoc missing")
     return shell + "\n"
 
-class V6SelectionOffline(unittest.TestCase):
+class V6WorkerSelectionOffline(unittest.TestCase):
     def run_case(self, case):
         with tempfile.TemporaryDirectory() as folder:
             root = pathlib.Path(folder)
-            stub = root / "docker"
-            stub.write_text(FAKE_DOCKER, encoding="utf-8")
-            stub.chmod(0o755)
+            docker = root / "docker"
+            docker.write_text(FAKE_DOCKER, encoding="utf-8")
+            docker.chmod(0o755)
             log = root / "calls.txt"
-            env = {
+            environment = {
                 **os.environ,
                 "PATH": str(root) + os.pathsep + os.environ.get("PATH", ""),
                 "V6_FAKE_CASE": case,
                 "V6_FAKE_LOG": str(log),
             }
             process = subprocess.run(
-                ["sh", "-s"], input=embedded_shell(), text=True,
-                capture_output=True, env=env, timeout=8, check=False,
+                ["sh", "-s"], input=shell_source(), text=True, env=environment,
+                capture_output=True, timeout=8, check=False,
             )
             calls = log.read_text().splitlines() if log.exists() else []
             return process.returncode, process.stdout, process.stderr, calls
 
-    def test_exact_project_preserved(self):
-        code, stdout, stderr, calls = self.run_case("exact")
+    def test_exact_observed_running_v6_is_selected(self):
+        code, stdout, stderr, calls = self.run_case("actual_worker_v6")
         self.assertEqual(code, 0, stderr)
         self.assertIn("V6_PRIMARY_LABEL_MATCH_COUNT=1", stdout)
-        self.assertIn("V6_SELECTION=EXACT_ORIGINAL_PROJECT", stdout)
+        self.assertIn("V6_SELECTION=EXACT_INVENTORIED_WORKER_V6", stdout)
         self.assertIn("V6_EXACT_WORKER=VERIFIED_UNIQUE_PINNED_IMAGE", stdout)
-        self.assertEqual(calls.count("exec"), 1)
+        self.assertEqual(sum(x.startswith("exec ") for x in calls), 1)
+        self.assertTrue(any("label=com.docker.compose.service=worker-v6" in x for x in calls))
 
-    def test_real_alt_compose_project_unique_pinned_worker(self):
-        code, stdout, stderr, calls = self.run_case("alternate")
-        self.assertEqual(code, 0, stderr)
-        self.assertIn("V6_PRIMARY_LABEL_MATCH_COUNT=0", stdout)
-        self.assertIn("V6_PINNED_IMAGE_WORKER_MATCH_COUNT=1", stdout)
-        self.assertIn("V6_SELECTION=EXACT_IMAGE_ALTERNATE_COMPOSE_PROJECT", stdout)
-        self.assertEqual(calls.count("exec"), 1)
-
-    def test_fail_closed_on_ambiguity_or_wrong_image(self):
-        for case in ("primary_multiple", "multiple_alt", "no_match",
-                     "production_only", "bad_image", "docker_error"):
+    def test_all_other_cases_fail_closed_without_docker_exec(self):
+        for case in ("duplicate_v6", "wrong_image", "exited_v6",
+                     "only_legacy_worker", "only_production_worker",
+                     "no_v6", "docker_error"):
             with self.subTest(case=case):
                 code, stdout, stderr, calls = self.run_case(case)
                 self.assertEqual(code, 2, (case, stderr))
-                self.assertIn("PRODUCTION_CHANGED=NO", stdout)
                 self.assertIn("V6_EXACT_WORKER=BLOCKED_", stdout)
-                self.assertEqual(calls.count("exec"), 0)
-                self.assertNotIn("tenderlens-vps:prod", stdout)
-                self.assertNotIn("valyqon-public-sources:v6-fe4c66bbd553", stdout)
+                self.assertIn("PRODUCTION_CHANGED=NO", stdout)
+                self.assertFalse(any(x.startswith("exec ") for x in calls))
+                self.assertFalse(any(x.startswith("ps ") and
+                    "label=com.docker.compose.service=worker-v6" not in x
+                    for x in calls))
 
 if __name__ == "__main__":
     unittest.main()

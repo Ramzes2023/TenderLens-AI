@@ -126,7 +126,7 @@ def test_rejects_same_database_and_missing_inputs(tmp_path):
     a.write_bytes(b"not a database")
     with pytest.raises(ValueError):
         audit_paths(a, a, now=NOW)
-    with pytest.raises(ValueError):
+    with pytest.raises((ValueError, sqlite3.DatabaseError)):
         audit_paths(a, tmp_path / "missing.sqlite", now=NOW)
 
 

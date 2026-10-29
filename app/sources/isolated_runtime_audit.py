@@ -31,6 +31,10 @@ SOURCE_FLAGS = (
 MAX_AGE_SECONDS = 7200
 MAX_SOURCE_ROWS = 200
 MAX_JOBS = 600
+SAFE_FAILURE_CODES = frozenset({
+    "handler_error", "permanent_failure", "unknown_type",
+    "lease_expired", "invalid_result",
+})
 
 
 def isolated_environment_valid(environment):
@@ -113,16 +117,17 @@ def audit_connection(conn, *, environment, now=None):
             "last_worker_job": "not_found",
             "last_worker_age_minutes": None,
             "last_worker_accepted_count": None,
+            "last_worker_failure_code": None,
         }
 
     # The durable queue is shared by *only this isolated* container's private
     # source volume. Never query saved user/customer data.
     jobs = conn.execute(
-        "SELECT payload_json,state,finished_at,result_json FROM durable_jobs "
+        "SELECT payload_json,state,finished_at,result_json,failure_code FROM durable_jobs "
         "WHERE job_type='connector.sync.v1' ORDER BY created_at DESC LIMIT ?",
         (MAX_JOBS,),
     ).fetchall()
-    for raw, state, finished, raw_result in jobs:
+    for raw, state, finished, raw_result, failure_code in jobs:
         try:
             payload = json.loads(raw)
             source = payload.get("source_id") if isinstance(payload, dict) else None
@@ -135,10 +140,16 @@ def audit_connection(conn, *, environment, now=None):
             if type(accepted) is not int or accepted < 0:
                 accepted = None
             age = _job_age_minutes(finished, now)
+            # Only fixed, non-sensitive Worker failure codes; never raw DB text.
+            safe_failure = (
+                failure_code if failure_code in SAFE_FAILURE_CODES
+                else "unclassified" if failure_code is not None else None
+            ) if state == "failed" else None
             result[source].update(
                 last_worker_job=state,
                 last_worker_age_minutes=age,
                 last_worker_accepted_count=accepted,
+                last_worker_failure_code=safe_failure,
             )
         except (ValueError, TypeError, OverflowError, AttributeError):
             continue

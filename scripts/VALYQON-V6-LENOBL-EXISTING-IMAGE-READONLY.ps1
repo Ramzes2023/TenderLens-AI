@@ -14,6 +14,7 @@ $ssh = (Get-Command ssh.exe -ErrorAction Stop).Source
 # Single-quoted here-string: remote shell and Python receive literal content.
 $remote = @'
 set -eu
+printf 'V6_SHELL_EXECUTED=YES\n'
 # Only the reviewed isolated V6 Worker; do not fall back to an arbitrary
 # container, V5, production API or the stopped Telegram bot.
 ids="$(docker ps --filter 'label=com.docker.compose.project=valyqon-public-sources' --filter 'label=com.docker.compose.service=worker' --format '{{.ID}}')"
@@ -165,21 +166,90 @@ $start.FileName = $ssh
 $start.Arguments = '-T -i "' + $IdentityFile + '" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10 ' + $Target + ' sh -s'
 $start.UseShellExecute = $false
 $start.RedirectStandardInput = $true
+$start.RedirectStandardOutput = $true
+$start.RedirectStandardError = $true
 $start.CreateNoWindow = $true
 $process = New-Object System.Diagnostics.Process
 $process.StartInfo = $start
 try {
     if (-not $process.Start()) { throw "READONLY_V6_DIAGNOSTIC=SSH_START_FAILED" }
+    # Drain BOTH streams concurrently to avoid SSH/Docker buffer deadlocks.
+    # Never show raw stderr, which may contain host details or secrets.
+    $outTask = $process.StandardOutput.ReadToEndAsync()
+    $errTask = $process.StandardError.ReadToEndAsync()
     try {
         $process.StandardInput.Write($remoteLf)
     } finally {
         $process.StandardInput.Close()
     }
-    $process.WaitForExit()
+    if (-not $process.WaitForExit(160000)) {
+        $process.Kill()
+        throw "READONLY_V6_DIAGNOSTIC=SSH_OR_SOURCE_TIMEOUT"
+    }
     $status = $process.ExitCode
+    $safeStdout = $outTask.GetAwaiter().GetResult()
+    $safeStderr = $errTask.GetAwaiter().GetResult()
 } finally {
     $process.Dispose()
 }
+# Only fixed diagnostic markers from the trusted script. No raw stdout,
+# shell error, traceback or remote buyer/account data is forwarded.
+$printed = 0
+foreach ($line in ($safeStdout -split "`r?`n")) {
+    if ($line.Length -gt 12000) { continue }
+    if ($line -match '^(?:V6_SHELL_EXECUTED|V6_EXACT_WORKER|V6_LENOBL_EXISTING_IMAGE|V6_SOURCE_IMPORT_CLASS|V6_CANARY_EXCEPTION_CLASS|TELEGRAM_SEND_AUTHORIZED|PRODUCTION_CHANGED)=[A-Za-z0-9_-]{1,80}) {
+        Write-Output $line
+        $printed++
+    } elseif ($line -match '^(V6_WORKER_SIX_SOURCE_AUDIT|V6_LENOBL_CANARY)=(\{[^\r\n]{1,11000}\})) {
+        # Verify valid JSON, then re-emit only the expected strict-shape fields.
+        try {
+            $record = $Matches[2] | ConvertFrom-Json -ErrorAction Stop
+            if ($Matches[1] -eq 'V6_WORKER_SIX_SOURCE_AUDIT') {
+                $allowedIds = @('mikroton_tender','stan_commercial_public','south_ural_public','kavkaz_rf_firstparty','lenobl_small_public','ru_samara_public_list')
+                $clean = [ordered]@{}
+                foreach ($id in $allowedIds) {
+                    $entry = $record.PSObject.Properties[$id].Value
+                    $state = [string]$entry.state
+                    if ($state -notin @('queued','running','succeeded','failed','cancelled','not_found','unknown')) { $state = 'unknown' }
+                    $failure = [string]$entry.failure_code
+                    if ($failure -notin @('handler_error','permanent_failure','lease_expired','invalid_result','unknown_type','unclassified')) { $failure = $null }
+                    $accepted = if ($entry.accepted_count -is [int] -and $entry.accepted_count -ge 0) { $entry.accepted_count } else { $null }
+                    $age = if ($entry.age_min -is [double] -and $entry.age_min -ge 0) { $entry.age_min } else { $null }
+                    $clean[$id] = @{state=$state;failure_code=$failure;accepted_count=$accepted;age_min=$age}
+                }
+                Write-Output ('V6_WORKER_SIX_SOURCE_AUDIT=' + ($clean | ConvertTo-Json -Depth 5 -Compress))
+                $printed++
+            } else {
+                $reason = [string]$record.transport_reason
+                if ($reason -notin @('network','timeout','policy','tls','dns','http_status','size','redirect','none')) { $reason='none' }
+                $class = [string]$record.error_class
+                if ($class -notmatch '^[A-Za-z][A-Za-z0-9_]{0,63}) { $class='UnknownException' }
+                $result = [string]$record.result
+                if ($result -notin @('CANDIDATE_ONLY','NO_OPEN_CURRENT','BLOCKED_FIRSTPARTY')) { $result='UNKNOWN' }
+                $clean = [ordered]@{
+                    result=$result
+                    error_class=$class
+                    transport_reason=$reason
+                    http_requests=$record.http_requests
+                    originals=$record.originals
+                    current_deadlines=$record.current_deadlines
+                }
+                Write-Output ('V6_LENOBL_CANARY=' + ($clean | ConvertTo-Json -Compress))
+                $printed++
+            }
+        } catch {
+            Write-Output 'V6_DIAGNOSTIC_JSON=BLOCKED_INVALID'
+            $printed++
+        }
+    }
+}
+if ($printed -eq 0) {
+    Write-Output 'V6_REMOTE_SAFE_MARKERS=NONE'
+}
+if ($safeStderr.Length -gt 0) {
+    Write-Output 'V6_REMOTE_STDERR_PRESENT=YES_REDACTED'
+}
+Write-Output "V6_SSH_EXIT_CODE=$status"
 if ($status -ne 0) {
     throw "READONLY_V6_DIAGNOSTIC_EXIT=$status (no deployment performed)"
 }

@@ -4,6 +4,7 @@ Never invent notice dates/prices. No external credentials, persistent DB or LLM.
 """
 import asyncio
 import json
+import re
 import tempfile
 from pathlib import Path
 
@@ -64,7 +65,10 @@ def proof():
                 raise AssertionError("Missing GPB SQL rows")
             snapshot = snapshot_catalog(catalog,store)
             for n in stored:
-                if not n.url.startswith(f"https://etpgpb.ru/procedures/etp/{n.external_id}-"):
+                if not re.fullmatch(
+                    rf"https://etpgpb\.ru/procedures/etp/{re.escape(n.external_id)}(?:-[a-z0-9-]+)?/",
+                    n.url,
+                ):
                     raise AssertionError("Noncanonical GPB detail URL")
                 report = asyncio.run(snapshot.fetch(
                     source_keys=(SOURCE,), search_terms=(n.external_id,),
@@ -90,13 +94,8 @@ def main():
     except Exception as e:
         print("RU_GPB_REAL_WORKER=BLOCKED")
         print("FAILURE_CLASS="+type(e).__name__)
-        # Only the explicit public source and isolated test DB are accessed.
-        # Keep the failure category/proximal cause visible for actual fixes.
-        cause = e.__cause__ or e.__context__
-        print("FAILURE_REASON="+str(e).replace("\\n", " ")[:350])
-        if cause is not None:
-            print("FAILURE_CAUSE_CLASS="+type(cause).__name__)
-            print("FAILURE_CAUSE="+str(cause).replace("\\n", " ")[:350])
+        # Never print raw network exception text: it can contain URLs or secrets.
+        print("FAILURE_REASON=redacted; consult approved transport class diagnostics")
         print("PRODUCTION_CHANGED=NO")
         return 1
     print("RU_GPB_REAL_WORKER_EVIDENCE="+json.dumps(result,sort_keys=True))

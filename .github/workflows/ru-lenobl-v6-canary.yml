@@ -1,0 +1,37 @@
+name: RU Lenobl V6 read-only bounded publisher canary contracts
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/lenobl_v6_canary.py
+      - tests/test_lenobl_v6_canary.py
+      - .github/workflows/ru-lenobl-v6-canary.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lenobl-no-send-canary-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHON_DOTENV_DISABLED: "1"
+      TELEGRAM_BOT_TOKEN: ""
+      OUTBOUND_PROXY_URL: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Compile and prove publisher GET limits without a network
+        run: |
+          python -m py_compile app/sources/lenobl_v6_canary.py
+          python -m pytest -q tests/test_lenobl_v6_canary.py tests/test_ru_lenobl_v6_worker_request_budget.py
+      - name: Confirm bundled operator command with no release authority
+        run: |
+          grep -q 'COPY app /app/app' Dockerfile
+          test -f app/sources/lenobl_v6_canary.py
+          echo "SAME_NETWORK_VPS_EXECUTED=NO"
+          echo "PRODUCTION_CHANGED=NO"

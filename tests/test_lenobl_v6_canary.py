@@ -10,12 +10,16 @@ from app.sources.lenobl_small_public import HOST, LIST_URL
 from app.sources.lenobl_v6_canary import (
     _failure_label, main, probe_source, safe_environment,
 )
-from tests.test_isolated_runtime_audit import environment
 
 
 def allowed_env():
     return {
-        **environment(),
+        "DATABASE_URL": "sqlite:////app/data/isolated-public-sources.sqlite3",
+        "VALYQON_ISOLATED_PUBLIC_SOURCES_ENABLED": "true",
+        "MONITORING_ENABLED": "false",
+        "TELEGRAM_BOT_TOKEN": "",
+        "VALYQON_EMAIL_MODE": "disabled",
+        "VALYQON_RESTRICT_PAID_SOURCE_DETAILS": "true",
         "LENOBL_SMALL_PUBLIC_ENABLED": "true",
         "VALYQON_CONNECTOR_MAX_RECORDS": "30",
         "OUTBOUND_PROXY_URL": "",

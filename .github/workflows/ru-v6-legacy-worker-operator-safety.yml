@@ -28,11 +28,10 @@ jobs:
           if ($errors.Count -ne 0) { throw "POWERSHELL_SYNTAX_INVALID=$($errors.Count)" }
           $source = Get-Content -LiteralPath $file -Raw -Encoding UTF8
           foreach ($required in @('StrictHostKeyChecking=yes', 'BatchMode=yes', 'mode=ro',
-                                  'label=com.docker.compose.service=worker',
-                                  'V6_PINNED_IMAGE_WORKER_MATCH_COUNT',
+                                  "--filter 'label=com.docker.compose.service=worker-v6'",
                                   'V6_PRIMARY_LABEL_MATCH_COUNT',
-                                  'EXACT_IMAGE_ALTERNATE_COMPOSE_PROJECT',
-                                  'tenderlens-vps',
+                                  'EXACT_INVENTORIED_WORKER_V6',
+                                  'BLOCKED_NOT_FOUND',
                                   'VALYQON_CONNECTOR_MAX_RECORDS', 'max_requests=4',
                                   'TELEGRAM_SEND_AUTHORIZED=NO', 'PRODUCTION_CHANGED=NO',
                                   'ProcessStartInfo', 'StandardInput.Write($remoteLf)',
@@ -44,7 +43,8 @@ jobs:
           }
           foreach ($forbidden in @('docker compose up', 'docker restart', 'docker rm',
                                    'git reset --hard', 'telegram.send', 'sqlite3.connect(DB_PATH)',
-                                   '$remote | & $ssh', 'label=com.docker.compose.service=worker-v6')) {
+                                   '$remote | & $ssh', "--filter 'label=com.docker.compose.service=worker'",
+                                   'V6_PINNED_IMAGE_WORKER_MATCH_COUNT=')) {
             if ($source.Contains($forbidden)) { throw "UNSAFE_OPERATOR_ACTION=$forbidden" }
           }
           Write-Output 'POWERSHELL_READONLY_CONTRACT=PASS'
@@ -71,7 +71,7 @@ jobs:
                       string payload = Encoding.ASCII.GetString(data);
                       if (!payload.StartsWith("set -eu" + (char)10) ||
                           !payload.EndsWith(((char)10).ToString() + "PY" + (char)10) ||
-                          !payload.Contains("label=com.docker.compose.service=worker'") ||
+                          !payload.Contains("label=com.docker.compose.service=worker-v6'") ||
                           !payload.Contains("valyqon-public-sources:v6-fe4c66bbd553")) return 23;
                       Console.WriteLine("MOCK_SSH_LF_ONLY_HEREDOC=PASS");
                       if (Environment.GetEnvironmentVariable("VALYQON_TEST_SSH_EXIT") == "2") {

@@ -32,6 +32,9 @@ jobs:
                                   'VALYQON_CONNECTOR_MAX_RECORDS', 'max_requests=4',
                                   'TELEGRAM_SEND_AUTHORIZED=NO', 'PRODUCTION_CHANGED=NO',
                                   'ProcessStartInfo', 'StandardInput.Write($remoteLf)',
+                                  'RedirectStandardOutput = $true',
+                                  'RedirectStandardError = $true',
+                                  'V6_REMOTE_STDERR_PRESENT=YES_REDACTED',
                                   'BLOCKED_IMAGE_NOT_VERIFIED')) {
             if (-not $source.Contains($required)) { throw "READONLY_BOUNDARY_MISSING=$required" }
           }
@@ -67,6 +70,15 @@ jobs:
                           !payload.Contains("label=com.docker.compose.service=worker'") ||
                           !payload.Contains("valyqon-public-sources:v6-fe4c66bbd553")) return 23;
                       Console.WriteLine("MOCK_SSH_LF_ONLY_HEREDOC=PASS");
+                      if (Environment.GetEnvironmentVariable("VALYQON_TEST_SSH_EXIT") == "2") {
+                          Console.WriteLine("V6_SHELL_EXECUTED=YES");
+                          Console.WriteLine("V6_EXACT_WORKER=BLOCKED_NOT_UNIQUE");
+                          Console.WriteLine("PRODUCTION_CHANGED=NO");
+                          Console.Error.WriteLine("confidential remote error not for forwarding");
+                          return 2;
+                      }
+                      Console.WriteLine("V6_SHELL_EXECUTED=YES");
+                      Console.WriteLine("PRODUCTION_CHANGED=NO");
                       return 0;
                   }
               }
@@ -79,7 +91,27 @@ jobs:
           $fakeKey = Join-Path $env:RUNNER_TEMP 'fake-test-key'
           'CI offline dummy, NOT a private key' | Set-Content -LiteralPath $fakeKey
           $env:PATH = "$env:RUNNER_TEMP;$env:PATH"
-          & ./scripts/VALYQON-V6-LENOBL-EXISTING-IMAGE-READONLY.ps1 -Target 'ubuntu@127.0.0.1' -IdentityFile $fakeKey
-          if ($LASTEXITCODE -ne 0) { throw 'MOCK_SSH_STREAM_FAILED' }
+          $ok = @( & ./scripts/VALYQON-V6-LENOBL-EXISTING-IMAGE-READONLY.ps1 -Target 'ubuntu@127.0.0.1' -IdentityFile $fakeKey )
+          if ('V6_SHELL_EXECUTED=YES' -notin $ok) { throw 'MOCK_SSH_SUCCESS_STATUS_NOT_VISIBLE' }
+          $env:VALYQON_TEST_SSH_EXIT = '2'
+          $seen = New-Object 'System.Collections.Generic.List[string]'
+          try {
+            & ./scripts/VALYQON-V6-LENOBL-EXISTING-IMAGE-READONLY.ps1 -Target 'ubuntu@127.0.0.1' -IdentityFile $fakeKey | ForEach-Object { $seen.Add([string]$_) }
+            throw 'MOCK_SSH_FAILURE_WAS_NOT_REJECTED'
+          } catch {
+            if ($_.Exception.Message -notlike '*READONLY_V6_DIAGNOSTIC_EXIT=2*') { throw }
+          } finally {
+            Remove-Item Env:VALYQON_TEST_SSH_EXIT -ErrorAction SilentlyContinue
+          }
+          if (-not $seen.Contains('V6_EXACT_WORKER=BLOCKED_NOT_UNIQUE')) {
+            throw 'MOCK_SSH_FAILURE_CAUSE_NOT_VISIBLE'
+          }
+          if (-not $seen.Contains('V6_REMOTE_STDERR_PRESENT=YES_REDACTED')) {
+            throw 'MOCK_SSH_STDERR_REDACTION_MISSING'
+          }
+          if (($seen | Out-String).Contains('confidential remote error')) {
+            throw 'MOCK_SSH_STDERR_LEAK'
+          }
+          Write-Output 'MOCK_SSH_BLOCKER_REPORTED_SAFELY=PASS'
           Write-Output 'SSH_NETWORK_CALLS=ZERO'
           Write-Output 'PRODUCTION_CHANGED=NO'

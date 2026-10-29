@@ -141,7 +141,7 @@ try:
         and "cap = min(limit, MAX_DETAILS)" in legacy_fetch
         and "remaining_details" not in legacy_fetch
         and "if _policy.get() is None else nullcontext()" in legacy_fetch
-        and "/app/sources/lenobl_small_public.py" == lenobl_runtime.__file__
+        and "/app/app/sources/lenobl_small_public.py" == lenobl_runtime.__file__
     )
 except (AttributeError, OSError, TypeError):
     legacy_ok = False

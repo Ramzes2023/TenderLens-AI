@@ -151,11 +151,39 @@ class DeadlineAlerts:
                 "ORDER BY r.claimed_at DESC,r.source,r.external_id LIMIT ?",
                 (account_id, organization_id, company_id, limit),
             ).fetchall()
+            # Aggregate over the entire scoped receipt history. The visible
+            # journal below is capped at 50 rows, so its counts alone can
+            # conceal earlier failures or attempts stranded after a crash.
+            # All claimed_at values written by _claim() are UTC ISO-8601.
+            cutoff = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat(
+                timespec="seconds"
+            )
+            health = conn.execute(
+                "SELECT COUNT(*) AS total, "
+                "COALESCE(SUM(CASE WHEN state='sent' THEN 1 ELSE 0 END),0) AS sender_ok, "
+                "COALESCE(SUM(CASE WHEN state='failed' THEN 1 ELSE 0 END),0) AS failed, "
+                "COALESCE(SUM(CASE WHEN state='pending' THEN 1 ELSE 0 END),0) AS pending, "
+                "COALESCE(SUM(CASE WHEN state='pending' AND claimed_at<=? "
+                "THEN 1 ELSE 0 END),0) AS old_pending "
+                "FROM deadline_alert_receipts "
+                "WHERE account_id=? AND organization_id=? AND company_id=?",
+                (cutoff, account_id, organization_id, company_id),
+            ).fetchone()
         return {
             "organization_id": organization_id,
             "company_id": company_id,
             "scope": "my_recorded_deadline_delivery_attempts",
             "limit": limit,
+            "health": {
+                "total": int(health["total"]),
+                "sender_ok": int(health["sender_ok"]),
+                "failed": int(health["failed"]),
+                "pending": int(health["pending"]),
+                "potentially_stranded_pending": int(health["old_pending"]),
+                "stale_after_minutes": 30,
+                "scope": "my_all_recorded_attempts",
+                "automatic_retry_enabled": False,
+            },
             "records": [{
                 "channel": row["channel"],
                 "state": row["state"],

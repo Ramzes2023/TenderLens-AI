@@ -39,13 +39,30 @@
   };
   function blank(){
     $('vqDeliveryRows').replaceChildren();
-    for(const id of ['vqDeliveryCount','vqDeliverySent','vqDeliveryFailed','vqDeliveryPending'])
+    for(const id of ['vqDeliveryCount','vqDeliverySent','vqDeliveryFailed','vqDeliveryPending',
+                     'vqDeliveryAllFailed','vqDeliveryOldPending'])
       $(id).textContent='—';
+    $('vqDeliveryReliabilityStatus').textContent=t('Not checked','Не проверено');
+    $('vqDeliveryReliabilityStatus').classList.remove('needs-review');
   }
   function render(){
     blank();
     if(!cache)return;
     const records=cache.records;
+    // Health counters include the entire private receipt history, not just
+    // the last 50 displayed records. They never imply that a notification
+    // was actually received or read.
+    if(cache.health){
+      const health=cache.health;
+      $('vqDeliveryAllFailed').textContent=String(health.failed);
+      $('vqDeliveryOldPending').textContent=String(health.potentially_stranded_pending);
+      const warn=health.failed>0||health.potentially_stranded_pending>0;
+      $('vqDeliveryReliabilityStatus').classList.toggle('needs-review',warn);
+      $('vqDeliveryReliabilityStatus').textContent=warn
+        ?t('Investigation recommended','Рекомендуется проверка')
+        :t('No recorded failures or old pending claims',
+           'Нет записанных ошибок или старых ожидающих попыток');
+    }
     $('vqDeliveryCount').textContent=String(records.length);
     $('vqDeliverySent').textContent=String(records.filter(r=>r.state==='sent').length);
     $('vqDeliveryFailed').textContent=String(records.filter(r=>r.state==='failed').length);
@@ -124,7 +141,17 @@
       const allow=['sent','failed','pending'];
       if(!data.records.every(r=>allow.includes(r.state)&&['email','telegram'].includes(r.channel)))
         throw Error('Invalid delivery records');
-      cache={records:data.records};loadedKey=sc;
+      const health=data.health;
+      if(health!==undefined){
+        const names=['total','sender_ok','failed','pending','potentially_stranded_pending'];
+        if(!health||health.scope!=='my_all_recorded_attempts'||
+           health.automatic_retry_enabled!==false||health.stale_after_minutes!==30||
+           !names.every(name=>Number.isSafeInteger(health[name])&&health[name]>=0)||
+           health.total<health.sender_ok+health.failed+health.pending||
+           health.potentially_stranded_pending>health.pending)
+          throw Error('Invalid delivery health response');
+      }
+      cache={records:data.records,health:health||null};loadedKey=sc;
       render();
       setStatus('Showing real recorded attempts for this account and company.',
         'Показаны реальные записи попыток для этого аккаунта и компании.');

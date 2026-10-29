@@ -1,0 +1,43 @@
+name: Deadline Delivery Health Browser Acceptance
+
+on:
+  push:
+    branches:
+      - feat/deadline-delivery-health-20261026
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chromium-receipt-health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      PYTHON_DOTENV_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install isolated app QA and real Chromium
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install 'playwright>=1.55,<2'
+          python -m playwright install --with-deps chromium
+      - name: Strict account/company receipt-health and actual Chromium verification
+        run: |
+          python -m pytest -q -rs --junitxml=/tmp/valyqon-health-browser.xml             tests/test_delivery_reliability_health.py             tests/test_delivery_journal.py             tests/test_delivery_journal_browser.py
+          python - <<'PY'
+          from xml.etree import ElementTree as ET
+          root=ET.parse('/tmp/valyqon-health-browser.xml').getroot()
+          groups=list(root) if root.tag=='testsuites' else [root]
+          total=sum(int(g.get('tests',0)) for g in groups)
+          skip=sum(int(g.get('skipped',0)) for g in groups)
+          failed=sum(int(g.get('failures',0))+int(g.get('errors',0)) for g in groups)
+          print(f'DELIVERY_HEALTH_BROWSER_TOTAL={total};SKIPPED={skip};FAILED={failed}')
+          if total < 6 or skip or failed:
+              raise SystemExit('REAL_BROWSER_ACCEPTANCE_NOT_CONFIRMED')
+          PY

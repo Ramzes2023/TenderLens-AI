@@ -59,6 +59,19 @@ def _recent(raw, now):
     return stamp is not None and 0 <= (now - stamp).total_seconds() <= MAX_AGE_SECONDS
 
 
+def _job_age_minutes(raw, now):
+    """durable_jobs.finished_at is BIGINT Unix microseconds, not ISO text.
+
+    An absent, malformed or future finish time must never be presented as
+    recent Worker evidence. Source observation clocks are ISO strings and
+    deliberately continue through _recent instead.
+    """
+    if type(raw) is not int or not 0 < raw < 2**63:
+        return None
+    age_us = int(now.timestamp() * 1_000_000) - raw
+    return round(age_us / 60_000_000, 1) if age_us >= 0 else None
+
+
 def audit_connection(conn, *, environment, now=None):
     """Return only aggregate evidence, never raw titles, URLs, IDs or tenant data."""
     now = now or datetime.now(timezone.utc)
@@ -121,11 +134,10 @@ def audit_connection(conn, *, environment, now=None):
             accepted = evidence.get("accepted_count") if isinstance(evidence, dict) else None
             if type(accepted) is not int or accepted < 0:
                 accepted = None
-            stamp = _timestamp(finished)
-            age = ((now - stamp).total_seconds() / 60) if stamp is not None else None
+            age = _job_age_minutes(finished, now)
             result[source].update(
                 last_worker_job=state,
-                last_worker_age_minutes=round(age, 1) if age is not None else None,
+                last_worker_age_minutes=age,
                 last_worker_accepted_count=accepted,
             )
         except (ValueError, TypeError, OverflowError, AttributeError):

@@ -17,17 +17,64 @@ set -eu
 printf 'V6_SHELL_EXECUTED=YES\n'
 # Only the reviewed isolated V6 Worker; do not fall back to an arbitrary
 # container, V5, production API or the stopped Telegram bot.
-ids="$(docker ps --filter 'label=com.docker.compose.project=valyqon-public-sources' --filter 'label=com.docker.compose.service=worker' --format '{{.ID}}')"
+# Operator's deployed Compose project name can differ from the repository's
+# proposed name. Never guess a container by name or use the production worker.
+expected_image="valyqon-public-sources:v6-fe4c66bbd553"
+if ! ids="$(docker ps --filter 'label=com.docker.compose.project=valyqon-public-sources' --filter 'label=com.docker.compose.service=worker' --format '{{.ID}}' 2>/dev/null)"; then
+  printf 'V6_EXACT_WORKER=BLOCKED_DOCKER_ACCESS\nPRODUCTION_CHANGED=NO\n'
+  exit 2
+fi
 count="$(printf '%s\n' "$ids" | awk 'NF{n++} END{print n+0}')"
-if [ "$count" -ne 1 ]; then
+printf 'V6_PRIMARY_LABEL_MATCH_COUNT=%s\n' "$count"
+if [ "$count" -gt 1 ]; then
   printf 'V6_EXACT_WORKER=BLOCKED_NOT_UNIQUE\nPRODUCTION_CHANGED=NO\n'
   exit 2
 fi
-image="$(docker inspect --format '{{.Config.Image}}' "$ids")"
-if [ "$image" != "valyqon-public-sources:v6-fe4c66bbd553" ]; then
+if [ "$count" -eq 0 ]; then
+  # Narrow alternate selection: still require Docker Compose service=worker,
+  # the EXACT existing V6 image, a real non-production Compose project and
+  # exactly one match. Python then independently rejects unsafe source env.
+  if ! worker_ids="$(docker ps --filter 'label=com.docker.compose.service=worker' --format '{{.ID}}' 2>/dev/null)"; then
+    printf 'V6_EXACT_WORKER=BLOCKED_DOCKER_ACCESS\nPRODUCTION_CHANGED=NO\n'
+    exit 2
+  fi
+  matches=0
+  selected=''
+  for candidate in $worker_ids; do
+    if ! candidate_image="$(docker inspect --format '{{.Config.Image}}' "$candidate" 2>/dev/null)"; then
+      printf 'V6_EXACT_WORKER=BLOCKED_DOCKER_ACCESS\nPRODUCTION_CHANGED=NO\n'
+      exit 2
+    fi
+    if [ "$candidate_image" = "$expected_image" ]; then
+      if ! owner="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$candidate" 2>/dev/null)"; then
+        printf 'V6_EXACT_WORKER=BLOCKED_DOCKER_ACCESS\nPRODUCTION_CHANGED=NO\n'
+        exit 2
+      fi
+      if [ -n "$owner" ] && [ "$owner" != "tenderlens-vps" ]; then
+        matches=$((matches + 1))
+        selected="$candidate"
+      fi
+    fi
+  done
+  printf 'V6_PINNED_IMAGE_WORKER_MATCH_COUNT=%s\n' "$matches"
+  if [ "$matches" -ne 1 ]; then
+    printf 'V6_EXACT_WORKER=BLOCKED_NOT_UNIQUE\nPRODUCTION_CHANGED=NO\n'
+    exit 2
+  fi
+  ids="$selected"
+  printf 'V6_SELECTION=EXACT_IMAGE_ALTERNATE_COMPOSE_PROJECT\n'
+else
+  printf 'V6_SELECTION=EXACT_ORIGINAL_PROJECT\n'
+fi
+if ! image="$(docker inspect --format '{{.Config.Image}}' "$ids" 2>/dev/null)"; then
+  printf 'V6_EXACT_WORKER=BLOCKED_DOCKER_ACCESS\nPRODUCTION_CHANGED=NO\n'
+  exit 2
+fi
+if [ "$image" != "$expected_image" ]; then
   printf 'V6_EXACT_WORKER=BLOCKED_IMAGE_NOT_VERIFIED\nPRODUCTION_CHANGED=NO\n'
   exit 2
 fi
+printf 'V6_EXACT_WORKER=VERIFIED_UNIQUE_PINNED_IMAGE\n'
 docker exec -i "$ids" python - <<'PY'
 import asyncio
 import json
@@ -197,7 +244,63 @@ try {
 $printed = 0
 foreach ($line in ($safeStdout -split '\r?\n')) {
     if ($line.Length -gt 12000) { continue }
-    if ($line -match '^(?:V6_SHELL_EXECUTED|V6_EXACT_WORKER|V6_LENOBL_EXISTING_IMAGE|V6_SOURCE_IMPORT_CLASS|V6_CANARY_EXCEPTION_CLASS|TELEGRAM_SEND_AUTHORIZED|PRODUCTION_CHANGED)=[A-Za-z0-9_-]{1,80}$') {
+    if ($line -match '^(?:V6_SHELL_EXECUTED|V6_EXACT_WORKER|V6_SELECTION|V6_PRIMARY_LABEL_MATCH_COUNT|V6_PINNED_IMAGE_WORKER_MATCH_COUNT|V6_LENOBL_EXISTING_IMAGE|V6_SOURCE_IMPORT_CLASS|V6_CANARY_EXCEPTION_CLASS|TELEGRAM_SEND_AUTHORIZED|PRODUCTION_CHANGED)=[A-Za-z0-9_-]{1,80}
+        Write-Output $line
+        $printed++
+    } elseif ($line -match '^(V6_WORKER_SIX_SOURCE_AUDIT|V6_LENOBL_CANARY)=(\{[^\r\n]{1,11000}\})$') {
+        # Verify valid JSON, then re-emit only the expected strict-shape fields.
+        try {
+            $record = $Matches[2] | ConvertFrom-Json -ErrorAction Stop
+            if ($Matches[1] -eq 'V6_WORKER_SIX_SOURCE_AUDIT') {
+                $allowedIds = @('mikroton_tender','stan_commercial_public','south_ural_public','kavkaz_rf_firstparty','lenobl_small_public','ru_samara_public_list')
+                $clean = [ordered]@{}
+                foreach ($id in $allowedIds) {
+                    $entry = $record.PSObject.Properties[$id].Value
+                    $state = [string]$entry.state
+                    if ($state -notin @('queued','running','succeeded','failed','cancelled','not_found','unknown')) { $state = 'unknown' }
+                    $failure = [string]$entry.failure_code
+                    if ($failure -notin @('handler_error','permanent_failure','lease_expired','invalid_result','unknown_type','unclassified')) { $failure = $null }
+                    $accepted = if ($entry.accepted_count -is [int] -and $entry.accepted_count -ge 0) { $entry.accepted_count } else { $null }
+                    $age = if ($entry.age_min -is [double] -and $entry.age_min -ge 0) { $entry.age_min } else { $null }
+                    $clean[$id] = @{state=$state;failure_code=$failure;accepted_count=$accepted;age_min=$age}
+                }
+                Write-Output ('V6_WORKER_SIX_SOURCE_AUDIT=' + ($clean | ConvertTo-Json -Depth 5 -Compress))
+                $printed++
+            } else {
+                $reason = [string]$record.transport_reason
+                if ($reason -notin @('network','timeout','policy','tls','dns','http_status','size','redirect','none')) { $reason='none' }
+                $class = [string]$record.error_class
+                if ($class -notmatch '^[A-Za-z][A-Za-z0-9_]{0,63}$') { $class='UnknownException' }
+                $result = [string]$record.result
+                if ($result -notin @('CANDIDATE_ONLY','NO_OPEN_CURRENT','BLOCKED_FIRSTPARTY')) { $result='UNKNOWN' }
+                $clean = [ordered]@{
+                    result=$result
+                    error_class=$class
+                    transport_reason=$reason
+                    http_requests=$record.http_requests
+                    originals=$record.originals
+                    current_deadlines=$record.current_deadlines
+                }
+                Write-Output ('V6_LENOBL_CANARY=' + ($clean | ConvertTo-Json -Compress))
+                $printed++
+            }
+        } catch {
+            Write-Output 'V6_DIAGNOSTIC_JSON=BLOCKED_INVALID'
+            $printed++
+        }
+    }
+}
+if ($printed -eq 0) {
+    Write-Output 'V6_REMOTE_SAFE_MARKERS=NONE'
+}
+if ($safeStderr.Length -gt 0) {
+    Write-Output 'V6_REMOTE_STDERR_PRESENT=YES_REDACTED'
+}
+Write-Output "V6_SSH_EXIT_CODE=$status"
+if ($status -ne 0) {
+    throw "READONLY_V6_DIAGNOSTIC_EXIT=$status (no deployment performed)"
+}
+) {
         Write-Output $line
         $printed++
     } elseif ($line -match '^(V6_WORKER_SIX_SOURCE_AUDIT|V6_LENOBL_CANARY)=(\{[^\r\n]{1,11000}\})$') {

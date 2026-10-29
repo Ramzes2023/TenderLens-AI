@@ -233,9 +233,18 @@ class LenoblSmallPublicSource:
         if type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError("Invalid Lenobl source limit")
         cap = min(limit, MAX_DETAILS)
+        inherited = _policy.get()
+        if inherited is not None:
+            # A shared Worker fetch policy covers BOTH the list and individual
+            # detail GETs. A V6 batch of 30 otherwise attempts up to 7 requests
+            # against the Lenobl Worker's 4-request outbound allowance.
+            remaining_details = inherited.max_requests - inherited.requests - 1
+            if remaining_details < 1:
+                raise ValueError("Lenobl requires listing and detail request slots")
+            cap = min(cap, remaining_details)
         policy = (bounded_fetch(FetchPolicy(frozenset({HOST}), cap + 1,
                                              max_bytes=MAX_BYTES))
-                  if _policy.get() is None else nullcontext())
+                  if inherited is None else nullcontext())
         with policy:
             async with source_client(
                 timeout=self.timeout, trust_env=False, follow_redirects=False,

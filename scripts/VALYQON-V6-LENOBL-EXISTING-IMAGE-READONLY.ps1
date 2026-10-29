@@ -152,7 +152,7 @@ PY
 '@
 # Windows PowerShell pipes add CRLF; dash/sh treats CR as an invalid option.
 # Send exact LF-only ASCII script over process stdin, not a native pipeline.
-$remoteLf = $remote.Replace("`r`n", "`n").Replace("`r", "`n") + "`n"
+$remoteLf = $remote.Replace("`r`n", "`n").Replace("`r", "`n").TrimEnd([char]10) + "`n"
 if ($remoteLf.Contains("`r") -or -not $remoteLf.StartsWith("set -eu`n") -or
     -not $remoteLf.EndsWith("`nPY`n")) {
     throw "READONLY_V6_DIAGNOSTIC=BLOCKED_UNSAFE_SHELL_STREAM"

@@ -44,6 +44,19 @@ def _recent(raw, now):
     return value is not None and 0 <= (now - value).total_seconds() <= MAX_AGE_SECONDS
 
 
+def _recent_finished_job(raw, now):
+    """durable_jobs.finished_at is an INTEGER Unix-microsecond timestamp.
+
+    Do not reinterpret a missing or text-coded job receipt as a current job.
+    This is deliberately distinct from source_opportunities.last_seen, which
+    is an ISO-8601 TEXT timestamp.
+    """
+    if type(raw) is not int or not 0 < raw < 2**63:
+        return False
+    age_us = int(now.timestamp() * 1_000_000) - raw
+    return 0 <= age_us <= MAX_AGE_SECONDS * 1_000_000
+
+
 def _connect_readonly(path):
     file = Path(path)
     if not file.is_file() or file.is_symlink():
@@ -109,7 +122,7 @@ def audit_connections(source_db, customer_db, *, now=None):
                 continue
             evidence = json.loads(raw_result) if raw_result else {}
             accepted = evidence.get("accepted_count") if isinstance(evidence, dict) else None
-            latest[source] = (state == "succeeded" and _recent(finished, now)
+            latest[source] = (state == "succeeded" and _recent_finished_job(finished, now)
                               and type(accepted) is int and accepted >= 0)
         except (ValueError, TypeError, AttributeError):
             continue

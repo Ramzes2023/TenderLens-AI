@@ -1,5 +1,6 @@
 """Offline V6 inventory-grounded selection: fake Docker only, zero network."""
 import os
+import re
 import pathlib
 import subprocess
 import tempfile
@@ -104,6 +105,19 @@ class V6WorkerSelectionOffline(unittest.TestCase):
                 self.assertFalse(any(x.startswith("ps ") and
                     "label=com.docker.compose.service=worker-v6" not in x
                     for x in calls))
+
+    def test_legacy_budget_canary_fingerprint_before_any_get(self):
+        source = PS1.read_text(encoding="utf-8-sig")
+        fragment = source.split("legacy_fetch = inspect.getsource", 1)[1].split("async def probe()", 1)[0]
+        self.assertIn("lenobl_runtime.MAX_DETAILS == 6", fragment)
+        self.assertIn('"remaining_details" not in legacy_fetch', fragment)
+        self.assertIn('"if _policy.get() is None else nullcontext()" in legacy_fetch', fragment)
+        self.assertIn('lenobl_runtime.MAX_DETAILS = 3', fragment)
+        self.assertIn('fail("BLOCKED_UNEXPECTED_LEGACY_ADAPTER")', fragment)
+        self.assertLess(fragment.index("if not legacy_ok:"), fragment.index("lenobl_runtime.MAX_DETAILS = 3"))
+        self.assertIn("policy = FetchPolicy(frozenset({HOST}), max_requests=4)", source)
+        self.assertIn('expected_image="valyqon-public-sources:v6-fe4c66bbd553"', source)
+        self.assertIn("mode=ro", source)
 
 if __name__ == "__main__":
     unittest.main()

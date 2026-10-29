@@ -38,7 +38,10 @@ jobs:
                                   'RedirectStandardOutput = $true',
                                   'RedirectStandardError = $true',
                                   'V6_REMOTE_STDERR_PRESENT=YES_REDACTED',
-                                  'BLOCKED_IMAGE_NOT_VERIFIED')) {
+                                  'BLOCKED_IMAGE_NOT_VERIFIED',
+                                  'LEGACY_INPROCESS_THREE_DETAILS',
+                                  'BLOCKED_UNEXPECTED_LEGACY_ADAPTER',
+                                  'lenobl_runtime.MAX_DETAILS = 3')) {
             if (-not $source.Contains($required)) { throw "READONLY_BOUNDARY_MISSING=$required" }
           }
           foreach ($forbidden in @('docker compose up', 'docker restart', 'docker rm',

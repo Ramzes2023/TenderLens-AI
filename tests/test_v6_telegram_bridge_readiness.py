@@ -35,7 +35,7 @@ def seed(source_path, customer_path, *, profile=None, samara_deadline="31.12.202
         source.execute("INSERT INTO durable_jobs VALUES (?,?,?,?,?,?)", (
             "connector.sync.v1", json.dumps({"source_id": name}), "succeeded",
             json.dumps({"accepted_count": 2}),
-            (finished or NOW - timedelta(minutes=5)).isoformat(),
+            int((finished or NOW - timedelta(minutes=5)).timestamp() * 1_000_000),
             (NOW - timedelta(minutes=10 + n)).isoformat(),
         ))
     if include_samara:
@@ -88,6 +88,30 @@ def test_no_broadcast_without_strict_explicit_keywords(tmp_path, profile):
     a, b = tmp_path / "sources.sqlite", tmp_path / "customer.sqlite"
     seed(a, b, profile=profile)
     assert not audit_paths(a, b, now=NOW)["read_only_candidate"]
+
+
+def test_text_finished_at_fails_closed_even_if_recent(tmp_path):
+    a, b = tmp_path / "sources.sqlite", tmp_path / "customer.sqlite"
+    seed(a, b)
+    with sqlite3.connect(a) as db:
+        db.execute(
+            "UPDATE durable_jobs SET finished_at=? WHERE payload_json LIKE '%samara%'",
+            ((NOW - timedelta(minutes=5)).isoformat(),),
+        )
+    proof = audit_paths(a, b, now=NOW)
+    assert proof["recent_successful_workers"] == 5
+    assert proof["read_only_candidate"] is False
+
+
+def test_real_job_epoch_microseconds_are_recent_only_in_job_receipts(tmp_path):
+    a, b = tmp_path / "sources.sqlite", tmp_path / "customer.sqlite"
+    seed(a, b)
+    with sqlite3.connect(a) as db:
+        values = [r[0] for r in db.execute("SELECT finished_at FROM durable_jobs")]
+    assert values and all(type(n) is int for n in values)
+    proof = audit_paths(a, b, now=NOW)
+    assert proof["recent_successful_workers"] == 6
+    assert proof["read_only_candidate"] is True
 
 
 def test_missing_active_company_is_blocked(tmp_path):

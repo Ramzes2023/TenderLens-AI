@@ -49,6 +49,7 @@ printf 'V6_SELECTION=EXACT_INVENTORIED_WORKER_V6\n'
 printf 'V6_EXACT_WORKER=VERIFIED_UNIQUE_PINNED_IMAGE\n'
 docker exec -i "$ids" python - <<'PY'
 import asyncio
+import inspect
 import json
 import os
 import sqlite3
@@ -120,11 +121,34 @@ try:
     # Run source import from the CURRENT deployed image. This deliberately
     # does not import the newly merged canary from a not-yet-deployed image.
     from app.sources.http import FetchPolicy, bounded_fetch
+    import app.sources.lenobl_small_public as lenobl_runtime
     from app.sources.lenobl_small_public import HOST, LenoblSmallPublicSource
     from app.api.public_source_deadline import eligible_published_deadline
 except Exception as exc:
     print("V6_SOURCE_IMPORT_CLASS=" + type(exc).__name__, flush=True)
     fail("BLOCKED_SOURCE_IMPORT")
+
+# The pinned 2026-10-29 V6 image (fe4c66bbd553) uses a SIX-detail
+# adapter but the shared Worker policy permits FOUR first-party GETs.
+# PR #365 fixed this in newer GitHub code; the old V6 image is NOT updated.
+# Constrain only this independent read-only docker-exec Python process.
+# Never patch source files, import shared server state or increase policy.
+try:
+    legacy_fetch = inspect.getsource(LenoblSmallPublicSource.fetch)
+    legacy_ok = (
+        lenobl_runtime.HOST == "zakupki.lenreg.ru"
+        and lenobl_runtime.MAX_DETAILS == 6
+        and "cap = min(limit, MAX_DETAILS)" in legacy_fetch
+        and "remaining_details" not in legacy_fetch
+        and "if _policy.get() is None else nullcontext()" in legacy_fetch
+        and "/app/sources/lenobl_small_public.py" == lenobl_runtime.__file__
+    )
+except (AttributeError, OSError, TypeError):
+    legacy_ok = False
+if not legacy_ok:
+    fail("BLOCKED_UNEXPECTED_LEGACY_ADAPTER")
+lenobl_runtime.MAX_DETAILS = 3
+print("V6_LENOBL_BUDGET_MODE=LEGACY_INPROCESS_THREE_DETAILS", flush=True)
 
 async def probe():
     policy = FetchPolicy(frozenset({HOST}), max_requests=4)
@@ -216,7 +240,7 @@ try {
 $printed = 0
 foreach ($line in ($safeStdout -split '\r?\n')) {
     if ($line.Length -gt 12000) { continue }
-    if ($line -match '^(?:V6_SHELL_EXECUTED|V6_EXACT_WORKER|V6_SELECTION|V6_PRIMARY_LABEL_MATCH_COUNT|V6_PINNED_IMAGE_WORKER_MATCH_COUNT|V6_LENOBL_EXISTING_IMAGE|V6_SOURCE_IMPORT_CLASS|V6_CANARY_EXCEPTION_CLASS|TELEGRAM_SEND_AUTHORIZED|PRODUCTION_CHANGED)=[A-Za-z0-9_-]{1,80}$') {
+    if ($line -match '^(?:V6_SHELL_EXECUTED|V6_EXACT_WORKER|V6_SELECTION|V6_PRIMARY_LABEL_MATCH_COUNT|V6_PINNED_IMAGE_WORKER_MATCH_COUNT|V6_LENOBL_EXISTING_IMAGE|V6_SOURCE_IMPORT_CLASS|V6_CANARY_EXCEPTION_CLASS|V6_LENOBL_BUDGET_MODE|TELEGRAM_SEND_AUTHORIZED|PRODUCTION_CHANGED)=[A-Za-z0-9_-]{1,80}$') {
         Write-Output $line
         $printed++
     } elseif ($line -match '^(V6_WORKER_SIX_SOURCE_AUDIT|V6_LENOBL_CANARY)=(\{[^\r\n]{1,11000}\})$') {

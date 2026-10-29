@@ -19,7 +19,7 @@ def seed(source_path, customer_path, *, profile=None, samara_deadline="31.12.202
     source.executescript(
         "CREATE TABLE source_opportunities (source_id TEXT, notice_json TEXT, last_seen TEXT);"
         "CREATE TABLE durable_jobs (job_type TEXT, payload_json TEXT, state TEXT, "
-        "result_json TEXT, finished_at TEXT, created_at TEXT);"
+        "result_json TEXT, finished_at BIGINT, created_at TEXT);"
     )
     customer.executescript(
         "CREATE TABLE monitor_subscriptions (owner_user_id INTEGER, enabled INTEGER);"

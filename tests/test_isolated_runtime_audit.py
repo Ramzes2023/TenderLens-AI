@@ -28,7 +28,8 @@ def fixture_conn():
                  "(source_id TEXT, notice_json TEXT, last_seen TEXT)")
     conn.execute("CREATE TABLE durable_jobs "
                  "(job_type TEXT, payload_json TEXT, state TEXT, "
-                 "finished_at BIGINT, result_json TEXT, created_at TEXT)")
+                 "finished_at BIGINT, result_json TEXT, created_at TEXT, "
+                 "failure_code TEXT)")
     return conn
 
 
@@ -48,7 +49,9 @@ def test_six_sources_actual_sql_and_worker_status_without_exposing_notices():
                      {"source": "stan_commercial_public", "title": "expired",
                       "deadline": (now - timedelta(days=1)).isoformat()}),
                   now.isoformat()))
-    conn.execute("INSERT INTO durable_jobs VALUES(?,?,?,?,?,?)",
+    conn.execute("INSERT INTO durable_jobs "
+                 "(job_type,payload_json,state,finished_at,result_json,created_at) "
+                 "VALUES(?,?,?,?,?,?)",
                  ("connector.sync.v1", json.dumps({"source_id": "mikroton_tender"}),
                   "succeeded", int(now.timestamp() * 1_000_000), json.dumps({"accepted_count": 1}),
                   now.isoformat()))
@@ -116,7 +119,9 @@ def test_real_sql_worker_clock_uses_integer_without_data_leakage():
     now = datetime(2026, 10, 29, 14, 0, tzinfo=timezone.utc)
     conn = fixture_conn()
     finished = int(now.timestamp() * 1_000_000) - 180_000_000
-    conn.execute("INSERT INTO durable_jobs VALUES(?,?,?,?,?,?)", (
+    conn.execute("INSERT INTO durable_jobs "
+                 "(job_type,payload_json,state,finished_at,result_json,created_at) "
+                 "VALUES(?,?,?,?,?,?)", (
         "connector.sync.v1", json.dumps({"source_id": "lenobl_small_public"}),
         "failed", finished, None, now.isoformat(),
     ))
@@ -127,4 +132,29 @@ def test_real_sql_worker_clock_uses_integer_without_data_leakage():
     assert record["last_worker_accepted_count"] is None
     assert data["publisher_live_acceptance_proved_by_this_audit"] is False
     assert data["production_changed"] is False
+    conn.close()
+
+
+def test_failure_code_from_real_lease_is_safe_class_only():
+    now = datetime(2026, 10, 29, 14, 0, tzinfo=timezone.utc)
+    conn = fixture_conn()
+    for source, state, code in (
+        ("lenobl_small_public", "failed", "handler_error"),
+        ("ru_samara_public_list", "failed", "secret_failure_payload"),
+        ("stan_commercial_public", "succeeded", None),
+    ):
+        conn.execute(
+            "INSERT INTO durable_jobs "
+            "(job_type,payload_json,state,finished_at,result_json,created_at,"
+            "failure_code) VALUES(?,?,?,?,?,?,?)",
+            ("connector.sync.v1", json.dumps({"source_id": source}),
+             state, int(now.timestamp() * 1_000_000), None,
+             int(now.timestamp() * 1_000_000), code),
+        )
+    result = audit_connection(conn, environment=environment(), now=now)
+    assert result["sources"]["lenobl_small_public"]["last_worker_failure_code"] == "handler_error"
+    assert result["sources"]["ru_samara_public_list"]["last_worker_failure_code"] == "unclassified"
+    assert result["sources"]["stan_commercial_public"]["last_worker_failure_code"] is None
+    assert "secret_failure_payload" not in json.dumps(result)
+    assert result["production_changed"] is False
     conn.close()

@@ -1,0 +1,42 @@
+name: RU V6 existing image read-only operator script safety
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/VALYQON-V6-LENOBL-EXISTING-IMAGE-READONLY.ps1
+      - .github/workflows/ru-v6-legacy-worker-operator-safety.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  powershell-parser-only:
+    runs-on: windows-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Parse PowerShell and enforce read-only boundaries
+        shell: pwsh
+        run: |
+          $file = 'scripts/VALYQON-V6-LENOBL-EXISTING-IMAGE-READONLY.ps1'
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $file).Path, [ref]$tokens, [ref]$errors
+          )
+          if ($errors.Count -ne 0) { throw "POWERSHELL_SYNTAX_INVALID=$($errors.Count)" }
+          $source = Get-Content -LiteralPath $file -Raw -Encoding UTF8
+          foreach ($required in @('StrictHostKeyChecking=yes', 'BatchMode=yes', 'mode=ro',
+                                  'label=com.docker.compose.service=worker-v6',
+                                  'VALYQON_CONNECTOR_MAX_RECORDS', 'max_requests=4',
+                                  'TELEGRAM_SEND_AUTHORIZED=NO', 'PRODUCTION_CHANGED=NO')) {
+            if (-not $source.Contains($required)) { throw "READONLY_BOUNDARY_MISSING=$required" }
+          }
+          foreach ($forbidden in @('docker compose up', 'docker restart', 'docker rm',
+                                   'git reset --hard', 'telegram.send', 'sqlite3.connect(DB_PATH)')) {
+            if ($source.Contains($forbidden)) { throw "UNSAFE_OPERATOR_ACTION=$forbidden" }
+          }
+          Write-Output 'POWERSHELL_READONLY_CONTRACT=PASS'
+          Write-Output 'ACTUAL_VPS_PROBE=NOT_EXECUTED'
+          Write-Output 'PRODUCTION_CHANGED=NO'

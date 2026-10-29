@@ -195,12 +195,12 @@ try {
 # Only fixed diagnostic markers from the trusted script. No raw stdout,
 # shell error, traceback or remote buyer/account data is forwarded.
 $printed = 0
-foreach ($line in ($safeStdout -split "`r?`n")) {
+foreach ($line in ($safeStdout -split '\r?\n')) {
     if ($line.Length -gt 12000) { continue }
-    if ($line -match '^(?:V6_SHELL_EXECUTED|V6_EXACT_WORKER|V6_LENOBL_EXISTING_IMAGE|V6_SOURCE_IMPORT_CLASS|V6_CANARY_EXCEPTION_CLASS|TELEGRAM_SEND_AUTHORIZED|PRODUCTION_CHANGED)=[A-Za-z0-9_-]{1,80}) {
+    if ($line -match '^(?:V6_SHELL_EXECUTED|V6_EXACT_WORKER|V6_LENOBL_EXISTING_IMAGE|V6_SOURCE_IMPORT_CLASS|V6_CANARY_EXCEPTION_CLASS|TELEGRAM_SEND_AUTHORIZED|PRODUCTION_CHANGED)=[A-Za-z0-9_-]{1,80}$') {
         Write-Output $line
         $printed++
-    } elseif ($line -match '^(V6_WORKER_SIX_SOURCE_AUDIT|V6_LENOBL_CANARY)=(\{[^\r\n]{1,11000}\})) {
+    } elseif ($line -match '^(V6_WORKER_SIX_SOURCE_AUDIT|V6_LENOBL_CANARY)=(\{[^\r\n]{1,11000}\})$') {
         # Verify valid JSON, then re-emit only the expected strict-shape fields.
         try {
             $record = $Matches[2] | ConvertFrom-Json -ErrorAction Stop
@@ -223,7 +223,7 @@ foreach ($line in ($safeStdout -split "`r?`n")) {
                 $reason = [string]$record.transport_reason
                 if ($reason -notin @('network','timeout','policy','tls','dns','http_status','size','redirect','none')) { $reason='none' }
                 $class = [string]$record.error_class
-                if ($class -notmatch '^[A-Za-z][A-Za-z0-9_]{0,63}) { $class='UnknownException' }
+                if ($class -notmatch '^[A-Za-z][A-Za-z0-9_]{0,63}$') { $class='UnknownException' }
                 $result = [string]$record.result
                 if ($result -notin @('CANDIDATE_ONLY','NO_OPEN_CURRENT','BLOCKED_FIRSTPARTY')) { $result='UNKNOWN' }
                 $clean = [ordered]@{

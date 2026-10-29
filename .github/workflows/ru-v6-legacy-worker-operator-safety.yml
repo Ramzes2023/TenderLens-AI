@@ -28,15 +28,58 @@ jobs:
           if ($errors.Count -ne 0) { throw "POWERSHELL_SYNTAX_INVALID=$($errors.Count)" }
           $source = Get-Content -LiteralPath $file -Raw -Encoding UTF8
           foreach ($required in @('StrictHostKeyChecking=yes', 'BatchMode=yes', 'mode=ro',
-                                  'label=com.docker.compose.service=worker-v6',
+                                  'label=com.docker.compose.service=worker',
                                   'VALYQON_CONNECTOR_MAX_RECORDS', 'max_requests=4',
-                                  'TELEGRAM_SEND_AUTHORIZED=NO', 'PRODUCTION_CHANGED=NO')) {
+                                  'TELEGRAM_SEND_AUTHORIZED=NO', 'PRODUCTION_CHANGED=NO',
+                                  'ProcessStartInfo', 'StandardInput.Write($remoteLf)',
+                                  'BLOCKED_IMAGE_NOT_VERIFIED')) {
             if (-not $source.Contains($required)) { throw "READONLY_BOUNDARY_MISSING=$required" }
           }
           foreach ($forbidden in @('docker compose up', 'docker restart', 'docker rm',
-                                   'git reset --hard', 'telegram.send', 'sqlite3.connect(DB_PATH)')) {
+                                   'git reset --hard', 'telegram.send', 'sqlite3.connect(DB_PATH)',
+                                   '$remote | & $ssh', 'label=com.docker.compose.service=worker-v6')) {
             if ($source.Contains($forbidden)) { throw "UNSAFE_OPERATOR_ACTION=$forbidden" }
           }
           Write-Output 'POWERSHELL_READONLY_CONTRACT=PASS'
           Write-Output 'ACTUAL_VPS_PROBE=NOT_EXECUTED'
+          Write-Output 'PRODUCTION_CHANGED=NO'
+
+      - name: Prove LF-only heredoc reaches a fake SSH process (no network)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $mockSource = Join-Path $env:RUNNER_TEMP 'mock_ssh.cs'
+          $mockExe = Join-Path $env:RUNNER_TEMP 'ssh.exe'
+          @'
+          using System;
+          using System.IO;
+          using System.Text;
+          public class MockSsh {
+              public static int Main(string[] args) {
+                  using (var stream = new MemoryStream()) {
+                      Console.OpenStandardInput().CopyTo(stream);
+                      byte[] data = stream.ToArray();
+                      if (data.Length < 32 || data[0] != 0x73 || data[1] != 0x65) return 21;
+                      foreach (byte item in data) if (item == 13) return 22;
+                      string payload = Encoding.ASCII.GetString(data);
+                      if (!payload.StartsWith("set -eu" + (char)10) ||
+                          !payload.EndsWith(((char)10).ToString() + "PY" + (char)10) ||
+                          !payload.Contains("label=com.docker.compose.service=worker'") ||
+                          !payload.Contains("valyqon-public-sources:v6-fe4c66bbd553")) return 23;
+                      Console.WriteLine("MOCK_SSH_LF_ONLY_HEREDOC=PASS");
+                      return 0;
+                  }
+              }
+          }
+          '@ | Set-Content -LiteralPath $mockSource -Encoding utf8
+          $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe'
+          if (-not (Test-Path -LiteralPath $csc)) { throw 'MOCK_CSC_NOT_FOUND' }
+          & $csc /nologo ('/out:' + $mockExe) $mockSource
+          if ($LASTEXITCODE -ne 0) { throw 'MOCK_SSH_COMPILE_FAILED' }
+          $fakeKey = Join-Path $env:RUNNER_TEMP 'fake-test-key'
+          'CI offline dummy, NOT a private key' | Set-Content -LiteralPath $fakeKey
+          $env:PATH = "$env:RUNNER_TEMP;$env:PATH"
+          & ./scripts/VALYQON-V6-LENOBL-EXISTING-IMAGE-READONLY.ps1 -Target 'ubuntu@127.0.0.1' -IdentityFile $fakeKey
+          if ($LASTEXITCODE -ne 0) { throw 'MOCK_SSH_STREAM_FAILED' }
+          Write-Output 'SSH_NETWORK_CALLS=ZERO'
           Write-Output 'PRODUCTION_CHANGED=NO'

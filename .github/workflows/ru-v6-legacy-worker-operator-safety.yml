@@ -29,6 +29,10 @@ jobs:
           $source = Get-Content -LiteralPath $file -Raw -Encoding UTF8
           foreach ($required in @('StrictHostKeyChecking=yes', 'BatchMode=yes', 'mode=ro',
                                   'label=com.docker.compose.service=worker',
+                                  'V6_PINNED_IMAGE_WORKER_MATCH_COUNT',
+                                  'V6_PRIMARY_LABEL_MATCH_COUNT',
+                                  'EXACT_IMAGE_ALTERNATE_COMPOSE_PROJECT',
+                                  'tenderlens-vps',
                                   'VALYQON_CONNECTOR_MAX_RECORDS', 'max_requests=4',
                                   'TELEGRAM_SEND_AUTHORIZED=NO', 'PRODUCTION_CHANGED=NO',
                                   'ProcessStartInfo', 'StandardInput.Write($remoteLf)',
@@ -115,3 +119,13 @@ jobs:
           Write-Output 'MOCK_SSH_BLOCKER_REPORTED_SAFELY=PASS'
           Write-Output 'SSH_NETWORK_CALLS=ZERO'
           Write-Output 'PRODUCTION_CHANGED=NO'
+
+  offline-docker-label-selection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test exact isolated worker selection using fake docker only
+        run: python3 -B -m unittest -v tests.test_ru_v6_worker_selection_offline

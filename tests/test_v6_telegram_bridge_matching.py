@@ -20,6 +20,16 @@ def build(tmp_path, *, keywords=("тестовой",)):
         "accepted_currencies": ["RUB"],
     }
     seed(sources, customers, profile=profile)
+    # The shared preflight fixture intentionally models only the columns its
+    # own aggregate audit uses. Exact V6 profile matching also validates the
+    # real normalized notice identity from the source_opportunities PK column.
+    # Add that missing column in THIS test's disposable database only.
+    with sqlite3.connect(sources) as conn:
+        conn.execute("ALTER TABLE source_opportunities ADD COLUMN external_id TEXT")
+        conn.execute(
+            "UPDATE source_opportunities SET external_id=? "
+            "WHERE source_id='ru_samara_public_list'", ("12345678",)
+        )
     return sources, customers
 
 
@@ -61,8 +71,11 @@ def test_corrupted_stored_identity_is_not_matched(tmp_path):
         bad = json.loads(row[0])
         bad["external_id"] = "untrusted-mismatch"
         db.execute("UPDATE source_opportunities SET notice_json=?", (json.dumps(bad),))
-    proof = dry_run_paths(a, b, now=NOW)
-    assert proof["unique_current_matching_notice_count"] == 0
+    # A tampered first-party ID invalidates the mandatory readiness gate.
+    # Refuse the entire run rather than silently treating corrupt identity
+    # as a legitimate zero-match source snapshot.
+    with pytest.raises(ValueError, match="Failed source or subscription readiness gate"):
+        dry_run_paths(a, b, now=NOW)
 
 
 def test_missing_explicit_keywords_block_all_candidates(tmp_path):

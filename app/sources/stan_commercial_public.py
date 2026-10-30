@@ -103,8 +103,11 @@ def parse_list(data):
     for url,c in cards.items():
         if not c["eis"] and len(c["numbers"])==1 and len(c["titles"])==1:
             valid.append((next(iter(c["numbers"])),next(iter(c["titles"])),url))
-    if len(valid) < MAX_DETAILS:
-        raise ValueError("Insufficient independent commercial procedure links")
+    # Commercial-only originals may be sparse among 223-FZ EIS mirrors.
+    # One separately verified original is enough; NEVER admit EIS-only pages.
+    # Independent title/number/section confirmation still occurs on detail GET.
+    if not valid:
+        raise ValueError("No independently identified commercial procedure links")
     return valid[:MAX_DETAILS]
 
 

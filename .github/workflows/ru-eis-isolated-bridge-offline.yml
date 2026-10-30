@@ -12,10 +12,12 @@ on:
       - app/sources/eis_223_rss.py
       - app/sources/eis_deadlines.py
       - app/sources/eis_vps_acceptance.py
+      - app/sources/eis_isolated_runtime_audit.py
       - app/sources/isolated_public_scheduler.py
       - app/sources/opportunities.py
       - ops/public_sources/compose.eis-rss.yaml
       - tests/test_eis_isolated_public_integration.py
+      - tests/test_eis_isolated_runtime_audit.py
       - tests/test_public_eis_failclosed_compose.py
       - .github/workflows/ru-eis-isolated-bridge-offline.yml
 
@@ -43,6 +45,7 @@ jobs:
         run: |
           python -m pytest -q \
             tests/test_eis_isolated_public_integration.py \
+            tests/test_eis_isolated_runtime_audit.py \
             tests/test_public_eis_failclosed_compose.py \
             tests/test_eis_223_rss.py \
             tests/test_eis_223_persistence_contract.py \

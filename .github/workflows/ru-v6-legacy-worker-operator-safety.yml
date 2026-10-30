@@ -5,6 +5,8 @@ on:
     paths:
       - scripts/VALYQON-V6-LENOBL-EXISTING-IMAGE-READONLY.ps1
       - scripts/VALYQON-V6-LENOBL-TEMP-WORKER-READONLY.ps1
+      - scripts/VALYQON-V6-STAN-EXISTING-IMAGE-READONLY.ps1
+      - tests/test_v6_stan_readonly_operator_safety.py
       - tests/test_v6_lenobl_disposable_worker_operator_safety.py
       - .github/workflows/ru-v6-legacy-worker-operator-safety.yml
   workflow_dispatch:
@@ -85,6 +87,31 @@ jobs:
           Write-Output 'V6_DISPOSABLE_WORKER_POWERSHELL_PARSE=PASS'
           Write-Output 'ACTUAL_VPS_PROBE=NOT_EXECUTED'
 
+      - name: Parse STAN PowerShell and enforce no-send and fixed-image boundaries
+        shell: pwsh
+        run: |
+          $file='scripts/VALYQON-V6-STAN-EXISTING-IMAGE-READONLY.ps1'
+          $tokens=$null
+          $errors=$null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $file).Path,[ref]$tokens,[ref]$errors
+          )
+          if ($errors.Count -ne 0) { throw "STAN_READONLY_POWERSHELL_SYNTAX_INVALID=$($errors.Count)" }
+          $src=Get-Content -LiteralPath $file -Raw -Encoding UTF8
+          foreach ($expected in @('label=com.docker.compose.service=worker-v6',
+                                   'valyqon-public-sources:v6-fe4c66bbd553',
+                                   'max_requests=3', 'V6_STAN_CANARY=',
+                                   'TELEGRAM_SEND_AUTHORIZED=NO',
+                                   'PRODUCTION_CHANGED=NO', 'RedirectStandardError = $true')) {
+            if (-not $src.Contains($expected)) { throw "STAN_READONLY_BOUNDARY_MISSING=$expected" }
+          }
+          foreach ($forbidden in @('docker compose up','docker restart','git reset --hard',
+                                   'sqlite3.connect(', 'telegram.send')) {
+            if ($src.Contains($forbidden)) { throw "STAN_READONLY_UNSAFE_ACTION=$forbidden" }
+          }
+          Write-Output 'STAN_READONLY_POWERSHELL_CONTRACT=PASS'
+          Write-Output 'LIVE_STAN_VPS=NOT_CALLED'
+
       - name: Prove LF-only heredoc reaches a fake SSH process (no network)
         shell: pwsh
         run: |
@@ -163,6 +190,16 @@ jobs:
           persist-credentials: false
       - name: Test exact isolated worker selection using fake docker only
         run: python3 -B -m unittest -v tests.test_ru_v6_worker_selection_offline
+
+  stan-readonly-offline-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile STAN embedded canary and reject unsafe Docker selection with mock
+        run: python3 -B -m unittest -v tests.test_v6_stan_readonly_operator_safety
 
   disposable-worker-offline-safety:
     runs-on: ubuntu-latest

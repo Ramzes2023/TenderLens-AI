@@ -7,6 +7,8 @@ on:
       - scripts/VALYQON-V6-LENOBL-TEMP-WORKER-READONLY.ps1
       - scripts/VALYQON-V6-STAN-EXISTING-IMAGE-READONLY.ps1
       - scripts/VALYQON-V6-STAN-PAGE2-READONLY.ps1
+      - scripts/VALYQON-V6-STAN-PAGE2-TEMP-WORKER-READONLY.ps1
+      - tests/test_v6_stan_page2_temp_worker_offline.py
       - tests/test_v6_stan_page2_readonly_operator_safety.py
       - tests/test_v6_stan_readonly_operator_safety.py
       - tests/test_v6_lenobl_disposable_worker_operator_safety.py
@@ -140,6 +142,34 @@ jobs:
           Write-Output 'STAN_PAGE2_PS_SAFETY=PASS'
           Write-Output 'LIVE_STAN_PAGE2=NOT_EXECUTED'
 
+      - name: Parse STAN temporary SQL Worker PowerShell contract
+        shell: pwsh
+        run: |
+          $file='scripts/VALYQON-V6-STAN-PAGE2-TEMP-WORKER-READONLY.ps1'
+          $tokens=$null
+          $errors=$null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $file).Path,[ref]$tokens,[ref]$errors
+          )
+          if ($errors.Count -ne 0) { throw "STAN_TEMP_WORKER_PS_SYNTAX_INVALID=$($errors.Count)" }
+          $src=Get-Content -LiteralPath $file -Raw -Encoding UTF8
+          foreach ($marker in @('label=com.docker.compose.service=worker-v6',
+                                'valyqon-public-sources:v6-fe4c66bbd553',
+                                'EPHEMERAL_OFFICIAL_PAGE_TWO',
+                                'TemporaryDirectory(', 'dir="/tmp"',
+                                'stan_runtime.source_client = page_two_only_client',
+                                'V6_STAN_TEMP_WORKER_COUNTS=',
+                                'TELEGRAM_SEND_AUTHORIZED=NO',
+                                'PRODUCTION_CHANGED=NO')) {
+            if (-not $src.Contains($marker)) { throw "STAN_TEMP_WORKER_BOUNDARY_MISSING=$marker" }
+          }
+          foreach ($bad in @('docker restart','docker compose up',
+                              'docker rm','sqlite3.connect(DB_PATH)','telegram.send')) {
+            if ($src.Contains($bad)) { throw "STAN_TEMP_WORKER_UNSAFE_ACTION=$bad" }
+          }
+          Write-Output 'STAN_TEMP_WORKER_PS_SAFETY=PASS'
+          Write-Output 'LIVE_STAN_TEMP_WORKER=NOT_EXECUTED'
+
       - name: Prove LF-only heredoc reaches a fake SSH process (no network)
         shell: pwsh
         run: |
@@ -218,6 +248,16 @@ jobs:
           persist-credentials: false
       - name: Test exact isolated worker selection using fake docker only
         run: python3 -B -m unittest -v tests.test_ru_v6_worker_selection_offline
+
+  stan-page2-temp-worker-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile disposable STAN Worker and fake Docker selection
+        run: python3 -B -m unittest -v tests.test_v6_stan_page2_temp_worker_offline
 
   stan-page2-readonly-offline-safety:
     runs-on: ubuntu-latest

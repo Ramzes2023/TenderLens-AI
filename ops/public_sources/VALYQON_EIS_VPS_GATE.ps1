@@ -30,8 +30,8 @@ if not ca.is_file():
 async def probe():
     works=True
     for label, src in (
-        ("44", EisRssSource((build_eis_rss_url("поставка"),),timeout=15,direct=True,ca_bundle_file=ca)),
-        ("223", Eis223RssSource((build_eis_223_rss_url("поставка"),),timeout=15,direct=True,ca_bundle_file=ca)),
+        ("44", EisRssSource((build_eis_rss_url("\u043f\u043e\u0441\u0442\u0430\u0432\u043a\u0430"),),timeout=15,direct=True,ca_bundle_file=ca)),
+        ("223", Eis223RssSource((build_eis_223_rss_url("\u043f\u043e\u0441\u0442\u0430\u0432\u043a\u0430"),),timeout=15,direct=True,ca_bundle_file=ca)),
     ):
         try:
             rows=await asyncio.wait_for(src.fetch(limit=8),timeout=26)

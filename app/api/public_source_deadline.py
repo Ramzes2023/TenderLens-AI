@@ -38,7 +38,7 @@ def eligible_published_deadline(source: str, raw: object, *, now: datetime) -> b
         # offset. Require a deadline later than even a UTC+14 wall clock,
         # rather than silently treating it as Moscow or UTC.
         match = re.fullmatch(
-            r"(?:0[1-9]|[12][0-9]|3[01])\\.(?:0[1-9]|1[0-2])\\.20[0-9]{2} "
+            r"(?:0[1-9]|[12][0-9]|3[01])\.(?:0[1-9]|1[0-2])\.20[0-9]{2} "
             r"(?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9])?", raw)
         if match:
             try:

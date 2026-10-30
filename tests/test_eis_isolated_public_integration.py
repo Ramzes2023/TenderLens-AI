@@ -151,3 +151,27 @@ def test_vps_acceptance_rejects_unreviewed_context(monkeypatch):
     from app.sources.eis_vps_acceptance import main
     monkeypatch.delenv("VALYQON_ISOLATED_PUBLIC_SOURCES_ENABLED", raising=False)
     assert main() == 2
+
+
+def test_eis_rss_second_precision_passes_existing_notice_validator():
+    from dataclasses import replace
+    from app.sources.eis_223_rss import parse_eis_223_feed
+    from app.sources.opportunities import validate_notice
+
+    payload = (
+        '<rss><channel><item><title>Поставка мебели №32616521305</title>'
+        '<link>https://zakupki.gov.ru/223/purchase/public/purchase/info/common-info.html?'
+        'regNumber=32616521305</link>'
+        '<description>Найденный результат: Размещение выполняется по: 223-ФЗ. '
+        'Дата и время окончания подачи заявок: 10.12.2026 19:45:23</description>'
+        '</item></channel></rss>'
+    ).encode("utf-8")
+    (item,) = parse_eis_223_feed(payload)
+    assert item.deadline == "10.12.2026 19:45:23"
+    assert validate_notice(item, "eis_223") is item
+    assert not eligible_published_deadline(
+        "eis_223", item.deadline,
+        now=datetime(2026, 12, 10, 10, 0, tzinfo=timezone.utc))
+    assert eligible_published_deadline(
+        "eis_223", item.deadline,
+        now=datetime(2026, 11, 1, tzinfo=timezone.utc))

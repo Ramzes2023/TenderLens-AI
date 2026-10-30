@@ -33,3 +33,44 @@ The test job never runs an application deployment, never mounts production volum
 **EIS_PUBLIC_ACTIVATION = BLOCKED_PENDING_LIVE_UPSTREAM_AND_RELEASE_GATES.**
 
 The strict diagnostics deliberately expose the reason rather than manufacturing a successful integration. Code merge, runtime source activation, publishing external HTTPS results, and consented alert delivery remain four distinct milestones.
+
+
+## Implemented isolated public EIS bridge (additional change in this PR)
+
+This PR now contains an **optional operational path**, not merely live probes:
+
+- `ops/public_sources/compose.eis-rss.yaml`: separate 44-FZ and 223-FZ official RSS URLs, mandatory operator-provided, never from company keywords; direct validated TLS; both disabled until explicit overlay activation.
+- `app/api/isolated_public_sources.py`: public-source allowlist flags for `eis`, `eis_223`; default off.
+- `app/sources/isolated_public_scheduler.py`: on explicit operator flags, verifies same-host fixed RSS URLs and enqueues only selected official keys on the existing bounded hourly Worker. Existing nine pre-approved Russian sources remain unchanged. Both EIS keys are **not** reclassified as previously verified.
+- `app/sources/eis_deadlines.py`, `eis_rss.py`, `eis_223_rss.py`, `app/api/public_source_deadline.py`: result-level closing clock can be used only if explicitly published by the source. Unknown timezone is never guessed: conservative UTC+14 current-deadline criterion; unknown deadline is excluded from live guest results.
+- `app/api/public_eis_identity.py` and guest search enforce official HTTPS host, explicit 44/223 path and aligned registration number for visible candidates. Guest projection still hides originals, buyer, number and protected source details. Existing paid-source lock remains enabled.
+- `app/sources/eis_vps_acceptance.py`: same-isolated-Worker real upstream diagnostic, requiring separately genuine currently open 44 and 223 originals, without SQL writes or customer data. It reports **candidate only** even on green.
+
+### Trusted operator rehearsal (DO NOT run against the main production Compose)
+
+The existing six-source isolated public stack must already be verified, including source volume backup, exact image digest and safe Caddy rollback. Put reviewed official 44 and 223 RSS URLs in **operator environment only** as `VALYQON_EIS_44_RSS_URL` and `VALYQON_EIS_223_RSS_URL`; never commit them alongside personal access tokens. Both URLs must be the official `https://zakupki.gov.ru/epz/order/extendedsearch/rss.html` endpoint, appropriately filtered to one law.
+
+With the reviewed exact image installed into an **isolated trial project/volume** and all six source overlays applied in existing order, add `-f ops/public_sources/compose.eis-rss.yaml` last to each corresponding Compose call. First validate `docker compose ... config --quiet` and confirm no production DB mounts, automatic bot sends or new ports.
+
+Before scheduling, run the read-only check from the **isolated trial Worker**:
+
+```bash
+docker compose -p valyqon-public-sources \
+  -f ops/public_sources/compose.yaml \
+  -f ops/public_sources/compose.south-ural.yaml \
+  -f ops/public_sources/compose.kavkaz-rf.yaml \
+  -f ops/public_sources/compose.lenobl.yaml \
+  -f ops/public_sources/compose.samara-list.yaml \
+  -f ops/public_sources/compose.eis-rss.yaml \
+  exec -T worker python -m app.sources.eis_vps_acceptance
+```
+
+Pass requires `EIS_VPS_ACCEPTANCE=CANDIDATE_ONLY`, meaning genuine official current notices were fetched; **it does not prove** durable queued work, SQL search, deployment or HTTPS. On any nonzero result, keep EIS off and diagnose the transport in that exact VPS environment.
+
+Then explicitly enqueue exactly each accepted EIS source in a disposable trial, using `docker compose ... run --rm --no-deps enqueue python -m app.sources.enqueue --source eis` and the corresponding `--source eis_223` command. Check each returned job's `succeeded`, fresh original ID + deadline and SQL row, cross-platform duplicate handling, anonymous projection, loss of upstream and absence of unintended alerts. Only after independently verified guest HTTPS match and rollback may the reviewed EIS overlay join the already deployed isolated public stack. The verified scheduler profile is a separate later opt-in. **Do not** enable EIS on `tenderlens-vps` or alter the base production customer DB.
+
+### Long-term official machine-readable feed
+
+The 2025+ officially described SOI service is **not** implemented by this RSS overlay. The operator must acquire lawful registered service access and current official TFF schema (getDocsLE2 for organisations or other appropriate interface), develop a separately tested signed/token-authenticated SOI connector, validate 44/223 XML data and documents, check access/retention conditions, then run a real Worker → SQL → user acceptance. Never disguise scraped RSS or marketplace mirrors as an official authenticated SOI result. No token is currently available to this PR.
+
+**Current claim: IMPLEMENTED_GATED_STAGING_ONLY; EIS_PUBLIC_DEPLOYMENT=NOT_VERIFIED.**

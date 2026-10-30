@@ -175,3 +175,55 @@ def test_eis_rss_second_precision_passes_existing_notice_validator():
     assert eligible_published_deadline(
         "eis_223", item.deadline,
         now=datetime(2026, 11, 1, tzinfo=timezone.utc))
+
+
+def test_synthetic_44_and_223_rss_parse_to_isolated_sql_to_redacted_guest(tmp_path):
+    """No upstream network; proves actual source parsers/storage/public contract."""
+    from app.sources.eis_rss import parse_eis_feed
+    from app.sources.eis_223_rss import parse_eis_223_feed
+    from app.sources.opportunities import OpportunityRepository
+    from app.api.guest_search_routes import search_persisted_notices
+    from app.database.backend import Database
+    from app.database.config import parse_database_settings
+
+    now = datetime.now(timezone.utc)
+    local_future = (now + timedelta(days=45)).strftime("%d.%m.%Y %H:%M")
+    specs = (
+        ("eis", N44, "/epz/order/notice/ea44/view/common-info.html",
+         "44-ФЗ", parse_eis_feed),
+        ("eis_223", N223, "/223/purchase/public/purchase/info/common-info.html",
+         "223-ФЗ", parse_eis_223_feed),
+    )
+    db = Database(parse_database_settings(
+        "sqlite:///" + str(tmp_path / "eis-test.sqlite3")))
+    repo = OpportunityRepository(db)
+    repo.initialize()
+    try:
+        for name, number, path, law, parser in specs:
+            xml = (
+                '<rss><channel><item>'
+                '<title>Поставка оборудования №' + number + '</title>'
+                '<link>https://zakupki.gov.ru' + path + '?regNumber=' + number + '</link>'
+                '<description>Найденный результат: Размещение выполняется по: '
+                + law + '. Дата и время окончания подачи заявок: '
+                + local_future + '</description></item></channel></rss>'
+            ).encode("utf-8")
+            (row,) = parser(xml)
+            assert row.source == name
+            assert ready := accepted_eis_original({
+                "source": name, "tender_number": row.tender_number,
+                "external_id": row.external_id, "url": row.url,
+            })
+            assert ready
+            assert eligible_published_deadline(name, row.deadline, now=now)
+            assert repo.upsert(row, f"connector-sync-v1:{name}:adapter-r1") is True
+        output = search_persisted_notices(
+            db, "оборудования", active_only=True, now=now,
+            allowed_sources=frozenset({"eis", "eis_223"}))
+        assert output["shown"] == 2
+        assert all(item["title"].startswith("Поставка оборудования") for item in output["results"])
+        assert all(set(item) == {"title", "deadline", "initial_price", "currency"}
+                   for item in output["results"])
+        assert all("zakupki.gov.ru" not in json.dumps(item) for item in output["results"])
+    finally:
+        db.close()

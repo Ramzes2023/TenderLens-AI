@@ -226,3 +226,32 @@ def test_synthetic_44_and_223_rss_parse_to_isolated_sql_to_redacted_guest(tmp_pa
         assert all("zakupki.gov.ru" not in json.dumps(item) for item in output["results"])
     finally:
         db.close()
+
+
+@pytest.mark.parametrize("query", [
+    "fz223=on",
+    "fz44=on&fz223=on",
+    "searchString=test",
+    "fz44=off",
+])
+def test_official_44_scheduler_rejects_wrong_law_before_enqueuing(monkeypatch, query):
+    from app.api.isolated_public_sources import ISOLATED_SQLITE_URL
+    from app.sources.isolated_public_scheduler import approved_cycle
+
+    for key, value in {
+        "VALYQON_ISOLATED_PUBLIC_SOURCES_ENABLED": "true",
+        "DATABASE_URL": ISOLATED_SQLITE_URL,
+        "MIKROTON_TENDER_ENABLED": "true",
+        "STAN_COMMERCIAL_PUBLIC_ENABLED": "true",
+        "SOUTH_URAL_PUBLIC_ENABLED": "false",
+        "KAVKAZ_RF_FIRSTPARTY_ENABLED": "false",
+        "LENOBL_SMALL_PUBLIC_ENABLED": "false",
+        "RU_SAMARA_PUBLIC_LIST_ENABLED": "false",
+        "EIS_RSS_PUBLIC_ENABLED": "true",
+        "EIS_223_PUBLIC_ENABLED": "false",
+        "EIS_DIRECT_ENABLED": "true",
+        "EIS_RSS_URLS": "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?" + query,
+    }.items():
+        monkeypatch.setenv(key, value)
+    with pytest.raises(ValueError, match="fz44"):
+        approved_cycle()

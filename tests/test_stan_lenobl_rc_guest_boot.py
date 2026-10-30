@@ -73,7 +73,8 @@ def test_real_stage_lifespan_initializes_separate_sql_and_health_without_base_mi
         destination=Path(folder)/"stage-only.sqlite3"
         monkeypatch.setattr(public, "parse_database_settings",
                             lambda _: DatabaseSettings("test-rc",destination))
-        monkeypatch.setattr(public.os, "environ", env)
+        from types import SimpleNamespace
+        monkeypatch.setattr(public, "os", SimpleNamespace(environ=env))
         app=create_public_source_app()
         with TestClient(app) as client:
             assert app.state.public_source_allowed_keys == frozenset({

@@ -25,6 +25,7 @@ from app.sources.ru_samara_public_list import (
     SOURCE_ID as _samara_source,
 )
 from .public_source_deadline import eligible_published_deadline
+from .public_eis_identity import accepted_eis_original
 
 router = APIRouter(tags=["guest-search"], include_in_schema=False)
 
@@ -164,6 +165,11 @@ def search_persisted_notices(database, query: str, *, limit: int = MAX_PREVIEWS,
                             type(price) not in (int, float)
                             or not math.isfinite(price) or price <= 0
                             or currency != "RUB")))):
+                continue
+        # Existing publisher identity must be independently law-verified by the
+        # Worker, and the public layer rejects malformed official links.
+        if active_only and notice["source"] in {"eis", "eis_223", "eis_44_html"}:
+            if not accepted_eis_original(notice):
                 continue
         # Only the visible title is searchable in guest mode. Searching hidden
         # buyer/URL/source/summary fields creates an information-disclosure oracle.

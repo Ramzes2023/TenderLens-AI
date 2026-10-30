@@ -55,6 +55,12 @@ def validate_notice(notice, source_id):
         except (TypeError, ValueError, OverflowError):
             pass
         # Established EIS human-readable dates retain source-local semantics.
+        if source_id in {'eis', 'eis_223'}:
+            try:
+                datetime.strptime(value, '%d.%m.%Y %H:%M:%S')
+                continue
+            except ValueError:
+                pass
         try:
             datetime.strptime(value, '%d.%m.%Y %H:%M')
         except ValueError:

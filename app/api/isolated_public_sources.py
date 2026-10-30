@@ -35,6 +35,9 @@ ISOLATED_SOURCES = (
     ("kavkaz_rf_firstparty", "KAVKAZ_RF_FIRSTPARTY_ENABLED"),
     ("lenobl_small_public", "LENOBL_SMALL_PUBLIC_ENABLED"),
     ("ru_samara_public_list", "RU_SAMARA_PUBLIC_LIST_ENABLED"),
+    # Separate, default-off EIS RSS channels; never auto-enable via profile feeds.
+    ("eis", "EIS_RSS_PUBLIC_ENABLED"),
+    ("eis_223", "EIS_223_PUBLIC_ENABLED"),
 )
 
 

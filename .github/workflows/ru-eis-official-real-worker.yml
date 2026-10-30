@@ -1,0 +1,112 @@
+name: RU EIS official live Worker gates (read only to production)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/sources/eis_44_public_html.py
+      - app/sources/eis_rss.py
+      - app/sources/eis_223_rss.py
+      - scripts/ci_ru_eis44_html_worker.py
+      - scripts/ru_public_live_smoke.py
+      - scripts/ru_eis_pinned_tls_probe.py
+      - scripts/ru_eis_official_transport_diagnostic.py
+      - compose.public.yaml
+      - tests/test_public_eis_failclosed_compose.py
+      - .github/workflows/ru-eis-official-real-worker.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ru-eis-real-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  eis-44-html:
+    name: Official EIS 44-FZ listing -> Worker -> disposable SQLite -> search
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHON_DOTENV_DISABLED: "1"
+      VALYQON_RU_EIS_CA_CERT: ${{ github.workspace }}/russian_trusted_root_ca_pem.crt
+      EIS_DIRECT_ENABLED: "false"
+      EIS_SYSTEM_TRUST_ENABLED: "false"
+      TELEGRAM_BOT_TOKEN: ""
+      MONITORING_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install existing pinned dev dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Check public EIS flags fail closed until release
+        run: python -m pytest -q tests/test_public_eis_failclosed_compose.py
+      - name: Validate official root CA SHA-256 in application scope only
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.ru_eis_pinned_tls_probe import verify_root
+          verify_root(Path("russian_trusted_root_ca_pem.crt").read_bytes())
+          print("EIS_CA_PIN=VERIFIED; OS_TRUST_UNCHANGED=YES")
+          PY
+      - name: Classify official EIS HTTP transport without reading response bodies
+        run: |
+          python -m scripts.ru_eis_official_transport_diagnostic --self-test
+          python -m scripts.ru_eis_official_transport_diagnostic --live
+      - name: STRICT real listing -> leased connector handler -> temporary SQLite -> keyword query
+        run: python -m scripts.ci_ru_eis44_html_worker
+      - name: Evidence boundary
+        if: always()
+        run: |
+          echo "EIS_44_HTML_DETAIL_PAGES=NOT_VERIFIED" >> "$GITHUB_STEP_SUMMARY"
+          echo "PRODUCTION_WRITES=NONE; PUBLIC_ACTIVATION=NOT_PERFORMED" >> "$GITHUB_STEP_SUMMARY"
+
+  eis-44-223-rss:
+    name: Official EIS 44/223 RSS -> ephemeral SQLite -> keyword query
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHON_DOTENV_DISABLED: "1"
+      VALYQON_RU_EIS_CA_CERT: ${{ github.workspace }}/russian_trusted_root_ca_pem.crt
+      VALYQON_RU_REQUIRE_EIS_LIVE: "1"
+      TELEGRAM_BOT_TOKEN: ""
+      MONITORING_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install existing pinned dev dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Check public EIS flags fail closed until release
+        run: python -m pytest -q tests/test_public_eis_failclosed_compose.py
+      - name: Validate official root CA SHA-256 in application scope only
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.ru_eis_pinned_tls_probe import verify_root
+          verify_root(Path("russian_trusted_root_ca_pem.crt").read_bytes())
+          print("EIS_CA_PIN=VERIFIED; OS_TRUST_UNCHANGED=YES")
+          PY
+      - name: Classify official EIS HTTP transport without reading response bodies
+        run: |
+          python -m scripts.ru_eis_official_transport_diagnostic --self-test
+          python -m scripts.ru_eis_official_transport_diagnostic --live
+      - name: STRICT EIS RSS 44-FZ and 223-FZ real live source -> disposable SQL -> search
+        run: python -m scripts.ru_public_live_smoke
+      - name: Evidence boundary
+        if: always()
+        run: |
+          echo "EIS_RSS_DETAIL_PAGES=NOT_VERIFIED" >> "$GITHUB_STEP_SUMMARY"
+          echo "PRODUCTION_WRITES=NONE; PUBLIC_ACTIVATION=NOT_PERFORMED" >> "$GITHUB_STEP_SUMMARY"

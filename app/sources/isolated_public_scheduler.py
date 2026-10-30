@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import signal
 import threading
+from urllib.parse import parse_qs, urlsplit
 from datetime import datetime, timedelta, timezone
 
 from app.api.isolated_public_sources import ISOLATED_SQLITE_URL
@@ -62,9 +63,45 @@ def approved_cycle():
         if northwest != "true" or north_caucasus != "true" or extension != "true":
             raise ValueError("Samara list-only requires all five previous sources enabled.")
         approved += ("ru_samara_public_list",)
+    # Optional official EIS RSS feeds are permitted ONLY with a reviewed
+    # operator profile, explicit static feeds and direct verified HTTPS.
+    eis_44 = os.environ.get("EIS_RSS_PUBLIC_ENABLED", "false")
+    eis_223 = os.environ.get("EIS_223_PUBLIC_ENABLED", "false")
+    if eis_44 not in {"true", "false"} or eis_223 not in {"true", "false"}:
+        raise ValueError("Invalid official EIS public opt-in")
+    if eis_44 == "true" or eis_223 == "true":
+        if os.environ.get("EIS_DIRECT_ENABLED") != "true":
+            raise ValueError("EIS requires strict direct HTTPS")
+        from app.sources.eis_rss import validate_eis_direct_urls
+        if eis_44 == "true":
+            urls = tuple(filter(None, os.environ.get("EIS_RSS_URLS", "").split(";")))
+            if not urls:
+                raise ValueError("Explicit official EIS 44 feed missing")
+            validate_eis_direct_urls(urls)
+            for url in urls:
+                query = parse_qs(urlsplit(url).query, keep_blank_values=True)
+                if (query.get("fz44") != ["on"]
+                        or any(key.casefold() == "fz223" for key in query)):
+                    raise ValueError("Official EIS 44 feed must select only fz44")
+            approved += ("eis",)
+        if eis_223 == "true":
+            from app.sources.eis_223_rss import _validate_feed_url
+            urls = tuple(filter(None, os.environ.get("EIS_223_RSS_URLS", "").split(";")))
+            if not urls:
+                raise ValueError("Explicit official EIS 223 feed missing")
+            for url in urls:
+                validate_eis_direct_urls((url,))
+                _validate_feed_url(url)
+            approved += ("eis_223",)
     catalog = build_source_catalog(load_monitoring_settings())
-    if set(approved_ru_keys(catalog)) != set(approved):
+    # EIS is NOT in the long-standing independently accepted RU allowlist.
+    # It is gated separately, never silently promoted to "approved RU".
+    eis_keys = {"eis", "eis_223"}
+    if set(approved_ru_keys(catalog)) != (set(approved) - eis_keys):
         raise ValueError("Unexpected enabled RU source in scheduler")
+    if (eis_44 == "true" and "eis" not in catalog.enabled_keys
+            or eis_223 == "true" and "eis_223" not in catalog.enabled_keys):
+        raise ValueError("EIS feed not enabled in source catalog")
 
     database = Database(load_database_settings())
     try:

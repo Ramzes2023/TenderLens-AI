@@ -14,6 +14,7 @@ import re
 DATE_ONLY_ALLOWED = frozenset({"kavkaz_rf_firstparty"})
 NAIVE_CLOCK_ALLOWED = frozenset({"lenobl_small_public"})
 SAMARA_LIST_ONLY_SOURCE = "ru_samara_public_list"
+EIS_RSS_SOURCES = frozenset({"eis", "eis_223"})
 _SAMARA_DATE = re.compile(r"(?:0[1-9]|[12][0-9]|3[01])\.(?:0[1-9]|1[0-2])\.20[0-9]{2}")
 _SAMARA_CLOCK = re.compile(
     r"(?:0[1-9]|[12][0-9]|3[01])\.(?:0[1-9]|1[0-2])\.20[0-9]{2} "
@@ -32,6 +33,20 @@ def eligible_published_deadline(source: str, raw: object, *, now: datetime) -> b
     now = now.astimezone(timezone.utc)
     if not isinstance(raw, str) or len(raw) > 48:
         return False
+    if source in EIS_RSS_SOURCES:
+        # Official EIS result-level civil clock has NO independently attested
+        # offset. Require a deadline later than even a UTC+14 wall clock,
+        # rather than silently treating it as Moscow or UTC.
+        match = re.fullmatch(
+            r"(?:0[1-9]|[12][0-9]|3[01])\.(?:0[1-9]|1[0-2])\.20[0-9]{2} "
+            r"(?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9])?", raw)
+        if match:
+            try:
+                fmt = "%d.%m.%Y %H:%M:%S" if raw.count(":") == 2 else "%d.%m.%Y %H:%M"
+                closing = datetime.strptime(raw, fmt)
+            except ValueError:
+                return False
+            return closing > (now + timedelta(hours=14)).replace(tzinfo=None)
     if source == SAMARA_LIST_ONLY_SOURCE:
         # Authentic first-party native JSON LIST fields, not a deep detail
         # page. Source uses Russian day.month.year, optionally a local clock

@@ -18,6 +18,8 @@ x-public-source-env: &public-source-env
   MONITORING_ENABLED: "false"
   EIS_RSS_URLS: ""
   EIS_PROFILE_FEEDS_ENABLED: "false"
+  EIS_223_RSS_URLS: ""
+  EIS_223_PROFILE_FEEDS_ENABLED: "false"
   EIS_223_ENABLED: "false"
   EIS_44_HTML_ENABLED: "false"
   EIS_DIRECT_ENABLED: "false"

@@ -96,7 +96,6 @@ def approved_cycle():
     if (eis_44 == "true" and "eis" not in catalog.enabled_keys
             or eis_223 == "true" and "eis_223" not in catalog.enabled_keys):
         raise ValueError("EIS feed not enabled in source catalog")
-        raise ValueError("Unexpected enabled RU source in scheduler")
 
     database = Database(load_database_settings())
     try:

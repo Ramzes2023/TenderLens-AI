@@ -23,6 +23,7 @@ from .http import FetchPolicy, bounded_fetch, _policy, page_limit, source_client
 
 from .models import TenderNotice
 from .enrichment import enrichment as build_notice_enrichment
+from .eis_deadlines import result_deadline
 
 
 class SourceError(RuntimeError):
@@ -410,7 +411,9 @@ def parse_eis_feed(payload: bytes, *, source_name: str = "eis") -> list[TenderNo
         number_match = _NOTICE_RE.search(combined + " " + link)
         tender_number = number_match.group(1) if number_match else None
         external_id = guid or tender_number or _stable_id(guid, link, title, published or "")
-        deadline_text = _extract(_DEADLINE_RE, combined)
+        # An explicit actual notice closing clock is safer than free-text
+        # matches on the EIS advanced-search form or publication timestamp.
+        deadline_text = result_deadline(description) or _extract(_DEADLINE_RE, combined)
         notices.append(TenderNotice(
             source=source_name,
             external_id=external_id[:500],

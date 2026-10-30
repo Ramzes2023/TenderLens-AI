@@ -8,6 +8,7 @@ x-rc-env: &rc-env
   DATABASE_URL: sqlite:////app/data/isolated-public-sources.sqlite3
   VALYQON_DATABASE_REQUIRE_POSTGRES: "false"
   VALYQON_ISOLATED_PUBLIC_SOURCES_ENABLED: "true"
+  VALYQON_STAN_LENOBL_RC_MODE: "true"
   DATA_DIR: /app/data
   VALYQON_PUBLIC_ANALYTICS_MODE: real
   VALYQON_RESTRICT_PAID_SOURCE_DETAILS: "true"

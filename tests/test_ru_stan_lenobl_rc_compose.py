@@ -45,6 +45,7 @@ class RCComposeIsolation(unittest.TestCase):
         expected={
             "DATABASE_URL":"sqlite:////app/data/isolated-public-sources.sqlite3",
             "VALYQON_ISOLATED_PUBLIC_SOURCES_ENABLED":"true",
+            "VALYQON_STAN_LENOBL_RC_MODE":"true",
             "STAN_COMMERCIAL_PUBLIC_ENABLED":"true",
             "LENOBL_SMALL_PUBLIC_ENABLED":"true",
             "VALYQON_CONNECTOR_MAX_RECORDS":"3",

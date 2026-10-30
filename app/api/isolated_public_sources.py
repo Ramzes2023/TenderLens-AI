@@ -46,7 +46,24 @@ def approved_public_source_keys(environment):
             raise RuntimeError("Invalid isolated source opt-in flag")
         if value == "true":
             enabled.add(source)
-    if not {"mikroton_tender", "stan_commercial_public"}.issubset(enabled):
+    # The original public publisher requires MikroTon + STAN. A separate
+    # non-public, no-ingress RC may test STAN + Lenobl independently, but
+    # must opt in explicitly and satisfy an exact no-send environment.
+    rc = environment.get("VALYQON_STAN_LENOBL_RC_MODE", "false")
+    if rc not in {"true", "false"}:
+        raise RuntimeError("Invalid isolated release candidate mode")
+    if rc == "true":
+        if (enabled != {"stan_commercial_public", "lenobl_small_public"}
+                or environment.get("VALYQON_ISOLATED_PUBLIC_SOURCES_ENABLED") != "true"
+                or environment.get("DATABASE_URL") != ISOLATED_SQLITE_URL
+                or environment.get("MONITORING_ENABLED") != "false"
+                or environment.get("VALYQON_EMAIL_MODE") != "disabled"
+                or environment.get("VALYQON_PUBLIC_AI_ENABLED") != "false"
+                or environment.get("VALYQON_RU_BACKGROUND_CATALOG_ENABLED") != "false"
+                or environment.get("TELEGRAM_BOT_TOKEN", "") != ""
+                or environment.get("OUTBOUND_PROXY_URL", "") != ""):
+            raise RuntimeError("Nonpublic STAN/Lenobl RC environment rejected")
+    elif not {"mikroton_tender", "stan_commercial_public"}.issubset(enabled):
         raise RuntimeError("Mandatory base public source flags unavailable")
     return frozenset(enabled)
 

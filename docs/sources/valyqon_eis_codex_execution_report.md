@@ -9,6 +9,10 @@ Both legal categories remain unverified as current official sources.
 ## Git and release state
 
 - Work branch: `codex/eis-public-20261030-204538`.
+- Diagnostic implementation/report commit: `50f96528f74ba9cd5af47515c4b45a2e092f6d09`.
+- [Draft follow-up PR #386](https://github.com/Ramzes2023/TenderLens-AI/pull/386)
+  targets the review branch of #379, so its diff contains only this diagnostic
+  and report. No force push, main merge or release was performed.
 - Inspected EIS baseline: `8b8828941ebe600c5ff4a4583a31ccaaf0bbe5b8`.
 - Fetched current main: `cf84479e030017abf2db51db4a11c9698b36f79c`.
   Main has subsequent STAN/Lenobl and operator-safety work; it is not this EIS branch.

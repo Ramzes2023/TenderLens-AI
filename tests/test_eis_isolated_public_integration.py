@@ -79,7 +79,7 @@ def test_eis_public_flags_are_explicit_not_an_eis_profile_default():
     assert {"eis", "eis_223"}.issubset(allowed)
     with pytest.raises(RuntimeError):
         approved_public_source_keys({**flags, "EIS_223_PUBLIC_ENABLED": "yes"})
-    assert "eis" in RU_APPROVED_SOURCES and "eis_223" in RU_APPROVED_SOURCES
+    assert "eis" not in RU_APPROVED_SOURCES and "eis_223" not in RU_APPROVED_SOURCES
 
 
 def test_eis_compose_does_not_change_prod_volume_or_unapproved_delivery():

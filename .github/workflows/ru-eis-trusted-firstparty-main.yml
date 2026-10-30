@@ -1,0 +1,62 @@
+name: RU EIS official 44 and 223 trusted runner first-party evidence
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/ru-eis-trusted-firstparty-main.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ru-eis-trusted-main-readonly
+  cancel-in-progress: false
+
+jobs:
+  eis-verified-ru-runner:
+    if: github.ref == 'refs/heads/main' && github.repository == 'Ramzes2023/TenderLens-AI'
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 12
+    env:
+      PYTHON_DOTENV_DISABLED: "1"
+      VALYQON_RU_REQUIRE_EIS_LIVE: "1"
+      MONITORING_ENABLED: "false"
+      TELEGRAM_BOT_TOKEN: ""
+      OUTBOUND_PROXY_URL: ""
+      VALYQON_RU_EIS_CA_CERT: ${{ github.workspace }}/russian_trusted_root_ca_pem.crt
+    steps:
+      - name: Require exact approved Russian runner before any checkout
+        env:
+          ACTUAL_RUNNER_NAME: ${{ runner.name }}
+        run: test "$ACTUAL_RUNNER_NAME" = "VALYQON-RU-01"
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned application test dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Verify pinned official root CA for app-only EIS
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.ru_eis_pinned_tls_probe import verify_root
+          verify_root(Path("russian_trusted_root_ca_pem.crt").read_bytes())
+          print("EIS_CA_PIN=VERIFIED; SYSTEM_TRUST_UNCHANGED=YES")
+          PY
+      - name: STRICT 44-FZ and 223-FZ live official RSS into disposable SQLite and keyword lookup
+        timeout-minutes: 7
+        run: python -B -m scripts.ru_public_live_smoke
+      - name: Safe evidence boundary
+        if: always()
+        shell: bash
+        run: |
+          echo "RUNNER_BOUNDARY=VALYQON-RU-01_MAIN_ONLY" >> "$GITHUB_STEP_SUMMARY"
+          echo "SOURCE_ORIGINAL_DETAIL_PAGES=NOT_INDEPENDENTLY_VERIFIED" >> "$GITHUB_STEP_SUMMARY"
+          echo "PRODUCTION_DB_MODIFIED=NO" >> "$GITHUB_STEP_SUMMARY"
+          echo "PUBLIC_SITE_DEPLOYED=NO" >> "$GITHUB_STEP_SUMMARY"

@@ -229,5 +229,5 @@ if ($safeStderr.Length -gt 0) {
 }
 Write-Output "V6_SSH_EXIT_CODE=$status"
 if ($status -ne 0) {
-    throw "RC_STAGE_OPERATOR_EXIT=$status (no deployment performed)"
+    throw "RC_STAGE_OPERATOR_EXIT=$status (no production cutover performed)"
 }

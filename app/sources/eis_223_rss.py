@@ -22,6 +22,7 @@ from .eis_rss import (
 from .http import ConnectorTransportError, page_limit, source_client
 from .models import TenderNotice
 from .ru_procurement_signals import extract_ru_procurement_signals
+from .eis_deadlines import result_deadline
 
 SOURCE_NAME = "eis_223"
 MAX_RESPONSE_BYTES = 5 * 1024 * 1024
@@ -114,7 +115,7 @@ def parse_eis_223_feed(
         values = asdict(base)
         values.update(external_id=external_id, tender_number=tender_number,
                       customer=None, initial_price=None, currency=None,
-                      deadline=None, region=None)
+                      deadline=result_deadline(description), region=None)
         notice = Eis223Notice(
             **values, observed_law=f"{match.group(1)}-FZ" if match else None,
             feed_url=feed_url, raw_guid=guid or None,

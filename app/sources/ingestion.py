@@ -172,7 +172,7 @@ class ConnectorSyncHandler:
                          else 4 if source_id == 'gpb_etp_public'
                          else 4 if source_id == 'lenobl_small_public'
                          else min(self.max_records, 2) + 1 if source_id == 'nmck_native_public'
-                         else min(self.max_records, 2) + 1 if source_id == 'stan_commercial_public'
+                         else min(self.max_records, 2) + 2 if source_id == 'stan_commercial_public'
                          else min(self.max_records, 2) + 1 if source_id == 'kavkaz_rf_firstparty'
                          else min(self.max_records, 10) + 1 if source_id == 'south_ural_public'
                          else 1 + min(3, (self.max_records + 9) // 10) if source_id == 'ru_samara_public_list'

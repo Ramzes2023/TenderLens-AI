@@ -76,6 +76,13 @@ async def eis_client(factory, *, direct, **kwargs):
             yield client
 
 EIS_EXTENDED_RSS_URL = "https://zakupki.gov.ru/epz/order/extendedsearch/rss.html"
+# Operator-supplied links must originate from the publisher's own RSS action.
+# /rss is a narrowly scoped candidate variant, NOT a verified working feed.
+# Generated/default URLs remain unchanged until strict live publisher proof.
+EIS_ALLOWED_RSS_PATHS = frozenset({
+    "/epz/order/extendedsearch/rss.html",
+    "/epz/order/extendedsearch/rss",
+})
 
 
 def build_eis_rss_url(search_term: str) -> str:
@@ -377,7 +384,7 @@ def validate_eis_direct_urls(urls) -> None:
     for raw in urls:
         parts = urlsplit(raw)
         if (parts.scheme != "https" or parts.netloc != "zakupki.gov.ru"
-                or parts.path != "/epz/order/extendedsearch/rss.html" or parts.fragment
+                or parts.path not in EIS_ALLOWED_RSS_PATHS or parts.fragment
                 or "\\" in raw or any(c.isspace() or ord(c) < 32 for c in raw)):
             raise SourceError("Direct EIS requires the official HTTPS RSS endpoint")
 

@@ -185,3 +185,35 @@ def test_one_detail_only_even_when_both_pages_offer_two_distinct_candidates(monk
     records=asyncio.run(StanCommercialPublicSource().fetch(limit=30))
     assert [x.external_id for x in records]==["ЗК-2026-000014"]
     assert calls==[LIST_URL,LIST_URL+"?page=2",LIST_URL+"/TDQJKSbF"]
+
+
+
+def test_stricter_one_record_worker_budget_only_uses_page_two_and_one_detail(monkeypatch):
+    import asyncio
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    import app.sources.stan_commercial_public as module
+    from app.sources.http import FetchPolicy, bounded_fetch
+    first_number="ЗК-2026-000016"
+    title="Монтаж инженерных сетей"
+    original_url=LIST_URL+"/TDQJKSbF"
+    listed=(f'<a href="/etp/TDQJKSbF">№ {first_number}</a>'
+            f'<a href="/etp/TDQJKSbF"><h2>{title}</h2></a>').encode()
+    calls=[]
+    class Fake:
+        async def get(self,url):
+            calls.append(url)
+            mapping={LIST_URL+"?page=2": listed,
+                     original_url: detail(first_number,title)}
+            assert url in mapping and len(calls)<=2
+            return SimpleNamespace(content=mapping[url],
+                                   headers={"content-type":"text/html"},
+                                   raise_for_status=lambda:None)
+    @asynccontextmanager
+    async def fake_client(**kwargs):
+        yield Fake()
+    monkeypatch.setattr(module,"source_client",fake_client)
+    with bounded_fetch(FetchPolicy(frozenset({"stantorgi.ru"}), max_requests=2)):
+        rows=asyncio.run(StanCommercialPublicSource().fetch(limit=1))
+    assert [x.external_id for x in rows]==[first_number]
+    assert calls==[LIST_URL+"?page=2",original_url]

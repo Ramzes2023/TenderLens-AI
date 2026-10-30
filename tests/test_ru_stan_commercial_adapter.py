@@ -193,3 +193,33 @@ def test_duplicate_commercial_original_across_pages_only_fetched_once(monkeypatc
     notices = asyncio.run(StanCommercialPublicSource().fetch(limit=2))
     assert len(notices)==1
     assert calls==[LIST_URL,LIST_URL+"?page=2",LIST_URL+"/RScxkWBC"]
+
+
+def test_page_two_candidate_not_starved_by_two_closed_first_page_candidates(monkeypatch):
+    """At most two details: distribute one slot per observed page first."""
+    import asyncio
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    import app.sources.stan_commercial_public as module
+    first = listing()
+    second = ('''<a href="/etp/TDQJKSbF">№ ЗК-2026-000014</a>
+<a href="/etp/TDQJKSbF"><h2>Монтаж оборудования инженерного водоснабжения</h2></a>''').encode()
+    by_url = {row[2]: detail(row[0], row[1]) for row in parse_list(first)}
+    by_url[LIST_URL+"/TDQJKSbF"] = detail(
+        "ЗК-2026-000014", "Монтаж оборудования инженерного водоснабжения")
+    calls=[]
+    class Fake:
+        async def get(self,url):
+            calls.append(url)
+            content = (first if url == LIST_URL else second if url == LIST_URL+"?page=2"
+                       else by_url[url])
+            return SimpleNamespace(content=content,
+                                   headers={"content-type":"text/html"},
+                                   raise_for_status=lambda:None)
+    @asynccontextmanager
+    async def fake_client(**kwargs):
+        yield Fake()
+    monkeypatch.setattr(module, "source_client", fake_client)
+    notices=asyncio.run(StanCommercialPublicSource().fetch(limit=2))
+    assert [x.external_id for x in notices] == ["ЗК-2026-000020", "ЗК-2026-000014"]
+    assert calls==[LIST_URL,LIST_URL+"?page=2",LIST_URL+"/RScxkWBC",LIST_URL+"/TDQJKSbF"]

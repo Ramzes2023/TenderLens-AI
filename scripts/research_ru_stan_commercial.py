@@ -96,8 +96,10 @@ def parse_list(data):
     for url,c in cards.items():
         if not c["eis"] and len(c["numbers"])==1 and len(c["titles"])==1:
             valid.append((next(iter(c["numbers"])),next(iter(c["titles"])),url))
-    if len(valid) < MAX_DETAILS:
-        raise ValueError("Insufficient independent commercial procedure links")
+    # Only one commercial procedure may be present among many EIS mirrors.
+    # Never skip independent detail corroboration or admit EIS-only rows.
+    if not valid:
+        raise ValueError("No independently identified commercial procedure links")
     return valid[:MAX_DETAILS]
 
 
@@ -143,7 +145,7 @@ def main():
     print("RU_STAN_COMMERCIAL_VERIFIED_DETAILS="+str(len(data)))
     print("RU_STAN_LIVE=PASS_RESEARCH_ONLY")
     print("PRODUCTION_CHANGED=NO")
-    return 0 if len(data)==MAX_DETAILS else 2
+    return 0 if 1 <= len(data) <= MAX_DETAILS else 2
 
 if __name__=="__main__":
     raise SystemExit(main())

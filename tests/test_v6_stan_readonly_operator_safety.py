@@ -57,6 +57,11 @@ class STANReadOnlySafety(unittest.TestCase):
                           "sqlite3.connect(", "subprocess.run(", "data/isolated-public-sources.sqlite3?mode=rw"):
             self.assertNotIn(forbidden,raw)
         self.assertIn("V6_STAN_CANARY=",raw)
+        self.assertIn('stan_runtime.MAX_DETAILS = 1',python)
+        self.assertIn('if len(valid) < MAX_DETAILS:',python)
+        self.assertIn('BLOCKED_UNEXPECTED_LEGACY_PARSER',python)
+        self.assertLess(python.index('if not legacy_shape:'),
+                        python.index('stan_runtime.MAX_DETAILS = 1'))
 
     def run_case(self,case):
         with tempfile.TemporaryDirectory() as folder:

@@ -49,6 +49,7 @@ printf 'V6_SELECTION=EXACT_INVENTORIED_WORKER_V6\n'
 printf 'V6_EXACT_WORKER=VERIFIED_UNIQUE_PINNED_IMAGE\n'
 docker exec -i "$ids" python - <<'PY'
 import asyncio
+import inspect
 import json
 import os
 from datetime import datetime, timezone
@@ -78,6 +79,7 @@ if (os.environ.get("TELEGRAM_BOT_TOKEN", "")
 
 try:
     import httpx
+    import app.sources.stan_commercial_public as stan_runtime
     from app.sources.http import FetchPolicy, bounded_fetch, source_client
     from app.sources.stan_commercial_public import (
         HOST, LIST_URL, MAX_DETAILS, MAX_BYTES,
@@ -94,6 +96,23 @@ except Exception as exc:
 if HOST != "stantorgi.ru" or LIST_URL != "https://stantorgi.ru/etp" or MAX_DETAILS != 2:
     status("BLOCKED_UNEXPECTED_ADAPTER")
     raise SystemExit(2)
+# The existing pinned image requires TWO commercial entries in its listing.
+# A mixed first-party 223-FZ/commercial page may legitimately have just ONE.
+# Change only this disposable docker-exec process; never change real Worker.
+try:
+    legacy_code = inspect.getsource(stan_runtime.parse_list)
+    legacy_shape = (
+        stan_runtime.__file__ == "/app/app/sources/stan_commercial_public.py"
+        and 'if len(valid) < MAX_DETAILS:' in legacy_code
+        and 'if not c["eis"] and len(c["numbers"])==1 and len(c["titles"])==1:' in legacy_code
+    )
+except (AttributeError, OSError, TypeError):
+    legacy_shape = False
+if not legacy_shape:
+    status("BLOCKED_UNEXPECTED_LEGACY_PARSER")
+    raise SystemExit(2)
+stan_runtime.MAX_DETAILS = 1
+print("V6_STAN_LISTING_MODE=LEGACY_SINGLE_INPROCESS", flush=True)
 
 async def canary():
     policy = FetchPolicy(frozenset({HOST}), max_requests=3, max_bytes=MAX_BYTES)
@@ -205,7 +224,7 @@ try {
 $printed = 0
 foreach ($line in ($safeStdout -split '\r?\n')) {
     if ($line.Length -gt 12000) { continue }
-    if ($line -match '^(?:V6_SHELL_EXECUTED|V6_EXACT_WORKER|V6_SELECTION|V6_PRIMARY_LABEL_MATCH_COUNT|V6_PINNED_IMAGE_WORKER_MATCH_COUNT|V6_LENOBL_EXISTING_IMAGE|V6_SOURCE_IMPORT_CLASS|V6_CANARY_EXCEPTION_CLASS|V6_LENOBL_BUDGET_MODE|V6_STAN_STATUS|V6_STAN_EXCEPTION_CLASS|TELEGRAM_SEND_AUTHORIZED|PRODUCTION_CHANGED)=[A-Za-z0-9_-]{1,80}$') {
+    if ($line -match '^(?:V6_SHELL_EXECUTED|V6_EXACT_WORKER|V6_SELECTION|V6_PRIMARY_LABEL_MATCH_COUNT|V6_PINNED_IMAGE_WORKER_MATCH_COUNT|V6_LENOBL_EXISTING_IMAGE|V6_SOURCE_IMPORT_CLASS|V6_CANARY_EXCEPTION_CLASS|V6_LENOBL_BUDGET_MODE|V6_STAN_STATUS|V6_STAN_EXCEPTION_CLASS|V6_STAN_LISTING_MODE|TELEGRAM_SEND_AUTHORIZED|PRODUCTION_CHANGED)=[A-Za-z0-9_-]{1,80}$') {
         Write-Output $line
         $printed++
     } elseif ($line -match '^V6_STAN_CANARY=(\{[^\r\n]{1,2500}\})$') {

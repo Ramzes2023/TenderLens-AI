@@ -74,3 +74,23 @@ Then explicitly enqueue exactly each accepted EIS source in a disposable trial, 
 The 2025+ officially described SOI service is **not** implemented by this RSS overlay. The operator must acquire lawful registered service access and current official TFF schema (getDocsLE2 for organisations or other appropriate interface), develop a separately tested signed/token-authenticated SOI connector, validate 44/223 XML data and documents, check access/retention conditions, then run a real Worker → SQL → user acceptance. Never disguise scraped RSS or marketplace mirrors as an official authenticated SOI result. No token is currently available to this PR.
 
 **Current claim: IMPLEMENTED_GATED_STAGING_ONLY; EIS_PUBLIC_DEPLOYMENT=NOT_VERIFIED.**
+
+
+### Exact EIS Worker → isolated SQL release audit (read-only)
+
+After the **separately validated real first-party fetch** and explicitly submitted EIS 44+223 jobs, run **inside the isolated Worker**:
+
+```bash
+docker compose -p valyqon-public-sources \
+  -f ops/public_sources/compose.yaml \
+  -f ops/public_sources/compose.south-ural.yaml \
+  -f ops/public_sources/compose.kavkaz-rf.yaml \
+  -f ops/public_sources/compose.lenobl.yaml \
+  -f ops/public_sources/compose.samara-list.yaml \
+  -f ops/public_sources/compose.eis-rss.yaml \
+  exec -T worker python -m app.sources.eis_isolated_runtime_audit
+```
+
+The audit reads source-opportunities and durable connector jobs through SQLite `mode=ro` and `PRAGMA query_only=ON`, never opens the main production DB, never prints procurement contents or registered recipients, and never triggers notifications. For **each** law it requires a fresh successful connector job, a positive accepted notice count, a recent official canonical source record, a verified future submission deadline and the safe public-preview allowlist. `EIS_ISOLATED_SQL_WORKER_AUDIT=CANDIDATE_ONLY` means only **isolated Worker/SQL local readiness**. It is NOT proof of authentic current upstream access, external HTTPS/Caddy routing or an active customer-facing integration. Failures return a nonzero status and must block the public cutover.
+
+**Additional release gate:** after source-specific trial acceptance, verify the public-domain `/api/v1/public/opportunities` route is in fact reading the intended isolated source volume, not the legacy API DB. Match a synthetic-free live result using its title through a separately authorized read-only audit; no identifiers or purchaser details can be published in anonymous previews. Test rollback to the previous six-source Compose layers without losing the original public site. Keep `valyqon-public-sources` Compose name illustrative: always confirm the actual current operator project/name before applying any command. Never run these as generic production migrations.

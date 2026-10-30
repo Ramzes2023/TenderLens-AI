@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 import httpx
 
 from .eis_rss import (
-    EIS_EXTENDED_RSS_URL, SourceError, _child_text, _local_name,
+    EIS_EXTENDED_RSS_URL, EIS_ALLOWED_RSS_PATHS, SourceError, _child_text, _local_name,
     parse_eis_feed, verify_eis_feed_law, validate_eis_direct_urls,
     requires_eis_law_validation,
     eis_client,
@@ -133,7 +133,7 @@ def _validate_feed_url(url: str) -> None:
     parts = urlsplit(url)
     query = parse_qs(parts.query, keep_blank_values=True)
     if (parts.scheme != "https" or parts.netloc != "zakupki.gov.ru"
-            or parts.path != urlsplit(EIS_EXTENDED_RSS_URL).path or parts.fragment
+            or parts.path not in EIS_ALLOWED_RSS_PATHS or parts.fragment
             or query.get("fz223") != ["on"]
             or any(key.casefold() == "fz44" for key in query)):
         raise ValueError("Expected public EIS HTTPS RSS URL with fz223=on and no fz44")

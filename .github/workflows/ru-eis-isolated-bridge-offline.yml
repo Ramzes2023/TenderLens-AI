@@ -11,6 +11,8 @@ on:
       - app/sources/eis_rss.py
       - scripts/ru_eis_candidate_route_probe.py
       - tests/test_ru_eis_candidate_route_probe.py
+      - app/sources/eis_official_detail_deadline.py
+      - tests/test_eis_official_detail_deadline.py
       - app/sources/eis_223_rss.py
       - app/sources/eis_deadlines.py
       - app/sources/eis_vps_acceptance.py
@@ -51,6 +53,7 @@ jobs:
             tests/test_public_eis_failclosed_compose.py \
             tests/test_eis_223_rss.py \
             tests/test_ru_eis_candidate_route_probe.py \
+            tests/test_eis_official_detail_deadline.py \
             tests/test_eis_223_persistence_contract.py \
             tests/test_isolated_public_source_scheduler.py \
             tests/test_ru_approved_operator_cycle.py

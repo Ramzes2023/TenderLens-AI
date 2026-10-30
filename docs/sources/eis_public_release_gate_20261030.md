@@ -94,3 +94,49 @@ docker compose -p valyqon-public-sources \
 The audit reads source-opportunities and durable connector jobs through SQLite `mode=ro` and `PRAGMA query_only=ON`, never opens the main production DB, never prints procurement contents or registered recipients, and never triggers notifications. For **each** law it requires a fresh successful connector job, a positive accepted notice count, a recent official canonical source record, a verified future submission deadline and the safe public-preview allowlist. `EIS_ISOLATED_SQL_WORKER_AUDIT=CANDIDATE_ONLY` means only **isolated Worker/SQL local readiness**. It is NOT proof of authentic current upstream access, external HTTPS/Caddy routing or an active customer-facing integration. Failures return a nonzero status and must block the public cutover.
 
 **Additional release gate:** after source-specific trial acceptance, verify the public-domain `/api/v1/public/opportunities` route is in fact reading the intended isolated source volume, not the legacy API DB. Match a synthetic-free live result using its title through a separately authorized read-only audit; no identifiers or purchaser details can be published in anonymous previews. Test rollback to the previous six-source Compose layers without losing the original public site. Keep `valyqon-public-sources` Compose name illustrative: always confirm the actual current operator project/name before applying any command. Never run these as generic production migrations.
+
+
+## 30 October: recover historical local proof; two official RSS path spellings
+
+Historical [PR #215](https://github.com/Ramzes2023/TenderLens-AI/pull/215)
+reported genuine **Windows-local** 10 EIS 44 + 10 EIS 223 RSS notices in
+disposable fetch/SQLite tests. The 44 law had 6 independently checked official
+detail links; 223 linked detail endpoints failed. Later local Ingushetia tests
+also proved a bounded local Worker and SQLite path. This was **not** an
+always-on production feed, deployed EIS worker, VPS reachability proof or
+external public user result. An archived national CA PEM is included in
+`russian_trusted_root_ca_pem.crt`, separately from machine-readable SOI
+access registration; obtaining a CA file does not grant publisher data access.
+
+The newer exact-VPS reports in [PR #386](https://github.com/Ramzes2023/TenderLens-AI/pull/386)
+show network TCP timeout at the VPS host and both actual Worker egress
+networks; Windows/WSL subsequently reached the official host with pinned TLS
+but received HTTP 404/HTML on both fixed `rss.html` searches. These observations
+are from **different locations and dates**, and do not invalidate earlier
+successful local RSS requests. They do **not** establish whether the site
+changed paths, rejected an individual search, temporarily removed RSS, or
+serves a different browser-generated export URL.
+
+The code now also permits the exact `/epz/order/extendedsearch/rss` path
+**only when explicitly operator-supplied**, with the same official host, HTTPS,
+direct transport and independent 44/223 law verification. The old generated
+`/rss.html` URL is unchanged. Both URL spellings are **candidates**, not live
+verified, and the new allowance **does not** auto-enable EIS or deploy anything.
+
+Before selecting either variant: retrieve the real RSS action's full URL from
+the official EIS search UI in a lawful accessible browser session, compare its
+path and law filters, test verified-CA XML and official notice identity,
+observed current deadlines and repeat-fetch identity, then test the actual
+target producer Worker -> durable isolated SQLite -> external guest HTTPS.
+Reject HTTP 404, HTML, login/challenge pages and zero authentic notices.
+Do not rewrite paths or query filters speculatively to manufacture a pass.
+Never bypass CAPTCHA, IP gates, TLS, authentication or rate limits.
+
+For comprehensive official machine-readable distribution separate from RSS,
+`getDocsIP`/`getDocsLE` requires registered recipient authorization and
+current officially published TFF documentation. Do not reuse a downloaded
+certificate as SOI credentials, paste recipient secrets into Codex/GitHub,
+or confuse the old FTP archive with a current public API.
+
+**No source was activated or any production container / Caddy route changed
+by this historical recovery or path-variant code.**

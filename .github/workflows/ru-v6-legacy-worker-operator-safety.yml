@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - scripts/VALYQON-V6-LENOBL-EXISTING-IMAGE-READONLY.ps1
+      - scripts/VALYQON-V6-LENOBL-TEMP-WORKER-READONLY.ps1
+      - tests/test_v6_lenobl_disposable_worker_operator_safety.py
       - .github/workflows/ru-v6-legacy-worker-operator-safety.yml
   workflow_dispatch:
 permissions:
@@ -53,6 +55,35 @@ jobs:
           Write-Output 'POWERSHELL_READONLY_CONTRACT=PASS'
           Write-Output 'ACTUAL_VPS_PROBE=NOT_EXECUTED'
           Write-Output 'PRODUCTION_CHANGED=NO'
+
+
+      - name: Parse disposable Worker PowerShell and reject unsafe commands
+        shell: pwsh
+        run: |
+          $file = 'scripts/VALYQON-V6-LENOBL-TEMP-WORKER-READONLY.ps1'
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $file).Path, [ref]$tokens, [ref]$errors
+          )
+          if ($errors.Count -ne 0) { throw "TEMP_WORKER_POWERSHELL_SYNTAX_INVALID=$($errors.Count)" }
+          $source = Get-Content -LiteralPath $file -Raw -Encoding UTF8
+          foreach ($required in @('label=com.docker.compose.service=worker-v6',
+                                  'valyqon-public-sources:v6-fe4c66bbd553',
+                                  'LEGACY_INPROCESS_THREE_DETAILS',
+                                  'TemporaryDirectory(', 'dir="/tmp"',
+                                  'ConnectorSyncHandler(catalog, store, max_records=3)',
+                                  'V6_LENOBL_TEMP_WORKER_COUNTS=',
+                                  'TELEGRAM_SEND_AUTHORIZED', 'PRODUCTION_CHANGED')) {
+            if (-not $source.Contains($required)) { throw "TEMP_WORKER_BOUNDARY_MISSING=$required" }
+          }
+          foreach ($forbidden in @('docker compose up', 'docker restart',
+                                   'docker rm', 'git reset --hard',
+                                   'sqlite3.connect(DB_PATH)', 'telegram.send')) {
+            if ($source.Contains($forbidden)) { throw "TEMP_WORKER_UNSAFE_OPERATION=$forbidden" }
+          }
+          Write-Output 'V6_DISPOSABLE_WORKER_POWERSHELL_PARSE=PASS'
+          Write-Output 'ACTUAL_VPS_PROBE=NOT_EXECUTED'
 
       - name: Prove LF-only heredoc reaches a fake SSH process (no network)
         shell: pwsh
@@ -132,3 +163,13 @@ jobs:
           persist-credentials: false
       - name: Test exact isolated worker selection using fake docker only
         run: python3 -B -m unittest -v tests.test_ru_v6_worker_selection_offline
+
+  disposable-worker-offline-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify disposable Worker shell and Python without Docker/network
+        run: python3 -B -m unittest -v tests.test_v6_lenobl_disposable_worker_operator_safety

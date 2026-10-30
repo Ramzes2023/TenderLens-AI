@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import tempfile
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
@@ -63,15 +63,56 @@ def active_official_count(notices: object, key: str, now: datetime) -> int:
     return result
 
 
+def deadline_diagnostic_counts(notices: object, key: str, now: datetime) -> dict[str, int]:
+    """Aggregate ONLY; no tender text, ids, raw dates or URLs escape this process."""
+    from datetime import datetime as _datetime
+    if key not in KEYS or not isinstance(notices, list):
+        raise ValueError("Invalid source/notices")
+    if now.tzinfo is None:
+        raise ValueError("Aware clock required")
+    counts = {
+        "identity_rejected": 0,
+        "deadline_missing": 0,
+        "deadline_invalid": 0,
+        "deadline_not_safely_future": 0,
+        "open_verified": 0,
+    }
+    for item in notices:
+        row = asdict(item)
+        if row.get("source") != key or not accepted_eis_original(row):
+            counts["identity_rejected"] += 1
+            continue
+        raw = row.get("deadline")
+        if raw is None or raw == "":
+            counts["deadline_missing"] += 1
+            continue
+        if not isinstance(raw, str) or len(raw) > 48:
+            counts["deadline_invalid"] += 1
+            continue
+        try:
+            fmt = "%d.%m.%Y %H:%M:%S" if raw.count(":") == 2 else "%d.%m.%Y %H:%M"
+            local_deadline = _datetime.strptime(raw, fmt)
+        except ValueError:
+            counts["deadline_invalid"] += 1
+            continue
+        if eligible_published_deadline(key, raw, now=now):
+            counts["open_verified"] += 1
+        else:
+            # Unknown EIS timezone; no guess about expiration or activity.
+            counts["deadline_not_safely_future"] += 1
+    return counts
+
+
 async def probe(key: str, path: str, ca: Path, now: datetime) -> dict:
     url = candidate_url(key, path)
     factory = EisRssSource if key == "eis" else Eis223RssSource
     adapter = factory((url,), timeout=14, ca_bundle_file=ca, direct=True)
     try:
         rows = await asyncio.wait_for(adapter.fetch(limit=MAX_ITEMS_PER_ATTEMPT), timeout=23)
-        active = active_official_count(rows, key, now)
+        counters = deadline_diagnostic_counts(rows, key, now)
+        active = counters["open_verified"]
         return {"status": "ACTIVE_CANDIDATE" if active else "NO_CURRENT_VERIFIED_ORIGINALS",
-                "retrieved": len(rows), "active": active}
+                "retrieved": len(rows), "active": active, "diagnostic": counters}
     except ConnectorTransportError as exc:
         reason = exc.reason if exc.reason in {
             "http_status", "http_transient", "network", "tls_certificate",
@@ -122,6 +163,9 @@ def main() -> int:
             print(prefix + "_OPEN_VERIFIED_ORIGINALS=" + str(data["active"]), flush=True)
             if data["active"]:
                 success.add(key)
+        if "diagnostic" in data:
+            for name, value in data["diagnostic"].items():
+                print(prefix + "_CATEGORY_" + name.upper() + "=" + str(value), flush=True)
         if "reason" in data:
             print(prefix + "_REASON=" + data["reason"], flush=True)
         if "class" in data:

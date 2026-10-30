@@ -88,7 +88,14 @@ def approved_cycle():
                 _validate_feed_url(url)
             approved += ("eis_223",)
     catalog = build_source_catalog(load_monitoring_settings())
-    if set(approved_ru_keys(catalog)) != set(approved):
+    # EIS is NOT in the long-standing independently accepted RU allowlist.
+    # It is gated separately, never silently promoted to "approved RU".
+    eis_keys = {"eis", "eis_223"}
+    if set(approved_ru_keys(catalog)) != (set(approved) - eis_keys):
+        raise ValueError("Unexpected enabled RU source in scheduler")
+    if (eis_44 == "true" and "eis" not in catalog.enabled_keys
+            or eis_223 == "true" and "eis_223" not in catalog.enabled_keys):
+        raise ValueError("EIS feed not enabled in source catalog")
         raise ValueError("Unexpected enabled RU source in scheduler")
 
     database = Database(load_database_settings())

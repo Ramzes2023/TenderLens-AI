@@ -5,6 +5,8 @@ on:
     paths:
       - ops/public_sources/compose.stan-lenobl-rc.yaml
       - tests/test_ru_stan_lenobl_rc_compose.py
+      - tests/test_stan_lenobl_rc_guest_boot.py
+      - app/api/isolated_public_sources.py
       - .github/workflows/ru-stan-lenobl-rc-compose.yml
   workflow_dispatch:
 permissions:

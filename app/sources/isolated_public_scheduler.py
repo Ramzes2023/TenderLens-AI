@@ -62,6 +62,31 @@ def approved_cycle():
         if northwest != "true" or north_caucasus != "true" or extension != "true":
             raise ValueError("Samara list-only requires all five previous sources enabled.")
         approved += ("ru_samara_public_list",)
+    # Optional official EIS RSS feeds are permitted ONLY with a reviewed
+    # operator profile, explicit static feeds and direct verified HTTPS.
+    eis_44 = os.environ.get("EIS_RSS_PUBLIC_ENABLED", "false")
+    eis_223 = os.environ.get("EIS_223_PUBLIC_ENABLED", "false")
+    if eis_44 not in {"true", "false"} or eis_223 not in {"true", "false"}:
+        raise ValueError("Invalid official EIS public opt-in")
+    if eis_44 == "true" or eis_223 == "true":
+        if os.environ.get("EIS_DIRECT_ENABLED") != "true":
+            raise ValueError("EIS requires strict direct HTTPS")
+        from app.sources.eis_rss import validate_eis_direct_urls
+        if eis_44 == "true":
+            urls = tuple(filter(None, os.environ.get("EIS_RSS_URLS", "").split(";")))
+            if not urls:
+                raise ValueError("Explicit official EIS 44 feed missing")
+            validate_eis_direct_urls(urls)
+            approved += ("eis",)
+        if eis_223 == "true":
+            from app.sources.eis_223_rss import _validate_feed_url
+            urls = tuple(filter(None, os.environ.get("EIS_223_RSS_URLS", "").split(";")))
+            if not urls:
+                raise ValueError("Explicit official EIS 223 feed missing")
+            for url in urls:
+                validate_eis_direct_urls((url,))
+                _validate_feed_url(url)
+            approved += ("eis_223",)
     catalog = build_source_catalog(load_monitoring_settings())
     if set(approved_ru_keys(catalog)) != set(approved):
         raise ValueError("Unexpected enabled RU source in scheduler")

@@ -78,6 +78,8 @@ def test_adapter_real_shape_follows_only_commercial_canonical_details(monkeypatc
             docs.append(url)
             if url == LIST_URL:
                 body = listing()
+            elif url == LIST_URL + "?page=2":
+                body = b'<a href="/etp/Zz123456">EIS-only page</a>'
             else:
                 assert url in mapping
                 body = mapping[url]
@@ -88,6 +90,130 @@ def test_adapter_real_shape_follows_only_commercial_canonical_details(monkeypatc
         yield Fake()
     monkeypatch.setattr(module,"source_client",fake_client)
     notices=asyncio.run(StanCommercialPublicSource().fetch(limit=2))
-    assert [n.external_id for n in notices] == ["ЗК-2026-000020","ЗК-2026-000016"]
+    assert [n.external_id for n in notices] == ["ЗК-2026-000020"]
     assert all(n.initial_price is None and n.deadline is None for n in notices)
-    assert len(docs)==3
+    assert docs == [LIST_URL, LIST_URL + "?page=2", LIST_URL + "/RScxkWBC"]
+
+
+
+def test_page_two_current_commercial_wins_under_existing_worker_three_get_budget(monkeypatch):
+    import asyncio
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    import app.sources.stan_commercial_public as module
+    number="ЗК-2026-000016"
+    title="Строительно-монтажные работы по водоснабжению"
+    detail_url=LIST_URL+"/TDQJKSbF"
+    page_one=('''<a href="/etp/AAaaBB12">№ 32616478602 / АЭ-2026-000033</a>
+<a href="/etp/AAaaBB12">223-ФЗ поставка угля</a>
+<a href="/etp/RScxkWBC">№ ЗК-2026-000020</a>
+<a href="/etp/RScxkWBC"><h2>Поставка пожарных шкафов</h2></a>''').encode()
+    page_two=(f'<a href="/etp/TDQJKSbF">№ {number}</a>'
+              f'<a href="/etp/TDQJKSbF"><h2>{title}</h2></a>').encode()
+    original=(f'<h1>{title}</h1>'
+              f'<div>Коммерческая закупка</div>'
+              f'<div>Номер процедуры</div><div>{number}</div>'
+              f'<div>Наименование заказчика</div><div>ООО Закупки-Оригинал</div>'
+              f'<div>Дата и время окончания подачи заявок</div>'
+              f'<div>11.11.2026 08:00 (МСК)</div>').encode()
+    calls=[]
+    class Fake:
+        async def get(self,url):
+            calls.append(url)
+            assert url in {LIST_URL,LIST_URL+"?page=2",detail_url}
+            body=({LIST_URL:page_one,LIST_URL+"?page=2":page_two,detail_url:original})[url]
+            return SimpleNamespace(content=body,headers={"content-type":"text/html"},
+                                   raise_for_status=lambda:None)
+    @asynccontextmanager
+    async def client(**kwargs):
+        assert kwargs["trust_env"] is False and kwargs["follow_redirects"] is False
+        yield Fake()
+    monkeypatch.setattr(module,"source_client",client)
+    rows=asyncio.run(StanCommercialPublicSource().fetch(limit=30))
+    assert len(rows)==1
+    assert rows[0].external_id==number
+    assert rows[0].url==detail_url
+    assert rows[0].customer=="ООО Закупки-Оригинал"
+    assert rows[0].deadline=="2026-11-11T08:00:00+03:00"
+    assert calls==[LIST_URL,LIST_URL+"?page=2",detail_url]
+
+
+def test_both_listing_pages_without_commercial_originals_fail_closed(monkeypatch):
+    import asyncio
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    import app.sources.stan_commercial_public as module
+    calls=[]
+    class Fake:
+        async def get(self,url):
+            calls.append(url)
+            assert url in (LIST_URL,LIST_URL+"?page=2")
+            return SimpleNamespace(
+                content=(b'<a href="/etp/AAaaBB12">EIS 223-FZ mirror</a>'),
+                headers={"content-type":"text/html"},raise_for_status=lambda:None)
+    @asynccontextmanager
+    async def client(**kwargs):
+        yield Fake()
+    monkeypatch.setattr(module,"source_client",client)
+    with pytest.raises(ValueError,match="No independently identified STAN"):
+        asyncio.run(StanCommercialPublicSource().fetch(limit=30))
+    assert calls==[LIST_URL,LIST_URL+"?page=2"]
+
+
+def test_one_detail_only_even_when_both_pages_offer_two_distinct_candidates(monkeypatch):
+    import asyncio
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    import app.sources.stan_commercial_public as module
+    first=listing()
+    second=('''<a href="/etp/TDQJKSbF">№ ЗК-2026-000014</a>
+<a href="/etp/TDQJKSbF"><h2>Монтаж инженерных сетей</h2></a>''').encode()
+    calls=[]
+    class Fake:
+        async def get(self,url):
+            calls.append(url)
+            assert len(calls)<=3
+            assert url in (LIST_URL,LIST_URL+"?page=2",LIST_URL+"/TDQJKSbF")
+            body=(first if url==LIST_URL else second if url==LIST_URL+"?page=2"
+                  else detail("ЗК-2026-000014","Монтаж инженерных сетей"))
+            return SimpleNamespace(content=body,headers={"content-type":"text/html"},
+                                   raise_for_status=lambda:None)
+    @asynccontextmanager
+    async def client(**kwargs):
+        yield Fake()
+    monkeypatch.setattr(module,"source_client",client)
+    records=asyncio.run(StanCommercialPublicSource().fetch(limit=30))
+    assert [x.external_id for x in records]==["ЗК-2026-000014"]
+    assert calls==[LIST_URL,LIST_URL+"?page=2",LIST_URL+"/TDQJKSbF"]
+
+
+
+def test_stricter_one_record_worker_budget_only_uses_page_two_and_one_detail(monkeypatch):
+    import asyncio
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    import app.sources.stan_commercial_public as module
+    from app.sources.http import FetchPolicy, bounded_fetch
+    first_number="ЗК-2026-000016"
+    title="Монтаж инженерных сетей"
+    original_url=LIST_URL+"/TDQJKSbF"
+    listed=(f'<a href="/etp/TDQJKSbF">№ {first_number}</a>'
+            f'<a href="/etp/TDQJKSbF"><h2>{title}</h2></a>').encode()
+    calls=[]
+    class Fake:
+        async def get(self,url):
+            calls.append(url)
+            mapping={LIST_URL+"?page=2": listed,
+                     original_url: detail(first_number,title)}
+            assert url in mapping and len(calls)<=2
+            return SimpleNamespace(content=mapping[url],
+                                   headers={"content-type":"text/html"},
+                                   raise_for_status=lambda:None)
+    @asynccontextmanager
+    async def fake_client(**kwargs):
+        yield Fake()
+    monkeypatch.setattr(module,"source_client",fake_client)
+    with bounded_fetch(FetchPolicy(frozenset({"stantorgi.ru"}), max_requests=2)):
+        rows=asyncio.run(StanCommercialPublicSource().fetch(limit=1))
+    assert [x.external_id for x in rows]==[first_number]
+    assert calls==[LIST_URL+"?page=2",original_url]

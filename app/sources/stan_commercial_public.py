@@ -227,20 +227,40 @@ class StanCommercialPublicSource:
                 # eligible commercial original exists on official page 2.
                 # Fixed literal URLs only: no untrusted pagination/redirects.
                 candidates = {}
+                page_urls = []
                 for listing_url in (LIST_URL, LIST_URL + "?page=2"):
                     listing = await client.get(listing_url)
                     listing.raise_for_status()
                     if "html" not in listing.headers.get("content-type","").lower():
                         raise ValueError("STAN public listing not HTML")
+                    on_page = []
                     for number, title, url in parse_list(listing.content, allow_empty=True):
                         current = candidates.get(url)
                         if current is not None and current != (number, title, url):
                             raise ValueError("Conflicting STAN first-party listing identities")
                         candidates[url] = (number, title, url)
+                        if url not in on_page:
+                            on_page.append(url)
+                    page_urls.append(on_page)
                 if not candidates:
                     raise ValueError("No commercial originals on either official page")
+                # A page full of archived commercial entries must not crowd
+                # out every page-two candidate. With cap=2, try one verified
+                # original per page before any additional from either page.
+                selected = []
+                for on_page in page_urls:
+                    for url in on_page:
+                        if url not in selected:
+                            selected.append(url)
+                            break
+                for url in candidates:
+                    if len(selected) >= cap:
+                        break
+                    if url not in selected:
+                        selected.append(url)
                 records=[]
-                for number,title,url in list(candidates.values())[:cap]:
+                for url in selected[:cap]:
+                    number,title,_ = candidates[url]
                     try:
                         page=await client.get(url)
                         page.raise_for_status()

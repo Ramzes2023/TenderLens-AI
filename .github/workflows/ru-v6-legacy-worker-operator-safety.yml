@@ -159,8 +159,8 @@ jobs:
                                 'TemporaryDirectory(', 'dir="/tmp"',
                                 'stan_runtime.source_client = page_two_only_client',
                                 'V6_STAN_TEMP_WORKER_COUNTS=',
-                                'TELEGRAM_SEND_AUTHORIZED=NO',
-                                'PRODUCTION_CHANGED=NO')) {
+                                'out("TELEGRAM_SEND_AUTHORIZED", "NO")',
+                                'out("PRODUCTION_CHANGED", "NO")')) {
             if (-not $src.Contains($marker)) { throw "STAN_TEMP_WORKER_BOUNDARY_MISSING=$marker" }
           }
           foreach ($bad in @('docker restart','docker compose up',

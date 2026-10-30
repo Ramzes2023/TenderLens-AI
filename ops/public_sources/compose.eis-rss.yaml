@@ -1,0 +1,31 @@
+# OPTIONAL EIS 44/223 official RSS integration.
+# Layer after the existing reviewed public six-source Compose prefix.
+# Never deploy until SAME-VPS official originals + Worker + fresh deadline +
+# isolated SQL + guest HTTPS + rollback pass.
+# All values are operator-supplied; no token is stored in Git.
+x-eis-feed-urls: &eis-feeds
+  EIS_RSS_URLS: "${VALYQON_EIS_44_RSS_URL:?Explicit official 44-FZ EIS RSS URL required}"
+  EIS_223_RSS_URLS: "${VALYQON_EIS_223_RSS_URL:?Explicit official 223-FZ EIS RSS URL required}"
+  EIS_PROFILE_FEEDS_ENABLED: "false"
+  EIS_223_PROFILE_FEEDS_ENABLED: "false"
+  EIS_223_ENABLED: "true"
+  EIS_44_HTML_ENABLED: "false"
+  EIS_DIRECT_ENABLED: "true"
+  EIS_SYSTEM_TRUST_ENABLED: "false"
+  EIS_RSS_PUBLIC_ENABLED: "true"
+  EIS_223_PUBLIC_ENABLED: "true"
+
+services:
+  guest-sources:
+    environment:
+      EIS_RSS_PUBLIC_ENABLED: "true"
+      EIS_223_PUBLIC_ENABLED: "true"
+  worker:
+    environment:
+      <<: *eis-feeds
+  scheduler:
+    environment:
+      <<: *eis-feeds
+  enqueue:
+    environment:
+      <<: *eis-feeds

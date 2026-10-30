@@ -11,6 +11,7 @@ on:
       - scripts/ci_ru_eis44_html_worker.py
       - scripts/ru_public_live_smoke.py
       - scripts/ru_eis_pinned_tls_probe.py
+      - scripts/ru_eis_official_transport_diagnostic.py
       - .github/workflows/ru-eis-official-real-worker.yml
 
 permissions:
@@ -51,6 +52,10 @@ jobs:
           verify_root(Path("russian_trusted_root_ca_pem.crt").read_bytes())
           print("EIS_CA_PIN=VERIFIED; OS_TRUST_UNCHANGED=YES")
           PY
+      - name: Classify official EIS HTTP transport without reading response bodies
+        run: |
+          python -m scripts.ru_eis_official_transport_diagnostic --self-test
+          python -m scripts.ru_eis_official_transport_diagnostic --live
       - name: STRICT real listing -> leased connector handler -> temporary SQLite -> keyword query
         run: python -m scripts.ci_ru_eis44_html_worker
       - name: Evidence boundary
@@ -88,6 +93,10 @@ jobs:
           verify_root(Path("russian_trusted_root_ca_pem.crt").read_bytes())
           print("EIS_CA_PIN=VERIFIED; OS_TRUST_UNCHANGED=YES")
           PY
+      - name: Classify official EIS HTTP transport without reading response bodies
+        run: |
+          python -m scripts.ru_eis_official_transport_diagnostic --self-test
+          python -m scripts.ru_eis_official_transport_diagnostic --live
       - name: STRICT EIS RSS 44-FZ and 223-FZ real live source -> disposable SQL -> search
         run: python -m scripts.ru_public_live_smoke
       - name: Evidence boundary

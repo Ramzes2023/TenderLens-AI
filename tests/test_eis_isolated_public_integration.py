@@ -255,3 +255,40 @@ def test_official_44_scheduler_rejects_wrong_law_before_enqueuing(monkeypatch, q
         monkeypatch.setenv(key, value)
     with pytest.raises(ValueError, match="fz44"):
         approved_cycle()
+
+
+@pytest.mark.parametrize("path", [
+    "/epz/order/extendedsearch/rss.html",
+    "/epz/order/extendedsearch/rss",
+])
+def test_operator_selected_official_eis_rss_paths_are_law_isolated(path):
+    """Both path spellings are only URL candidates; no live publisher claim."""
+    from app.sources.eis_rss import validate_eis_direct_urls
+    from app.sources.eis_223_rss import _validate_feed_url
+    base = "https://zakupki.gov.ru" + path
+    for law in ("44", "223"):
+        url = base + "?searchString=abc&fz" + law + "=on"
+        validate_eis_direct_urls((url,))
+        if law == "223":
+            _validate_feed_url(url)
+        else:
+            with pytest.raises(ValueError):
+                _validate_feed_url(url)
+    with pytest.raises(ValueError):
+        _validate_feed_url(base + "?fz44=on&fz223=on")
+
+
+@pytest.mark.parametrize("url", [
+    "http://zakupki.gov.ru/epz/order/extendedsearch/rss?fz44=on",
+    "https://evil.invalid/epz/order/extendedsearch/rss?fz44=on",
+    "https://zakupki.gov.ru.evil.invalid/epz/order/extendedsearch/rss?fz44=on",
+    "https://zakupki.gov.ru:8443/epz/order/extendedsearch/rss?fz44=on",
+    "https://zakupki.gov.ru/epz/order/extendedsearch/rss/",
+    "https://zakupki.gov.ru/epz/order/extendedsearch/rss.xml",
+    "https://zakupki.gov.ru/epz/order/extendedsearch/rss#x",
+    "https://zakupki.gov.ru/epz/order/extendedsearch/rss?fz44=on\\\\bad",
+])
+def test_new_eis_rss_path_does_not_admit_untrusted_destinations(url):
+    from app.sources.eis_rss import SourceError, validate_eis_direct_urls
+    with pytest.raises(SourceError):
+        validate_eis_direct_urls((url,))

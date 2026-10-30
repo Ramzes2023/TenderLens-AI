@@ -4,15 +4,7 @@
 param(
     [Parameter(Mandatory=$true)][ValidatePattern('^[a-zA-Z][a-zA-Z0-9_-]{0,31}@[A-Za-z0-9.-]+$')]
     [string]$Target,
-    [Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-f]{40}    [string]$IdentityFile = (Join-Path $HOME '.ssh\tenderlens_vps_ed25519')
-)
-$ErrorActionPreference = 'Stop'
-if (-not (Test-Path -LiteralPath $IdentityFile -PathType Leaf)) {
-    throw 'Existing SSH identity not found; no remote action.'
-}
-$ssh = (Get-Command ssh.exe -ErrorAction Stop).Source
-# Single-quoted here-string: remote shell and Python receive literal content.
-)]
+    [Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-f]{40}$')]
     [string]$ReviewedCommit,
     [string]$IdentityFile = (Join-Path $HOME '.ssh\tenderlens_vps_ed25519')
 )

@@ -217,7 +217,7 @@ def test_synthetic_44_and_223_rss_parse_to_isolated_sql_to_redacted_guest(tmp_pa
             assert eligible_published_deadline(name, row.deadline, now=now)
             assert repo.upsert(row, f"connector-sync-v1:{name}:adapter-r1") is True
         output = search_persisted_notices(
-            db, "оборудования", active_only=True, now=now,
+            db, "оборудования", active_only=True, now=datetime.now(timezone.utc),
             allowed_sources=frozenset({"eis", "eis_223"}))
         assert output["shown"] == 2
         assert all(item["title"].startswith("Поставка оборудования") for item in output["results"])

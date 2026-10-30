@@ -210,11 +210,10 @@ def test_synthetic_44_and_223_rss_parse_to_isolated_sql_to_redacted_guest(tmp_pa
             ).encode("utf-8")
             (row,) = parser(xml)
             assert row.source == name
-            assert ready := accepted_eis_original({
+            assert accepted_eis_original({
                 "source": name, "tender_number": row.tender_number,
                 "external_id": row.external_id, "url": row.url,
             })
-            assert ready
             assert eligible_published_deadline(name, row.deadline, now=now)
             assert repo.upsert(row, f"connector-sync-v1:{name}:adapter-r1") is True
         output = search_persisted_notices(

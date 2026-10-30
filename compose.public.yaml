@@ -18,6 +18,12 @@ services:
       ROSELTORG_PUBLIC_ENABLED: "false"
       TEKTORG_PUBLIC_ENABLED: "false"
       B2B_CENTER_ENABLED: "false"
+      # Unverified EIS cannot be advertised as runtime-enabled just because
+      # the default profile feed builder would otherwise be on.
+      EIS_RSS_URLS: ""
+      EIS_PROFILE_FEEDS_ENABLED: "false"
+      EIS_223_RSS_URLS: ""
+      EIS_223_PROFILE_FEEDS_ENABLED: "false"
       EIS_44_HTML_ENABLED: "false"
       EIS_223_ENABLED: "false"
       VALYQON_RU_BACKGROUND_CATALOG_ENABLED: "false"

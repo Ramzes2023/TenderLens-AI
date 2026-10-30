@@ -78,6 +78,8 @@ def test_adapter_real_shape_follows_only_commercial_canonical_details(monkeypatc
             docs.append(url)
             if url == LIST_URL:
                 body = listing()
+            elif url == LIST_URL + "?page=2":
+                body = b'<a href="/etp/AAaaBB12">No eligible commercial</a>'
             else:
                 assert url in mapping
                 body = mapping[url]
@@ -90,4 +92,104 @@ def test_adapter_real_shape_follows_only_commercial_canonical_details(monkeypatc
     notices=asyncio.run(StanCommercialPublicSource().fetch(limit=2))
     assert [n.external_id for n in notices] == ["ЗК-2026-000020","ЗК-2026-000016"]
     assert all(n.initial_price is None and n.deadline is None for n in notices)
-    assert len(docs)==3
+    assert len(docs)==4
+    assert docs[:2] == [LIST_URL, LIST_URL + "?page=2"]
+
+
+def test_second_page_commercial_original_retrieved_after_eis_only_first_page(monkeypatch):
+    """Both listing URLs must be fetched before strict independent detail."""
+    import asyncio
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    import app.sources.stan_commercial_public as module
+
+    number = "ЗК-2026-000016"
+    title = "Выполнение комплекса строительно-монтажных работ и водоотведения"
+    url = LIST_URL + "/TDQJKSbF"
+    first = '''<a href="/etp/AAaaBB12">№ 32616478602 / АЭ-2026-000033</a>
+<a href="/etp/AAaaBB12">223-ФЗ поставка материалов и оборудования</a>'''.encode()
+    second = (f'<a href="/etp/TDQJKSbF">№ {number}</a>'
+              f'<a href="/etp/TDQJKSbF"><h2>{title}</h2></a>').encode()
+    original = (
+        f"<h1>{title}</h1><div>Коммерческая закупка</div>"
+        f"<div>Номер процедуры</div><div>{number}</div>"
+        "<div>Наименование заказчика</div><div>ООО СК Основа</div>"
+        "<div>Дата и время окончания подачи заявок</div>"
+        "<div>11.11.2026 08:00 (МСК)</div>"
+    ).encode()
+    calls = []
+
+    class Fake:
+        async def get(self, actual):
+            calls.append(actual)
+            mapping = {LIST_URL: first, LIST_URL + "?page=2": second, url: original}
+            assert actual in mapping, "unexpected extra HTTP request"
+            return SimpleNamespace(content=mapping[actual],
+                                   headers={"content-type": "text/html"},
+                                   raise_for_status=lambda: None)
+
+    @asynccontextmanager
+    async def fake_client(**kwargs):
+        assert kwargs["trust_env"] is False
+        assert kwargs["follow_redirects"] is False
+        yield Fake()
+
+    monkeypatch.setattr(module, "source_client", fake_client)
+    notices = asyncio.run(StanCommercialPublicSource().fetch(limit=2))
+    assert len(notices) == 1
+    assert notices[0].external_id == number
+    assert notices[0].url == url
+    assert notices[0].customer == "ООО СК Основа"
+    assert notices[0].deadline == "2026-11-11T08:00:00+03:00"
+    assert calls == [LIST_URL, LIST_URL + "?page=2", url]
+
+
+def test_both_pages_eis_only_still_fail_closed(monkeypatch):
+    import asyncio
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    import app.sources.stan_commercial_public as module
+
+    only_eis = ('''<a href="/etp/AAaaBB12">№ 32616478602 / АЭ-2026-000033</a>
+<a href="/etp/AAaaBB12">223-ФЗ выполнение работ</a>''').encode()
+    calls = []
+
+    class Fake:
+        async def get(self, url):
+            calls.append(url)
+            assert url in (LIST_URL, LIST_URL + "?page=2")
+            return SimpleNamespace(content=only_eis,
+                                   headers={"content-type": "text/html"},
+                                   raise_for_status=lambda: None)
+    @asynccontextmanager
+    async def fake_client(**kwargs):
+        yield Fake()
+    monkeypatch.setattr(module, "source_client", fake_client)
+    with pytest.raises(ValueError, match="No commercial originals"):
+        asyncio.run(StanCommercialPublicSource().fetch(limit=2))
+    assert calls == [LIST_URL, LIST_URL + "?page=2"]
+
+
+def test_duplicate_commercial_original_across_pages_only_fetched_once(monkeypatch):
+    import asyncio
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    import app.sources.stan_commercial_public as module
+    record = ('''<a href="/etp/RScxkWBC">№ ЗК-2026-000020</a>
+<a href="/etp/RScxkWBC"><h2>Поставка пожарных шкафов</h2></a>''').encode()
+    calls = []
+    class Fake:
+        async def get(self,url):
+            calls.append(url)
+            return SimpleNamespace(
+                content=record if "?" in url or url==LIST_URL else detail(
+                    "ЗК-2026-000020","Поставка пожарных шкафов"),
+                headers={"content-type":"text/html"},
+                raise_for_status=lambda: None)
+    @asynccontextmanager
+    async def fake_client(**kwargs):
+        yield Fake()
+    monkeypatch.setattr(module,"source_client",fake_client)
+    notices = asyncio.run(StanCommercialPublicSource().fetch(limit=2))
+    assert len(notices)==1
+    assert calls==[LIST_URL,LIST_URL+"?page=2",LIST_URL+"/RScxkWBC"]

@@ -1,0 +1,89 @@
+name: EIS 44/223 isolated public bridge offline regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - app/api/isolated_public_sources.py
+      - app/api/guest_search_routes.py
+      - app/api/public_eis_identity.py
+      - app/api/public_source_deadline.py
+      - app/sources/eis_rss.py
+      - app/sources/eis_223_rss.py
+      - app/sources/eis_deadlines.py
+      - app/sources/eis_vps_acceptance.py
+      - app/sources/isolated_public_scheduler.py
+      - app/sources/opportunities.py
+      - ops/public_sources/compose.eis-rss.yaml
+      - tests/test_eis_isolated_public_integration.py
+      - tests/test_public_eis_failclosed_compose.py
+      - .github/workflows/ru-eis-isolated-bridge-offline.yml
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-eis-safe-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PYTHON_DOTENV_DISABLED: "1"
+      MONITORING_ENABLED: "false"
+      TELEGRAM_BOT_TOKEN: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Offline EIS-to-public integration and regression, no upstream requests
+        run: |
+          python -m pytest -q \
+            tests/test_eis_isolated_public_integration.py \
+            tests/test_public_eis_failclosed_compose.py \
+            tests/test_eis_223_rss.py \
+            tests/test_eis_223_persistence_contract.py \
+            tests/test_isolated_public_source_scheduler.py \
+            tests/test_ru_approved_operator_cycle.py
+      - name: Require opt-in Compose only with reviewed synthetic EIS URLs
+        shell: bash
+        env:
+          VALYQON_EIS_44_RSS_URL: https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz44=on
+          VALYQON_EIS_223_RSS_URL: https://zakupki.gov.ru/epz/order/extendedsearch/rss.html?fz223=on
+        run: |
+          set -euo pipefail
+          docker compose -f ops/public_sources/compose.yaml \
+            -f ops/public_sources/compose.south-ural.yaml \
+            -f ops/public_sources/compose.kavkaz-rf.yaml \
+            -f ops/public_sources/compose.lenobl.yaml \
+            -f ops/public_sources/compose.samara-list.yaml \
+            -f ops/public_sources/compose.eis-rss.yaml \
+            --profile operator --profile verified-scheduler \
+            config --format json > "${RUNNER_TEMP}/isolated-eis.json"
+          python - "${RUNNER_TEMP}/isolated-eis.json" <<'PY'
+          import json, sys
+          data = json.load(open(sys.argv[1], encoding="utf-8"))
+          services = data["services"]
+          assert set(services) == {"guest-sources","worker","scheduler","enqueue"}
+          for name, service in services.items():
+              env = service["environment"]
+              assert env["EIS_RSS_PUBLIC_ENABLED"] == "true"
+              assert env["EIS_223_PUBLIC_ENABLED"] == "true"
+              assert env["TELEGRAM_BOT_TOKEN"] == ""
+              assert env["MONITORING_ENABLED"] == "false"
+              assert not service.get("ports")
+              assert all("tenderlens_data" not in str(v) for v in service.get("volumes", []))
+              assert env["DATABASE_URL"] == "sqlite:////app/data/isolated-public-sources.sqlite3"
+              if name != "guest-sources":
+                  assert env["EIS_DIRECT_ENABLED"] == "true"
+                  assert env["EIS_PROFILE_FEEDS_ENABLED"] == "false"
+                  assert env["EIS_223_PROFILE_FEEDS_ENABLED"] == "false"
+          assert services["worker"]["environment"]["EIS_223_ENABLED"] == "true"
+          assert services["scheduler"].get("network_mode") == "none"
+          print("EIS_44_223_OPTIONAL_COMPOSE=PASS")
+          print("PRODUCTION_MUTATIONS=NONE")
+          print("SOURCE_NETWORK_ACCESS=NOT_TESTED")
+          PY

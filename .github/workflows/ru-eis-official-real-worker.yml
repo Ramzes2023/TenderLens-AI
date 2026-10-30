@@ -12,6 +12,8 @@ on:
       - scripts/ru_public_live_smoke.py
       - scripts/ru_eis_pinned_tls_probe.py
       - scripts/ru_eis_official_transport_diagnostic.py
+      - compose.public.yaml
+      - tests/test_public_eis_failclosed_compose.py
       - .github/workflows/ru-eis-official-real-worker.yml
 
 permissions:
@@ -43,6 +45,8 @@ jobs:
           cache: pip
       - name: Install existing pinned dev dependencies
         run: python -m pip install -r requirements-dev.txt
+      - name: Check public EIS flags fail closed until release
+        run: python -m pytest -q tests/test_public_eis_failclosed_compose.py
       - name: Validate official root CA SHA-256 in application scope only
         shell: bash
         run: |
@@ -84,6 +88,8 @@ jobs:
           cache: pip
       - name: Install existing pinned dev dependencies
         run: python -m pip install -r requirements-dev.txt
+      - name: Check public EIS flags fail closed until release
+        run: python -m pytest -q tests/test_public_eis_failclosed_compose.py
       - name: Validate official root CA SHA-256 in application scope only
         shell: bash
         run: |

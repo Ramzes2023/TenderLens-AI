@@ -1,0 +1,46 @@
+name: RU STAN Lenobl RC private operator build safety
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/VALYQON-STAN-LENOBL-RC-STAGE-OPERATOR.ps1
+      - tests/test_stan_lenobl_rc_operator_security.py
+      - .github/workflows/ru-stan-lenobl-rc-operator.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bash-python-failclosed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate in-process Bash/Python and exact stage safety gates
+        run: python3 -B -m unittest -v tests.test_stan_lenobl_rc_operator_security
+  powershell-parser:
+    runs-on: windows-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Parse PowerShell operator without contacting VPS
+        shell: pwsh
+        run: |
+          $file='scripts/VALYQON-STAN-LENOBL-RC-STAGE-OPERATOR.ps1'
+          $tokens=$null
+          $errors=$null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $file).Path, [ref]$tokens, [ref]$errors
+          )
+          if ($errors.Count -ne 0) { throw "RC_STAGE_PS_PARSE_INVALID=$($errors.Count)" }
+          $src=Get-Content -LiteralPath $file -Raw -Encoding UTF8
+          foreach ($marker in @('ReviewedCommit', 'RC_STAGE=BOOT_PASS',
+                'RC_STAGE_E2E=NOT_RUN','StrictHostKeyChecking=yes',
+                'PRODUCTION_CHANGED=NO','TELEGRAM_SEND_AUTHORIZED=NO')) {
+            if (-not $src.Contains($marker)) { throw "RC_STAGE_REQUIRED=$marker" }
+          }
+          Write-Output 'RC_STAGE_OPERATOR_PS_SAFETY=PASS'
+          Write-Output 'RC_STAGE_REMOTE_EXECUTED=NO'

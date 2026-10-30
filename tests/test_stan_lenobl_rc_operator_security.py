@@ -41,7 +41,7 @@ class StageOperatorSecurity(unittest.TestCase):
             "3145728",
             "BLOCKED_PROJECT_EXISTS",
             "BLOCKED_VOLUME_EXISTS",
-            "BLOCKED_STAGE_IMAGE_EXISTS" if False else "BLOCKED_IMAGE_EXISTS",
+            "BLOCKED_IMAGE_EXISTS",
             "set(s[\"guest-sources\"][\"networks\"])",
             "\"private_guest\"",
             "internal",
@@ -66,9 +66,8 @@ class StageOperatorSecurity(unittest.TestCase):
             "tenderlens-vps_edge",
         ):
             self.assertNotIn(dangerous,src,dangerous)
-        self.assertIn("set(cfg",src) if False else None
-        self.assertIn("set(m[\"networks\"])",code)
-        self.assertIn("assert not", "assert not" if "not x.get(\"ports\")" in code else "")
+        self.assertIn('set(m["networks"])', code)
+        self.assertIn('not x.get("ports")', code)
 
     def test_ssh_output_is_sanitized_and_no_hidden_recipient_send(self):
         raw,_,_=parse()

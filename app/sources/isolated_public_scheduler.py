@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import signal
 import threading
+from urllib.parse import parse_qs, urlsplit
 from datetime import datetime, timedelta, timezone
 
 from app.api.isolated_public_sources import ISOLATED_SQLITE_URL
@@ -77,6 +78,11 @@ def approved_cycle():
             if not urls:
                 raise ValueError("Explicit official EIS 44 feed missing")
             validate_eis_direct_urls(urls)
+            for url in urls:
+                query = parse_qs(urlsplit(url).query, keep_blank_values=True)
+                if (query.get("fz44") != ["on"]
+                        or any(key.casefold() == "fz223" for key in query)):
+                    raise ValueError("Official EIS 44 feed must select only fz44")
             approved += ("eis",)
         if eis_223 == "true":
             from app.sources.eis_223_rss import _validate_feed_url

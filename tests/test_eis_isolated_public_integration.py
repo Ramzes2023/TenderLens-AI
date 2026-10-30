@@ -126,3 +126,28 @@ def test_current_real_eis_anonymous_search_rejects_wrong_origin(tmp_path):
         }
     finally:
         db.close()
+
+
+def test_223_parser_preserves_only_official_result_deadline():
+    from app.sources.eis_223_rss import parse_eis_223_feed
+
+    payload = (
+        '<rss><channel><item><title>Поставка мебели №32616521305</title>'
+        '<link>https://zakupki.gov.ru/223/purchase/public/purchase/info/common-info.html?'
+        'regNumber=32616521305</link>'
+        '<description>Найденный результат: Размещение выполняется по: 223-ФЗ. '
+        'Дата и время окончания подачи заявок: 10.12.2026 19:45</description>'
+        '</item></channel></rss>'
+    ).encode("utf-8")
+    result = parse_eis_223_feed(payload)
+    assert len(result) == 1
+    assert result[0].deadline == "10.12.2026 19:45"
+    from app.sources.eis_vps_acceptance import ready_notice
+    assert ready_notice(result[0], "eis_223", datetime(2026, 10, 30, tzinfo=timezone.utc))
+    assert not ready_notice(result[0], "eis", datetime(2026, 10, 30, tzinfo=timezone.utc))
+
+
+def test_vps_acceptance_rejects_unreviewed_context(monkeypatch):
+    from app.sources.eis_vps_acceptance import main
+    monkeypatch.delenv("VALYQON_ISOLATED_PUBLIC_SOURCES_ENABLED", raising=False)
+    assert main() == 2

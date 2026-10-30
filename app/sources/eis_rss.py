@@ -413,7 +413,7 @@ def parse_eis_feed(payload: bytes, *, source_name: str = "eis") -> list[TenderNo
         external_id = guid or tender_number or _stable_id(guid, link, title, published or "")
         # An explicit actual notice closing clock is safer than free-text
         # matches on the EIS advanced-search form or publication timestamp.
-        deadline_text = result_deadline(description) or _extract(_DEADLINE_RE, combined)
+        deadline_text = result_deadline(description)
         notices.append(TenderNotice(
             source=source_name,
             external_id=external_id[:500],

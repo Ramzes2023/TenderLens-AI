@@ -30,6 +30,17 @@ def test_first_party_commercial_two_links_not_eis_mirrors():
 def test_untrusted_urls_never_accepted(url):
     assert canonical(url) is None
 
+def test_one_real_commercial_candidate_among_eis_mirrors():
+    page = ('''<a href="/etp/AAaaBB12">№ 32616478602 / АЭ-2026-000033</a>
+<a href="/etp/AAaaBB12">Поставка угля каменного для нужд предприятия</a>
+<a href="/etp/RScxkWBC">№ ЗК-2026-000020</a>
+<a href="/etp/RScxkWBC"><h2>Поставка пожарных шкафов</h2></a>''').encode()
+    cards = parse_list(page)
+    assert len(cards) == 1
+    assert cards[0][0] == "ЗК-2026-000020"
+    assert verify_detail(detail(cards[0][0], cards[0][1]), *cards[0]) == cards[0]
+
+
 def test_independent_title_and_number_required():
     n,t,u=parse_list(listing())[0]
     assert verify_detail(detail(n,t),n,t,u)==(n,t,u)

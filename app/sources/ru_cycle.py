@@ -24,6 +24,9 @@ RU_APPROVED_SOURCES = (
     "ru_samara_public_list",
     # Official anonymous Dagestan list -> fenced Worker/SQL; deep details login-protected.
     "ru_dagestan_public_list",
+    # Official EIS RSS 44/223: selectable only when explicit audited feeds are enabled.
+    "eis",
+    "eis_223",
 )
 
 

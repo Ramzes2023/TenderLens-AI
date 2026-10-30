@@ -12,7 +12,7 @@ MOCK = """#!/usr/bin/env python3
 import os
 import sys
 p=sys.argv[1:]
-with open(os.environ["FAKE_LOG"],"a") as f: f.write(p[0]+"\\\\n")
+with open(os.environ["FAKE_LOG"],"a") as f: f.write(p[0]+"\\n")
 case=os.environ["FAKE_CASE"]
 if case=="docker_error": sys.exit(9)
 if p[0]=="ps":

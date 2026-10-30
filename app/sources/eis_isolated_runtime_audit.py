@@ -21,7 +21,7 @@ from app.api.guest_search_routes import _public_preview
 from .isolated_runtime_audit import (
     MAX_AGE_SECONDS, _job_age_minutes, _recent, isolated_environment_valid,
 )
-from .eis_rss import validate_eis_direct_urls
+from .eis_rss import SourceError, validate_eis_direct_urls
 from .eis_223_rss import _validate_feed_url
 
 SOURCES = ("eis", "eis_223")
@@ -44,7 +44,10 @@ def _official_feed_configuration(env):
         urls = tuple(v.strip() for v in env.get(flag, "").split(";") if v.strip())
         if not urls or len(urls) > 5:
             raise ValueError("Official EIS feed missing or exceeds bound")
-        validate_eis_direct_urls(urls)
+        try:
+            validate_eis_direct_urls(urls)
+        except SourceError:
+            raise ValueError("Invalid official EIS static feed") from None
         for url in urls:
             query = parse_qs(urlsplit(url).query, keep_blank_values=True)
             wanted = "fz44" if name == "eis" else "fz223"

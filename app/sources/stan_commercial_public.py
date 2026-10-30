@@ -86,7 +86,7 @@ def canonical(value):
         return None
 
 
-def parse_list(data):
+def parse_list(data, *, allow_empty=False):
     cards={}
     for href,text in parse_doc(data).links:
         url=canonical(href)
@@ -106,7 +106,7 @@ def parse_list(data):
     # Commercial-only originals may be sparse among 223-FZ EIS mirrors.
     # One separately verified original is enough; NEVER admit EIS-only pages.
     # Independent title/number/section confirmation still occurs on detail GET.
-    if not valid:
+    if not valid and not allow_empty:
         raise ValueError("No independently identified commercial procedure links")
     return valid[:MAX_DETAILS]
 
@@ -215,18 +215,33 @@ class StanCommercialPublicSource:
     async def fetch(self, limit=20):
         if type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError("Invalid STAN fetch limit")
-        cap = min(limit, MAX_DETAILS)
-        ctx = (bounded_fetch(FetchPolicy(frozenset({HOST}), cap + 1, max_bytes=MAX_BYTES))
+        # Existing worker policy allows exactly three requests for STAN
+        # when max_records >= 2. Two fixed official listing pages and one
+        # independently fetched original fit without changing shared Worker.
+        cap = 1
+        ctx = (bounded_fetch(FetchPolicy(frozenset({HOST}), 3, max_bytes=MAX_BYTES))
                if _policy.get() is None else nullcontext())
         with ctx:
             async with source_client(timeout=self.timeout, trust_env=False, follow_redirects=False,
                 headers={"Accept":"text/html","User-Agent":"Mozilla/5.0"}) as client:
-                listing = await client.get(LIST_URL)
-                listing.raise_for_status()
-                if "html" not in listing.headers.get("content-type","").lower():
-                    raise ValueError("STAN public listing not HTML")
+                # Fetch each fixed official page, never follow page-provided
+                # pagination, redirects or untrusted off-host URLs. Try the
+                # second page's first corroborated commercial candidate first:
+                # the first page may have only a closed commercial notice.
+                by_page = []
+                for listing_url in (LIST_URL, LIST_URL + "?page=2"):
+                    listing = await client.get(listing_url)
+                    listing.raise_for_status()
+                    if "html" not in listing.headers.get("content-type","").lower():
+                        raise ValueError("STAN public listing not HTML")
+                    by_page.append(parse_list(listing.content, allow_empty=True))
+                if not any(by_page):
+                    raise ValueError("No independently identified STAN commercial originals")
+                # At most one original detail: page 2 first when available;
+                # full two-detail page fairness remains in separately gated PR.
+                selected = by_page[1][0] if by_page[1] else by_page[0][0]
                 records=[]
-                for number,title,url in parse_list(listing.content)[:cap]:
+                for number,title,url in (selected,):
                     try:
                         page=await client.get(url)
                         page.raise_for_status()

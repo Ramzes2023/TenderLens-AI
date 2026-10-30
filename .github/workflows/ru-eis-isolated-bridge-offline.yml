@@ -12,6 +12,7 @@ on:
       - scripts/ru_eis_candidate_route_probe.py
       - tests/test_ru_eis_candidate_route_probe.py
       - app/sources/eis_official_detail_deadline.py
+      - scripts/ru_eis_detail_deadline_live_probe.py
       - tests/test_eis_official_detail_deadline.py
       - app/sources/eis_223_rss.py
       - app/sources/eis_deadlines.py
